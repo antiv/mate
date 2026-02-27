@@ -1,0 +1,23 @@
+<!-- Edit Instruction Modal -->
+<div id="editInstructionModal" class="hidden fixed inset-0 z-[90] flex items-center justify-center">
+    <div id="editInstructionModalBackdrop" class="absolute inset-0 bg-black/40 dark:bg-black/60"></div>
+    <div class="relative w-full max-w-3xl bg-white dark:bg-gray-900 rounded-lg shadow-2xl border border-gray-200 dark:border-gray-700 flex flex-col max-h-[90vh]">
+        <div class="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+            <div>
+                <h4 class="text-sm font-semibold text-gray-900 dark:text-white">Edit Instruction</h4>
+                <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Adjust the instruction content in a focused editor.</p>
+            </div>
+            <button type="button" id="editInstructionModalCloseBtn" class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
+                <i class="fas fa-times text-base"></i>
+            </button>
+        </div>
+        <div class="px-4 py-4 flex-1 overflow-y-auto">
+            <textarea id="editInstructionModalTextarea" class="w-full h-full min-h-[300px] border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-white rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Enter agent instruction..."></textarea>
+        </div>
+        <div class="px-4 py-3 border-t border-gray-200 dark:border-gray-700 flex justify-end space-x-2">
+            <button type="button" id="editInstructionModalCancelBtn" class="px-3 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded text-gray-600 dark:text-gray-300 hover:border-gray-400 dark:hover:border-gray-500">Cancel</button>
+            <button type="button" id="editInstructionModalSaveBtn" class="px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded">Save</button>
+        </div>
+    </div>
+</div>
+

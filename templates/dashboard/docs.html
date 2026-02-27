@@ -1,0 +1,308 @@
+{% extends "base.html" %}
+
+{% block title %}API Documentation - MATE{% endblock %}
+
+{% block content %}
+<div class="space-y-4">
+    <!-- Header -->
+    <div class="flex justify-between items-center">
+        <div>
+            <h2 class="text-xl font-bold text-gray-900 dark:text-white">API Documentation</h2>
+            <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">ADK Server & Admin API Documentation</p>
+        </div>
+        <button onclick="refreshDocs()" class="bg-gray-600 hover:bg-gray-700 text-white px-3 py-1.5 text-xs rounded-lg flex items-center">
+            <i class="fas fa-sync-alt mr-1.5"></i>
+            Refresh
+        </button>
+    </div>
+
+    <!-- Server Status Check -->
+    <div id="docsStatusCard" class="bg-yellow-50 dark:bg-yellow-900 border border-yellow-200 dark:border-yellow-700 rounded-lg p-3 hidden">
+        <div class="flex items-center">
+            <i class="fas fa-exclamation-triangle text-yellow-600 dark:text-yellow-400 mr-2"></i>
+            <div>
+                <h4 class="text-xs font-medium text-yellow-800 dark:text-yellow-200">ADK Server Status</h4>
+                <p id="docsStatusMessage" class="text-xs text-yellow-700 dark:text-yellow-300 mt-0.5"></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- API Documentation -->
+    <div class="bg-white rounded-lg shadow overflow-hidden">
+        <div class="px-4 py-2 border-b border-gray-200 flex justify-between items-center">
+            <h3 class="text-sm font-semibold text-gray-900">API Documentation</h3>
+            <div class="flex items-center space-x-2">
+                <!-- API Source Switcher -->
+                <div class="flex bg-gray-100 dark:bg-gray-700 rounded-lg p-0.5">
+                    <button id="adminApiBtn" onclick="switchToAdminApi()" class="px-2 py-1 text-xs rounded-md text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200">
+                        Admin API
+                    </button>
+                    <button id="adkApiBtn" onclick="switchToAdkApi()" class="px-2 py-1 text-xs rounded-md bg-blue-600 text-white">
+                        ADK API
+                    </button>
+                </div>
+                <!-- Documentation Format Switcher -->
+                <div class="flex bg-gray-100 dark:bg-gray-700 rounded-lg p-0.5">
+                    <button id="swaggerBtn" onclick="switchToSwagger()" class="px-2 py-1 text-xs rounded-md bg-blue-600 text-white">
+                        Swagger UI
+                    </button>
+                    <button id="redocBtn" onclick="switchToRedoc()" class="px-2 py-1 text-xs rounded-md text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200">
+                        ReDoc
+                    </button>
+                </div>
+                <!-- Server Info & External Link -->
+                <div class="flex items-center space-x-1.5">
+                    <div class="text-xs text-gray-500">
+                        <i class="fas fa-server mr-1"></i>
+                        <span id="serverInfo">{{ adk_host }}:{{ adk_port }}</span>
+                    </div>
+                    <a id="externalLink" href="#" target="_blank" class="text-gray-500 hover:text-gray-700">
+                        <i class="fas fa-external-link-alt text-xs"></i>
+                    </a>
+                </div>
+            </div>
+        </div>
+        <div class="relative">
+            <div id="docsLoader" class="absolute inset-0 flex items-center justify-center bg-gray-50 z-10">
+                <div class="text-center">
+                    <i class="fas fa-spinner fa-spin text-3xl text-gray-400 mb-4"></i>
+                    <p class="text-gray-600">Loading API Documentation...</p>
+                </div>
+            </div>
+            <iframe 
+                id="docsIframe"
+                src=""
+                class="w-full h-[calc(100vh-200px)] border-0"
+                onload="hideDocsLoader()"
+                onerror="showDocsError()"
+                sandbox="allow-same-origin allow-scripts allow-forms allow-popups">
+            </iframe>
+        </div>
+    </div>
+
+    <!-- Fallback content -->
+    <div id="docsError" class="bg-red-50 dark:bg-red-900 border border-red-200 dark:border-red-700 rounded-lg p-4 hidden">
+        <div class="flex items-center mb-3">
+            <i class="fas fa-exclamation-circle text-red-600 dark:text-red-400 mr-2"></i>
+            <h4 class="text-sm font-medium text-red-800 dark:text-red-200">Unable to Load ADK Documentation</h4>
+        </div>
+        <p class="text-xs text-red-700 dark:text-red-300 mb-2">
+            The ADK server documentation could not be loaded. This might be because:
+        </p>
+        <ul class="list-disc list-inside text-xs text-red-700 dark:text-red-300 space-y-0.5 mb-3">
+            <li>ADK server is not running</li>
+            <li>ADK server is starting up</li>
+            <li>Network connectivity issues</li>
+            <li>CORS or security restrictions</li>
+        </ul>
+        <div class="flex flex-wrap gap-2">
+            <button onclick="checkServerAndRetry()" class="bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 text-xs rounded-lg inline-flex items-center">
+                <i class="fas fa-redo mr-1.5"></i>
+                Retry Loading
+            </button>
+            <div class="text-xs text-gray-600 dark:text-gray-400 self-center">Open in new tab:</div>
+            <a id="swaggerErrorLink" href="#" target="_blank" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 text-xs rounded-lg inline-flex items-center">
+                <i class="fas fa-external-link-alt mr-1.5"></i>
+                ADK Swagger
+            </a>
+            <a id="redocErrorLink" href="#" target="_blank" class="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 text-xs rounded-lg inline-flex items-center">
+                <i class="fas fa-external-link-alt mr-1.5"></i>
+                ADK ReDoc
+            </a>
+            <a id="adminSwaggerErrorLink" href="/admin-docs" target="_blank" class="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1.5 text-xs rounded-lg inline-flex items-center">
+                <i class="fas fa-external-link-alt mr-1.5"></i>
+                Admin Swagger
+            </a>
+            <a id="adminRedocErrorLink" href="/admin-redoc" target="_blank" class="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1.5 text-xs rounded-lg inline-flex items-center">
+                <i class="fas fa-external-link-alt mr-1.5"></i>
+                Admin ReDoc
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let docsLoaded = false;
+    let currentApi = 'adk'; // 'admin' or 'adk'
+    let currentFormat = 'swagger'; // 'swagger' or 'redoc'
+    
+    // Get current hostname and port for ADK server
+    const currentHost = window.location.hostname;
+    const currentProtocol = window.location.protocol;
+    const currentPort = window.location.port;
+    const adkPort = {{ adk_port }};
+    
+    // Only include port in ADK URL if current URL also has a port
+    const adkBaseUrl = currentPort ? 
+        `${currentProtocol}//${currentHost}:${adkPort}` : 
+        `${currentProtocol}//${currentHost}`;
+    
+    // Admin docs are on the same server
+    const adminBaseUrl = `${currentProtocol}//${currentHost}${currentPort ? ':' + currentPort : ''}`;
+    
+    function hideDocsLoader() {
+        document.getElementById('docsLoader').style.display = 'none';
+        docsLoaded = true;
+    }
+    
+    function showDocsError() {
+        document.getElementById('docsLoader').style.display = 'none';
+        document.getElementById('docsError').classList.remove('hidden');
+    }
+    
+    function loadCurrentDocs() {
+        const iframe = document.getElementById('docsIframe');
+        const loader = document.getElementById('docsLoader');
+        const errorDiv = document.getElementById('docsError');
+        const externalLink = document.getElementById('externalLink');
+        const serverInfo = document.getElementById('serverInfo');
+        
+        // Reset state
+        docsLoaded = false;
+        loader.style.display = 'flex';
+        iframe.style.display = 'block';
+        errorDiv.classList.add('hidden');
+        
+        // Build URL based on current selection
+        let url, linkUrl, serverText;
+        if (currentApi === 'admin') {
+            if (currentFormat === 'swagger') {
+                url = `${adminBaseUrl}/admin-docs`;
+                linkUrl = `${adminBaseUrl}/admin-docs`;
+            } else {
+                url = `${adminBaseUrl}/admin-redoc`;
+                linkUrl = `${adminBaseUrl}/admin-redoc`;
+            }
+            serverText = 'Admin Server';
+        } else {
+            if (currentFormat === 'swagger') {
+                url = `${adkBaseUrl}/docs`;
+                linkUrl = `${adkBaseUrl}/docs`;
+            } else {
+                url = `${adkBaseUrl}/redoc`;
+                linkUrl = `${adkBaseUrl}/redoc`;
+            }
+            serverText = currentPort ? `${currentHost}:${adkPort}` : currentHost;
+        }
+        
+        // Update UI
+        iframe.src = url;
+        externalLink.href = linkUrl;
+        serverInfo.textContent = serverText;
+    }
+    
+    function switchToAdminApi() {
+        const adminBtn = document.getElementById('adminApiBtn');
+        const adkBtn = document.getElementById('adkApiBtn');
+        
+        // Update button states
+        adminBtn.className = 'px-3 py-1 text-sm rounded-md bg-purple-600 text-white';
+        adkBtn.className = 'px-3 py-1 text-sm rounded-md text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200';
+        
+        currentApi = 'admin';
+        loadCurrentDocs();
+    }
+    
+    function switchToAdkApi() {
+        const adminBtn = document.getElementById('adminApiBtn');
+        const adkBtn = document.getElementById('adkApiBtn');
+        
+        // Update button states
+        adkBtn.className = 'px-3 py-1 text-sm rounded-md bg-blue-600 text-white';
+        adminBtn.className = 'px-3 py-1 text-sm rounded-md text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200';
+        
+        currentApi = 'adk';
+        loadCurrentDocs();
+    }
+    
+    function switchToSwagger() {
+        const swaggerBtn = document.getElementById('swaggerBtn');
+        const redocBtn = document.getElementById('redocBtn');
+        
+        // Update button states
+        swaggerBtn.className = 'px-3 py-1 text-sm rounded-md bg-blue-600 text-white';
+        redocBtn.className = 'px-3 py-1 text-sm rounded-md text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200';
+        
+        currentFormat = 'swagger';
+        loadCurrentDocs();
+    }
+    
+    function switchToRedoc() {
+        const swaggerBtn = document.getElementById('swaggerBtn');
+        const redocBtn = document.getElementById('redocBtn');
+        
+        // Update button states
+        redocBtn.className = 'px-3 py-1 text-sm rounded-md bg-green-600 text-white';
+        swaggerBtn.className = 'px-3 py-1 text-sm rounded-md text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200';
+        
+        currentFormat = 'redoc';
+        loadCurrentDocs();
+    }
+    
+    function refreshDocs() {
+        loadCurrentDocs();
+    }
+    
+    async function checkServerAndRetry() {
+        try {
+            // Check server status first
+            const response = await fetch('/dashboard/api/server/status', {
+                credentials: 'same-origin'
+            });
+            const status = await response.json();
+            
+            if (status.status === 'running') {
+                // Server is running, try to reload docs
+                refreshDocs();
+                showNotification('Retrying to load documentation...');
+            } else {
+                // Server is not running
+                const statusCard = document.getElementById('docsStatusCard');
+                const statusMessage = document.getElementById('docsStatusMessage');
+                statusCard.classList.remove('hidden');
+                statusMessage.textContent = `ADK server is ${status.status}: ${status.message}`;
+                showNotification('ADK server is not running. Please start the server first.', 'error');
+            }
+        } catch (error) {
+            showNotification('Error checking server status', 'error');
+        }
+    }
+    
+    // Check server status on page load
+    document.addEventListener('DOMContentLoaded', async function() {
+        // Initialize error links
+        document.getElementById('swaggerErrorLink').href = `${adkBaseUrl}/docs`;
+        document.getElementById('redocErrorLink').href = `${adkBaseUrl}/redoc`;
+        document.getElementById('adminSwaggerErrorLink').href = `${adminBaseUrl}/admin-docs`;
+        document.getElementById('adminRedocErrorLink').href = `${adminBaseUrl}/admin-redoc`;
+        
+        // Load initial docs (ADK Swagger by default)
+        loadCurrentDocs();
+        
+        try {
+            const response = await fetch('/dashboard/api/server/status', {
+                credentials: 'same-origin'
+            });
+            const status = await response.json();
+            
+            if (status.status !== 'running') {
+                const statusCard = document.getElementById('docsStatusCard');
+                const statusMessage = document.getElementById('docsStatusMessage');
+                statusCard.classList.remove('hidden');
+                statusMessage.textContent = `ADK server is ${status.status}: ${status.message}`;
+            }
+        } catch (error) {
+            console.error('Error checking server status:', error);
+        }
+        
+        // Set timeout to show error if iframe doesn't load
+        setTimeout(() => {
+            if (!docsLoaded) {
+                showDocsError();
+            }
+        }, 10000); // 10 second timeout
+    });
+</script>
+{% endblock %}

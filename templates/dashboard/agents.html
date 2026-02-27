@@ -1,0 +1,908 @@
+{% extends "base.html" %}
+
+{% block title %}Agent Management - MATE{% endblock %}
+
+{% block extra_head %}
+<script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.44.0/min/vs/loader.js"></script>
+<link rel="stylesheet" href="/static/css/agents.css">
+{% endblock %}
+
+{% block content %}
+{% from 'dashboard/modals/config_modals.html' import config_modals %}
+{% from 'dashboard/modals/parent_agents_modal.html' import parent_agents_modal %}
+{% from 'dashboard/modals/agent_modal_macro.html' import agent_modal %}
+
+        <div class="flex h-screen">
+            <!-- Main Content Area -->
+            <div class="flex-1 flex flex-col h-screen">
+
+
+<div class="space-y-4 overflow-y-auto flex-1 p-4">
+    <!-- Header -->
+    <div class="flex justify-between items-center">
+        <div>
+            <h2 class="text-xl font-bold text-gray-900 dark:text-white">Agent Management</h2>
+            <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">Manage agent configurations and settings</p>
+            {% if selected_project_id %}
+            {% set selected_project = (projects | selectattr('id', 'equalto', selected_project_id) | list | first) %}
+            {% if selected_project %}
+            <p class="text-xs text-blue-600 dark:text-blue-300 mt-0.5">Project: {{ selected_project.name }}</p>
+            {% endif %}
+            {% endif %}
+        </div>
+        <div class="flex space-x-2">
+            <button onclick="exportAgents()" class="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 text-xs rounded-lg flex items-center disabled:bg-gray-400 disabled:cursor-not-allowed" {% if not selected_project_id %}disabled title="Select a project first"{% endif %}>
+                <i class="fas fa-download mr-1.5"></i>
+                Export
+            </button>
+            <button onclick="showImportModal()" class="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1.5 text-xs rounded-lg flex items-center">
+                <i class="fas fa-upload mr-1.5"></i>
+                Import
+            </button>
+            <button onclick="reinitializeAllAgents()" class="bg-yellow-600 hover:bg-yellow-700 text-white px-3 py-1.5 text-xs rounded-lg flex items-center" title="Reload all agents with fresh configuration">
+                <i class="fas fa-redo mr-1.5"></i>
+                Reload All
+            </button>
+            <button onclick="refreshAgentsPage()" class="bg-orange-600 hover:bg-orange-700 text-white px-3 py-1.5 text-xs rounded-lg flex items-center">
+                <i class="fas fa-sync-alt mr-1.5"></i>
+                Refresh
+            </button>
+            <button id="graphEditorBtn" onclick="showCytoscapeGraphEditor()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 text-xs rounded-lg flex items-center disabled:bg-gray-400 disabled:cursor-not-allowed" {% if not selected_project_id %}disabled title="Select a project first"{% endif %}>
+                <i class="fas fa-project-diagram mr-2"></i>
+                Graph Editor
+            </button>
+            <button onclick="showCreateAgentModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 text-xs rounded-lg flex items-center disabled:bg-gray-400 disabled:cursor-not-allowed" {% if not selected_project_id %}disabled title="Select a project first"{% endif %}>
+                <i class="fas fa-plus mr-1.5"></i>
+                Add Agent
+            </button>
+        </div>
+    </div>
+
+    <!-- Agents Table -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+        <div class="px-4 py-2 border-b border-gray-200 dark:border-gray-700">
+            <div class="flex justify-between items-center">
+                <h3 class="text-sm font-semibold text-gray-900 dark:text-white">Agent Configurations</h3>
+                <div class="flex space-x-2">
+                    <div class="relative">
+                        <select id="projectSelector" onchange="handleProjectSelection(this.value)" class="pl-2 pr-8 py-1.5 text-xs border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent min-w-[180px] {{ '' if selected_project_id else 'bg-gray-200 dark:bg-gray-800 text-gray-500 dark:text-gray-500 cursor-not-allowed' }}">
+                            <option value="">Select project...</option>
+                            {% for project in projects %}
+                            <option value="{{ project.id }}" {% if selected_project_id == project.id %}selected{% endif %}>{{ project.name }}</option>
+                            {% endfor %}
+                        </select>
+                        <div class="absolute inset-y-0 right-0 pr-2 flex items-center pointer-events-none">
+                            <i class="fas fa-chevron-down text-xs text-gray-400"></i>
+                        </div>
+                    </div>
+                    <button onclick="showProjectModal()" class="bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 px-3 py-1.5 text-xs rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <i class="fas fa-cog mr-1"></i>
+                        Manage Projects
+                    </button>
+                    <div class="relative">
+                        <select id="rootAgentFilter" onchange="filterAgents()" {% if not selected_project_id %}disabled{% endif %} class="pl-2 pr-8 py-1.5 text-xs border border-gray-300 dark:border-gray-600 {% if selected_project_id %}dark:bg-gray-700 dark:text-white{% else %}bg-gray-200 dark:bg-gray-800 text-gray-500 dark:text-gray-500 cursor-not-allowed{% endif %} rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent min-w-[150px]">
+                            <option value="">All Agents</option>
+                            <!-- Will be populated dynamically with root agents -->
+                        </select>
+                        <div class="absolute inset-y-0 right-0 pr-2 flex items-center pointer-events-none">
+                            <i class="fas fa-chevron-down text-xs text-gray-400"></i>
+                        </div>
+                    </div>
+                    <button id="rootAgentChatBtn" type="button" {% if not selected_project_id %}disabled{% endif %} class="hidden px-2 py-1 text-xs text-white bg-green-600 hover:bg-green-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 disabled:bg-gray-400 disabled:text-gray-200 disabled:cursor-not-allowed" title="Open agent chat">
+                        <i class="fas fa-comments"></i>
+                    </button>
+                    <div class="relative">
+                        <input type="text" id="agentSearch" placeholder="Search agents..." {% if not selected_project_id %}disabled{% endif %} class="pl-8 pr-3 py-1.5 text-xs border border-gray-300 dark:border-gray-600 {% if selected_project_id %}dark:bg-gray-700 dark:text-white{% else %}bg-gray-200 dark:bg-gray-800 text-gray-500 dark:text-gray-500 cursor-not-allowed{% endif %} rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent w-48">
+                        <div class="absolute inset-y-0 left-0 pl-2 flex items-center pointer-events-none">
+                            <i class="fas fa-search text-xs text-gray-400"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="overflow-auto max-h-[calc(100vh-200px)]">
+            <table id="agentsTable" class="w-full divide-y divide-gray-200 dark:divide-gray-700 table-fixed">
+                <thead class="bg-gray-50 dark:bg-gray-700">
+                    <tr>
+                        <th class="px-3 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-1/6">Name</th>
+                        <th class="px-3 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-1/12">Type</th>
+                        <th class="px-3 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-1/6">Model</th>
+                        <th class="px-3 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-1/6">Parents</th>
+                        <th class="px-3 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-1/12">Status</th>
+                        <th class="px-3 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-1/6">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="agentsTableBody" class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                    {% if not selected_project_id %}
+                    <tr>
+                        <td colspan="6" class="px-3 py-3 text-center text-xs text-gray-500 dark:text-gray-400">
+                            Select a project to view its agents.
+                        </td>
+                    </tr>
+                    {% elif configs|length == 0 %}
+                    <tr>
+                        <td colspan="6" class="px-3 py-3 text-center text-xs text-gray-500 dark:text-gray-400">
+                            No agents found in this project yet.
+                        </td>
+                    </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Agent Chat Panel and Chat User Selection Modal -->
+{% include 'dashboard/modals/chat_modals.html' %}
+
+<!-- Edit Instruction Modal -->
+{% include 'dashboard/modals/edit_instruction_modal.html' %}
+
+<!-- Create Agent Modal -->
+{{ agent_modal(
+    'createAgentModal', 
+    'createAgentForm', 
+    'Add New Agent',
+    'agent',
+    'createAgentSubmitBtn',
+    'createAgentLoader',
+    'createAgentBtnText',
+    'Create Agent',
+    'hideCreateAgentModal()',
+    show_id_field=False,
+    show_type_empty_option=True,
+    submit_btn_color='bg-blue-600 hover:bg-blue-700',
+    container_class='modal-side-panel',
+    projects_list=projects,
+    current_project_id=selected_project_id
+) }}
+
+<!-- Edit Agent Modal -->
+{{ agent_modal(
+    'editAgentModal', 
+    'editAgentForm', 
+    'Edit Agent',
+    'editAgent',
+    'editAgentSubmitBtn',
+    'editAgentLoader',
+    'editAgentBtnText',
+    'Update Agent',
+    'hideEditAgentModal()',
+    show_id_field=True,
+    show_type_empty_option=False,
+    submit_btn_color='bg-blue-600 hover:bg-blue-700',
+    container_class='modal-side-panel',
+    projects_list=projects
+) }}
+
+<!-- Copy Agent Modal -->
+{{ agent_modal(
+    'copyAgentModal', 
+    'copyAgentForm', 
+    'Copy Agent',
+    'copyAgent',
+    'copyAgentSubmitBtn',
+    'copyAgentLoader',
+    'copyAgentBtnText',
+    'Copy Agent',
+    'hideCopyAgentModal()',
+    show_id_field=False,
+    show_type_empty_option=False,
+    submit_btn_color='bg-purple-600 hover:bg-purple-700',
+    container_class='modal-side-panel',
+    projects_list=projects
+) }}
+
+<!-- Project Management Modal -->
+{% include 'dashboard/modals/project_modal.html' %}
+
+<!-- Import Agents Modal -->
+{% include 'dashboard/modals/import_agents_modal.html' %}
+
+<!-- Memory Blocks Modal -->
+{% include 'dashboard/modals/memory_blocks_modal.html' %}
+
+<!-- Graph Editor Modal -->
+{% include 'dashboard/modals/graph_editor_modals.html' %}
+{% endblock %}
+
+{% block scripts %}
+<script id="configs-json" type="application/json">{{ configs | tojson | safe }}</script>
+<script id="projects-json" type="application/json">{{ projects | tojson | safe }}</script>
+<!-- Cytoscape.js for graph visualization - Load first -->
+<script src="https://unpkg.com/cytoscape@3.26.0/dist/cytoscape.min.js"></script>
+<script src="https://unpkg.com/dagre@0.8.5/dist/dagre.min.js"></script>
+<script src="https://unpkg.com/cytoscape-dagre@2.5.0/cytoscape-dagre.js"></script>
+<!-- Monaco Editor for JSON editing -->
+<script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.44.0/min/vs/loader.js"></script>
+<!-- Graph Editor CSS -->
+<link rel="stylesheet" href="/static/css/graph-editor.css">
+<!-- Agent Management Scripts -->
+<script src="/static/js/agent-utils.js"></script>
+<script src="/static/js/agent-config.js"></script>
+<script src="/static/js/agent-tools.js"></script>
+<script src="/static/js/modals/file-search.js"></script>
+<script src="/static/js/agent-forms.js"></script>
+<script src="/static/js/modals/project-management.js"></script>
+<script src="/static/js/agents-page.js"></script>
+<script src="/static/js/table-sorting.js"></script>
+<script src="/static/js/agent-management.js"></script>
+<script src="/static/js/modals/parent-agents-modal.js"></script>
+<script src="/static/js/modals/agent-edit-helpers.js"></script>
+<script src="/static/js/modals/memory-blocks.js"></script>
+<!-- Graph Editor - Load after Cytoscape.js and other dependencies -->
+<script src="/static/js/modals/cytoscape-graph-editor.js"></script>
+
+<script>
+    /* eslint-disable */
+    // ============================================================================
+    // Template Variables - Passed from Jinja2 to JavaScript
+    // ============================================================================
+        window.projects = JSON.parse(document.getElementById('projects-json').textContent || '[]');
+        window.configs = JSON.parse(document.getElementById('configs-json').textContent || '[]');
+        window.selectedProjectId = {% if selected_project_id %}{{ selected_project_id }}{% else %}null{% endif %};
+        const PROJECT_STORAGE_KEY = 'agentDashboardSelectedProjectId';
+    
+    // Persist selected project or restore previous selection
+    (function handleProjectPersistence() {
+        let storedProjectId = null;
+        try {
+            storedProjectId = localStorage.getItem(PROJECT_STORAGE_KEY);
+        } catch (error) {
+            storedProjectId = null;
+        }
+
+        if (window.selectedProjectId) {
+            try {
+                localStorage.setItem(PROJECT_STORAGE_KEY, String(window.selectedProjectId));
+            } catch (error) {
+                // ignore storage errors
+            }
+        } else if (storedProjectId) {
+            const exists = window.projects.some(project => String(project.id) === storedProjectId);
+            if (exists) {
+                window.location.href = `/dashboard/agents?project_id=${encodeURIComponent(storedProjectId)}`;
+            } else {
+                try {
+                    localStorage.removeItem(PROJECT_STORAGE_KEY);
+                } catch (error) {
+                    // ignore
+                }
+            }
+        }
+    })();
+    
+    // Normalize config IDs to ensure they're integers (not strings or agent names)
+    // Process in reverse to avoid index issues when removing items
+    for (let i = configs.length - 1; i >= 0; i--) {
+        const config = configs[i];
+        if (config.id !== undefined && config.id !== null) {
+            const originalId = config.id;
+            // If ID is somehow the agent name, log error and remove this config
+            if (typeof config.id === 'string' && config.id === config.name) {
+                console.error(`Error: Config "${config.name}" has agent name "${config.name}" as ID instead of numeric ID. Removing from list.`);
+                configs.splice(i, 1);
+                continue;
+            }
+            // Try to parse as integer
+            const parsedId = parseInt(config.id, 10);
+            if (!isNaN(parsedId) && parsedId.toString() === String(config.id).trim()) {
+                config.id = parsedId;
+            } else {
+                
+            }
+        } else {
+            console.error(`Error: Config "${config.name}" has no ID field. Removing from list.`);
+            configs.splice(i, 1);
+        }
+
+        // Ensure project_id is available
+        if ((config.project_id === undefined || config.project_id === null) && config.project && config.project.id !== undefined) {
+            config.project_id = config.project.id;
+        }
+    }
+    
+    
+    // ============================================================================
+    // Note: Monaco editor, modal, config, tool, and form functions are now
+    // loaded from external JS files. See static/js/ directory.
+    // ============================================================================
+    
+    // ============================================================================
+    // Form Submission Handlers - Template-dependent code
+    // ============================================================================
+
+    // Handle create agent form submission
+    document.getElementById('createAgentForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        // Show loader
+        const submitBtn = document.getElementById('createAgentSubmitBtn');
+        const loader = document.getElementById('createAgentLoader');
+        const btnText = document.getElementById('createAgentBtnText');
+        
+        submitBtn.disabled = true;
+        loader.classList.remove('hidden');
+        btnText.textContent = 'Creating...';
+        
+        const formData = new FormData();
+        const agentName = document.getElementById('agentName').value;
+        formData.append('name', agentName);
+        const projectId = document.getElementById('agentProject').value;
+        if (!projectId) {
+            showNotification('Select a project for this agent before saving.', 'error');
+            submitBtn.disabled = false;
+            loader.classList.add('hidden');
+            btnText.textContent = 'Create Agent';
+            return;
+        }
+        formData.append('project_id', projectId);
+        formData.append('type', document.getElementById('agentType').value);
+        formData.append('model_name', document.getElementById('agentModel').value || '');
+        formData.append('description', document.getElementById('agentDescription').value || '');
+        formData.append('instruction', document.getElementById('agentInstruction').value || '');
+        // Get values from Monaco editors if they're active, otherwise from form fields
+        const parentAgents = monacoEditors['agentParentsEditor'] ? getJsonFromEditor(monacoEditors['agentParentsEditor']) : document.getElementById('agentParents').value || '';
+        const allowedRoles = monacoEditors['agentRolesEditor'] ? getJsonFromEditor(monacoEditors['agentRolesEditor']) : document.getElementById('agentRoles').value || '';
+        const toolConfig = monacoEditors['agentToolConfigEditor'] ? getJsonFromEditor(monacoEditors['agentToolConfigEditor']) : document.getElementById('agentToolConfig').value || '';
+        const mcpServersConfig = monacoEditors['agentMcpServersConfigEditor'] ? getJsonFromEditor(monacoEditors['agentMcpServersConfigEditor']) : document.getElementById('agentMcpServersConfig').value || '';
+        const plannerConfig = monacoEditors['agentPlannerConfigEditor'] ? getJsonFromEditor(monacoEditors['agentPlannerConfigEditor']) : document.getElementById('agentPlannerConfig').value || '';
+        
+        const generateContentConfig = monacoEditors['agentGenerateContentConfigEditor'] ? getJsonFromEditor(monacoEditors['agentGenerateContentConfigEditor']) : document.getElementById('agentGenerateContentConfig').value || '';
+        const inputSchema = monacoEditors['agentInputSchemaEditor'] ? getJsonFromEditor(monacoEditors['agentInputSchemaEditor']) : document.getElementById('agentInputSchema').value || '';
+        const outputSchema = monacoEditors['agentOutputSchemaEditor'] ? getJsonFromEditor(monacoEditors['agentOutputSchemaEditor']) : document.getElementById('agentOutputSchema').value || '';
+        
+        formData.append('parent_agents', parentAgents);
+        formData.append('allowed_for_roles', allowedRoles);
+        formData.append('tool_config', toolConfig);
+        formData.append('mcp_servers_config', mcpServersConfig);
+        formData.append('planner_config', plannerConfig);
+        formData.append('generate_content_config', generateContentConfig);
+        formData.append('input_schema', inputSchema);
+        formData.append('output_schema', outputSchema);
+        formData.append('include_contents', document.getElementById('agentIncludeContents').value || '');
+        formData.append('max_iterations', document.getElementById('agentMaxIterations').value || '');
+        const hardcoded = document.getElementById('agentHardcoded').checked;
+        formData.append('disabled', document.getElementById('agentDisabled').checked);
+        formData.append('hardcoded', hardcoded);
+
+        // Check if this is a top-level agent (no parents) and not hardcoded
+        let shouldCreateFolder = false;
+        let isTopLevelAgent = false;
+        try {
+            const parsedParents = parentAgents ? JSON.parse(parentAgents) : [];
+            isTopLevelAgent = (!parsedParents || parsedParents.length === 0) && !hardcoded;
+        } catch (e) {
+            // If parsing fails, assume no parents
+            isTopLevelAgent = !hardcoded && (!parentAgents || parentAgents.trim() === '');
+        }
+
+        // If it's a top-level agent, ask user if they want to create a folder
+        if (isTopLevelAgent) {
+            const createFolder = await showConfirmDialog(
+                `This is a top-level agent.\n\nWould you like to create a new folder for "${agentName}" in the agents directory?\n\nThis will copy the template agent structure to agents/${agentName}/`,
+                'Create Agent Folder',
+                'Create Folder',
+                'Skip',
+                'info'
+            );
+            shouldCreateFolder = createFolder;
+        }
+
+        try {
+            const response = await fetch('/dashboard/api/agents', {
+                method: 'POST',
+                credentials: 'same-origin',  // Use same-origin credentials
+                body: formData
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                // If user confirmed folder creation, create the folder
+                if (shouldCreateFolder) {
+                    try {
+                        btnText.textContent = 'Creating folder...';
+                        const folderResponse = await fetch(`/dashboard/api/agents/${agentName}/create-folder`, {
+                            method: 'POST',
+                            credentials: 'same-origin'
+                        });
+                        const folderResult = await folderResponse.json();
+                        
+                        if (folderResult.success) {
+                            if (folderResult.skipped) {
+                                showNotification(`Agent created successfully. Folder already exists.`);
+                            } else {
+                                showNotification(`Agent and folder created successfully at agents/${agentName}/`);
+                            }
+                        } else {
+                            showNotification(`Agent created but folder creation failed: ${folderResult.message}`, 'warning');
+                        }
+                    } catch (folderError) {
+                        console.error('Folder creation error:', folderError);
+                        showNotification('Agent created but folder creation failed', 'warning');
+                    }
+                } else {
+                    showNotification('Agent created successfully');
+                }
+                hideCreateAgentModal();
+                location.reload();
+            } else {
+                showNotification(result.message || 'Failed to create agent', 'error');
+            }
+        } catch (error) {
+            showNotification('Error creating agent', 'error');
+        } finally {
+            // Hide loader
+            submitBtn.disabled = false;
+            loader.classList.add('hidden');
+            btnText.textContent = 'Create Agent';
+        }
+    });
+
+    // Handle edit agent form submission
+    document.getElementById('editAgentForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        // Set flag to prevent modal close from clearing graph editor flags
+        window.isSubmittingEditForm = true;
+        
+        // Show loader
+        const submitBtn = document.getElementById('editAgentSubmitBtn');
+        const loader = document.getElementById('editAgentLoader');
+        const btnText = document.getElementById('editAgentBtnText');
+        
+        submitBtn.disabled = true;
+        loader.classList.remove('hidden');
+        btnText.textContent = 'Updating...';
+        
+        const configIdRaw = document.getElementById('editAgentId').value;
+        const agentName = document.getElementById('editAgentName').value;
+        const projectId = document.getElementById('editAgentProject').value;
+        if (!projectId) {
+            showNotification('Project selection is required.', 'error');
+            submitBtn.disabled = false;
+            loader.classList.add('hidden');
+            btnText.textContent = 'Update Agent';
+            window.isSubmittingEditForm = false;
+            return;
+        }
+        
+        // Validate that configId is a valid integer
+        // Parse and validate the ID
+        const configId = parseInt(configIdRaw, 10);
+        const isInvalid = configIdRaw === '' || configIdRaw === null || configIdRaw === undefined || isNaN(configId);
+        
+        if (isInvalid) {
+            console.error('Invalid agent ID detected in form submission:', {
+                rawValue: configIdRaw,
+                rawValueType: typeof configIdRaw,
+                parsedValue: configId,
+                isNaN: isNaN(configId),
+                agentName: agentName,
+                editAgentIdElement: document.getElementById('editAgentId'),
+                editAgentIdValue: document.getElementById('editAgentId')?.value
+            });
+            const errorMsg = `Error: Invalid agent ID in form. ID: "${configIdRaw}" (type: ${typeof configIdRaw}). Agent: "${agentName}". Please refresh the page and try again.`;
+            showNotification(errorMsg, 'error');
+            submitBtn.disabled = false;
+            loader.classList.add('hidden');
+            btnText.textContent = 'Update Agent';
+            window.isSubmittingEditForm = false;
+            return;
+        }
+        
+        
+        
+        const formData = new FormData();
+        formData.append('name', agentName);
+        formData.append('project_id', projectId);
+        formData.append('type', document.getElementById('editAgentType').value);
+        formData.append('model_name', document.getElementById('editAgentModel').value || '');
+        formData.append('description', document.getElementById('editAgentDescription').value || '');
+        formData.append('instruction', document.getElementById('editAgentInstruction').value || '');
+        // Get values from Monaco editors if they're active, otherwise from form fields
+        const parentAgents = monacoEditors['editAgentParentsEditor'] ? getJsonFromEditor(monacoEditors['editAgentParentsEditor']) : document.getElementById('editAgentParents').value || '';
+        const allowedRoles = monacoEditors['editAgentRolesEditor'] ? getJsonFromEditor(monacoEditors['editAgentRolesEditor']) : document.getElementById('editAgentRoles').value || '';
+        const toolConfig = monacoEditors['editAgentToolConfigEditor'] ? getJsonFromEditor(monacoEditors['editAgentToolConfigEditor']) : document.getElementById('editAgentToolConfig').value || '';
+        const mcpServersConfig = monacoEditors['editAgentMcpServersConfigEditor'] ? getJsonFromEditor(monacoEditors['editAgentMcpServersConfigEditor']) : document.getElementById('editAgentMcpServersConfig').value || '';
+        const plannerConfig = monacoEditors['editAgentPlannerConfigEditor'] ? getJsonFromEditor(monacoEditors['editAgentPlannerConfigEditor']) : document.getElementById('editAgentPlannerConfig').value || '';
+        
+        const generateContentConfig = monacoEditors['editAgentGenerateContentConfigEditor'] ? getJsonFromEditor(monacoEditors['editAgentGenerateContentConfigEditor']) : document.getElementById('editAgentGenerateContentConfig').value || '';
+        const inputSchema = monacoEditors['editAgentInputSchemaEditor'] ? getJsonFromEditor(monacoEditors['editAgentInputSchemaEditor']) : document.getElementById('editAgentInputSchema').value || '';
+        const outputSchema = monacoEditors['editAgentOutputSchemaEditor'] ? getJsonFromEditor(monacoEditors['editAgentOutputSchemaEditor']) : document.getElementById('editAgentOutputSchema').value || '';
+        
+        formData.append('parent_agents', parentAgents);
+        formData.append('allowed_for_roles', allowedRoles);
+        formData.append('tool_config', toolConfig);
+        formData.append('mcp_servers_config', mcpServersConfig);
+        formData.append('planner_config', plannerConfig);
+        formData.append('generate_content_config', generateContentConfig);
+        formData.append('input_schema', inputSchema);
+        formData.append('output_schema', outputSchema);
+        formData.append('include_contents', document.getElementById('editAgentIncludeContents').value || '');
+        formData.append('max_iterations', document.getElementById('editAgentMaxIterations').value || '');
+        formData.append('disabled', document.getElementById('editAgentDisabled').checked);
+        const newHardcoded = document.getElementById('editAgentHardcoded').checked;
+        formData.append('hardcoded', newHardcoded);
+
+        // Check if hardcoded status changed and if it's a top-level agent
+        const originalHardcoded = window.editAgentOriginalHardcoded || false;
+        const hardcodedChanged = originalHardcoded !== newHardcoded;
+        
+        // Check if it's a top-level agent (no parents)
+        let isTopLevelAgent = false;
+        try {
+            const parsedParents = parentAgents ? JSON.parse(parentAgents) : [];
+            isTopLevelAgent = (!parsedParents || parsedParents.length === 0);
+        } catch (e) {
+            isTopLevelAgent = (!parentAgents || parentAgents.trim() === '');
+        }
+
+        // Handle folder creation/deletion based on hardcoded status change
+        let shouldCreateFolder = false;
+        let shouldDeleteFolder = false;
+        
+        if (hardcodedChanged && isTopLevelAgent) {
+            if (originalHardcoded && !newHardcoded) {
+                // Changed from hardcoded to not hardcoded - offer to create folder
+                const createFolder = await showConfirmDialog(
+                    `You're changing this agent from hardcoded to non-hardcoded.\n\nWould you like to create a folder for "${agentName}" in the agents directory?\n\nThis will copy the template agent structure to agents/${agentName}/`,
+                    'Create Agent Folder',
+                    'Create Folder',
+                    'Skip',
+                    'info'
+                );
+                shouldCreateFolder = createFolder;
+            } else if (!originalHardcoded && newHardcoded) {
+                // Changed from not hardcoded to hardcoded - offer to delete folder
+                const deleteFolder = await showConfirmDialog(
+                    `You're changing this agent from non-hardcoded to hardcoded.\n\nWould you like to delete the folder for "${agentName}" if it exists?\n\nThis will remove agents/${agentName}/ directory.`,
+                    'Delete Agent Folder',
+                    'Delete',
+                    'Keep',
+                    'warning'
+                );
+                shouldDeleteFolder = deleteFolder;
+            }
+        }
+
+        try {
+            const response = await fetch(`/dashboard/api/agents/${configId}`, {
+                method: 'PUT',
+                credentials: 'same-origin',  // Use same-origin credentials (session cookies)
+                body: formData
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                let notificationMessage = 'Agent updated successfully';
+                
+                // Handle folder creation/deletion after successful update
+                if (shouldCreateFolder) {
+                    try {
+                        btnText.textContent = 'Creating folder...';
+                        const folderResponse = await fetch(`/dashboard/api/agents/${agentName}/create-folder`, {
+                            method: 'POST',
+                            credentials: 'same-origin'
+                        });
+                        const folderResult = await folderResponse.json();
+                        
+                        if (folderResult.success) {
+                            if (folderResult.skipped) {
+                                notificationMessage = 'Agent updated successfully. Folder already exists.';
+                            } else {
+                                notificationMessage = `Agent updated and folder created at agents/${agentName}/`;
+                            }
+                        } else {
+                            notificationMessage = `Agent updated but folder creation failed: ${folderResult.message}`;
+                        }
+                    } catch (folderError) {
+                        console.error('Folder creation error:', folderError);
+                        notificationMessage = 'Agent updated but folder creation failed';
+                    }
+                } else if (shouldDeleteFolder) {
+                    try {
+                        btnText.textContent = 'Deleting folder...';
+                        const folderResponse = await fetch(`/dashboard/api/agents/${agentName}/delete-folder`, {
+                            method: 'DELETE',
+                            credentials: 'same-origin'
+                        });
+                        const folderResult = await folderResponse.json();
+                        
+                        if (folderResult.success) {
+                            if (folderResult.folder_deleted) {
+                                notificationMessage = `Agent updated and folder deleted (${folderResult.folder_path})`;
+                            } else {
+                                notificationMessage = 'Agent updated successfully. No folder to delete.';
+                            }
+                        } else {
+                            notificationMessage = `Agent updated but folder deletion failed: ${folderResult.message}`;
+                        }
+                    } catch (folderError) {
+                        console.error('Folder deletion error:', folderError);
+                        notificationMessage = 'Agent updated but folder deletion failed';
+                    }
+                }
+                
+                showNotification(notificationMessage);
+                
+                // Reload the agent with fresh configuration (don't wait for it)
+                fetch(`/dashboard/api/agents/${agentName}/reinitialize`, {
+                    method: 'POST',
+                    credentials: 'same-origin'
+                }).then(response => response.json()).then(reloadResult => {
+                    if (!reloadResult.success) {
+                        
+                    }
+                }).catch(error => {
+                    
+                });
+                
+                // Check if we're editing from graph editor
+                if (window.editingFromGraphEditor && window.graphEditorInstance) {
+                    
+                    // Find the existing agent in configs array
+                    const configIndex = configs.findIndex(c => c.id == configId);
+                    
+                    if (configIndex !== -1) {
+                        // Get the existing agent config
+                        const existingAgent = configs[configIndex];
+                        
+                        // Helper to safely parse JSON
+                        const safeJsonParse = (str, fallback) => {
+                            // If it's already an object/array, return it directly
+                            if (typeof str === 'object' && str !== null) {
+                                return str;
+                            }
+                            // If it's a string, try to parse it
+                            if (typeof str === 'string') {
+                                const trimmed = str.trim();
+                                // Check for empty string or "[object Object]" (which means an object was stringified incorrectly)
+                                if (!trimmed || trimmed === '[object Object]') {
+                                    return fallback;
+                                }
+                                try {
+                                    return JSON.parse(trimmed);
+                                } catch (e) {
+                                    return fallback;
+                                }
+                            }
+                            // Otherwise return fallback
+                            return fallback;
+                        };
+                        
+                        // Update it with the form data (captured BEFORE hiding modal)
+                        const selectedProjectId = document.getElementById('editAgentProject').value;
+                        const resolvedProjectId = selectedProjectId ? parseInt(selectedProjectId, 10) : existingAgent.project_id;
+                        const resolvedProject = window.projects.find(p => String(p.id) === String(resolvedProjectId)) || existingAgent.project || null;
+                        
+                        const updatedAgent = {
+                            ...existingAgent,
+                            id: configId,
+                            name: document.getElementById('editAgentName').value,
+                            type: document.getElementById('editAgentType').value,
+                            model_name: document.getElementById('editAgentModel').value || '',
+                            description: document.getElementById('editAgentDescription').value || '',
+                            instruction: document.getElementById('editAgentInstruction').value || '',
+                            parent_agents: safeJsonParse(parentAgents, []),
+                            allowed_for_roles: safeJsonParse(allowedRoles, []),
+                            tool_config: safeJsonParse(toolConfig, {}),
+                            mcp_servers_config: safeJsonParse(mcpServersConfig, {}),
+                            planner_config: safeJsonParse(plannerConfig, {}),
+                            generate_content_config: safeJsonParse(generateContentConfig, {}),
+                            input_schema: safeJsonParse(inputSchema, {}),
+                            output_schema: safeJsonParse(outputSchema, {}),
+                            include_contents: document.getElementById('editAgentIncludeContents').value || '',
+                            max_iterations: document.getElementById('editAgentMaxIterations').value || '',
+                            disabled: document.getElementById('editAgentDisabled').checked,
+                            hardcoded: document.getElementById('editAgentHardcoded').checked,
+                            project_id: resolvedProjectId,
+                            project: resolvedProject
+                        };
+                        
+                        // Update configs array
+                        configs[configIndex] = updatedAgent;
+                        filterAgents(configs);
+                        
+                        // Hide modal AFTER capturing data
+                        hideEditAgentModal();
+                        
+                        // Mark that agents were modified
+                        window.graphEditorInstance.agentsModified = true;
+                        
+                        // Refresh the graph editor data - pass agent ID to update only that node
+                        window.graphEditorInstance.refreshGraphData(configId);
+                    } else {
+                        hideEditAgentModal();
+                        window.graphEditorInstance.refreshGraphData();
+                    }
+                    
+                    // Ensure graph editor stays open
+                    setTimeout(() => {
+                        if (document.getElementById('graphEditorModal').classList.contains('hidden')) {
+                            document.getElementById('graphEditorModal').classList.remove('hidden');
+                        }
+                    }, 100);
+                    
+                    // Clear the flag
+                    window.editingFromGraphEditor = false;
+                    window.graphEditorInstance = null;
+                } else {
+                    // Normal behavior - hide modal then reload the page
+                    hideEditAgentModal();
+                    location.reload();
+                }
+            } else {
+                showNotification(result.message || 'Failed to update agent', 'error');
+            }
+        } catch (error) {
+            console.error('Error updating agent:', error);
+            showNotification('Error updating agent: ' + error.message, 'error');
+        } finally {
+            // Hide loader
+            submitBtn.disabled = false;
+            loader.classList.add('hidden');
+            btnText.textContent = 'Update Agent';
+            
+            // Clear submission flag
+            window.isSubmittingEditForm = false;
+        }
+    });
+
+    // Handle copy agent form submission
+    document.getElementById('copyAgentForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        // Show loader
+        const submitBtn = document.getElementById('copyAgentSubmitBtn');
+        const loader = document.getElementById('copyAgentLoader');
+        const btnText = document.getElementById('copyAgentBtnText');
+        
+        submitBtn.disabled = true;
+        loader.classList.remove('hidden');
+        btnText.textContent = 'Copying...';
+        
+        const formData = new FormData();
+        const agentName = document.getElementById('copyAgentName').value;
+        formData.append('name', agentName);
+        formData.append('type', document.getElementById('copyAgentType').value);
+        const projectId = document.getElementById('copyAgentProject').value;
+        if (!projectId) {
+            showNotification('Select a project for the copied agent.', 'error');
+            submitBtn.disabled = false;
+            loader.classList.add('hidden');
+            btnText.textContent = 'Copy Agent';
+            return;
+        }
+        formData.append('project_id', projectId);
+        formData.append('model_name', document.getElementById('copyAgentModel').value || '');
+        formData.append('description', document.getElementById('copyAgentDescription').value || '');
+        formData.append('instruction', document.getElementById('copyAgentInstruction').value || '');
+        // Get values from Monaco editors if they're active, otherwise from form fields
+        const parentAgents = monacoEditors['copyAgentParentsEditor'] ? getJsonFromEditor(monacoEditors['copyAgentParentsEditor']) : document.getElementById('copyAgentParents').value || '';
+        const allowedRoles = monacoEditors['copyAgentRolesEditor'] ? getJsonFromEditor(monacoEditors['copyAgentRolesEditor']) : document.getElementById('copyAgentRoles').value || '';
+        const toolConfig = monacoEditors['copyAgentToolConfigEditor'] ? getJsonFromEditor(monacoEditors['copyAgentToolConfigEditor']) : document.getElementById('copyAgentToolConfig').value || '';
+        const mcpServersConfig = monacoEditors['copyAgentMcpServersConfigEditor'] ? getJsonFromEditor(monacoEditors['copyAgentMcpServersConfigEditor']) : document.getElementById('copyAgentMcpServersConfig').value || '';
+        const plannerConfig = monacoEditors['copyAgentPlannerConfigEditor'] ? getJsonFromEditor(monacoEditors['copyAgentPlannerConfigEditor']) : document.getElementById('copyAgentPlannerConfig').value || '';
+        
+        const generateContentConfig = monacoEditors['copyAgentGenerateContentConfigEditor'] ? getJsonFromEditor(monacoEditors['copyAgentGenerateContentConfigEditor']) : document.getElementById('copyAgentGenerateContentConfig').value || '';
+        const inputSchema = monacoEditors['copyAgentInputSchemaEditor'] ? getJsonFromEditor(monacoEditors['copyAgentInputSchemaEditor']) : document.getElementById('copyAgentInputSchema').value || '';
+        const outputSchema = monacoEditors['copyAgentOutputSchemaEditor'] ? getJsonFromEditor(monacoEditors['copyAgentOutputSchemaEditor']) : document.getElementById('copyAgentOutputSchema').value || '';
+        
+        formData.append('parent_agents', parentAgents);
+        formData.append('allowed_for_roles', allowedRoles);
+        formData.append('tool_config', toolConfig);
+        formData.append('mcp_servers_config', mcpServersConfig);
+        formData.append('planner_config', plannerConfig);
+        formData.append('generate_content_config', generateContentConfig);
+        formData.append('input_schema', inputSchema);
+        formData.append('output_schema', outputSchema);
+        formData.append('include_contents', document.getElementById('copyAgentIncludeContents').value || '');
+        formData.append('max_iterations', document.getElementById('copyAgentMaxIterations').value || '');
+        const hardcoded = document.getElementById('copyAgentHardcoded').checked;
+        formData.append('disabled', document.getElementById('copyAgentDisabled').checked);
+        formData.append('hardcoded', hardcoded);
+
+        // Check if this is a top-level agent (no parents) and not hardcoded
+        let shouldCreateFolder = false;
+        let isTopLevelAgent = false;
+        try {
+            const parsedParents = parentAgents ? JSON.parse(parentAgents) : [];
+            isTopLevelAgent = (!parsedParents || parsedParents.length === 0) && !hardcoded;
+        } catch (e) {
+            // If parsing fails, assume no parents
+            isTopLevelAgent = !hardcoded && (!parentAgents || parentAgents.trim() === '');
+        }
+
+        // If it's a top-level agent, ask user if they want to create a folder
+        if (isTopLevelAgent) {
+            const createFolder = await showConfirmDialog(
+                `This is a top-level agent.\n\nWould you like to create a new folder for "${agentName}" in the agents directory?\n\nThis will copy the template agent structure to agents/${agentName}/`,
+                'Create Agent Folder',
+                'Create Folder',
+                'Skip',
+                'info'
+            );
+            shouldCreateFolder = createFolder;
+        }
+
+        try {
+            const response = await fetch('/dashboard/api/agents', {
+                method: 'POST',
+                credentials: 'same-origin',  // Use same-origin credentials
+                body: formData
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                // If user confirmed folder creation, create the folder
+                if (shouldCreateFolder) {
+                    try {
+                        btnText.textContent = 'Creating folder...';
+                        const folderResponse = await fetch(`/dashboard/api/agents/${agentName}/create-folder`, {
+                            method: 'POST',
+                            credentials: 'same-origin'
+                        });
+                        const folderResult = await folderResponse.json();
+                        
+                        if (folderResult.success) {
+                            if (folderResult.skipped) {
+                                showNotification(`Agent copied successfully. Folder already exists.`);
+                            } else {
+                                showNotification(`Agent copied and folder created successfully at agents/${agentName}/`);
+                            }
+                        } else {
+                            showNotification(`Agent copied but folder creation failed: ${folderResult.message}`, 'warning');
+                        }
+                    } catch (folderError) {
+                        console.error('Folder creation error:', folderError);
+                        showNotification('Agent copied but folder creation failed', 'warning');
+                    }
+                } else {
+                    showNotification('Agent copied successfully');
+                }
+                hideCopyAgentModal();
+                location.reload();
+            } else {
+                showNotification(result.message || 'Failed to copy agent', 'error');
+            }
+        } catch (error) {
+            showNotification('Error copying agent', 'error');
+        } finally {
+            // Hide loader
+            submitBtn.disabled = false;
+            loader.classList.add('hidden');
+            btnText.textContent = 'Copy Agent';
+        }
+    });
+
+    // Ensure graph editor button state is updated after all scripts load
+    setTimeout(() => {
+        if (typeof updateGraphEditorButtonState === 'function') {
+            updateGraphEditorButtonState();
+        }
+    }, 200);
+
+    // Initialize table sorting
+    document.addEventListener('DOMContentLoaded', function() {
+        initMultiColumnTableSorting('agentsTable', {
+            0: { sortable: true, dataType: 'text' }, // Name
+            1: { sortable: true, dataType: 'text' }, // Type
+            2: { sortable: true, dataType: 'text' }, // Model
+            3: { sortable: true, dataType: 'text' }, // Parents
+            4: { sortable: true, dataType: 'text' }, // Status
+            5: { sortable: false } // Actions
+        });
+        
+        // Add event listeners for interactive elements
+        if (typeof setupPanelEventListeners === 'function') {
+            setupPanelEventListeners();
+        }
+    });
+
+
+</script>
+{% endblock %}

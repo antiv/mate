@@ -1,0 +1,60 @@
+<!-- File Search Modal -->
+<div id="{{ id_prefix }}FileSearchModal" class="fixed inset-0 z-[120] hidden">
+    <div class="absolute inset-0 bg-black/60" onclick="closeFileSearchModal('{{ id_prefix }}')"></div>
+    <div class="relative z-10 mx-auto my-6 w-full max-w-4xl px-2">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-2xl border border-gray-200 dark:border-gray-700 flex flex-col max-h-[85vh]">
+            <div class="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                <div>
+                    <h4 class="text-sm font-semibold text-gray-900 dark:text-white">File Search (RAG) Management</h4>
+                    <p class="text-xs text-gray-500 dark:text-gray-400">Manage file search stores and documents for RAG functionality.</p>
+                </div>
+                <button type="button" class="text-gray-500 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-100" onclick="closeFileSearchModal('{{ id_prefix }}')">
+                    <i class="fas fa-times text-base"></i>
+                </button>
+            </div>
+            <div class="px-4 py-4 overflow-y-auto space-y-4">
+                <div>
+                    <h5 class="text-xs font-semibold text-gray-900 dark:text-white mb-2">Assigned Stores & Files</h5>
+                    <div id="{{ id_prefix }}FileSearchStoresList" class="space-y-2">
+                        <p class="text-sm text-gray-500 dark:text-gray-400">Loading stores...</p>
+                    </div>
+                </div>
+                <div class="border-t border-gray-200 dark:border-gray-700 pt-4">
+                    <h5 class="text-xs font-semibold text-gray-900 dark:text-white mb-2">Assign or Create Store</h5>
+                    <p class="text-xs text-gray-500 dark:text-gray-400 mb-3">Assign an existing store or create a new one for this agent.</p>
+                    <div class="space-y-2">
+                        <select 
+                            id="{{ id_prefix }}AssignStoreSelect" 
+                            onchange="handleStoreSelectChange('{{ id_prefix }}')"
+                            class="w-full px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        >
+                            <option value="">Loading stores...</option>
+                        </select>
+                        <div id="{{ id_prefix }}NewStoreNameContainer" class="hidden">
+                            <input 
+                                type="text" 
+                                id="{{ id_prefix }}NewStoreDisplayName" 
+                                placeholder="Store display name" 
+                                class="w-full px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            >
+                        </div>
+                        <button 
+                            type="button" 
+                            onclick="handleAssignOrCreateStore('{{ id_prefix }}')"
+                            class="px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded"
+                        >
+                            <i class="fas fa-link text-[11px] mr-1"></i>
+                            <span id="{{ id_prefix }}AssignButtonText">Assign Store</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="px-4 py-3 border-t border-gray-200 dark:border-gray-700 flex justify-end space-x-2">
+                <button type="button" class="px-3 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded text-gray-600 dark:text-gray-300 hover:border-gray-400 dark:hover:border-gray-500" onclick="closeFileSearchModal('{{ id_prefix }}')">
+                    Close
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+

@@ -1,0 +1,472 @@
+"""
+SQLAlchemy models for the application.
+"""
+
+from sqlalchemy import Column, Integer, String, DateTime, create_engine, UUID, Text, ForeignKey, Boolean, Date, JSON
+from sqlalchemy.orm import sessionmaker, relationship, declarative_base
+from datetime import datetime, timezone
+from typing import Optional
+import json
+
+Base = declarative_base()
+
+
+class User(Base):
+    """Model for user management and role-based access control."""
+    
+    __tablename__ = 'users'
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(String(255), nullable=False, unique=True)  # Primary user identifier
+    roles = Column(Text, nullable=False, default='["user"]')  # JSON array of roles
+    profile_data = Column(Text, nullable=True)  # User profile data for agent personalization (text format)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), 
+                       onupdate=lambda: datetime.now(timezone.utc), nullable=False)
+    
+    def get_roles(self) -> list:
+        """Get user roles as a list."""
+        try:
+            return json.loads(self.roles) if self.roles else ["user"]
+        except json.JSONDecodeError:
+            return ["user"]
+    
+    def set_roles(self, roles: list):
+        """Set user roles from a list."""
+        self.roles = json.dumps(roles)
+    
+    def has_role(self, role: str) -> bool:
+        """Check if user has a specific role."""
+        return role in self.get_roles()
+    
+    def add_role(self, role: str):
+        """Add a role to the user."""
+        current_roles = self.get_roles()
+        if role not in current_roles:
+            current_roles.append(role)
+            self.set_roles(current_roles)
+    
+    def remove_role(self, role: str):
+        """Remove a role from the user."""
+        current_roles = self.get_roles()
+        if role in current_roles:
+            current_roles.remove(role)
+            self.set_roles(current_roles)
+    
+    def get_profile_data(self) -> Optional[str]:
+        """Get user profile data as text."""
+        return self.profile_data if self.profile_data else None
+    
+    def set_profile_data(self, profile_data: Optional[str]):
+        """Set user profile data from text."""
+        self.profile_data = profile_data
+    
+    def to_dict(self) -> dict:
+        """Convert model instance to dictionary."""
+        return {
+            'id': self.id,
+            'user_id': self.user_id,
+            'roles': self.get_roles(),
+            'profile_data': self.get_profile_data(),
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+
+
+class TokenUsageLog(Base):
+    """Model for token usage logs."""
+    
+    __tablename__ = 'token_usage_logs'
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    request_id = Column(String(255), nullable=False)  # Required field based on error
+    session_id = Column(String(255), nullable=True)
+    user_id = Column(String(255), nullable=True)
+    agent_name = Column(String(255), nullable=True)
+    model_name = Column(String(255), nullable=True)
+    prompt_tokens = Column(Integer, nullable=True)
+    response_tokens = Column(Integer, nullable=True)
+    thoughts_tokens = Column(Integer, nullable=True)
+    tool_use_tokens = Column(Integer, nullable=True)
+    status = Column(String(50), nullable=True, default='SUCCESS')  # SUCCESS, ERROR, ACCESS_DENIED, etc.
+    error_description = Column(Text, nullable=True)  # Description of error if status is not SUCCESS
+    timestamp = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    
+    def to_dict(self) -> dict:
+        """Convert model instance to dictionary."""
+        return {
+            'id': self.id,
+            'request_id': self.request_id,
+            'session_id': self.session_id,
+            'user_id': self.user_id,
+            'agent_name': self.agent_name,
+            'model_name': self.model_name,
+            'prompt_tokens': self.prompt_tokens,
+            'response_tokens': self.response_tokens,
+            'thoughts_tokens': self.thoughts_tokens,
+            'tool_use_tokens': self.tool_use_tokens,
+            'status': self.status,
+            'error_description': self.error_description,
+            'timestamp': self.timestamp.isoformat() if self.timestamp else None
+        }
+
+
+class Project(Base):
+    """Model for grouping agents under projects."""
+    
+    __tablename__ = 'projects'
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(255), nullable=False, unique=True)
+    description = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc),
+                        onupdate=lambda: datetime.now(timezone.utc), nullable=False)
+    
+    agents = relationship("AgentConfig", back_populates="project", cascade="all, delete-orphan")
+    
+    def to_dict(self) -> dict:
+        """Convert project instance to dictionary."""
+        return {
+            'id': self.id,
+            'name': self.name,
+            'description': self.description,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+
+
+class AgentConfig(Base):
+    """Model for agent configuration."""
+    
+    __tablename__ = 'agents_config'
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(255), nullable=False, unique=True)
+    type = Column(String(50), nullable=False)  # llm, sequential, parallel, loop
+    model_name = Column(String(255), nullable=True)
+    description = Column(Text, nullable=True)
+    instruction = Column(Text, nullable=True)
+    mcp_servers_config = Column(Text, nullable=True)  # JSON object containing multiple MCP server configurations
+    parent_agents = Column(Text, nullable=True)  # JSON array of parent agent names
+    allowed_for_roles = Column(Text, nullable=True)  # JSON string of roles
+    tool_config = Column(Text, nullable=True)  # JSON string for tool configuration
+    max_iterations = Column(Integer, nullable=True)  # For LoopAgent - maximum number of iterations
+    planner_config = Column(Text, nullable=True)  # JSON string for planner configuration
+    generate_content_config = Column(Text, nullable=True)  # JSON string for LLM generation config (temperature, top_p, etc.)
+    input_schema = Column(Text, nullable=True)  # JSON string for input validation schema
+    output_schema = Column(Text, nullable=True)  # JSON string for output structure schema
+    include_contents = Column(Text, nullable=True)  # JSON array for managing context/history
+    disabled = Column(Boolean, nullable=False, default=False)  # Flag to disable agent
+    hardcoded = Column(Boolean, nullable=False, default=False)  # Flag to mark agent as hardcoded (skip folder creation)
+    project_id = Column(Integer, ForeignKey('projects.id'), nullable=False, default=1)
+    
+    project = relationship("Project", back_populates="agents")
+    
+    # Note: Relationships are handled in the AgentManager class
+    # to avoid complex self-referential relationship issues
+    
+    def get_parent_agents(self) -> list:
+        """Get parent agents as a list."""
+        try:
+            return json.loads(self.parent_agents) if self.parent_agents else []
+        except json.JSONDecodeError:
+            return []
+    
+    def set_parent_agents(self, parent_agents: list):
+        """Set parent agents from a list."""
+        self.parent_agents = json.dumps(parent_agents) if parent_agents else None
+    
+    def add_parent_agent(self, parent_agent: str):
+        """Add a parent agent to the list."""
+        current_parents = self.get_parent_agents()
+        if parent_agent not in current_parents:
+            current_parents.append(parent_agent)
+            self.set_parent_agents(current_parents)
+    
+    def remove_parent_agent(self, parent_agent: str):
+        """Remove a parent agent from the list."""
+        current_parents = self.get_parent_agents()
+        if parent_agent in current_parents:
+            current_parents.remove(parent_agent)
+            self.set_parent_agents(current_parents)
+    
+    def get_mcp_servers_config(self) -> dict:
+        """Get MCP servers configuration as a dictionary."""
+        try:
+            return json.loads(self.mcp_servers_config) if self.mcp_servers_config else {}
+        except json.JSONDecodeError:
+            return {}
+    
+    def set_mcp_servers_config(self, config: dict):
+        """Set MCP servers configuration from a dictionary."""
+        self.mcp_servers_config = json.dumps(config) if config else None
+    
+    def get_planner_config(self) -> dict:
+        """Get planner configuration as a dictionary."""
+        try:
+            return json.loads(self.planner_config) if self.planner_config else {}
+        except json.JSONDecodeError:
+            return {}
+    
+    def set_planner_config(self, config: dict):
+        """Set planner configuration from a dictionary."""
+        self.planner_config = json.dumps(config) if config else None
+    
+    def has_parent_agent(self, parent_agent: str) -> bool:
+        """Check if agent has a specific parent agent."""
+        return parent_agent in self.get_parent_agents()
+    
+    def to_dict(self) -> dict:
+        """Convert model instance to dictionary."""
+        return {
+            'id': self.id,
+            'name': self.name,
+            'type': self.type,
+            'model_name': self.model_name,
+            'description': self.description,
+            'instruction': self.instruction,
+            'mcp_servers_config': self.mcp_servers_config,
+            'parent_agents': self.get_parent_agents(),
+            'allowed_for_roles': self.allowed_for_roles,
+            'tool_config': self.tool_config,
+            'planner_config': self.planner_config,
+            'max_iterations': self.max_iterations,
+            'generate_content_config': self.generate_content_config,
+            'input_schema': self.input_schema,
+            'output_schema': self.output_schema,
+            'include_contents': self.include_contents,
+            'disabled': self.disabled,
+            'hardcoded': self.hardcoded,
+            'project_id': self.project_id,
+            'project': self.project.to_dict() if self.project else None
+        }
+
+
+class Credential(Base):
+    """Model for storing tool credentials."""
+    
+    __tablename__ = 'credentials'
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    app_name = Column(String(255), nullable=False)
+    user_id = Column(String(255), nullable=False)
+    credential_key = Column(String(500), nullable=False)
+    credential_data = Column(Text, nullable=False)  # JSON serialized credential
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), 
+                       onupdate=lambda: datetime.now(timezone.utc), nullable=False)
+    
+    # Create composite unique index for app_name + user_id + credential_key
+    __table_args__ = (
+        {'extend_existing': True}
+    )
+    
+    def to_dict(self) -> dict:
+        """Convert model instance to dictionary."""
+        return {
+            'id': self.id,
+            'app_name': self.app_name,
+            'user_id': self.user_id,
+            'credential_key': self.credential_key,
+            'credential_data': self.credential_data,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+
+
+# Memory Models for DBMemoryService
+
+class MemorySession(Base):
+    """Model for storing memory sessions."""
+    
+    __tablename__ = 'memory_sessions'
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    session_id = Column(String(255), nullable=False, unique=True)
+    app_name = Column(String(255), nullable=False)
+    user_id = Column(String(255), nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), 
+                       onupdate=lambda: datetime.now(timezone.utc), nullable=False)
+    
+    # Relationship to memory events
+    events = relationship("MemoryEvent", back_populates="session", cascade="all, delete-orphan")
+    
+    def to_dict(self) -> dict:
+        """Convert model instance to dictionary."""
+        return {
+            'id': self.id,
+            'session_id': self.session_id,
+            'app_name': self.app_name,
+            'user_id': self.user_id,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+
+
+class MemoryEvent(Base):
+    """Model for storing memory events."""
+    
+    __tablename__ = 'memory_events'
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    session_id = Column(String(255), ForeignKey('memory_sessions.session_id'), nullable=False)
+    event_id = Column(String(255), nullable=False)  # Original event ID from session
+    content = Column(JSON, nullable=True)  # Store event content as JSON
+    author = Column(String(255), nullable=True)
+    timestamp = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    
+    # Relationship to memory session
+    session = relationship("MemorySession", back_populates="events")
+    
+    def to_dict(self) -> dict:
+        """Convert model instance to dictionary."""
+        return {
+            'id': self.id,
+            'session_id': self.session_id,
+            'event_id': self.event_id,
+            'content': self.content,
+            'author': self.author,
+            'timestamp': self.timestamp.isoformat() if self.timestamp else None,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+
+
+# File Search Models for RAG functionality
+
+class FileSearchStore(Base):
+    """Model for Gemini File Search stores."""
+    
+    __tablename__ = 'file_search_stores'
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    store_name = Column(String(500), nullable=False, unique=True)  # Full store name from Gemini API
+    display_name = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    project_id = Column(Integer, ForeignKey('projects.id'), nullable=False)
+    created_by_agent = Column(String(255), nullable=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc),
+                       onupdate=lambda: datetime.now(timezone.utc), nullable=False)
+    
+    project = relationship("Project")
+    
+    def to_dict(self) -> dict:
+        """Convert model instance to dictionary."""
+        return {
+            'id': self.id,
+            'store_name': self.store_name,
+            'display_name': self.display_name,
+            'description': self.description,
+            'project_id': self.project_id,
+            'created_by_agent': self.created_by_agent,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+
+
+class AgentFileSearchStore(Base):
+    """Many-to-many relationship between agents and file search stores."""
+    
+    __tablename__ = 'agent_file_search_stores'
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    agent_name = Column(String(255), nullable=False)
+    store_id = Column(Integer, ForeignKey('file_search_stores.id'), nullable=False)
+    is_primary = Column(Boolean, nullable=False, default=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    
+    store = relationship("FileSearchStore")
+    
+    def to_dict(self) -> dict:
+        """Convert model instance to dictionary."""
+        return {
+            'id': self.id,
+            'agent_name': self.agent_name,
+            'store_id': self.store_id,
+            'is_primary': self.is_primary,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'store': self.store.to_dict() if self.store else None
+        }
+
+
+class MemoryBlock(Base):
+    """Model for local memory blocks (dynamic instructions, user facts, etc.)."""
+
+    __tablename__ = 'memory_blocks'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    project_id = Column(Integer, ForeignKey('projects.id'), nullable=False)
+    label = Column(String(500), nullable=False)
+    value = Column(Text, nullable=False, default='')
+    description = Column(Text, nullable=True)
+    block_metadata = Column('metadata', Text, nullable=True)  # JSON string; 'metadata' reserved in Declarative
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc),
+                       onupdate=lambda: datetime.now(timezone.utc), nullable=False)
+
+    project = relationship("Project")
+
+    def get_metadata(self) -> Optional[dict]:
+        """Get metadata as dict."""
+        if not self.block_metadata:
+            return None
+        try:
+            return json.loads(self.block_metadata)
+        except json.JSONDecodeError:
+            return None
+
+    def set_metadata(self, data: Optional[dict]):
+        """Set metadata from dict."""
+        self.block_metadata = json.dumps(data) if data else None
+
+    def to_dict(self) -> dict:
+        """Convert to dict compatible with block API (block_id, label, value, etc.)."""
+        return {
+            'block_id': str(self.id),
+            'label': self.label,
+            'value': self.value,
+            'description': self.description,
+            'metadata': self.get_metadata(),
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class FileSearchDocument(Base):
+    """Model for documents/files in file search stores."""
+
+    __tablename__ = 'file_search_documents'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    store_id = Column(Integer, ForeignKey('file_search_stores.id'), nullable=False)
+    document_name = Column(String(500), nullable=False)  # Full document name from Gemini API
+    display_name = Column(String(255), nullable=True)
+    file_path = Column(String(1000), nullable=True)  # Original file path if available
+    file_size = Column(Integer, nullable=True)  # Use Integer for SQLite compatibility
+    mime_type = Column(String(255), nullable=True)
+    status = Column(String(50), nullable=False, default='processing')  # processing, completed, failed
+    uploaded_by_agent = Column(String(255), nullable=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc),
+                       onupdate=lambda: datetime.now(timezone.utc), nullable=False)
+    
+    store = relationship("FileSearchStore")
+    
+    def to_dict(self) -> dict:
+        """Convert model instance to dictionary."""
+        return {
+            'id': self.id,
+            'store_id': self.store_id,
+            'document_name': self.document_name,
+            'display_name': self.display_name,
+            'file_path': self.file_path,
+            'file_size': self.file_size,
+            'mime_type': self.mime_type,
+            'status': self.status,
+            'uploaded_by_agent': self.uploaded_by_agent,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }

@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MATE Architecture Visualizer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="module">
+        import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+        mermaid.initialize({ startOnLoad: true, theme: 'neutral' });
+    </script>
+</head>
+<body class="bg-gray-50 text-gray-800 font-sans">
+
+    <div class="max-w-6xl mx-auto p-8">
+        <header class="mb-10 text-center">
+            <h1 class="text-4xl font-bold text-blue-900 mb-2">MATE Architecture & Roadmap</h1>
+            <p class="text-lg text-gray-600">Visual Schema, Data Flows, and Future Improvements</p>
+        </header>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+            <button onclick="document.getElementById('current-arch').scrollIntoView({behavior: 'smooth'})" class="p-4 bg-white border rounded-lg shadow hover:bg-blue-50 text-left">
+                <h3 class="font-bold text-blue-900">Current Architecture</h3>
+                <p class="text-sm text-gray-500">Diagrams 1-6: Existing system flows.</p>
+            </button>
+            <button onclick="document.getElementById('future-arch').scrollIntoView({behavior: 'smooth'})" class="p-4 bg-white border rounded-lg shadow hover:bg-green-50 text-left">
+                <h3 class="font-bold text-green-900">Future Roadmap</h3>
+                <p class="text-sm text-gray-500">Diagrams 7-12: Planned improvements.</p>
+            </button>
+        </div>
+
+        <div id="current-arch">
+             <h2 class="text-3xl font-bold text-gray-800 mb-6 border-b pb-2">Current Architecture</h2>
+             
+            <!-- Diagram 1 -->
+            <div class="bg-white shadow-lg rounded-xl p-6 mb-8 border border-gray-200">
+                <h2 class="text-2xl font-semibold mb-4 text-blue-800">1. High-Level System Architecture</h2>
+                <div class="mermaid flex justify-center bg-gray-50 p-4 rounded">
+graph TD
+    Client[Client / Dashboard]
+    subgraph "Server Infrastructure"
+        Auth[Auth Server :8000]
+        ADK[ADK Server :8001]
+    end
+    
+    subgraph "Data Persistence"
+        DB[(SQL Database)]
+        Memory[(Memory Blocks)]
+    end
+    
+    subgraph "Agent Logic"
+        AM[Agent Manager]
+        Exec[Agent Execution]
+        Tools[Tool Factory]
+    end
+
+    Client -->|HTTP / WebSocket| Auth
+    Auth -->|Proxy Request| ADK
+    Auth -->|MCP Protocol| MCP_Drive[Drive MCP]
+    Auth -->|MCP Protocol| MCP_Img[Image MCP]
+    
+    ADK -->|Init| AM
+    AM -->|Run| Exec
+    Exec -->|Use| Tools
+    Exec -->|Context| Memory
+    AM -->|Load Config| DB
+    Tools -->|Log Usage| DB
+                </div>
+            </div>
+
+            <!-- Diagram 2 -->
+            <div class="bg-white shadow-lg rounded-xl p-6 mb-8 border border-gray-200">
+                <h2 class="text-2xl font-semibold mb-4 text-blue-800">2. Request Execution Flow</h2>
+                <div class="mermaid flex justify-center bg-gray-50 p-4 rounded">
+sequenceDiagram
+    autonumber
+    participant C as Client
+    participant AS as Auth Server
+    participant ADK as ADK Server
+    participant AM as Agent Manager
+    participant AG as Agent Instance
+
+    C->>AS: HTTP Request (Bearer Token)
+    Note over AS: Validate Auth & Permissions
+    AS->>ADK: Proxy to ADK
+    ADK->>AM: Get Initialized Agent
+    AM-->>ADK: Return Instance
+    ADK->>AG: Execute Agent Run
+    
+    rect rgb(240, 248, 255)
+        note right of AG: Execution Callbacks
+        AG->>AG: Verify RBAC
+        AG->>AG: Inject User Profile
+        AG->>AG: Track Token Usage
+    end
+    
+    AG-->>ADK: Return Response
+    ADK-->>AS: Return Response
+    AS-->>C: Final Client Response
+                </div>
+            </div>
+
+            <!-- Diagram 3 -->
+            <div class="bg-white shadow-lg rounded-xl p-6 mb-8 border border-gray-200">
+                <h2 class="text-2xl font-semibold mb-4 text-blue-800">3. Agent Initialization Process</h2>
+                <div class="mermaid flex justify-center bg-gray-50 p-4 rounded">
+flowchart TD
+    Start([Start Initialization]) --> GetRoot[Fetch Root Agent Name]
+    GetRoot --> LoadConfig[Query 'agents_config' Table]
+    LoadConfig --> CheckType{Agent Type?}
+    
+    CheckType -- Complex (Seq/Par) --> Recurse[Recursively Load Sub-Agents]
+    CheckType -- Standard (LLM) --> InitTools[Initialize Tools via Factory]
+    
+    Recurse --> CreateAgents[Instantiate Agent Class]
+    InitTools --> CreateAgents
+    
+    CreateAgents --> BuildTree[Construct Parent-Child Tree]
+    BuildTree --> ApplySchemas[Apply Planners & JSON Schemas]
+    ApplySchemas --> Cache[Store in Memory Cache]
+    Cache --> End([Ready])
+    
+    style Start fill:#d4edda,stroke:#28a745
+    style End fill:#d4edda,stroke:#28a745
+    style LoadConfig fill:#fff3cd,stroke:#ffc107
+                </div>
+            </div>
+
+            <!-- Diagram 4 -->
+            <div class="bg-white shadow-lg rounded-xl p-6 mb-8 border border-gray-200">
+                <h2 class="text-2xl font-semibold mb-4 text-blue-800">4. Dynamic Memory (Bootstrap & Lazy Loading)</h2>
+                <div class="mermaid flex justify-center bg-gray-50 p-4 rounded">
+sequenceDiagram
+    participant U as User
+    participant A as Agent
+    participant T as Memory Tool
+    participant L as Memory (DB)
+
+    %% Phase 1
+    rect rgb(235, 245, 255)
+        note over A: Phase 1: Bootstrap (Startup)
+        A->>T: Load "system_instruction_shared_*"
+        A->>T: Load "system_instruction_{agentName}_*"
+        A->>T: Load "human_current_user"
+        T->>L: Fetch Context
+        L-->>A: [Identity, Safety, User Prefs]
+    end
+    
+    %% Phase 2
+    rect rgb(255, 247, 230)
+        note over A: Phase 2: Lazy Loading (Runtime)
+        
+        alt Trigger: "Visualization"
+            U->>A: "Show me the org chart visualization"
+            A->>T: Load "smart_object_output_format_json"
+            L-->>A: [JSON Schema for Smart Object]
+        else Trigger: "Deployment"
+            U->>A: "Deploy this to production"
+            A->>T: Load "protocol_deployment_steps"
+            L-->>A: [Step-by-Step Release Protocol]
+        end
+    end
+    
+    A->>A: Format/Act using Loaded Context
+    A-->>U: Final Response
+                </div>
+            </div>
+
+            <!-- Diagram 5: Agent MCP Workflow -->
+            <div class="bg-white shadow-lg rounded-xl p-6 mb-8 border border-gray-200">
+                <h2 class="text-2xl font-semibold mb-4 text-blue-800">5. Agents as MCP Servers Workflow</h2>
+                <p class="mb-4 text-gray-600">How agents are exposed as MCP endpoints and accessed by MCP clients.</p>
+                
+                <h3 class="text-lg font-semibold mb-3 text-blue-700">5a. Sequence Flow</h3>
+                <div class="mermaid flex justify-center bg-gray-50 p-4 rounded mb-6">
+sequenceDiagram
+    autonumber
+    participant MCPClient as MCP Client<br/>(Claude/Cursor/etc)
+    participant AuthServer as Auth Server :8000
+    participant MCPHandler as Agent MCP Handler
+    participant ADKServer as ADK Server :8001
+    participant Agent as Agent Instance
+    participant DB as Database
+
+    Note over AuthServer,DB: Initialization Phase (Server Startup)
+    AuthServer->>DB: Read agents_config table
+    DB-->>AuthServer: Agent configurations
+    AuthServer->>AuthServer: Filter by MCP_EXPOSED_AGENTS env var
+    AuthServer->>MCPHandler: Create MCP endpoints<br/>for each agent
+    MCPHandler->>MCPHandler: Register routes:<br/>/agents/{name}/mcp/*
+    
+    Note over MCPClient,Agent: Runtime: MCP Client Request
+    MCPClient->>AuthServer: POST /agents/{agent}/mcp/tools/call<br/>{method: "tools/call", params: {...}}
+    AuthServer->>MCPHandler: Route to agent MCP handler
+    MCPHandler->>MCPHandler: Parse MCP request<br/>Extract message
+    MCPHandler->>ADKServer: POST /a2a/{agent}<br/>{method: "message/send", params: {message}}
+    ADKServer->>Agent: Execute agent with message
+    Agent->>Agent: Process with tools & context
+    Agent-->>ADKServer: Return response
+    ADKServer-->>MCPHandler: A2A response
+    MCPHandler->>MCPHandler: Format as MCP result
+    MCPHandler-->>AuthServer: MCP JSON-RPC response
+    AuthServer-->>MCPClient: Final MCP response
+                </div>
+
+                <h3 class="text-lg font-semibold mb-3 text-blue-700">5b. Architecture Overview</h3>
+                <div class="mermaid flex justify-center bg-gray-50 p-4 rounded">
+graph TB
+    subgraph "MCP Clients"
+        Claude[Claude Desktop]
+        Cursor[Cursor IDE]
+        Other[Other MCP Clients]
+    end
+    
+    subgraph "Auth Server :8000"
+        MCPManager[Agent MCP Manager]
+        MCPHandler1[Agent MCP Handler<br/>creative_agent]
+        MCPHandler2[Agent MCP Handler<br/>main_entity]
+        MCPHandlerN[Agent MCP Handler<br/>...]
+    end
+    
+    subgraph "Database"
+        DB[(agents_config table)]
+        EnvVar[MCP_EXPOSED_AGENTS<br/>env variable]
+    end
+    
+    subgraph "ADK Server :8001"
+        A2A[A2A Protocol Handler]
+        AgentExec[Agent Executor]
+    end
+    
+    subgraph "Agent Instances"
+        Agent1[creative_agent]
+        Agent2[main_entity]
+        AgentN[...]
+    end
+    
+    Claude & Cursor & Other -->|MCP Protocol<br/>JSON-RPC 2.0| MCPManager
+    MCPManager -->|Read Config| DB
+    EnvVar -->|Filter Agents| MCPManager
+    MCPManager -->|Create| MCPHandler1
+    MCPManager -->|Create| MCPHandler2
+    MCPManager -->|Create| MCPHandlerN
+    
+    MCPHandler1 & MCPHandler2 & MCPHandlerN -->|A2A Protocol| A2A
+    A2A -->|Execute| AgentExec
+    AgentExec -->|Route| Agent1
+    AgentExec -->|Route| Agent2
+    AgentExec -->|Route| AgentN
+    
+    style MCPManager fill:#e3f2fd,stroke:#1976d2
+    style MCPHandler1 fill:#fff3e0,stroke:#e65100
+    style MCPHandler2 fill:#fff3e0,stroke:#e65100
+    style A2A fill:#f3e5f5,stroke:#7b1fa2
+                </div>
+                
+                <div class="mt-4 p-4 bg-blue-50 rounded-lg">
+                    <h3 class="font-semibold text-blue-900 mb-2">Key Points:</h3>
+                    <ul class="list-disc list-inside text-sm text-gray-700 space-y-1">
+                        <li><strong>Dynamic Creation:</strong> MCP endpoints created at startup from database configuration</li>
+                        <li><strong>Environment Control:</strong> Only agents listed in <code>MCP_EXPOSED_AGENTS</code> are exposed</li>
+                        <li><strong>Protocol Translation:</strong> MCP JSON-RPC → A2A Protocol → Agent Execution</li>
+                        <li><strong>Standard Interface:</strong> Any MCP-compatible client can access agents</li>
+                        <li><strong>Tool Format:</strong> Each agent exposes one tool: <code>call_{agent_name}_agent</code></li>
+                        <li><strong>Endpoint Pattern:</strong> <code>/agents/{agent_name}/mcp/*</code> for all MCP operations</li>
+                    </ul>
+                </div>
+            </div>
+
+             <!-- Diagram 6 -->
+            <div class="bg-white shadow-lg rounded-xl p-6 mb-8 border border-gray-200">
+                <h2 class="text-2xl font-semibold mb-4 text-blue-800">6. System Layers Abstraction</h2>
+                <div class="mermaid flex justify-center bg-gray-50 p-4 rounded">
+graph BT
+    subgraph "<b>Infrastructure Layer</b> (Hardware Equivalent)"
+        direction TB
+        I1[Docker Containers]
+        I2[PostgreSQL DB]
+        I3[Auth Server :8000]
+        I4[ADK Server :8001]
+    end
+
+    subgraph "<b>MATE Framework Core</b> (OS Equivalent)"
+        direction TB
+        OS1[Agent Manager]
+        OS2[Tool Factory]
+        OS3[RBAC & Security]
+        OS4[Bootstrap Protocol]
+    end
+
+    subgraph "<b>Agent Application Space</b> (App Equivalent)"
+        direction TB
+        App1[Project Configurations]
+        App2[Agent Definitions JSON]
+        App3[Active Agent Workflows]
+    end
+
+    I1 & I2 & I3 & I4 --> OS1
+    OS1 & OS2 & OS3 & OS4 --> App1
+    
+    style I1 fill:#f9f9f9,stroke:#333
+    style I2 fill:#f9f9f9,stroke:#333
+    style I3 fill:#f9f9f9,stroke:#333
+    style I4 fill:#f9f9f9,stroke:#333
+
+    style OS1 fill:#d1ecf1,stroke:#0c5460
+    style OS2 fill:#d1ecf1,stroke:#0c5460
+    style OS3 fill:#d1ecf1,stroke:#0c5460
+    style OS4 fill:#d1ecf1,stroke:#0c5460
+
+    style App1 fill:#d4edda,stroke:#155724
+    style App2 fill:#d4edda,stroke:#155724
+    style App3 fill:#d4edda,stroke:#155724
+                </div>
+            </div>
+        </div>
+
+        <div id="future-arch" class="mt-16 pt-8 border-t-2 border-dashed border-gray-300">
+            <h2 class="text-3xl font-bold text-green-800 mb-6 border-b pb-2">Planned Improvements (Roadmap)</h2>
+
+            <!-- Diagram 7: Roadmap Mindmap -->
+            <div class="bg-white shadow-lg rounded-xl p-6 mb-8 border border-gray-200">
+                <h2 class="text-2xl font-semibold mb-4 text-green-700">7. Strategic Feature Roadmap</h2>
+                <div class="mermaid flex justify-center bg-gray-50 p-4 rounded">
+%%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#f8fafc', 'primaryTextColor':'#1e293b', 'primaryBorderColor':'#475569', 'lineColor':'#94a3b8'}}}%%
+mindmap
+  root((MATE<br/>Improvements))
+    Security:::important
+      OAuth 2.0 / OIDC
+      RBAC Granularity
+      Session Management
+    Memory System:::important
+      Advanced Search
+      Native DB Storage
+      Visual Dashboard
+    Dev Experience
+      Agent Playground
+      CLI Tools
+      Templates
+    Observability
+      Distributed Tracing
+      Structured Logging
+      Cost Analytics
+    Reliability
+      Testing Framework
+      Circuit Breakers
+      Retry Policies
+                </div>
+            </div>
+
+            <!-- Diagram 8: OAuth Flow -->
+            <div class="bg-white shadow-lg rounded-xl p-6 mb-8 border border-gray-200">
+                <h2 class="text-2xl font-semibold mb-4 text-green-700">8. Future Authentication: OAuth 2.0</h2>
+                <div class="mermaid flex justify-center bg-gray-50 p-4 rounded">
+sequenceDiagram
+    participant U as User
+    participant FE as Dashboard
+    participant AS as Auth Server
+    participant IDP as Identity Provider
+    participant DB as Database
+
+    U->>FE: Click "Login with SSO"
+    FE->>AS: Get OAuth URL
+    AS-->>FE: Return Redirect URL
+    FE->>IDP: Redirect User
+    
+    Note over U,IDP: User Authenticates
+    
+    IDP-->>FE: Redirect w/ Code
+    FE->>AS: Exchange Code
+    AS->>IDP: Verify & Get Profile
+    IDP-->>AS: Profile & Token
+    
+    AS->>DB: Upsert User & Session
+    AS-->>FE: Set Secure Cookie
+    Note over FE: Authenticated
+                </div>
+            </div>
+
+            <!-- Diagram 9: Native Memory (Current) -->
+            <div class="bg-white shadow-lg rounded-xl p-6 mb-8 border border-gray-200">
+                <h2 class="text-2xl font-semibold mb-4 text-green-700">9. Memory: Native Implementation</h2>
+                <p class="mb-4 text-gray-600">Memory blocks stored in project database; agents use list_shared_blocks / get_shared_block / modify_shared_block tools.</p>
+                <div class="mermaid flex justify-center bg-gray-50 p-4 rounded">
+flowchart TD
+    subgraph "Agent Runtime"
+        Agent[Agent Instance]
+        MemTool[Memory Block Tools]
+    end
+
+    subgraph "MATE Memory"
+        Service[MemoryBlocksService]
+    end
+
+    subgraph "Storage"
+        SQL[(SQL Database<br/>memory_blocks)]
+    end
+
+    Agent --> MemTool
+    MemTool --> Service
+    Service -->|CRUD| SQL
+                </div>
+            </div>
+
+            <!-- Diagram 10: Testing & QA Framework -->
+            <div class="bg-white shadow-lg rounded-xl p-6 mb-8 border border-gray-200">
+                <h2 class="text-2xl font-semibold mb-4 text-green-700">10. Testing & QA Framework</h2>
+                <p class="mb-4 text-gray-600">New pipeline for validating agent configurations and behavior.</p>
+                <div class="mermaid flex justify-center bg-gray-50 p-4 rounded">
+graph LR
+    Dev[Developer] -->|Push Code| CI[CI Pipeline]
+    
+    subgraph "Stage 1: Validation"
+        CI --> Lint[Config Linter]
+        Lint --> Unit[Unit Tests]
+    end
+    
+    subgraph "Stage 2: Integration & QA"
+        Unit --> Mock[Mock Services]
+        Mock --> Integ[Integration Tests]
+        Integ --> Regress[Regression Suite]
+    end
+    
+    subgraph "Stage 3: Performance"
+        Regress --> Load[Load Testing]
+        Load --> Latency[Latency Check]
+    end
+    
+    Latency -->|Pass| Prod[Production]
+    Latency -->|Fail| Alert[Notify Dev]
+    
+    style Prod fill:#d4edda,stroke:#28a745
+    style Alert fill:#f8d7da,stroke:#721c24
+                </div>
+            </div>
+
+            <!-- Diagram 11: Observability -->
+            <div class="bg-white shadow-lg rounded-xl p-6 mb-8 border border-gray-200">
+                <h2 class="text-2xl font-semibold mb-4 text-green-700">11. Observability & Debugging</h2>
+                <p class="mb-4 text-gray-600">Distributed tracing, enhanced logging, debugging tools, and comprehensive metrics.</p>
+                <div class="mermaid flex justify-center bg-gray-50 p-4 rounded">
+flowchart TD
+    Start[Agent Execution] --> Tracing[Distributed Tracing]
+    Start --> Logging[Enhanced Logging]
+    Start --> Metrics[Metrics Dashboard]
+    
+    Tracing --> Trace[Request Tracing<br/>Through Agent Hierarchy]
+    Tracing --> ToolTrace[Tool Call Tracking<br/>& Durations]
+    Tracing --> Bottleneck[Bottleneck Detection]
+    Tracing --> FlowViz[Execution Flow<br/>Visualization]
+    
+    Logging --> StructLog[Structured JSON Logs]
+    Logging --> CorrID[Correlation IDs]
+    Logging --> ContextLog[Agent Context Logging]
+    Logging --> ToolLog[Tool Input/Output Logs]
+    
+    Metrics --> AgentMetrics[Agent-Specific Metrics]
+    Metrics --> ToolMetrics[Tool Execution Metrics]
+    Metrics --> ErrorRate[Error Rate Tracking]
+    Metrics --> ResponseTime[Response Time Percentiles]
+    Metrics --> TokenUsage[Token Usage per Agent/Model]
+    
+    Trace --> Debug[Debugging Tools]
+    ToolTrace --> Debug
+    StructLog --> Debug
+    ContextLog --> Debug
+    ToolLog --> Debug
+    
+    Debug --> Replay[Execution Replay]
+    Debug --> StepView[Step-by-Step Viewer]
+    Debug --> ToolInspector[Tool Call Inspector]
+    Debug --> MemoryInsp[Memory State Inspection]
+    Debug --> StackTrace[Error Stack Analysis]
+
+    style Start fill:#4a90e2,stroke:#2e5c8a,stroke-width:3px,color:#fff
+    style Tracing fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
+    style Logging fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    style Metrics fill:#e8f5e9,stroke:#388e3c,stroke-width:2px
+    style Debug fill:#fff3e0,stroke:#e65100,stroke-width:2px
+                </div>
+            </div>
+
+            <!-- Diagram 12: Error Handling -->
+            <div class="bg-white shadow-lg rounded-xl p-6 mb-8 border border-gray-200">
+                <h2 class="text-2xl font-semibold mb-4 text-green-700">12. Error Handling & Recovery Logic</h2>
+                <p class="mb-4 text-gray-600">Intelligent retry mechanisms, circuit breakers, and fallback routing.</p>
+                <div class="mermaid flex justify-center bg-gray-50 p-4 rounded">
+flowchart TD
+    Start([Start Execution]) --> Attempt{Attempt Execution}
+    
+    Attempt -->|Success| SuccessEnd([End Successfully])
+    Attempt -->|Failure| CheckType{Error Type?}
+    
+    CheckType -->|Transient Error| RetryPolicy{Retry Policy Check}
+    CheckType -->|Persistent Error| HardFail[Log Permanent Error]
+    
+    RetryPolicy -->|Retries Available| Backoff[Exponential Backoff]
+    Backoff --> Attempt
+    
+    RetryPolicy -->|Max Retries Reached| Circuit{Circuit Breaker}
+    
+    Circuit -->|Open| FallbackNode{Has Fallback Agent?}
+    
+    FallbackNode -->|Yes| RouteFallback[Route to Fallback Agent]
+    RouteFallback --> TryFallback{Try Fallback}
+    
+    TryFallback -->|Success| Degraded([Success Degraded])
+    TryFallback -->|Failure| HardFail
+    FallbackNode -->|No| HardFail
+    
+    HardFail --> ErrorResponse([Return Error Response])
+    
+    style SuccessEnd fill:#d4edda,stroke:#28a745
+    style Degraded fill:#fff3cd,stroke:#ffc107
+    style HardFail fill:#f8d7da,stroke:#721c24
+    style ErrorResponse fill:#f8d7da,stroke:#721c24
+                </div>
+            </div>
+
+        </div>
+
+    </div>
+
+</body>
+</html>

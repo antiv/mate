@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - MATE Dashboard</title>
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+    </style>
+</head>
+<body class="min-h-screen flex items-center justify-center">
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-8 w-full max-w-md">
+        <div class="text-center mb-6">
+            <img src="/static/logo.png" alt="MATE Logo" class="h-16 w-16 object-contain mx-auto mb-4">
+            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">MATE Dashboard</h1>
+            <p class="text-gray-600 dark:text-gray-400 mt-2">Sign in to continue</p>
+        </div>
+        
+        <form id="loginForm" class="space-y-4">
+            <div id="errorMessage" class="hidden bg-red-100 dark:bg-red-900 border border-red-400 text-red-700 dark:text-red-300 px-4 py-3 rounded"></div>
+            
+            <div>
+                <label for="username" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Username</label>
+                <input 
+                    type="text" 
+                    id="username" 
+                    name="username" 
+                    required
+                    class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+                    autocomplete="username"
+                >
+            </div>
+            
+            <div>
+                <label for="password" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Password</label>
+                <input 
+                    type="password" 
+                    id="password" 
+                    name="password" 
+                    required
+                    class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+                    autocomplete="current-password"
+                >
+            </div>
+            
+            <button 
+                type="submit" 
+                class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-md transition duration-200"
+            >
+                Sign In
+            </button>
+        </form>
+    </div>
+
+    <script>
+        // Don't auto-login on login page - let user submit the form
+        // This prevents redirect loops
+        
+        document.getElementById('loginForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const errorDiv = document.getElementById('errorMessage');
+            
+            // Clear previous errors
+            errorDiv.classList.add('hidden');
+            
+            try {
+                // Validate credentials by attempting to get a token
+                const response = await fetch('/auth/token', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': 'Basic ' + btoa(username + ':' + password)
+                    }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    
+                    // Store credentials securely (optionally use token instead)
+                    localStorage.setItem('auth_username', username);
+                    localStorage.setItem('auth_password', password);
+                    localStorage.setItem('auth_token', data.access_token);
+                    
+                    // Set cookie with token for server-side auth checks
+                    // Cookie expires in 24 hours
+                    document.cookie = `auth_token=${data.access_token}; path=/; max-age=86400; SameSite=Lax`;
+                    
+                    // Get redirect URL from query parameter or default to /dashboard
+                    const urlParams = new URLSearchParams(window.location.search);
+                    let redirectUrl = urlParams.get('redirect');
+                    // Decode URL if it was encoded
+                    if (redirectUrl) {
+                        redirectUrl = decodeURIComponent(redirectUrl);
+                    }
+                    // Default to /dashboard only if no redirect URL found
+                    if (!redirectUrl) {
+                        redirectUrl = '/dashboard';
+                    }
+                    
+                    // Redirect to the target URL
+                    // The cookie will be included automatically in the request
+                    window.location.href = redirectUrl;
+                } else {
+                    throw new Error('Invalid credentials');
+                }
+            } catch (error) {
+                errorDiv.textContent = 'Invalid username or password. Please try again.';
+                errorDiv.classList.remove('hidden');
+            }
+        });
+    </script>
+</body>
+</html>
+

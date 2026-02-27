@@ -1,0 +1,808 @@
+{% extends "base.html" %}
+
+{% block title %}Usage Analytics - MATE{% endblock %}
+
+{% block content %}
+<div class="space-y-4">
+    <!-- Header -->
+    <div class="flex justify-between items-center">
+        <div>
+            <h2 class="text-xl font-bold text-gray-900 dark:text-white">
+                {% if view == "analytics" %}Usage Analytics{% else %}Token Usage Logs{% endif %}
+            </h2>
+            <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                {% if view == "analytics" %}
+                    Detailed usage statistics and trends (Last {{ days }} days)
+                {% else %}
+                    Raw token usage data (Last {{ days }} days, showing {{ logs|length }} records)
+                {% endif %}
+            </p>
+        </div>
+        <div class="flex space-x-2">
+            <!-- View Toggle Switch -->
+            <div class="flex items-center space-x-1 bg-gray-100 dark:bg-gray-700 rounded-lg p-0.5">
+                <button onclick="switchView('analytics')" 
+                        class="px-3 py-1.5 rounded-md text-xs font-medium transition-colors {% if view == 'analytics' %}bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm{% else %}text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300{% endif %}">
+                    <i class="fas fa-chart-bar mr-1"></i>Analytics
+                </button>
+                <button onclick="switchView('logs')" 
+                        class="px-3 py-1.5 rounded-md text-xs font-medium transition-colors {% if view == 'logs' %}bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm{% else %}text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300{% endif %}">
+                    <i class="fas fa-table mr-1"></i>Raw Data
+                </button>
+            </div>
+            
+            <select id="timeRangeSelect" onchange="updateTimeRange()" class="border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg px-2 py-1 text-xs">
+                {% if view == "analytics" %}
+                    <option value="7" {% if days == 7 %}selected{% endif %}>Last 7 days</option>
+                    <option value="30" {% if days == 30 %}selected{% endif %}>Last 30 days</option>
+                    <option value="90" {% if days == 90 %}selected{% endif %}>Last 90 days</option>
+                {% else %}
+                    <option value="1h">Last Hour</option>
+                    <option value="3h">Last 3 Hours</option>
+                    <option value="6h">Last 6 Hours</option>
+                    <option value="12h">Last 12 Hours</option>
+                    <option value="1d" selected>Last Day</option>
+                    <option value="3d">Last 3 Days</option>
+                    <option value="7d">Last 7 Days</option>
+                    <option value="30d">Last 30 Days</option>
+                {% endif %}
+            </select>
+            <button onclick="refreshPage()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 text-xs rounded-lg flex items-center">
+                <i class="fas fa-sync-alt mr-1"></i>
+                Refresh
+            </button>
+        </div>
+    </div>
+
+    {% if view == "analytics" %}
+    <!-- Summary Stats -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-3">
+            <div class="flex items-center">
+                <div class="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center">
+                    <i class="fas fa-chart-line text-sm text-blue-600 dark:text-blue-400"></i>
+                </div>
+                <div class="ml-3">
+                    <h3 class="text-xs font-medium text-gray-500 dark:text-gray-400">Total Requests</h3>
+                    <p class="text-lg font-bold text-gray-900 dark:text-white" id="totalRequests">{{ stats.total_requests }}</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-3">
+            <div class="flex items-center">
+                <div class="w-10 h-10 rounded-full bg-green-100 dark:bg-green-900 flex items-center justify-center">
+                    <i class="fas fa-coins text-sm text-green-600 dark:text-green-400"></i>
+                </div>
+                <div class="ml-3">
+                    <h3 class="text-xs font-medium text-gray-500 dark:text-gray-400">Prompt Tokens</h3>
+                    <p class="text-lg font-bold text-gray-900 dark:text-white" id="promptTokens">{{ "{:,}".format(stats.total_prompt_tokens) }}</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-3">
+            <div class="flex items-center">
+                <div class="w-10 h-10 rounded-full bg-yellow-100 dark:bg-yellow-900 flex items-center justify-center">
+                    <i class="fas fa-reply text-sm text-yellow-600 dark:text-yellow-400"></i>
+                </div>
+                <div class="ml-3">
+                    <h3 class="text-xs font-medium text-gray-500 dark:text-gray-400">Response Tokens</h3>
+                    <p class="text-lg font-bold text-gray-900 dark:text-white" id="responseTokens">{{ "{:,}".format(stats.total_response_tokens) }}</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-3">
+            <div class="flex items-center">
+                <div class="w-10 h-10 rounded-full bg-purple-100 dark:bg-purple-900 flex items-center justify-center">
+                    <i class="fas fa-users text-sm text-purple-600 dark:text-purple-400"></i>
+                </div>
+                <div class="ml-3">
+                    <h3 class="text-xs font-medium text-gray-500 dark:text-gray-400">Unique Users</h3>
+                    <p class="text-lg font-bold text-gray-900 dark:text-white" id="uniqueUsers">{{ stats.unique_users }}</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-3">
+            <div class="flex items-center">
+                <div class="w-10 h-10 rounded-full bg-orange-100 dark:bg-orange-900 flex items-center justify-center">
+                    <i class="fas fa-robot text-sm text-orange-600 dark:text-orange-400"></i>
+                </div>
+                <div class="ml-3">
+                    <h3 class="text-xs font-medium text-gray-500 dark:text-gray-400">Active Agents</h3>
+                    <p class="text-lg font-bold text-gray-900 dark:text-white" id="activeAgents">{{ stats.unique_agents }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Charts Row 1 -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <!-- Daily Usage Chart -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+            <div class="flex justify-between items-center mb-2">
+                <h3 class="text-sm font-semibold text-gray-900 dark:text-white">Daily Usage Trend</h3>
+                <div class="text-xs text-gray-500 dark:text-gray-400">Requests & Tokens</div>
+            </div>
+            <div style="height: 200px; max-height: 200px;">
+                <canvas id="dailyUsageChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Token Distribution Chart -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+            <div class="flex justify-between items-center mb-2">
+                <h3 class="text-sm font-semibold text-gray-900 dark:text-white">Token Distribution</h3>
+                <div class="text-xs text-gray-500 dark:text-gray-400">Prompt vs Response</div>
+            </div>
+            <div style="height: 200px; max-height: 200px;">
+                <canvas id="tokenDistributionChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Charts Row 2 -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <!-- Top Agents Chart -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+            <div class="flex justify-between items-center mb-2">
+                <h3 class="text-sm font-semibold text-gray-900 dark:text-white">Top Agents by Usage</h3>
+                <div class="text-xs text-gray-500 dark:text-gray-400">Request Count</div>
+            </div>
+            <div style="height: 200px; max-height: 200px;">
+                <canvas id="topAgentsChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Hourly Activity Chart -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+            <div class="flex justify-between items-center mb-2">
+                <h3 class="text-sm font-semibold text-gray-900 dark:text-white">Activity by Hour</h3>
+                <div class="text-xs text-gray-500 dark:text-gray-400">Average Requests</div>
+            </div>
+            <div style="height: 200px; max-height: 200px;">
+                <canvas id="hourlyActivityChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Top Agents Table -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow">
+        <div class="px-4 py-2 border-b border-gray-200 dark:border-gray-700">
+            <h3 class="text-sm font-semibold text-gray-900 dark:text-white">Agent Performance Details</h3>
+        </div>
+        <div class="overflow-auto max-h-[calc(100vh-200px)]">
+            <table id="usageAnalyticsTable" class="w-full divide-y divide-gray-200 dark:divide-gray-700 table-fixed">
+                <thead class="bg-gray-50 dark:bg-gray-700">
+                    <tr>
+                        <th class="px-3 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-2/5">Agent Name</th>
+                        <th class="px-3 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-1/5">Requests</th>
+                        <th class="px-3 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-1/5">Avg. Response Time</th>
+                        <th class="px-3 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-1/5">Success Rate</th>
+                        <th class="px-3 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-1/5">Last Used</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                    {% for agent in stats.top_agents %}
+                    <tr>
+                        <td class="px-3 py-1.5 text-xs font-medium text-gray-900 dark:text-white truncate">{{ agent.agent or 'Unknown' }}</td>
+                        <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate">{{ agent.requests }}</td>
+                        <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate">~1.2s</td>
+                        <td class="px-3 py-1.5">
+                            <span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200">98.5%</span>
+                        </td>
+                        <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate">2 hours ago</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% else %}
+    <!-- Raw Data Table -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow">
+        <div class="px-4 py-2 border-b border-gray-200 dark:border-gray-700">
+            <div class="flex justify-between items-center">
+                <div>
+                    <h3 class="text-sm font-semibold text-gray-900 dark:text-white">Token Usage Logs</h3>
+                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Raw token usage data</p>
+                </div>
+                <div>
+                    <select id="logPageSize" onchange="updateLogFilters()" class="border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg px-2 py-1 text-xs">
+                        <option value="50">50 per page</option>
+                        <option value="100" selected>100 per page</option>
+                        <option value="200">200 per page</option>
+                        <option value="500">500 per page</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+        <div class="overflow-auto max-h-[calc(100vh-200px)]">
+            <table id="usageLogsTable" class="w-full divide-y divide-gray-200 dark:divide-gray-700 table-fixed">
+                <thead class="bg-gray-50 dark:bg-gray-700">
+                    <tr>
+                        <th class="px-3 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-1/6">Timestamp</th>
+                        <th class="px-3 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-1/6">Request ID</th>
+                        <th class="px-3 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-1/12">User ID</th>
+                        <th class="px-3 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-1/12">Agent</th>
+                        <th class="px-3 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-1/4">Model</th>
+                        <th class="px-3 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-1/12">Prompt Tokens</th>
+                        <th class="px-3 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-1/12">Response Tokens</th>
+                        <th class="px-3 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-1/12">Status</th>
+                    </tr>
+                </thead>
+                <tbody id="logsTableBody" class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                    {% for log in logs %}
+                    <tr class="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700" onclick="showLogDetails('{{ log.id }}')">
+                        <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate">
+                            {% if log.timestamp %}
+                                {{ log.timestamp[:19].replace('T', ' ') }}
+                            {% else %}
+                                N/A
+                            {% endif %}
+                        </td>
+                        <td class="px-3 py-1.5 text-xs font-mono text-gray-900 dark:text-white truncate">
+                            <button onclick="event.stopPropagation(); showLogDetails('{{ log.id }}')" class="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 underline">
+                                {{ log.request_id[:8] }}...
+                            </button>
+                        </td>
+                        <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate">
+                            {{ log.user_id or 'N/A' }}
+                        </td>
+                        <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate">
+                            {{ log.agent_name or 'N/A' }}
+                        </td>
+                        <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate">
+                            {{ log.model_name or 'N/A' }}
+                        </td>
+                        <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate">
+                            {{ log.prompt_tokens or 0 }}
+                        </td>
+                        <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate">
+                            {{ log.response_tokens or 0 }}
+                        </td>
+                        <td class="px-3 py-1.5">
+                            {% if log.status == 'SUCCESS' %}
+                                <span class="inline-flex items-center px-1 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-800 dark:text-green-100">
+                                    {{ log.status }}
+                                </span>
+                            {% elif log.status == 'ERROR' %}
+                                <span class="inline-flex items-center px-1 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 dark:bg-red-800 dark:text-red-100">
+                                    {{ log.status }}
+                                </span>
+                            {% else %}
+                                <span class="inline-flex items-center px-1 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-600 dark:text-gray-200">
+                                    {{ log.status or 'UNKNOWN' }}
+                                </span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                    {% if not logs %}
+                    <tr>
+                        <td colspan="8" class="px-3 py-6 text-center text-gray-500 dark:text-gray-400">
+                            <i class="fas fa-database text-2xl mb-2"></i>
+                            <p class="text-sm font-medium">No usage logs found</p>
+                            <p class="text-xs">No token usage data available for the selected time period.</p>
+                        </td>
+                    </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+        {% if logs %}
+        <div class="px-3 py-2 bg-gray-50 dark:bg-gray-700 border-t border-gray-200 dark:border-gray-600">
+            <div class="flex items-center justify-between">
+                <div class="text-xs text-gray-500 dark:text-gray-400">
+                    Showing <span id="currentPageInfo">1-{{ logs|length }}</span> of <span id="totalRecords">{{ logs|length }}</span> records
+                </div>
+                <div class="flex space-x-1">
+                    <button id="prevPageBtn" onclick="changePage(-1)" class="px-2 py-1 border border-gray-300 dark:border-gray-600 rounded-md text-xs text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                        <i class="fas fa-chevron-left mr-1"></i> Previous
+                    </button>
+                    <span class="px-2 py-1 text-xs text-gray-700 dark:text-gray-300">
+                        Page <span id="currentPage">1</span> of <span id="totalPages">1</span>
+                    </span>
+                    <button id="nextPageBtn" onclick="changePage(1)" class="px-2 py-1 border border-gray-300 dark:border-gray-600 rounded-md text-xs text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                        Next <i class="fas fa-chevron-right ml-1"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <!-- Log Details Modal -->
+    <div id="logDetailsModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50">
+        <div class="relative top-20 mx-auto p-5 border w-11/12 md:w-3/4 lg:w-1/2 shadow-lg rounded-md bg-white dark:bg-gray-800">
+            <div class="mt-3">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-medium text-gray-900 dark:text-white">Log Details</h3>
+                    <button type="button" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300" onclick="closeModal('logDetailsModal')">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div id="logDetailsContent" class="text-gray-700 dark:text-gray-300">
+                    <!-- Details will be loaded here -->
+                </div>
+                <div class="flex justify-end mt-6">
+                    <button type="button" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg transition-colors" onclick="closeModal('logDetailsModal')">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/table-sorting.js"></script>
+<script>
+    let dailyChart, tokenChart, agentsChart, hourlyChart;
+    
+    function initializeCharts() {
+        const stats = {{ stats | tojson }};
+        
+        // Daily Usage Chart
+        const dailyCtx = document.getElementById('dailyUsageChart').getContext('2d');
+        const dailyData = stats.daily_usage || [];
+        
+        dailyChart = new Chart(dailyCtx, {
+            type: 'line',
+            data: {
+                labels: dailyData.map(d => new Date(d.date).toLocaleDateString()),
+                datasets: [{
+                    label: 'Requests',
+                    data: dailyData.map(d => d.requests),
+                    borderColor: 'rgb(59, 130, 246)',
+                    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                    tension: 0.4,
+                    fill: true
+                }, {
+                    label: 'Tokens (÷100)',
+                    data: dailyData.map(d => Math.round((d.tokens || 0) / 100)),
+                    borderColor: 'rgb(16, 185, 129)',
+                    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                    tension: 0.4,
+                    fill: true
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true
+                    }
+                },
+                plugins: {
+                    legend: {
+                        position: 'top',
+                    }
+                }
+            }
+        });
+
+        // Token Distribution Chart
+        const tokenCtx = document.getElementById('tokenDistributionChart').getContext('2d');
+        tokenChart = new Chart(tokenCtx, {
+            type: 'doughnut',
+            data: {
+                labels: ['Prompt Tokens', 'Response Tokens'],
+                datasets: [{
+                    data: [stats.total_prompt_tokens || 0, stats.total_response_tokens || 0],
+                    backgroundColor: [
+                        'rgb(59, 130, 246)',
+                        'rgb(16, 185, 129)'
+                    ],
+                    borderWidth: 2,
+                    borderColor: '#fff'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                    }
+                }
+            }
+        });
+
+        // Top Agents Chart
+        const agentsCtx = document.getElementById('topAgentsChart').getContext('2d');
+        const agentsData = stats.top_agents || [];
+        
+        agentsChart = new Chart(agentsCtx, {
+            type: 'bar',
+            data: {
+                labels: agentsData.map(a => a.agent || 'Unknown'),
+                datasets: [{
+                    label: 'Requests',
+                    data: agentsData.map(a => a.requests),
+                    backgroundColor: 'rgba(59, 130, 246, 0.8)',
+                    borderColor: 'rgb(59, 130, 246)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true
+                    }
+                },
+                plugins: {
+                    legend: {
+                        display: false
+                    }
+                }
+            }
+        });
+
+        // Hourly Activity Chart
+        const hourlyCtx = document.getElementById('hourlyActivityChart').getContext('2d');
+        const hourlyData = stats.hourly_usage || Array.from({length: 24}, () => 0);
+        
+        hourlyChart = new Chart(hourlyCtx, {
+            type: 'bar',
+            data: {
+                labels: Array.from({length: 24}, (_, i) => i + ':00'),
+                datasets: [{
+                    label: 'Requests',
+                    data: hourlyData,
+                    backgroundColor: 'rgba(139, 92, 246, 0.8)',
+                    borderColor: 'rgb(139, 92, 246)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true
+                    }
+                },
+                plugins: {
+                    legend: {
+                        display: false
+                    }
+                }
+            }
+        });
+    }
+
+    function refreshPage() {
+        // Simple page reload, like Ctrl+R
+        window.location.reload();
+    }
+
+    function switchView(view) {
+        const url = new URL(window.location);
+        url.searchParams.set('view', view);
+        window.location.href = url.toString();
+    }
+
+    function showLogDetails(logId) {
+        // Use filtered logs if available, otherwise use initial logs
+        const logsToSearch = filteredLogs.length > 0 ? filteredLogs : {{ logs | tojson }};
+        const log = logsToSearch.find(l => l.id == logId);
+        
+        if (log) {
+            const content = `
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <strong class="text-gray-700 dark:text-gray-300">Request ID:</strong>
+                        <p class="text-gray-600 dark:text-gray-400 mt-1 font-mono text-sm">${log.request_id}</p>
+                    </div>
+                    <div>
+                        <strong class="text-gray-700 dark:text-gray-300">Session ID:</strong>
+                        <p class="text-gray-600 dark:text-gray-400 mt-1 font-mono text-sm">${log.session_id || 'N/A'}</p>
+                    </div>
+                    <div>
+                        <strong class="text-gray-700 dark:text-gray-300">User ID:</strong>
+                        <p class="text-gray-600 dark:text-gray-400 mt-1">${log.user_id || 'N/A'}</p>
+                    </div>
+                    <div>
+                        <strong class="text-gray-700 dark:text-gray-300">Agent Name:</strong>
+                        <p class="text-gray-600 dark:text-gray-400 mt-1">${log.agent_name || 'N/A'}</p>
+                    </div>
+                    <div>
+                        <strong class="text-gray-700 dark:text-gray-300">Model Name:</strong>
+                        <p class="text-gray-600 dark:text-gray-400 mt-1">${log.model_name || 'N/A'}</p>
+                    </div>
+                    <div>
+                        <strong class="text-gray-700 dark:text-gray-300">Status:</strong>
+                        <p class="text-gray-600 dark:text-gray-400 mt-1">${log.status || 'N/A'}</p>
+                    </div>
+                    <div>
+                        <strong class="text-gray-700 dark:text-gray-300">Timestamp:</strong>
+                        <p class="text-gray-600 dark:text-gray-400 mt-1">${log.timestamp ? new Date(log.timestamp).toLocaleString() : 'N/A'}</p>
+                    </div>
+                    <div>
+                        <strong class="text-gray-700 dark:text-gray-300">Total Tokens:</strong>
+                        <p class="text-gray-600 dark:text-gray-400 mt-1">${(log.prompt_tokens || 0) + (log.response_tokens || 0) + (log.thoughts_tokens || 0) + (log.tool_use_tokens || 0)}</p>
+                    </div>
+                </div>
+                <div class="mt-4">
+                    <strong class="text-gray-700 dark:text-gray-300">Token Breakdown:</strong>
+                    <div class="mt-2 grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div class="bg-blue-50 dark:bg-blue-900 p-3 rounded-lg">
+                            <p class="text-sm text-blue-600 dark:text-blue-400">Prompt Tokens</p>
+                            <p class="text-lg font-semibold text-blue-800 dark:text-blue-200">${log.prompt_tokens || 0}</p>
+                        </div>
+                        <div class="bg-green-50 dark:bg-green-900 p-3 rounded-lg">
+                            <p class="text-sm text-green-600 dark:text-green-400">Response Tokens</p>
+                            <p class="text-lg font-semibold text-green-800 dark:text-green-200">${log.response_tokens || 0}</p>
+                        </div>
+                        <div class="bg-purple-50 dark:bg-purple-900 p-3 rounded-lg">
+                            <p class="text-sm text-purple-600 dark:text-purple-400">Thoughts Tokens</p>
+                            <p class="text-lg font-semibold text-purple-800 dark:text-purple-200">${log.thoughts_tokens || 0}</p>
+                        </div>
+                        <div class="bg-orange-50 dark:bg-orange-900 p-3 rounded-lg">
+                            <p class="text-sm text-orange-600 dark:text-orange-400">Tool Use Tokens</p>
+                            <p class="text-lg font-semibold text-orange-800 dark:text-orange-200">${log.tool_use_tokens || 0}</p>
+                        </div>
+                    </div>
+                </div>
+                ${log.error_description ? `
+                <div class="mt-4">
+                    <strong class="text-gray-700 dark:text-gray-300">Error Description:</strong>
+                    <p class="text-red-600 dark:text-red-400 mt-1 bg-red-50 dark:bg-red-900 p-3 rounded-lg">${log.error_description}</p>
+                </div>
+                ` : ''}
+            `;
+            document.getElementById('logDetailsContent').innerHTML = content;
+            document.getElementById('logDetailsModal').classList.remove('hidden');
+        }
+    }
+
+    function closeModal(modalId) {
+        document.getElementById(modalId).classList.add('hidden');
+    }
+
+    async function updateTimeRange() {
+        const timeValue = document.getElementById('timeRangeSelect').value;
+        const currentView = new URLSearchParams(window.location.search).get('view') || 'analytics';
+        
+        if (currentView === 'analytics') {
+            // For analytics view, reload page with days parameter
+            localStorage.setItem('selectedTimeRange', timeValue);
+            const url = new URL(window.location);
+            url.searchParams.set('days', timeValue);
+            url.searchParams.set('view', currentView);
+            window.location.href = url.toString();
+        } else {
+            // For raw data view, update logs dynamically
+            localStorage.setItem('usageLogTimeFilter', timeValue);
+            updateLogFilters();
+        }
+    }
+
+    // Pagination state
+    let currentPageNum = 1;
+    let totalPagesNum = 1;
+    let logsData = [];
+    let filteredLogs = [];
+
+    async function updateLogFilters() {
+        const timeFilter = document.getElementById('timeRangeSelect').value;
+        const pageSize = parseInt(document.getElementById('logPageSize').value);
+        
+        // Save selections to localStorage
+        localStorage.setItem('usageLogTimeFilter', timeFilter);
+        localStorage.setItem('usageLogPageSize', pageSize);
+        
+        // Reset to first page when filters change
+        currentPageNum = 1;
+        
+        // Convert time filter to hours
+        let hours = 24; // default to 1 day
+        if (timeFilter.endsWith('h')) {
+            hours = parseInt(timeFilter);
+        } else if (timeFilter.endsWith('d')) {
+            hours = parseInt(timeFilter) * 24;
+        }
+        
+        // Fetch logs with new filters
+        try {
+            const response = await fetch(`/dashboard/api/usage/logs?hours=${hours}&limit=${pageSize}&page=${currentPageNum}`);
+            const data = await response.json();
+            
+            if (data.logs) {
+                logsData = data.logs;
+                totalPagesNum = data.total_pages || 1;
+                currentPageNum = data.current_page || 1;
+                
+                updateLogsTable(data.logs);
+                updatePaginationControls(data.total_records || 0, data.current_page || 1, data.total_pages || 1, pageSize);
+            }
+        } catch (error) {
+            console.error('Error fetching logs:', error);
+            showNotification('Error loading logs', 'error');
+        }
+    }
+    
+    function restoreLogFilters() {
+        // Restore saved filter values from localStorage
+        const savedTimeFilter = localStorage.getItem('usageLogTimeFilter') || '1d';
+        const savedPageSize = localStorage.getItem('usageLogPageSize') || '100';
+        
+        const timeFilterSelect = document.getElementById('timeRangeSelect');
+        const pageSizeSelect = document.getElementById('logPageSize');
+        
+        if (timeFilterSelect) {
+            timeFilterSelect.value = savedTimeFilter;
+        }
+        if (pageSizeSelect) {
+            pageSizeSelect.value = savedPageSize;
+        }
+        
+        // Load data with saved filters
+        updateLogFilters();
+    }
+
+    function updateLogsTable(logs) {
+        const tbody = document.querySelector('#logsTableBody');
+        if (!tbody) return;
+        
+        if (logs.length === 0) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="8" class="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
+                        <i class="fas fa-database text-4xl mb-4"></i>
+                        <p class="text-lg font-medium">No usage logs found</p>
+                        <p class="text-sm">No token usage data available for the selected time period.</p>
+                    </td>
+                </tr>
+            `;
+            return;
+        }
+        
+        tbody.innerHTML = logs.map(log => `
+            <tr class="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700" onclick="showLogDetails('${log.id}')">
+                <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate">
+                    ${log.timestamp ? log.timestamp.substring(0, 19).replace('T', ' ') : 'N/A'}
+                </td>
+                <td class="px-3 py-1.5 text-xs font-mono text-gray-900 dark:text-white truncate">
+                    <button onclick="event.stopPropagation(); showLogDetails('${log.id}')" class="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 underline">
+                        ${log.request_id.substring(0, 8)}...
+                    </button>
+                </td>
+                <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate">
+                    ${log.user_id || 'N/A'}
+                </td>
+                <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate">
+                    ${log.agent_name || 'N/A'}
+                </td>
+                <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate">
+                    ${log.model_name || 'N/A'}
+                </td>
+                <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate">
+                    ${log.prompt_tokens || 0}
+                </td>
+                <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate">
+                    ${log.response_tokens || 0}
+                </td>
+                <td class="px-3 py-1.5">
+                    ${getStatusBadge(log.status)}
+                </td>
+            </tr>
+        `).join('');
+        
+        // Store logs for modal access
+        filteredLogs = logs;
+    }
+
+    function getStatusBadge(status) {
+        if (status === 'SUCCESS') {
+            return '<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-800 dark:text-green-100">SUCCESS</span>';
+        } else if (status === 'ERROR') {
+            return '<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 dark:bg-red-800 dark:text-red-100">ERROR</span>';
+        } else {
+            return `<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-600 dark:text-gray-200">${status || 'UNKNOWN'}</span>`;
+        }
+    }
+
+    function updatePaginationControls(totalRecords, currentPage, totalPages, pageSize) {
+        const start = (currentPage - 1) * pageSize + 1;
+        const end = Math.min(currentPage * pageSize, totalRecords);
+        
+        document.getElementById('currentPageInfo').textContent = `${start}-${end}`;
+        document.getElementById('totalRecords').textContent = totalRecords;
+        document.getElementById('currentPage').textContent = currentPage;
+        document.getElementById('totalPages').textContent = totalPages;
+        
+        // Update button states
+        const prevBtn = document.getElementById('prevPageBtn');
+        const nextBtn = document.getElementById('nextPageBtn');
+        
+        if (prevBtn) {
+            prevBtn.disabled = currentPage <= 1;
+        }
+        if (nextBtn) {
+            nextBtn.disabled = currentPage >= totalPages;
+        }
+    }
+
+    async function changePage(direction) {
+        const newPage = currentPageNum + direction;
+        if (newPage < 1 || newPage > totalPagesNum) return;
+        
+        currentPageNum = newPage;
+        
+        const timeFilter = document.getElementById('timeRangeSelect').value;
+        const pageSize = parseInt(document.getElementById('logPageSize').value);
+        
+        // Convert time filter to hours
+        let hours = 24; // default to 1 day
+        if (timeFilter.endsWith('h')) {
+            hours = parseInt(timeFilter);
+        } else if (timeFilter.endsWith('d')) {
+            hours = parseInt(timeFilter) * 24;
+        }
+        
+        try {
+            const response = await fetch(`/dashboard/api/usage/logs?hours=${hours}&limit=${pageSize}&page=${currentPageNum}`);
+            const data = await response.json();
+            
+            if (data.logs) {
+                updateLogsTable(data.logs);
+                updatePaginationControls(data.total_records || 0, data.current_page || 1, data.total_pages || 1, pageSize);
+            }
+        } catch (error) {
+            console.error('Error fetching logs:', error);
+            showNotification('Error loading logs', 'error');
+        }
+    }
+
+
+    // Close modals when clicking outside
+    document.addEventListener('click', function(event) {
+        if (event.target.classList.contains('fixed') && event.target.classList.contains('inset-0')) {
+            event.target.classList.add('hidden');
+        }
+    });
+
+    // Initialize charts when page loads (only for analytics view)
+    document.addEventListener('DOMContentLoaded', function() {
+        {% if view == "analytics" %}
+        initializeCharts();
+        {% else %}
+        // Initialize logs data for raw data view
+        const initialLogs = {{ logs | tojson }};
+        filteredLogs = initialLogs;
+        
+        // Restore saved filters and load data
+        restoreLogFilters();
+        {% endif %}
+        
+        // Initialize table sorting
+        {% if view == "analytics" %}
+        initMultiColumnTableSorting('usageAnalyticsTable', {
+            0: { sortable: true, dataType: 'text' }, // Agent Name
+            1: { sortable: true, dataType: 'number' }, // Requests
+            2: { sortable: true, dataType: 'text' }, // Avg. Response Time
+            3: { sortable: true, dataType: 'text' }, // Success Rate
+            4: { sortable: true, dataType: 'text' } // Last Used
+        });
+        {% else %}
+        initMultiColumnTableSorting('usageLogsTable', {
+            0: { sortable: true, dataType: 'date' }, // Timestamp
+            1: { sortable: true, dataType: 'text' }, // Request ID
+            2: { sortable: true, dataType: 'text' }, // User ID
+            3: { sortable: true, dataType: 'text' }, // Agent
+            4: { sortable: true, dataType: 'text' }, // Model
+            5: { sortable: true, dataType: 'number' }, // Prompt Tokens
+            6: { sortable: true, dataType: 'number' }, // Response Tokens
+            7: { sortable: true, dataType: 'text' } // Status
+        });
+        {% endif %}
+    });
+</script>
+{% endblock %}

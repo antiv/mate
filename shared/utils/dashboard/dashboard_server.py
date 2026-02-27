@@ -1,0 +1,2214 @@
+"""
+Dashboard Server Implementation
+Basic dashboard endpoints without complex service dependencies
+"""
+
+import json
+import logging
+import os
+import shutil
+from pathlib import Path
+from typing import Dict, Any, List, Optional
+from sqlalchemy.exc import IntegrityError
+from fastapi import FastAPI, Request, HTTPException, Depends, Form, File, UploadFile
+from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.templating import Jinja2Templates
+from fastapi.staticfiles import StaticFiles
+
+logger = logging.getLogger(__name__)
+
+
+class DashboardServer:
+    """Dashboard Server with basic endpoint registration"""
+    
+    def __init__(self, app: FastAPI, project_root: Path):
+        self.app = app
+        self.project_root = project_root
+        
+        # Get ADK configuration for server control
+        from shared.utils.utils import get_adk_config
+        adk_config = get_adk_config()
+        self.adk_host = adk_config["adk_host"]
+        self.adk_port = adk_config["adk_port"]
+        self.session_service_uri = adk_config["session_service_uri"]
+        
+        # Initialize database services
+        self._initialize_services()
+        
+        # Initialize templates and static files
+        self._setup_templates_and_static()
+        
+        # Register all dashboard endpoints
+        self._register_endpoints()
+    
+    def _initialize_services(self):
+        """Initialize database and other services."""
+        try:
+            from shared.utils.database_client import get_database_client
+            from shared.utils.user_service import UserService
+            from shared.utils.token_usage_service import TokenUsageService
+            from shared.utils.models import AgentConfig, Project, User, TokenUsageLog
+            
+            self.db_client = get_database_client()
+            self.user_service = UserService()
+            self.token_service = TokenUsageService()
+            self.AgentConfig = AgentConfig
+            self.Project = Project
+            self.User = User
+            self.TokenUsageLog = TokenUsageLog
+            
+            print("✅ Dashboard database services initialized successfully")
+        except Exception as e:
+            print(f"⚠️  Dashboard database services initialization error: {e}")
+            # Set defaults if services fail to initialize
+            self.db_client = None
+            self.user_service = None
+            self.token_service = None
+    
+    def _get_usage_stats(self, days: int = 7) -> Dict[str, Any]:
+        """Get usage statistics from database."""
+        if not self.db_client:
+            return {
+                "total_requests": 0,
+                "total_prompt_tokens": 0,
+                "total_response_tokens": 0,
+                "unique_users": 1,
+                "unique_agents": 0,
+                "top_agents": [],
+                "daily_usage": [],
+                "hourly_usage": [0] * 24,
+                "database_info": {"type": "SQLITE", "filename": "my_agent_data.db"}
+            }
+        
+        session = self.db_client.get_session()
+        if not session:
+            return {"error": "Database connection failed"}
+        
+        try:
+            from sqlalchemy import func
+            from datetime import datetime, timedelta
+            
+            end_date = datetime.now()
+            start_date = end_date - timedelta(days=days)
+            
+            # Get token usage statistics
+            stats = session.query(
+                func.count(self.TokenUsageLog.id).label('total_requests'),
+                func.sum(self.TokenUsageLog.prompt_tokens).label('total_prompt_tokens'),
+                func.sum(self.TokenUsageLog.response_tokens).label('total_response_tokens'),
+                func.count(func.distinct(self.TokenUsageLog.user_id)).label('unique_users'),
+                func.count(func.distinct(self.TokenUsageLog.agent_name)).label('unique_agents')
+            ).filter(
+                self.TokenUsageLog.timestamp >= start_date,
+                self.TokenUsageLog.timestamp <= end_date
+            ).first()
+            
+            # Get top agents
+            top_agents = session.query(
+                self.TokenUsageLog.agent_name,
+                func.count(self.TokenUsageLog.id).label('request_count')
+            ).filter(
+                self.TokenUsageLog.timestamp >= start_date,
+                self.TokenUsageLog.timestamp <= end_date
+            ).group_by(self.TokenUsageLog.agent_name).order_by(func.count(self.TokenUsageLog.id).desc()).limit(5).all()
+            
+            # Get daily usage
+            daily_usage = session.query(
+                func.date(self.TokenUsageLog.timestamp).label('date'),
+                func.count(self.TokenUsageLog.id).label('requests'),
+                func.sum(self.TokenUsageLog.prompt_tokens + self.TokenUsageLog.response_tokens).label('total_tokens')
+            ).filter(
+                self.TokenUsageLog.timestamp >= start_date,
+                self.TokenUsageLog.timestamp <= end_date
+            ).group_by(func.date(self.TokenUsageLog.timestamp)).order_by(func.date(self.TokenUsageLog.timestamp)).all()
+            
+            # Get hourly usage
+            hourly_usage = session.query(
+                func.extract('hour', self.TokenUsageLog.timestamp).label('hour'),
+                func.count(self.TokenUsageLog.id).label('requests')
+            ).filter(
+                self.TokenUsageLog.timestamp >= start_date,
+                self.TokenUsageLog.timestamp <= end_date
+            ).group_by(func.extract('hour', self.TokenUsageLog.timestamp)).order_by(func.extract('hour', self.TokenUsageLog.timestamp)).all()
+            
+            # Create hourly data array (24 hours, 0-23)
+            hourly_data = [0] * 24
+            for hour_stat in hourly_usage:
+                hour = int(hour_stat.hour)
+                hourly_data[hour] = hour_stat.requests
+            
+            return {
+                'total_requests': stats.total_requests or 0,
+                'total_prompt_tokens': stats.total_prompt_tokens or 0,
+                'total_response_tokens': stats.total_response_tokens or 0,
+                'unique_users': stats.unique_users or 0,
+                'unique_agents': stats.unique_agents or 0,
+                'top_agents': [{'agent': agent.agent_name, 'requests': agent.request_count} for agent in top_agents],
+                'daily_usage': [{'date': str(day.date), 'requests': day.requests, 'tokens': day.total_tokens or 0} for day in daily_usage],
+                'hourly_usage': hourly_data,
+                'database_info': self._get_database_info()
+            }
+        except Exception as e:
+            print(f"Error getting usage stats: {e}")
+            return {"error": str(e)}
+        finally:
+            session.close()
+    
+    def _get_database_info(self) -> dict:
+        """Get database connection information."""
+        db_type = os.getenv("DB_TYPE", "sqlite").upper()
+        info = {
+            "type": db_type,
+            "hostname": None,
+            "filename": None,
+            "database": None,
+            "port": None
+        }
+        
+        if db_type == "SQLITE":
+            db_path = os.getenv("DB_PATH", "my_agent_data.db")
+            info["filename"] = os.path.basename(db_path)
+        elif db_type == "POSTGRESQL":
+            info["hostname"] = os.getenv("DB_HOST", "localhost")
+            info["database"] = os.getenv("DB_NAME", "")
+            info["port"] = os.getenv("DB_PORT", "5432")
+        elif db_type == "MYSQL":
+            info["hostname"] = os.getenv("DB_HOST", "localhost")
+            info["database"] = os.getenv("DB_NAME", "")
+            info["port"] = os.getenv("DB_PORT", "3306")
+        
+        return info
+    
+    def _get_all_users(self) -> List[Dict[str, Any]]:
+        """Get all users from database."""
+        if not self.db_client:
+            return []
+        
+        session = self.db_client.get_session()
+        if not session:
+            return []
+        
+        try:
+            users = session.query(self.User).all()
+            return [user.to_dict() for user in users]
+        except Exception as e:
+            print(f"Error getting users: {e}")
+            return []
+        finally:
+            session.close()
+    
+    def _get_all_projects(self) -> List[Dict[str, Any]]:
+        """Get all projects from database."""
+        if not self.db_client:
+            return []
+        
+        session = self.db_client.get_session()
+        if not session:
+            return []
+        
+        try:
+            projects = session.query(self.Project).order_by(self.Project.name.asc()).all()
+            return [project.to_dict() for project in projects]
+        except Exception as exc:
+            print(f"Error getting projects: {exc}")
+            return []
+        finally:
+            session.close()
+    
+    def _create_project(self, name: str, description: Optional[str]) -> Dict[str, Any]:
+        """Create a new project."""
+        if not self.db_client:
+            raise HTTPException(status_code=500, detail="Database connection failed")
+        
+        session = self.db_client.get_session()
+        if not session:
+            raise HTTPException(status_code=500, detail="Database connection failed")
+        
+        try:
+            project = self.Project(name=name.strip(), description=(description or "").strip() or None)
+            session.add(project)
+            session.commit()
+            session.refresh(project)
+            return project.to_dict()
+        except IntegrityError:
+            session.rollback()
+            raise HTTPException(status_code=400, detail="Project name must be unique")
+        except Exception as exc:
+            session.rollback()
+            raise HTTPException(status_code=500, detail=f"Failed to create project: {exc}")
+        finally:
+            session.close()
+    
+    def _update_project(self, project_id: int, name: str, description: Optional[str]) -> Dict[str, Any]:
+        """Update an existing project."""
+        if not self.db_client:
+            raise HTTPException(status_code=500, detail="Database connection failed")
+        
+        session = self.db_client.get_session()
+        if not session:
+            raise HTTPException(status_code=500, detail="Database connection failed")
+        
+        try:
+            project = session.query(self.Project).filter(self.Project.id == project_id).first()
+            if not project:
+                raise HTTPException(status_code=404, detail="Project not found")
+            
+            project.name = name.strip()
+            project.description = (description or "").strip() or None
+            session.commit()
+            session.refresh(project)
+            return project.to_dict()
+        except IntegrityError:
+            session.rollback()
+            raise HTTPException(status_code=400, detail="Project name must be unique")
+        except HTTPException:
+            session.rollback()
+            raise
+        except Exception as exc:
+            session.rollback()
+            raise HTTPException(status_code=500, detail=f"Failed to update project: {exc}")
+        finally:
+            session.close()
+    
+    def _delete_project(self, project_id: int) -> Dict[str, Any]:
+        """Delete a project and associated agents."""
+        if not self.db_client:
+            raise HTTPException(status_code=500, detail="Database connection failed")
+        
+        session = self.db_client.get_session()
+        if not session:
+            raise HTTPException(status_code=500, detail="Database connection failed")
+        
+        try:
+            project = session.query(self.Project).filter(self.Project.id == project_id).first()
+            if not project:
+                raise HTTPException(status_code=404, detail="Project not found")
+            
+            session.delete(project)
+            session.commit()
+            return {"success": True}
+        except HTTPException:
+            session.rollback()
+            raise
+        except Exception as exc:
+            session.rollback()
+            raise HTTPException(status_code=500, detail=f"Failed to delete project: {exc}")
+        finally:
+            session.close()
+    
+    def _get_all_agent_configs(self, project_id: Optional[int] = None) -> List[Dict[str, Any]]:
+        """Get agent configurations from database, optionally filtered by project."""
+        if not self.db_client:
+            return []
+        
+        session = self.db_client.get_session()
+        if not session:
+            return []
+        
+        try:
+            query = session.query(self.AgentConfig)
+            if project_id is not None:
+                query = query.filter(self.AgentConfig.project_id == project_id)
+            configs = query.all()
+            result = []
+            for config in configs:
+                config_dict = config.to_dict()
+                # Always use the database object's ID directly to ensure it's correct
+                # This prevents any issues where to_dict() might return wrong ID
+                db_id = config.id
+                config_dict['id'] = db_id
+                
+                # Verify the ID is valid (should be an integer)
+                if not isinstance(db_id, int):
+                    print(f"Warning: Agent '{config_dict.get('name', 'unknown')}' has non-integer ID: {db_id} (type: {type(db_id)})")
+                    # Try to convert to int if it's a numeric string
+                    try:
+                        config_dict['id'] = int(db_id)
+                    except (ValueError, TypeError):
+                        print(f"Error: Agent '{config_dict.get('name')}' has invalid ID: {db_id}. Cannot convert to integer.")
+                        # Skip this config or use a fallback?
+                        continue
+                
+                # Ensure project metadata is serialized for the frontend
+                project = config.project.to_dict() if getattr(config, "project", None) else None
+                config_dict['project'] = project
+                # Normalize parent agents to list
+                if isinstance(config_dict.get('parent_agents'), str):
+                    try:
+                        config_dict['parent_agents'] = json.loads(config_dict['parent_agents']) if config_dict['parent_agents'] else []
+                    except json.JSONDecodeError:
+                        pass
+                result.append(config_dict)
+            return result
+        except Exception as e:
+            print(f"Error getting agent configs: {e}")
+            import traceback
+            traceback.print_exc()
+            return []
+        finally:
+            session.close()
+    
+    def _get_schema_migrations(self) -> List[Dict[str, Any]]:
+        """Get all schema migrations."""
+        if not self.db_client:
+            return []
+        
+        session = self.db_client.get_session()
+        if not session:
+            return []
+        
+        try:
+            from sqlalchemy import text
+            # Query the schema_migrations table directly with explicit column names
+            result = session.execute(text("""
+                SELECT id, version, name, applied_at, checksum 
+                FROM schema_migrations 
+                ORDER BY version
+            """))
+            migrations = []
+            for row in result:
+                migrations.append({
+                    'id': row[0],
+                    'version': row[1],
+                    'name': row[2],
+                    'applied_at': str(row[3]) if row[3] else None,
+                    'checksum': row[4] or ""
+                })
+            return migrations
+        except Exception as e:
+            print(f"Error getting schema migrations: {e}")
+            return []
+        finally:
+            session.close()
+    
+    def _get_token_usage_logs(self, hours: int = 24, limit: int = 100, page: int = 1) -> Dict[str, Any]:
+        """Get paginated token usage logs."""
+        if not self.db_client:
+            return {"error": "Database connection failed"}
+        
+        session = self.db_client.get_session()
+        if not session:
+            return {"error": "Database connection failed"}
+        
+        try:
+            from sqlalchemy import func
+            from datetime import datetime, timedelta
+            
+            # Calculate time threshold
+            time_threshold = datetime.now() - timedelta(hours=hours)
+            
+            # Get total count
+            total_count = session.query(func.count(self.TokenUsageLog.id)).filter(
+                self.TokenUsageLog.timestamp >= time_threshold
+            ).scalar()
+            
+            # Calculate pagination
+            total_pages = (total_count + limit - 1) // limit  # Ceiling division
+            offset = (page - 1) * limit
+            
+            # Get paginated logs
+            logs = session.query(self.TokenUsageLog).filter(
+                self.TokenUsageLog.timestamp >= time_threshold
+            ).order_by(
+                self.TokenUsageLog.timestamp.desc()
+            ).offset(offset).limit(limit).all()
+            
+            return {
+                "logs": [{
+                    'id': log.id,
+                    'request_id': log.request_id,
+                    'session_id': log.session_id,
+                    'user_id': log.user_id,
+                    'agent_name': log.agent_name,
+                    'model_name': log.model_name,
+                    'prompt_tokens': log.prompt_tokens,
+                    'response_tokens': log.response_tokens,
+                    'thoughts_tokens': log.thoughts_tokens,
+                    'tool_use_tokens': log.tool_use_tokens,
+                    'status': log.status,
+                    'error_description': log.error_description,
+                    'timestamp': log.timestamp.isoformat() if log.timestamp else None
+                } for log in logs],
+                "total_records": total_count,
+                "current_page": page,
+                "total_pages": total_pages,
+                "page_size": limit
+            }
+        except Exception as e:
+            print(f"Error getting usage logs: {e}")
+            return {"error": str(e)}
+        finally:
+            session.close()
+    
+    def _create_user(self, user_id: str, roles: List[str]) -> bool:
+        """Create a new user."""
+        if not self.db_client:
+            return False
+        
+        session = self.db_client.get_session()
+        if not session:
+            return False
+        
+        try:
+            import json
+            user = self.User(user_id=user_id, roles=json.dumps(roles))
+            session.add(user)
+            session.commit()
+            return True
+        except Exception as e:
+            print(f"Error creating user: {e}")
+            session.rollback()
+            return False
+        finally:
+            session.close()
+    
+    def _update_user(self, user_id: str, roles: List[str], profile_data: Optional[str] = None) -> bool:
+        """Update user roles and profile data."""
+        if not self.user_service:
+            return False
+        
+        try:
+            # Update roles
+            roles_success = self.user_service.update_user_roles(user_id, roles)
+            
+            # Update profile data if provided
+            if profile_data is not None:
+                profile_success = self.user_service.update_user_profile(user_id, profile_data)
+                return roles_success and profile_success
+            
+            return roles_success
+        except Exception as e:
+            print(f"Error updating user: {e}")
+            return False
+    
+    def _delete_user(self, user_id: str) -> bool:
+        """Delete a user."""
+        if not self.db_client:
+            return False
+        
+        session = self.db_client.get_session()
+        if not session:
+            return False
+        
+        try:
+            user = session.query(self.User).filter(self.User.user_id == user_id).first()
+            if user:
+                session.delete(user)
+                session.commit()
+                return True
+            return False
+        except Exception as e:
+            print(f"Error deleting user: {e}")
+            session.rollback()
+            return False
+        finally:
+            session.close()
+    
+    def _copy_template_agent(self, agent_name: str) -> Dict[str, Any]:
+        """Copy template_agent folder to agents/{agent_name}/ directory."""
+        try:
+            # Define source and destination paths
+            template_path = self.project_root / "shared" / "template_agent"
+            agents_dir = self.project_root / "agents"
+            dest_path = agents_dir / agent_name
+            
+            # Check if template exists
+            if not template_path.exists():
+                return {
+                    "success": False,
+                    "message": f"Template agent folder not found at {template_path}",
+                    "skipped": False
+                }
+            
+            # Check if destination already exists
+            if dest_path.exists():
+                return {
+                    "success": True,
+                    "message": f"Agent folder '{agent_name}' already exists, skipping copy",
+                    "skipped": True
+                }
+            
+            # Create agents directory if it doesn't exist
+            agents_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Copy template folder
+            shutil.copytree(template_path, dest_path)
+            
+            return {
+                "success": True,
+                "message": f"Agent folder '{agent_name}' created successfully from template",
+                "skipped": False,
+                "path": str(dest_path)
+            }
+            
+        except Exception as e:
+            return {
+                "success": False,
+                "message": f"Error copying template: {str(e)}",
+                "skipped": False
+            }
+    
+    def _delete_agent_folder(self, agent_name: str) -> Dict[str, Any]:
+        """Delete agent folder from agents/{agent_name}/ directory."""
+        try:
+            agents_dir = self.project_root / "agents"
+            folder_path = agents_dir / agent_name
+            
+            # Check if folder exists
+            if not folder_path.exists():
+                return {
+                    "success": True,
+                    "message": f"Agent folder '{agent_name}' does not exist, nothing to delete",
+                    "folder_deleted": False,
+                    "folder_path": None
+                }
+            
+            # Make sure it's a directory
+            if not folder_path.is_dir():
+                return {
+                    "success": False,
+                    "message": f"Path exists but is not a directory: {folder_path}",
+                    "folder_deleted": False,
+                    "folder_path": str(folder_path),
+                    "error": True
+                }
+            
+            # Delete the folder
+            shutil.rmtree(folder_path)
+            
+            return {
+                "success": True,
+                "message": f"Agent folder '{agent_name}' deleted successfully",
+                "folder_deleted": True,
+                "folder_path": str(folder_path)
+            }
+            
+        except Exception as e:
+            return {
+                "success": False,
+                "message": f"Error deleting folder: {str(e)}",
+                "folder_deleted": False,
+                "folder_path": str(folder_path) if 'folder_path' in locals() else None,
+                "error": True
+            }
+    
+    def _create_agent_config(self, config_data: Dict[str, Any]) -> bool:
+        """Create a new agent configuration."""
+        if not self.db_client:
+            return False
+        
+        session = self.db_client.get_session()
+        if not session:
+            return False
+        
+        try:
+            import json
+            # Convert list fields to JSON strings for database storage
+            processed_data = config_data.copy()
+            if 'parent_agents' in processed_data and isinstance(processed_data['parent_agents'], list):
+                processed_data['parent_agents'] = json.dumps(processed_data['parent_agents']) if processed_data['parent_agents'] else None
+            if 'allowed_for_roles' in processed_data and isinstance(processed_data['allowed_for_roles'], list):
+                processed_data['allowed_for_roles'] = json.dumps(processed_data['allowed_for_roles']) if processed_data['allowed_for_roles'] else None
+            if 'mcp_servers_config' in processed_data and isinstance(processed_data['mcp_servers_config'], dict):
+                processed_data['mcp_servers_config'] = json.dumps(processed_data['mcp_servers_config']) if processed_data['mcp_servers_config'] else None
+            if 'tool_config' in processed_data and isinstance(processed_data['tool_config'], dict):
+                processed_data['tool_config'] = json.dumps(processed_data['tool_config']) if processed_data['tool_config'] else None
+            if 'planner_config' in processed_data and isinstance(processed_data['planner_config'], dict):
+                processed_data['planner_config'] = json.dumps(processed_data['planner_config']) if processed_data['planner_config'] else None
+            if 'generate_content_config' in processed_data and isinstance(processed_data['generate_content_config'], dict):
+                processed_data['generate_content_config'] = json.dumps(processed_data['generate_content_config']) if processed_data['generate_content_config'] else None
+            if 'input_schema' in processed_data and isinstance(processed_data['input_schema'], dict):
+                processed_data['input_schema'] = json.dumps(processed_data['input_schema']) if processed_data['input_schema'] else None
+            if 'output_schema' in processed_data and isinstance(processed_data['output_schema'], dict):
+                processed_data['output_schema'] = json.dumps(processed_data['output_schema']) if processed_data['output_schema'] else None
+            if 'include_contents' in processed_data and isinstance(processed_data['include_contents'], list):
+                processed_data['include_contents'] = json.dumps(processed_data['include_contents']) if processed_data['include_contents'] else None
+            project_id = processed_data.get('project_id')
+            processed_data['project_id'] = int(project_id) if project_id is not None else 1
+            
+            config = self.AgentConfig(**processed_data)
+            session.add(config)
+            session.commit()
+            return True
+        except Exception as e:
+            print(f"Error creating agent config: {e}")
+            session.rollback()
+            return False
+        finally:
+            session.close()
+    
+    def _update_agent_config(self, config_id: int, config_data: Dict[str, Any]) -> bool:
+        """Update an agent configuration."""
+        if not self.db_client:
+            return False
+        
+        session = self.db_client.get_session()
+        if not session:
+            return False
+        
+        # Ensure session is clean
+        session.rollback()
+        
+        try:
+            import json
+            config = session.query(self.AgentConfig).filter(self.AgentConfig.id == config_id).first()
+            if config:
+                original_parents = config.get_parent_agents() if hasattr(config, 'get_parent_agents') else []
+                original_project_id = config.project_id
+                updated_project_id = config_data.get('project_id', original_project_id)
+
+                for key, value in config_data.items():
+                    if hasattr(config, key):
+                        # Handle JSON fields specially - convert lists/dicts to JSON strings
+                        if key in ['parent_agents', 'allowed_for_roles', 'include_contents'] and isinstance(value, list):
+                            setattr(config, key, json.dumps(value) if value else None)
+                        elif key in ['mcp_servers_config', 'tool_config', 'planner_config', 'generate_content_config', 'input_schema', 'output_schema'] and isinstance(value, dict):
+                            setattr(config, key, json.dumps(value) if value else None)
+                        elif key == 'project_id' and value is not None:
+                            try:
+                                setattr(config, key, int(value))
+                            except (TypeError, ValueError):
+                                pass
+                        else:
+                            setattr(config, key, value)
+
+                session.flush()
+
+                def _propagate_project_to_descendants(parent_name: str, new_project_id: int, visited=None):
+                    if visited is None:
+                        visited = set()
+                    if parent_name in visited:
+                        return
+                    visited.add(parent_name)
+
+                    child_agents = session.query(self.AgentConfig).filter(
+                        self.AgentConfig.parent_agents.isnot(None),
+                        self.AgentConfig.parent_agents.like(f'%"{parent_name}"%')
+                    ).all()
+
+                    for child in child_agents:
+                        child.project_id = new_project_id
+                        session.flush()
+                        _propagate_project_to_descendants(child.name, new_project_id, visited)
+
+                try:
+                    updated_parents = json.loads(config.parent_agents) if config.parent_agents else []
+                except json.JSONDecodeError:
+                    updated_parents = original_parents
+
+                project_changed = (original_project_id != config.project_id)
+                is_root_agent = len(updated_parents) == 0
+
+                if project_changed and is_root_agent:
+                    _propagate_project_to_descendants(config.name, config.project_id)
+
+                session.commit()
+                return True
+            return False
+        except Exception as e:
+            print(f"Error updating agent config: {e}")
+            session.rollback()
+            return False
+        finally:
+            session.close()
+    
+    def _delete_agent_config(self, config_id: int) -> bool:
+        """Delete an agent configuration."""
+        if not self.db_client:
+            return False
+        
+        session = self.db_client.get_session()
+        if not session:
+            return False
+        
+        try:
+            config = session.query(self.AgentConfig).filter(self.AgentConfig.id == config_id).first()
+            if config:
+                session.delete(config)
+                session.commit()
+                return True
+            return False
+        except Exception as e:
+            print(f"Error deleting agent config: {e}")
+            session.rollback()
+            return False
+        finally:
+            session.close()
+    
+    def _export_agent_configs(self, search: str = None, root_agent: str = None, project_id: Optional[int] = None) -> Dict[str, Any]:
+        """Export agent configurations to JSON format with optional filtering."""
+        if not self.db_client:
+            return {"error": "Database connection failed"}
+        
+        session = self.db_client.get_session()
+        if not session:
+            return {"error": "Database connection failed"}
+        
+        try:
+            from datetime import datetime
+            # Get all configs first
+            query = session.query(self.AgentConfig)
+            if project_id is not None:
+                query = query.filter(self.AgentConfig.project_id == project_id)
+            all_configs = query.all()
+            
+            # Apply the same filtering logic as the frontend
+            filtered_configs = self._apply_agent_filters(all_configs, search, root_agent)
+            
+            export_data = {
+                "export_info": {
+                    "timestamp": datetime.now().isoformat(),
+                    "version": "1.0",
+                    "total_agents": len(filtered_configs),
+                    "filtered": search is not None or root_agent is not None,
+                    "search_term": search,
+                    "root_agent": root_agent,
+                    "project_id": project_id
+                },
+                "agents": []
+            }
+            
+            memory_blocks_project_ids = set()
+            
+            for config in filtered_configs:
+                agent_data = {
+                    "name": config.name,
+                    "type": config.type,
+                    "model_name": config.model_name,
+                    "description": config.description,
+                    "instruction": config.instruction,
+                    "mcp_servers_config": config.mcp_servers_config,
+                    "parent_agents": config.get_parent_agents(),
+                    "allowed_for_roles": config.allowed_for_roles,
+                    "tool_config": config.tool_config,
+                    "project_id": config.project_id,
+                    "disabled": config.disabled,
+                    "hardcoded": config.hardcoded
+                }
+                export_data["agents"].append(agent_data)
+                
+                if config.tool_config:
+                    try:
+                        tc = json.loads(config.tool_config) if isinstance(config.tool_config, str) else config.tool_config
+                        if self._has_memory_blocks(tc):
+                            memory_blocks_project_ids.add(config.project_id)
+                    except (json.JSONDecodeError, TypeError):
+                        pass
+            
+            if memory_blocks_project_ids:
+                from shared.utils.models import MemoryBlock
+                all_blocks = []
+                for pid in memory_blocks_project_ids:
+                    rows = session.query(MemoryBlock).filter(
+                        MemoryBlock.project_id == pid
+                    ).all()
+                    for row in rows:
+                        block = row.to_dict()
+                        block["project_id"] = pid
+                        all_blocks.append(block)
+                if all_blocks:
+                    export_data["memory_blocks"] = all_blocks
+            
+            return export_data
+        except Exception as e:
+            print(f"Error exporting agent configs: {e}")
+            return {"error": str(e)}
+        finally:
+            session.close()
+    
+    def _apply_agent_filters(self, configs: List, search: str = None, root_agent: str = None) -> List:
+        """Apply the same filtering logic as the frontend."""
+        filtered_configs = []
+        
+        # Build hierarchy for root agent filtering
+        hierarchy = self._build_agent_hierarchy(configs)
+        allowed_agents = None
+        
+        if root_agent:
+            allowed_agents = self._get_all_descendants(root_agent, hierarchy)
+        
+        for config in configs:
+            # Text search filter
+            search_matches = True
+            if search:
+                search_lower = search.lower()
+                search_matches = (
+                    search_lower in config.name.lower() or
+                    search_lower in config.type.lower() or
+                    search_lower in (config.model_name or "").lower() or
+                    search_lower in (config.description or "").lower() or
+                    any(search_lower in parent.lower() for parent in config.get_parent_agents())
+                )
+            
+            # Root agent hierarchy filter
+            hierarchy_matches = True
+            if allowed_agents is not None:
+                hierarchy_matches = config.name in allowed_agents
+            
+            # Include config if both filters match
+            if search_matches and hierarchy_matches:
+                filtered_configs.append(config)
+        
+        return filtered_configs
+    
+    def _build_agent_hierarchy(self, configs: List) -> Dict[str, List[str]]:
+        """Build agent hierarchy map (same logic as frontend)."""
+        hierarchy = {}
+        for config in configs:
+            parents = config.get_parent_agents()
+            if parents:
+                for parent in parents:
+                    if parent not in hierarchy:
+                        hierarchy[parent] = []
+                    hierarchy[parent].append(config.name)
+        return hierarchy
+    
+    def _get_all_descendants(self, root_agent: str, hierarchy: Dict[str, List[str]]) -> set:
+        """Get all descendants of a root agent (same logic as frontend)."""
+        descendants = set()
+        to_process = [root_agent]
+        
+        while to_process:
+            current = to_process.pop(0)
+            if current in hierarchy:
+                for child in hierarchy[current]:
+                    if child not in descendants:
+                        descendants.add(child)
+                        to_process.append(child)
+        
+        # Include the root agent itself
+        descendants.add(root_agent)
+        return descendants
+    
+    def _get_adk_status(self) -> Dict[str, Any]:
+        """Check if ADK server is running."""
+        from shared.utils.server_control_service import ServerControlService
+        service = ServerControlService(
+            adk_host=self.adk_host,
+            adk_port=self.adk_port,
+            session_service_uri=self.session_service_uri
+        )
+        return service.get_adk_status()
+    
+    def _start_adk_server(self) -> Dict[str, Any]:
+        """Start ADK server."""
+        from shared.utils.server_control_service import ServerControlService
+        service = ServerControlService(
+            adk_host=self.adk_host,
+            adk_port=self.adk_port,
+            session_service_uri=self.session_service_uri
+        )
+        return service.start_adk_server()
+    
+    def _stop_adk_server(self) -> Dict[str, Any]:
+        """Stop ADK server."""
+        from shared.utils.server_control_service import ServerControlService
+        service = ServerControlService(
+            adk_host=self.adk_host,
+            adk_port=self.adk_port,
+            session_service_uri=self.session_service_uri
+        )
+        return service.stop_adk_server()
+    
+    def _restart_adk_server(self) -> Dict[str, Any]:
+        """Restart ADK server."""
+        from shared.utils.server_control_service import ServerControlService
+        service = ServerControlService(
+            adk_host=self.adk_host,
+            adk_port=self.adk_port,
+            session_service_uri=self.session_service_uri
+        )
+        return service.restart_adk_server()
+    
+    def _import_agent_configs(self, import_data: Dict[str, Any], overwrite: bool = False) -> Dict[str, Any]:
+        """Import agent configurations from JSON format."""
+        if not self.db_client:
+            return {"error": "Database connection failed"}
+        
+        session = self.db_client.get_session()
+        if not session:
+            return {"error": "Database connection failed"}
+        
+        # Ensure session is clean
+        session.rollback()
+        
+        try:
+            import json
+            if "agents" not in import_data:
+                return {"error": "Invalid import format: missing 'agents' array"}
+            
+            imported_count = 0
+            skipped_count = 0
+            errors = []
+            
+            for agent_data in import_data["agents"]:
+                try:
+                    # Check if agent already exists
+                    existing_agent = session.query(self.AgentConfig).filter_by(name=agent_data["name"]).first()
+                    
+                    if existing_agent and not overwrite:
+                        skipped_count += 1
+                        errors.append(f"Agent '{agent_data['name']}' already exists (use overwrite=true to replace)")
+                        continue
+                    
+                    if existing_agent and overwrite:
+                        # Update existing agent
+                        for key, value in agent_data.items():
+                            if hasattr(existing_agent, key):
+                                # Handle parent_agents field specially - convert list to JSON string
+                                if key == "parent_agents" and isinstance(value, list):
+                                    setattr(existing_agent, key, json.dumps(value) if value else None)
+                                elif key == "project_id":
+                                    try:
+                                        setattr(existing_agent, key, int(value) if value is not None else 1)
+                                    except (TypeError, ValueError):
+                                        setattr(existing_agent, key, 1)
+                                else:
+                                    setattr(existing_agent, key, value)
+                        imported_count += 1
+                    else:
+                        # Create new agent
+                        parent_agents = agent_data.get("parent_agents", [])
+                        parent_agents_json = json.dumps(parent_agents) if parent_agents else None
+                        
+                        new_agent = self.AgentConfig(
+                            name=agent_data["name"],
+                            type=agent_data["type"],
+                            model_name=agent_data.get("model_name"),
+                            description=agent_data.get("description"),
+                            instruction=agent_data.get("instruction"),
+                            mcp_servers_config=agent_data.get("mcp_servers_config"),
+                            parent_agents=parent_agents_json,
+                            allowed_for_roles=agent_data.get("allowed_for_roles"),
+                            tool_config=agent_data.get("tool_config"),
+                            project_id=int(agent_data.get("project_id") or 1),
+                            disabled=agent_data.get("disabled", False),
+                            hardcoded=agent_data.get("hardcoded", False)
+                        )
+                        session.add(new_agent)
+                        imported_count += 1
+                        
+                except Exception as e:
+                    errors.append(f"Error importing agent '{agent_data.get('name', 'Unknown')}': {str(e)}")
+            
+            session.commit()
+            
+            memory_blocks_imported = 0
+            memory_blocks_skipped = 0
+            if "memory_blocks" in import_data and import_data["memory_blocks"]:
+                try:
+                    from shared.utils.models import MemoryBlock
+                    for block_data in import_data["memory_blocks"]:
+                        try:
+                            block_project_id = int(block_data.get("project_id") or 1)
+                            block_label = block_data.get("label", "").strip()
+                            if not block_label:
+                                continue
+                            
+                            existing = session.query(MemoryBlock).filter(
+                                MemoryBlock.project_id == block_project_id,
+                                MemoryBlock.label == block_label,
+                            ).first()
+                            
+                            if existing:
+                                if overwrite:
+                                    existing.value = block_data.get("value", "")
+                                    existing.description = block_data.get("description")
+                                    md = block_data.get("metadata")
+                                    existing.set_metadata(md if isinstance(md, dict) else None)
+                                    memory_blocks_imported += 1
+                                else:
+                                    memory_blocks_skipped += 1
+                            else:
+                                new_block = MemoryBlock(
+                                    project_id=block_project_id,
+                                    label=block_label,
+                                    value=block_data.get("value", ""),
+                                    description=block_data.get("description"),
+                                )
+                                md = block_data.get("metadata")
+                                if isinstance(md, dict):
+                                    new_block.set_metadata(md)
+                                session.add(new_block)
+                                memory_blocks_imported += 1
+                        except Exception as e:
+                            errors.append(f"Error importing memory block '{block_data.get('label', 'Unknown')}': {str(e)}")
+                    
+                    session.commit()
+                except Exception as e:
+                    session.rollback()
+                    errors.append(f"Error importing memory blocks: {str(e)}")
+            
+            result = {
+                "success": True,
+                "imported_count": imported_count,
+                "skipped_count": skipped_count,
+                "errors": errors
+            }
+            if memory_blocks_imported or memory_blocks_skipped:
+                result["memory_blocks_imported"] = memory_blocks_imported
+                result["memory_blocks_skipped"] = memory_blocks_skipped
+            return result
+            
+        except Exception as e:
+            session.rollback()
+            print(f"Error importing agent configs: {e}")
+            return {"error": str(e)}
+        finally:
+            session.close()
+    
+    def _setup_templates_and_static(self):
+        """Setup templates and static file serving"""
+        templates_dir = self.project_root / "templates"
+        static_dir = self.project_root / "static"
+        
+        self.templates = Jinja2Templates(directory=str(templates_dir))
+        
+        # Mount static files
+        self.app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+    
+    def _get_auth_user_dependency(self, request: Request):
+        """Get authenticated user for dashboard routes without triggering browser popup.
+        Uses auth function from auth_server."""
+        # Import here to avoid circular imports
+        from auth_server import require_dashboard_auth
+        return require_dashboard_auth(request)
+    
+    def _has_memory_blocks(self, tool_config_dict):
+        """Return True if agent has memory_blocks tool enabled."""
+        memory_blocks = tool_config_dict.get('memory_blocks')
+        if not memory_blocks:
+            return False
+        if memory_blocks is True:
+            return True
+        if isinstance(memory_blocks, dict):
+            return memory_blocks.get('enabled', True) is not False
+        return False
+
+    def _register_endpoints(self):
+        """Register all dashboard endpoints"""
+        
+        # Dashboard page endpoints
+        @self.app.get("/dashboard", response_class=HTMLResponse, tags=["Dashboard - Pages"])
+        async def dashboard_index(request: Request, username: str = Depends(self._get_auth_user_dependency)):
+            """Dashboard main page"""
+            # Get real stats from database
+            stats = self._get_usage_stats(7)
+            
+            return self.templates.TemplateResponse("dashboard/index.html", {
+                "request": request,
+                "page_title": "Dashboard",
+                "username": username,
+                "stats": stats
+            })
+
+        @self.app.get("/dashboard/users", response_class=HTMLResponse, tags=["Dashboard - Pages"])
+        async def dashboard_users(request: Request, username: str = Depends(self._get_auth_user_dependency)):
+            """Dashboard users page"""
+            users = self._get_all_users()
+            return self.templates.TemplateResponse("dashboard/users.html", {
+                "request": request,
+                "page_title": "User Management",
+                "username": username,
+                "users": users
+            })
+
+        @self.app.get("/dashboard/agents", response_class=HTMLResponse, tags=["Dashboard - Pages"])
+        async def dashboard_agents(request: Request, username: str = Depends(self._get_auth_user_dependency)):
+            """Dashboard agents page"""
+            project_param = request.query_params.get("project_id")
+            try:
+                selected_project_id = int(project_param) if project_param else None
+            except (TypeError, ValueError):
+                selected_project_id = None
+            
+            projects = self._get_all_projects()
+            configs = self._get_all_agent_configs(selected_project_id) if selected_project_id else []
+            return self.templates.TemplateResponse("dashboard/agents.html", {
+                "request": request,
+                "page_title": "Agent Management",
+                "username": username,
+                "configs": configs,
+                "projects": projects,
+                "selected_project_id": selected_project_id
+            })
+
+        @self.app.get("/dashboard/migrations", response_class=HTMLResponse, tags=["Dashboard - Pages"])
+        async def dashboard_migrations(request: Request, username: str = Depends(self._get_auth_user_dependency)):
+            """Dashboard migrations page"""
+            migrations = self._get_schema_migrations()
+            return self.templates.TemplateResponse("dashboard/migrations.html", {
+                "request": request,
+                "page_title": "Database Migrations",
+                "username": username,
+                "migrations": migrations
+            })
+
+        @self.app.get("/dashboard/usage", response_class=HTMLResponse, tags=["Dashboard - Pages"])
+        async def dashboard_usage(request: Request, days: int = 30, view: str = "analytics", username: str = Depends(self._get_auth_user_dependency)):
+            """Dashboard usage page"""
+            stats = self._get_usage_stats(days)
+            logs = self._get_token_usage_logs(24, limit=1000) if view == "logs" else {"logs": []}
+            return self.templates.TemplateResponse("dashboard/usage.html", {
+                "request": request,
+                "page_title": "Usage Analytics",
+                "username": username,
+                "stats": stats,
+                "logs": logs.get("logs", []) if isinstance(logs, dict) else [],
+                "days": days,
+                "view": view
+            })
+
+        @self.app.get("/dashboard/docs", response_class=HTMLResponse, tags=["Dashboard - Pages"])
+        async def dashboard_docs(request: Request, username: str = Depends(self._get_auth_user_dependency)):
+            """Dashboard docs page"""
+            # Extract hostname from request
+            host = request.headers.get("host", "localhost").split(":")[0]
+            return self.templates.TemplateResponse("dashboard/docs.html", {
+                "request": request,
+                "page_title": "Documentation",
+                "username": username,
+                "adk_host": host,
+                "adk_port": 8000
+            })
+
+        # API Endpoints for Dashboard
+        @self.app.get("/dashboard/api/stats", tags=["Dashboard - Usage Analytics"])
+        async def get_stats(request: Request, username: str = Depends(self._get_auth_user_dependency), days: int = 7):
+            """Get usage statistics."""
+            return self._get_usage_stats(days)
+
+        @self.app.get("/dashboard/api/usage/logs", tags=["Dashboard - Usage Analytics"])
+        async def get_usage_logs_api(
+            request: Request,
+            username: str = Depends(self._get_auth_user_dependency),
+            hours: int = 24,
+            limit: int = 100,
+            page: int = 1
+        ):
+            """Get paginated token usage logs."""
+            return self._get_token_usage_logs(hours, limit, page)
+
+        @self.app.get("/dashboard/api/users", tags=["Dashboard - Users"])
+        async def get_users(request: Request, username: str = Depends(self._get_auth_user_dependency)):
+            """Get all users."""
+            return {"users": self._get_all_users()}
+
+        @self.app.get("/dashboard/api/projects", tags=["Dashboard - Projects"])
+        async def get_projects_api(request: Request, username: str = Depends(self._get_auth_user_dependency)):
+            """Get all projects."""
+            return {"projects": self._get_all_projects()}
+
+        @self.app.post("/dashboard/api/projects", tags=["Dashboard - Projects"])
+        async def create_project_api(
+            request: Request,
+            username: str = Depends(self._get_auth_user_dependency),
+            name: str = Form(...),
+            description: str = Form("")
+        ):
+            """Create a new project."""
+            project = self._create_project(name, description)
+            return {"success": True, "project": project}
+
+        @self.app.put("/dashboard/api/projects/{project_id}", tags=["Dashboard - Projects"])
+        async def update_project_api(
+            project_id: int,
+            request: Request,
+            username: str = Depends(self._get_auth_user_dependency),
+            name: str = Form(...),
+            description: str = Form("")
+        ):
+            """Update an existing project."""
+            project = self._update_project(project_id, name, description)
+            return {"success": True, "project": project}
+
+        @self.app.delete("/dashboard/api/projects/{project_id}", tags=["Dashboard - Projects"])
+        async def delete_project_api(
+            project_id: int,
+            request: Request,
+            username: str = Depends(self._get_auth_user_dependency)
+        ):
+            """Delete a project."""
+            result = self._delete_project(project_id)
+            return {"success": True, **result}
+
+        @self.app.post("/dashboard/api/users", tags=["Dashboard - Users"])
+        async def create_user(request: Request, username: str = Depends(self._get_auth_user_dependency), user_id: str = Form(...), roles: str = Form(...)):
+            """Create a new user."""
+            try:
+                import json
+                roles_list = json.loads(roles) if roles else ["user"]
+                success = self._create_user(user_id, roles_list)
+                return {"success": success, "message": "User created successfully" if success else "Failed to create user"}
+            except json.JSONDecodeError:
+                return {"success": False, "message": "Invalid roles format"}
+
+        @self.app.put("/dashboard/api/users/{user_id}", tags=["Dashboard - Users"])
+        async def update_user(user_id: str, request: Request, username: str = Depends(self._get_auth_user_dependency), roles: str = Form(...), profile_data: str = Form(None)):
+            """Update user roles and profile data."""
+            try:
+                import json
+                roles_list = json.loads(roles) if roles else ["user"]
+                profile_data_value = profile_data if profile_data else None
+                success = self._update_user(user_id, roles_list, profile_data_value)
+                return {"success": success, "message": "User updated successfully" if success else "Failed to update user"}
+            except json.JSONDecodeError:
+                return {"success": False, "message": "Invalid roles format"}
+
+        @self.app.delete("/dashboard/api/users/{user_id}", tags=["Dashboard - Users"])
+        async def delete_user(user_id: str, request: Request, username: str = Depends(self._get_auth_user_dependency)):
+            """Delete a user."""
+            success = self._delete_user(user_id)
+            return {"success": success, "message": "User deleted successfully" if success else "Failed to delete user"}
+
+        @self.app.get("/dashboard/api/agents", tags=["Dashboard - Agents"])
+        async def get_agents(
+            request: Request,
+            username: str = Depends(self._get_auth_user_dependency),
+            project_id: Optional[int] = None
+        ):
+            """Get all agent configurations."""
+            return {"configs": self._get_all_agent_configs(project_id)}
+
+        @self.app.get("/dashboard/api/agents/export", tags=["Dashboard - Agents"])
+        async def export_agents(
+            request: Request, 
+            username: str = Depends(self._get_auth_user_dependency),
+            search: str = None,
+            root_agent: str = None,
+            project_id: Optional[int] = None
+        ):
+            """Export agent configurations as JSON with optional filtering."""
+            export_data = self._export_agent_configs(search=search, root_agent=root_agent, project_id=project_id)
+            
+            if "error" in export_data:
+                raise HTTPException(status_code=500, detail=export_data["error"])
+            
+            return export_data
+
+        @self.app.post("/dashboard/api/agents/import", tags=["Dashboard - Agents"])
+        async def import_agents(
+            request: Request,
+            username: str = Depends(self._get_auth_user_dependency),
+            overwrite: bool = False
+        ):
+            """Import agent configurations from JSON."""
+            try:
+                import_data = await request.json()
+                result = self._import_agent_configs(import_data, overwrite)
+                
+                if "error" in result:
+                    raise HTTPException(status_code=400, detail=result["error"])
+                
+                return result
+            except Exception as e:
+                raise HTTPException(status_code=400, detail=f"Invalid JSON data: {str(e)}")
+
+        @self.app.get("/dashboard/api/migrations", tags=["Dashboard - Migrations"])
+        async def get_migrations(request: Request, username: str = Depends(self._get_auth_user_dependency)):
+            """Get all schema migrations."""
+            return {"migrations": self._get_schema_migrations()}
+
+        @self.app.delete("/dashboard/api/migrations/{version}", tags=["Dashboard - Migrations"])
+        async def delete_migration(version: str, request: Request, username: str = Depends(self._get_auth_user_dependency)):
+            """Delete a migration from the schema_migrations table."""
+            if not self.db_client:
+                raise HTTPException(status_code=500, detail="Database connection failed")
+            
+            session = self.db_client.get_session()
+            if not session:
+                raise HTTPException(status_code=500, detail="Database connection failed")
+            
+            try:
+                from sqlalchemy import text
+                result = session.execute(text("DELETE FROM schema_migrations WHERE version = :version"), {"version": version})
+                session.commit()
+                
+                if result.rowcount == 0:
+                    raise HTTPException(status_code=404, detail=f"Migration {version} not found")
+                
+                return {"message": f"Migration {version} deleted successfully"}
+            except Exception as e:
+                session.rollback()
+                raise HTTPException(status_code=500, detail=f"Error deleting migration: {str(e)}")
+            finally:
+                session.close()
+
+        @self.app.post("/dashboard/api/migrations/{version}/rerun", tags=["Dashboard - Migrations"])
+        async def rerun_migration(version: str, request: Request, username: str = Depends(self._get_auth_user_dependency)):
+            """Re-run a specific migration by deleting it first, then running migrations."""
+            if not self.db_client:
+                raise HTTPException(status_code=500, detail="Database connection failed")
+            
+            session = self.db_client.get_session()
+            if not session:
+                raise HTTPException(status_code=500, detail="Database connection failed")
+            
+            try:
+                from sqlalchemy import text
+                from shared.utils.migration_system import MigrationSystem
+                
+                # First, delete the migration record
+                result = session.execute(text("DELETE FROM schema_migrations WHERE version = :version"), {"version": version})
+                session.commit()
+                
+                if result.rowcount == 0:
+                    raise HTTPException(status_code=404, detail=f"Migration {version} not found")
+                
+                # Then run migrations to re-apply it
+                migration_system = MigrationSystem(self.db_client)
+                success = migration_system.run_migrations()
+                
+                if success:
+                    return {"message": f"Migration {version} re-run successfully"}
+                else:
+                    return {"message": f"Migration {version} deleted but re-run failed. Check logs for details."}
+                    
+            except Exception as e:
+                session.rollback()
+                raise HTTPException(status_code=500, detail=f"Error re-running migration: {str(e)}")
+            finally:
+                session.close()
+
+        @self.app.post("/dashboard/api/migrations/run", tags=["Dashboard - Migrations"])
+        async def run_all_migrations(request: Request, username: str = Depends(self._get_auth_user_dependency)):
+            """Run all pending migrations."""
+            try:
+                from shared.utils.migration_system import MigrationSystem
+                
+                migration_system = MigrationSystem(self.db_client)
+                success = migration_system.run_migrations()
+                
+                if success:
+                    return {"message": "All migrations completed successfully"}
+                else:
+                    return {"message": "Some migrations failed. Check logs for details."}
+                    
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=f"Error running migrations: {str(e)}")
+
+        @self.app.post("/dashboard/api/agents", tags=["Dashboard - Agents"])
+        async def create_agent(
+            request: Request,
+            username: str = Depends(self._get_auth_user_dependency),
+            name: str = Form(...),
+            type: str = Form(...),
+            project_id: str = Form(...),
+            model_name: str = Form(None),
+            description: str = Form(None),
+            instruction: str = Form(None),
+            parent_agents: str = Form(None),
+            allowed_for_roles: str = Form(None),
+            tool_config: str = Form(""),
+            mcp_servers_config: str = Form(""),
+            planner_config: str = Form(""),
+            generate_content_config: str = Form(""),
+            input_schema: str = Form(""),
+            output_schema: str = Form(""),
+            include_contents: str = Form(""),
+            max_iterations: str = Form(""),
+            disabled: bool = Form(False),
+            hardcoded: bool = Form(False)
+        ):
+            """Create a new agent configuration."""
+            # Parse parent_agents JSON string to list
+            import json
+            try:
+                parent_agents_list = json.loads(parent_agents) if parent_agents else []
+            except json.JSONDecodeError:
+                parent_agents_list = []
+            
+            config_data = {
+                "name": name,
+                "type": type,
+                "project_id": int(project_id) if project_id else None,
+                "model_name": model_name,
+                "description": description,
+                "instruction": instruction,
+                "parent_agents": parent_agents_list,
+                "allowed_for_roles": allowed_for_roles,
+                "tool_config": tool_config,
+                "mcp_servers_config": mcp_servers_config,
+                "planner_config": planner_config,
+                "generate_content_config": generate_content_config,
+                "input_schema": input_schema,
+                "output_schema": output_schema,
+                "include_contents": include_contents,
+                "max_iterations": int(max_iterations) if max_iterations else None,
+                "disabled": disabled,
+                "hardcoded": hardcoded
+            }
+            success = self._create_agent_config(config_data)
+            return {"success": success, "message": "Agent created successfully" if success else "Failed to create agent"}
+
+        @self.app.put("/dashboard/api/agents/{config_id}", tags=["Dashboard - Agents"])
+        async def update_agent(
+            config_id: int,
+            request: Request,
+            username: str = Depends(self._get_auth_user_dependency),
+            name: str = Form(...),
+            type: str = Form(...),
+            project_id: str = Form(...),
+            model_name: str = Form(None),
+            description: str = Form(None),
+            instruction: str = Form(None),
+            parent_agents: str = Form(None),
+            allowed_for_roles: str = Form(None),
+            tool_config: str = Form(""),
+            mcp_servers_config: str = Form(""),
+            planner_config: str = Form(""),
+            generate_content_config: str = Form(""),
+            input_schema: str = Form(""),
+            output_schema: str = Form(""),
+            include_contents: str = Form(""),
+            max_iterations: str = Form(""),
+            disabled: bool = Form(False),
+            hardcoded: bool = Form(False)
+        ):
+            """Update an agent configuration."""
+            # Parse parent_agents JSON string to list
+            import json
+            try:
+                parent_agents_list = json.loads(parent_agents) if parent_agents else []
+            except json.JSONDecodeError:
+                parent_agents_list = []
+            
+            config_data = {
+                "name": name,
+                "type": type,
+                "project_id": int(project_id) if project_id else None,
+                "model_name": model_name,
+                "description": description,
+                "instruction": instruction,
+                "parent_agents": parent_agents_list,
+                "allowed_for_roles": allowed_for_roles,
+                "tool_config": tool_config,
+                "mcp_servers_config": mcp_servers_config,
+                "planner_config": planner_config,
+                "generate_content_config": generate_content_config,
+                "input_schema": input_schema,
+                "output_schema": output_schema,
+                "include_contents": include_contents,
+                "max_iterations": int(max_iterations) if max_iterations else None,
+                "disabled": disabled,
+                "hardcoded": hardcoded
+            }
+            success = self._update_agent_config(config_id, config_data)
+            return {"success": success, "message": "Agent updated successfully" if success else "Failed to update agent"}
+
+        @self.app.delete("/dashboard/api/agents/{config_id}", tags=["Dashboard - Agents"])
+        async def delete_agent(
+            config_id: int,
+            request: Request,
+            username: str = Depends(self._get_auth_user_dependency),
+            delete_folder: bool = False
+        ):
+            """Delete an agent configuration and optionally its folder if not hardcoded."""
+            # Fetch config to know name and hardcoded flag
+            agent_name = None
+            agent_hardcoded = False
+            try:
+                if self.db_client:
+                    session = self.db_client.get_session()
+                    if session:
+                        try:
+                            config = session.query(self.AgentConfig).filter(self.AgentConfig.id == config_id).first()
+                            if config:
+                                agent_name = config.name
+                                agent_hardcoded = bool(getattr(config, 'hardcoded', False))
+                        finally:
+                            session.close()
+            except Exception as e:
+                print(f"Error pre-reading agent before delete: {e}")
+
+            success = self._delete_agent_config(config_id)
+
+            # Optionally delete folder if requested and agent is not hardcoded
+            folder_deleted = False
+            folder_path = None
+            if success and delete_folder and agent_name and not agent_hardcoded:
+                try:
+                    agents_dir = self.project_root / "agents"
+                    dest_path = agents_dir / agent_name
+                    folder_path = str(dest_path)
+                    if dest_path.exists() and dest_path.is_dir():
+                        shutil.rmtree(dest_path)
+                        folder_deleted = True
+                except Exception as e:
+                    print(f"Error deleting agent folder '{agent_name}': {e}")
+
+            return {
+                "success": success,
+                "message": "Agent deleted successfully" if success else "Failed to delete agent",
+                "folder_deleted": folder_deleted,
+                "folder_path": folder_path,
+                "hardcoded": agent_hardcoded
+            }
+
+        @self.app.post("/dashboard/api/agents/{agent_name}/create-folder", tags=["Dashboard - Agents"])
+        async def create_agent_folder(agent_name: str, request: Request, username: str = Depends(self._get_auth_user_dependency)):
+            """Create agent folder from template for a specific agent."""
+            result = self._copy_template_agent(agent_name)
+            
+            if not result["success"] and not result["skipped"]:
+                raise HTTPException(status_code=500, detail=result["message"])
+            
+            return result
+
+        @self.app.delete("/dashboard/api/agents/{agent_name}/delete-folder", tags=["Dashboard - Agents"])
+        async def delete_agent_folder(agent_name: str, request: Request, username: str = Depends(self._get_auth_user_dependency)):
+            """Delete agent folder for a specific agent."""
+            result = self._delete_agent_folder(agent_name)
+            
+            if not result["success"] and result.get("error"):
+                raise HTTPException(status_code=500, detail=result["message"])
+            
+            return result
+
+        @self.app.post("/dashboard/api/agents/{agent_name}/reinitialize", tags=["Dashboard - Agents"])
+        async def reinitialize_agent(agent_name: str, request: Request, username: str = Depends(self._get_auth_user_dependency)):
+            """Reinitialize a specific agent with fresh configuration from database by proxying to ADK server."""
+            import httpx
+            from shared.utils.utils import get_adk_config
+            
+            print(f"🔄 [Dashboard] Reload request for agent '{agent_name}', proxying to ADK server")
+            
+            try:
+                adk_config = get_adk_config()
+                adk_url = f"http://{adk_config['adk_host']}:{adk_config['adk_port']}/api/reload-agent/{agent_name}"
+                
+                async with httpx.AsyncClient(timeout=30.0) as client:
+                    response = await client.post(adk_url)
+                    result = response.json()
+                    
+                    print(f"🔄 [Dashboard] ADK server response: {result}")
+                    return result
+                    
+            except Exception as e:
+                print(f"❌ [Dashboard] Error calling ADK reload endpoint: {e}")
+                import traceback
+                traceback.print_exc()
+                return {
+                    "success": False,
+                    "message": f"Error communicating with ADK server: {str(e)}",
+                    "agent_name": agent_name
+                }
+        
+        # File Search API Endpoints
+        @self.app.get("/dashboard/api/agents/{agent_name}/file-search/config", tags=["Dashboard - File Search"])
+        async def get_agent_file_search_config(
+            agent_name: str,
+            request: Request,
+            username: str = Depends(self._get_auth_user_dependency)
+        ):
+            """Get File Search configuration for an agent (diagnostic endpoint)."""
+            if not self.db_client:
+                return {"success": False, "error": "Database not available"}
+            
+            session = self.db_client.get_session()
+            if not session:
+                return {"success": False, "error": "Database session not available"}
+            
+            try:
+                agent = session.query(self.AgentConfig).filter_by(name=agent_name).first()
+                if not agent:
+                    return {"success": False, "error": f"Agent {agent_name} not found"}
+                
+                # Get stores from database
+                from shared.utils.file_search_service import FileSearchService
+                service = FileSearchService(self.db_client)
+                stores = service.get_stores_for_agent(agent_name)
+                store_names = [s['store_name'] for s in stores]
+                
+                # Parse tool_config
+                tool_config = agent.tool_config
+                tool_config_dict = {}
+                if tool_config:
+                    try:
+                        tool_config_dict = json.loads(tool_config) if isinstance(tool_config, str) else tool_config
+                    except json.JSONDecodeError:
+                        pass
+                
+                file_search_config = tool_config_dict.get('file_search', {})
+                
+                return {
+                    "success": True,
+                    "agent_name": agent_name,
+                    "stores_in_db": stores,
+                    "store_names": store_names,
+                    "tool_config_raw": tool_config,
+                    "tool_config_parsed": tool_config_dict,
+                    "file_search_config": file_search_config,
+                    "file_search_enabled": file_search_config.get('enabled', False),
+                    "file_search_store_names": file_search_config.get('store_names', []),
+                    "note": "tool_config is auto-populated from database during agent initialization"
+                }
+            finally:
+                session.close()
+        
+        @self.app.get("/dashboard/api/agents/{agent_name}/file-search/stores", tags=["Dashboard - File Search"])
+        async def get_agent_file_search_stores(
+            agent_name: str,
+            request: Request,
+            username: str = Depends(self._get_auth_user_dependency)
+        ):
+            """Get all file search stores assigned to an agent."""
+            from shared.utils.file_search_service import FileSearchService
+            service = FileSearchService(self.db_client)
+            stores = service.get_stores_for_agent(agent_name)
+            return {"success": True, "stores": stores}
+        
+        @self.app.get("/dashboard/api/agents/{agent_name}/file-search/files", tags=["Dashboard - File Search"])
+        async def get_agent_file_search_files(
+            agent_name: str,
+            request: Request,
+            username: str = Depends(self._get_auth_user_dependency)
+        ):
+            """Get all files accessible to an agent from all its stores."""
+            from shared.utils.file_search_service import FileSearchService
+            service = FileSearchService(self.db_client)
+            files = service.list_files_for_agent(agent_name)
+            return {"success": True, "files": files}
+        
+        @self.app.post("/dashboard/api/agents/{agent_name}/file-search/stores/assign", tags=["Dashboard - File Search"])
+        async def assign_file_search_store(
+            agent_name: str,
+            request: Request,
+            username: str = Depends(self._get_auth_user_dependency),
+            store_name: str = Form(...),
+            is_primary: bool = Form(False)
+        ):
+            """Assign a file search store to an agent."""
+            from shared.utils.file_search_service import FileSearchService
+            service = FileSearchService(self.db_client)
+            success = service.assign_store_to_agent(
+                agent_name=agent_name,
+                store_name=store_name,
+                is_primary=is_primary
+            )
+            message = "Store assigned successfully" if success else "Failed to assign store"
+            if success:
+                message += ". Note: Agent will need to be reinitialized to use File Search."
+            return {"success": success, "message": message, "needs_reload": success}
+        
+        @self.app.post("/dashboard/api/agents/{agent_name}/file-search/stores/unassign", tags=["Dashboard - File Search"])
+        async def unassign_file_search_store(
+            agent_name: str,
+            request: Request,
+            username: str = Depends(self._get_auth_user_dependency),
+            store_name: str = Form(...)
+        ):
+            """Unassign a file search store from an agent."""
+            from shared.utils.file_search_service import FileSearchService
+            service = FileSearchService(self.db_client)
+            success = service.unassign_store_from_agent(
+                agent_name=agent_name,
+                store_name=store_name
+            )
+            message = "Store unassigned successfully" if success else "Failed to unassign store"
+            if success:
+                message += ". Note: Agent will need to be reinitialized to apply changes."
+            return {"success": success, "message": message, "needs_reload": success}
+        
+        @self.app.post("/dashboard/api/file-search/stores/create", tags=["Dashboard - File Search"])
+        async def create_file_search_store(
+            request: Request,
+            username: str = Depends(self._get_auth_user_dependency)
+        ):
+            """Create a new file search store and optionally assign it to an agent."""
+            from shared.utils.file_search_service import FileSearchService
+            from shared.utils.tools.file_search_tools import create_file_search_store
+            service = FileSearchService(self.db_client)
+            
+            # Parse JSON body
+            try:
+                data = await request.json()
+                display_name = data.get("display_name")
+                project_id = data.get("project_id")
+                description = data.get("description")
+                agent_name = data.get("agent_name")
+                is_primary = data.get("is_primary", False)
+                
+                if not display_name:
+                    return {"success": False, "error": "display_name is required"}
+                if not project_id:
+                    return {"success": False, "error": "project_id is required"}
+            except Exception as e:
+                return {"success": False, "error": f"Invalid JSON: {str(e)}"}
+            
+            # First create the store in Gemini API
+            gemini_result = create_file_search_store(display_name=display_name)
+            if not gemini_result.get("success"):
+                return {"success": False, "error": gemini_result.get("error", "Failed to create store in Gemini API")}
+            
+            actual_store_name = gemini_result.get("store_name")
+            
+            # Create store record in database
+            if agent_name:
+                # Create and assign in one operation
+                result = service.create_store_and_assign(
+                    store_name=actual_store_name,
+                    display_name=display_name,
+                    agent_name=agent_name,
+                    project_id=project_id,
+                    description=description,
+                    is_primary=is_primary
+                )
+            else:
+                # Just create the store
+                result = service.create_store(
+                    store_name=actual_store_name,
+                    display_name=display_name,
+                    project_id=project_id,
+                    description=description
+                )
+            
+            return result
+        
+        @self.app.post("/dashboard/api/file-search/stores/upload", tags=["Dashboard - File Search"])
+        async def upload_file_to_store(
+            request: Request,
+            username: str = Depends(self._get_auth_user_dependency),
+            file: UploadFile = File(...),
+            store_name: str = Form(...),
+            display_name: str = Form(None),
+            agent_name: str = Form(None)
+        ):
+            """Upload a file to a file search store."""
+            import tempfile
+            from shared.utils.tools.file_search_tools import upload_file_to_store
+            from shared.utils.file_search_service import FileSearchService
+            
+            # Save uploaded file to temp location
+            with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(file.filename)[1]) as tmp_file:
+                content = await file.read()
+                tmp_file.write(content)
+                tmp_path = tmp_file.name
+            
+            try:
+                # Upload to Gemini File Search
+                result = upload_file_to_store(
+                    file_path=tmp_path,
+                    store_name=store_name,
+                    display_name=display_name or file.filename
+                )
+                
+                if result.get("success"):
+                    # Record document in database (always save, even if agent_name is not provided)
+                    service = FileSearchService(self.db_client)
+                    doc_name = result.get("document_name")
+                    # Ensure we have a document_name - use fallback if needed
+                    if not doc_name:
+                        import hashlib
+                        file_hash = hashlib.md5(tmp_path.encode()).hexdigest()[:16]
+                        doc_name = f"fileSearchDocuments/{file_hash}"
+                    
+                    try:
+                        doc_result = service.add_document(
+                            store_name=store_name,
+                            document_name=doc_name,
+                            display_name=display_name or file.filename,
+                            file_path=tmp_path,
+                            file_size=len(content),
+                            mime_type=file.content_type,
+                            status="completed",
+                            uploaded_by_agent=agent_name
+                        )
+                        
+                        # If database save failed, log it but don't fail the upload
+                        if not doc_result.get("success"):
+                            logger.warning(f"Failed to save document to database: {doc_result.get('error')}")
+                            # Still return success since Gemini upload worked, but include warning
+                            result["warning"] = "File uploaded but database save failed"
+                            result["db_error"] = doc_result.get("error")
+                        else:
+                            logger.info(f"Document saved to database: {doc_name}")
+                    except Exception as e:
+                        logger.error(f"Exception saving document to database: {e}")
+                        result["warning"] = f"File uploaded but database save failed: {str(e)}"
+                
+                return result
+            finally:
+                # Clean up temp file
+                try:
+                    os.unlink(tmp_path)
+                except:
+                    pass
+        
+        @self.app.get("/dashboard/api/file-search/stores/{store_name}/files", tags=["Dashboard - File Search"])
+        async def list_store_files(
+            store_name: str,
+            request: Request,
+            username: str = Depends(self._get_auth_user_dependency)
+        ):
+            """List all files in a file search store."""
+            from shared.utils.file_search_service import FileSearchService
+            service = FileSearchService(self.db_client)
+            files = service.list_files_in_store(store_name)
+            return {"success": True, "files": files}
+        
+        # Memory Blocks API Endpoints
+        @self.app.get("/dashboard/api/agents/{agent_name}/memory-blocks", tags=["Dashboard - Memory Blocks"])
+        async def list_agent_memory_blocks(
+            agent_name: str,
+            request: Request,
+            username: str = Depends(self._get_auth_user_dependency),
+            label_search: Optional[str] = None,
+            value_search: Optional[str] = None
+        ):
+            """List memory blocks for an agent."""
+            if not self.db_client:
+                return {"success": False, "error": "Database not available"}
+            
+            session = self.db_client.get_session()
+            if not session:
+                return {"success": False, "error": "Database session not available"}
+            
+            try:
+                agent = session.query(self.AgentConfig).filter_by(name=agent_name).first()
+                if not agent:
+                    return {"success": False, "error": f"Agent {agent_name} not found"}
+                
+                # Parse tool_config to check for memory tools
+                tool_config = agent.tool_config
+                tool_config_dict = {}
+                if tool_config:
+                    try:
+                        tool_config_dict = json.loads(tool_config) if isinstance(tool_config, str) else tool_config
+                    except json.JSONDecodeError:
+                        pass
+                
+                if not self._has_memory_blocks(tool_config_dict):
+                    return {"success": False, "error": "Agent does not have memory blocks tool configured"}
+                
+                from shared.utils.memory_blocks_service import MemoryBlocksService
+                svc = MemoryBlocksService(self.db_client)
+                result = svc.list_blocks(
+                    project_id=agent.project_id,
+                    limit=1000,
+                    label_search=label_search,
+                    value_search=value_search,
+                )
+                
+                if result.get("status") == "success":
+                    return {"success": True, "blocks": result.get("blocks", []), "block_count": result.get("block_count", 0)}
+                else:
+                    return {"success": False, "error": result.get("error_message", "Failed to list blocks")}
+                    
+            finally:
+                session.close()
+        
+        @self.app.get("/dashboard/api/agents/{agent_name}/memory-blocks/{block_id}", tags=["Dashboard - Memory Blocks"])
+        async def get_agent_memory_block(
+            agent_name: str,
+            block_id: str,
+            request: Request,
+            username: str = Depends(self._get_auth_user_dependency)
+        ):
+            """Get a specific memory block."""
+            if not self.db_client:
+                return {"success": False, "error": "Database not available"}
+            
+            session = self.db_client.get_session()
+            if not session:
+                return {"success": False, "error": "Database session not available"}
+            
+            try:
+                agent = session.query(self.AgentConfig).filter_by(name=agent_name).first()
+                if not agent:
+                    return {"success": False, "error": f"Agent {agent_name} not found"}
+                
+                tool_config = agent.tool_config
+                tool_config_dict = {}
+                if tool_config:
+                    try:
+                        tool_config_dict = json.loads(tool_config) if isinstance(tool_config, str) else tool_config
+                    except json.JSONDecodeError:
+                        pass
+                
+                if not self._has_memory_blocks(tool_config_dict):
+                    return {"success": False, "error": "Agent does not have memory blocks tool configured"}
+                
+                from shared.utils.memory_blocks_service import MemoryBlocksService
+                svc = MemoryBlocksService(self.db_client)
+                result = svc.get_block(project_id=agent.project_id, block_id=block_id)
+                
+                if result.get("status") == "success":
+                    return {"success": True, "block": result}
+                else:
+                    return {"success": False, "error": result.get("error_message", "Failed to get block")}
+                    
+            finally:
+                session.close()
+        
+        @self.app.post("/dashboard/api/agents/{agent_name}/memory-blocks", tags=["Dashboard - Memory Blocks"])
+        async def create_agent_memory_block(
+            agent_name: str,
+            request: Request,
+            username: str = Depends(self._get_auth_user_dependency),
+            label: str = Form(...),
+            value: str = Form(...),
+            description: Optional[str] = Form(None),
+            character_limit: Optional[int] = Form(None),
+            read_only: bool = Form(False),
+            preserve_on_migration: bool = Form(False)
+        ):
+            """Create a new memory block."""
+            if not self.db_client:
+                return {"success": False, "error": "Database not available"}
+            
+            session = self.db_client.get_session()
+            if not session:
+                return {"success": False, "error": "Database session not available"}
+            
+            try:
+                agent = session.query(self.AgentConfig).filter_by(name=agent_name).first()
+                if not agent:
+                    return {"success": False, "error": f"Agent {agent_name} not found"}
+                
+                tool_config = agent.tool_config
+                tool_config_dict = {}
+                if tool_config:
+                    try:
+                        tool_config_dict = json.loads(tool_config) if isinstance(tool_config, str) else tool_config
+                    except json.JSONDecodeError:
+                        pass
+                
+                if not self._has_memory_blocks(tool_config_dict):
+                    return {"success": False, "error": "Agent does not have memory blocks tool configured"}
+                
+                metadata = {}
+                if character_limit:
+                    metadata['limit'] = character_limit
+                if read_only:
+                    metadata['read_only'] = True
+                if preserve_on_migration:
+                    metadata['preserve_on_migration'] = True
+                
+                from shared.utils.memory_blocks_service import MemoryBlocksService
+                svc = MemoryBlocksService(self.db_client)
+                result = svc.create_block(
+                    project_id=agent.project_id,
+                    label=label,
+                    value=value,
+                    description=description,
+                    metadata=metadata if metadata else None,
+                )
+                
+                if result.get("status") == "success":
+                    return {"success": True, "block": result}
+                else:
+                    return {"success": False, "error": result.get("error_message", "Failed to create block")}
+                    
+            finally:
+                session.close()
+        
+        @self.app.put("/dashboard/api/agents/{agent_name}/memory-blocks/{block_id}", tags=["Dashboard - Memory Blocks"])
+        async def update_agent_memory_block(
+            agent_name: str,
+            block_id: str,
+            request: Request,
+            username: str = Depends(self._get_auth_user_dependency),
+            label: Optional[str] = Form(None),
+            value: Optional[str] = Form(None),
+            description: Optional[str] = Form(None),
+            character_limit: Optional[int] = Form(None),
+            read_only: Optional[bool] = Form(None),
+            preserve_on_migration: Optional[bool] = Form(None)
+        ):
+            """Update a memory block."""
+            if not self.db_client:
+                return {"success": False, "error": "Database not available"}
+            
+            session = self.db_client.get_session()
+            if not session:
+                return {"success": False, "error": "Database session not available"}
+            
+            try:
+                agent = session.query(self.AgentConfig).filter_by(name=agent_name).first()
+                if not agent:
+                    return {"success": False, "error": f"Agent {agent_name} not found"}
+                
+                tool_config = agent.tool_config
+                tool_config_dict = {}
+                if tool_config:
+                    try:
+                        tool_config_dict = json.loads(tool_config) if isinstance(tool_config, str) else tool_config
+                    except json.JSONDecodeError:
+                        pass
+                
+                if not self._has_memory_blocks(tool_config_dict):
+                    return {"success": False, "error": "Agent does not have memory blocks tool configured"}
+                
+                if value is None:
+                    return {"success": False, "error": "value is required"}
+                
+                from shared.utils.memory_blocks_service import MemoryBlocksService
+                svc = MemoryBlocksService(self.db_client)
+                result = svc.modify_block(
+                    project_id=agent.project_id,
+                    block_id=block_id,
+                    value=value,
+                    description=description,
+                )
+                
+                if result.get("status") == "success":
+                    return {"success": True, "block": result}
+                else:
+                    return {"success": False, "error": result.get("error_message", "Failed to update block")}
+                    
+            finally:
+                session.close()
+        
+        @self.app.delete("/dashboard/api/agents/{agent_name}/memory-blocks/{block_id}", tags=["Dashboard - Memory Blocks"])
+        async def delete_agent_memory_block(
+            agent_name: str,
+            block_id: str,
+            request: Request,
+            username: str = Depends(self._get_auth_user_dependency)
+        ):
+            """Delete a memory block."""
+            if not self.db_client:
+                return {"success": False, "error": "Database not available"}
+            
+            session = self.db_client.get_session()
+            if not session:
+                return {"success": False, "error": "Database session not available"}
+            
+            try:
+                agent = session.query(self.AgentConfig).filter_by(name=agent_name).first()
+                if not agent:
+                    return {"success": False, "error": f"Agent {agent_name} not found"}
+                
+                tool_config = agent.tool_config
+                tool_config_dict = {}
+                if tool_config:
+                    try:
+                        tool_config_dict = json.loads(tool_config) if isinstance(tool_config, str) else tool_config
+                    except json.JSONDecodeError:
+                        pass
+                
+                if not self._has_memory_blocks(tool_config_dict):
+                    return {"success": False, "error": "Agent does not have memory blocks tool configured"}
+                
+                from shared.utils.memory_blocks_service import MemoryBlocksService
+                svc = MemoryBlocksService(self.db_client)
+                result = svc.delete_block(project_id=agent.project_id, block_id=block_id)
+                
+                if result.get("status") == "success":
+                    return {"success": True, "message": result.get("message", "Block deleted successfully")}
+                else:
+                    return {"success": False, "error": result.get("error_message", "Failed to delete block")}
+                    
+            finally:
+                session.close()
+        
+        @self.app.get("/dashboard/api/file-search/stores/agents", tags=["Dashboard - File Search"])
+        async def get_store_agents(
+            request: Request,
+            username: str = Depends(self._get_auth_user_dependency),
+            store_name: str = None
+        ):
+            """Get all agents using a specific store."""
+            # Get store_name from query parameter to handle slashes
+            if not store_name:
+                from fastapi import Query
+                store_name = request.query_params.get('store_name')
+            
+            if not store_name:
+                return {"success": False, "error": "store_name parameter is required"}
+            
+            from shared.utils.file_search_service import FileSearchService
+            service = FileSearchService(self.db_client)
+            agents = service.get_agents_using_store(store_name)
+            return {"success": True, "agents": agents}
+        
+        @self.app.get("/dashboard/api/projects/{project_id}/file-search/stores", tags=["Dashboard - File Search"])
+        async def get_project_file_search_stores(
+            project_id: int,
+            request: Request,
+            username: str = Depends(self._get_auth_user_dependency)
+        ):
+            """Get all file search stores in a project."""
+            from shared.utils.file_search_service import FileSearchService
+            service = FileSearchService(self.db_client)
+            stores = service.get_all_stores_for_project(project_id)
+            return {"success": True, "stores": stores}
+        
+        @self.app.post("/dashboard/api/file-search/stores/files/delete", tags=["Dashboard - File Search"])
+        async def delete_file_from_store(
+            request: Request,
+            username: str = Depends(self._get_auth_user_dependency),
+            store_name: str = Form(...),
+            document_name: str = Form(...)
+        ):
+            """Delete a file from a file search store."""
+            from shared.utils.file_search_service import FileSearchService
+            service = FileSearchService(self.db_client)
+            success = service.delete_document(store_name, document_name)
+            if success:
+                return {"success": True, "message": "File deleted successfully"}
+            else:
+                return {"success": False, "error": "Failed to delete file"}
+        
+        @self.app.post("/dashboard/api/file-search/stores/delete", tags=["Dashboard - File Search"])
+        async def delete_file_search_store(
+            request: Request,
+            username: str = Depends(self._get_auth_user_dependency),
+            store_name: str = Form(...)
+        ):
+            """Delete a file search store and remove it from all agents."""
+            from shared.utils.file_search_service import FileSearchService
+            service = FileSearchService(self.db_client)
+            result = service.delete_store(store_name)
+            return result
+
+        @self.app.post("/dashboard/api/agents/reinitialize-all", tags=["Dashboard - Agents"])
+        async def reinitialize_all_agents(request: Request, username: str = Depends(self._get_auth_user_dependency)):
+            """Clear all cached agents to force reinitialization by proxying to ADK server."""
+            import httpx
+            from shared.utils.utils import get_adk_config
+            
+            print(f"🔄 [Dashboard] Reload all agents request, proxying to ADK server")
+            
+            try:
+                adk_config = get_adk_config()
+                adk_url = f"http://{adk_config['adk_host']}:{adk_config['adk_port']}/api/reload-all-agents"
+                
+                async with httpx.AsyncClient(timeout=30.0) as client:
+                    response = await client.post(adk_url)
+                    result = response.json()
+                    
+                    print(f"🔄 [Dashboard] ADK server response: {result}")
+                    return result
+                    
+            except Exception as e:
+                print(f"❌ [Dashboard] Error calling ADK reload endpoint: {e}")
+                import traceback
+                traceback.print_exc()
+                return {
+                    "success": False,
+                    "message": f"Error communicating with ADK server: {str(e)}"
+                }
+        
+        # Server Control API Endpoints
+        @self.app.get("/dashboard/api/server/status", tags=["Dashboard - Server Control"])
+        async def get_server_status(request: Request, username: str = Depends(self._get_auth_user_dependency)):
+            """Get ADK server status."""
+            return self._get_adk_status()
+
+        @self.app.post("/dashboard/api/server/start", tags=["Dashboard - Server Control"])
+        async def start_server(request: Request, username: str = Depends(self._get_auth_user_dependency)):
+            """Start ADK server."""
+            return self._start_adk_server()
+
+        @self.app.post("/dashboard/api/server/stop", tags=["Dashboard - Server Control"])
+        async def stop_server(request: Request, username: str = Depends(self._get_auth_user_dependency)):
+            """Stop ADK server."""
+            return self._stop_adk_server()
+
+        @self.app.post("/dashboard/api/server/restart", tags=["Dashboard - Server Control"])
+        async def restart_server(request: Request, username: str = Depends(self._get_auth_user_dependency)):
+            """Restart ADK server."""
+            return self._restart_adk_server()
+

@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agent Graph</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://unpkg.com/d3-graphviz@5.1.0/build/d3-graphviz.js"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        #graph {
+            display: flex;
+            justify-content: center;
+            align-items: flex-start; /* Aligns graph to the top */
+            min-height: 100vh;
+            width: 100%;
+        }
+        svg {
+            max-width: 100%;
+            height: auto;
+        }
+    </style>
+</head>
+<body class="bg-[#333537] text-gray-200">
+    <div id="graph-container" class="w-full h-full p-4 flex flex-col items-center">
+        <h1 class="text-2xl font-bold mb-4">Agent Hierarchy Graph (Top-to-Bottom)</h1>
+        <div id="graph" class="w-full"></div>
+    </div>
+
+    <script>
+        const dotSrc = `
+        strict digraph {
+            graph [bgcolor="#333537" rankdir=TB ranksep="12.0" fontname="Inter"] // Adjusted ranksep for new node size
+            node [style="rounded,filled" fontname="Inter" shape=box width=5 height=1.8 fixedsize=true color="#555555" fillcolor="#444444" fontcolor="#cccccc" fontsize="36px"] // Set global node styles
+            
+            chess_mate_root [label="🤖 chess_mate_root" color="#0F5223" fillcolor="#0F5223" fontcolor="#ffffff" fontsize="62px" width=8]
+            chess_opening_book [label="🤖 chess_opening_book" color="#936A16FF" fillcolor="#936A16FF" fontsize="62px" width=6]
+            chess_mate_root -> chess_opening_book [arrowhead=none color="#cccccc"]
+            
+            chess_engine_analyst [label="🤖 chess_engine_analyst" color="#936A16FF" fillcolor="#936A16FF" fontsize="62px" width=6]
+            chess_mate_root -> chess_engine_analyst [arrowhead=none color="#cccccc"]
+            
+            chess_historian [label="🤖 chess_historian" color="#936A16FF" fillcolor="#936A16FF" fontsize="62px" width=6]
+            chess_mate_root -> chess_historian [arrowhead=none color="#cccccc"]
+        }
+        `;
+        
+        // This renders the graph using d3-graphviz
+        d3.select("#graph").graphviz()
+            .renderDot(dotSrc)
+            .on("end", function () {
+                // You can add logic here for when the graph finishes rendering
+                console.log("Graph rendering complete.");
+            })
+            .onerror(function (err) {
+                console.error("Graphviz error:", err);
+                d3.select("#graph").html(`<div class="text-red-400 bg-red-900/50 p-4 rounded-lg"><p>Error rendering graph:</p><pre>${err}</pre></div>`);
+            });
+
+    </script>
+</body>
+</html>

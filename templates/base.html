@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}MATE Dashboard{% endblock %}</title>
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+        }
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .sidebar-active {
+            background-color: rgba(59, 130, 246, 0.1);
+            border-right: 3px solid #3b82f6;
+        }
+        
+        /* Dark theme styles */
+        .dark .sidebar-active {
+            background-color: rgba(59, 130, 246, 0.2);
+            border-right: 3px solid #60a5fa;
+        }
+        
+        /* Theme transition */
+        * {
+            transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+        }
+        
+        /* Theme switcher button */
+        .theme-switcher {
+            position: relative;
+            width: 60px;
+            height: 30px;
+            background-color: #e5e7eb;
+            border-radius: 15px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        
+        .dark .theme-switcher {
+            background-color: #374151;
+        }
+        
+        .theme-switcher::before {
+            content: '';
+            position: absolute;
+            top: 3px;
+            left: 3px;
+            width: 24px;
+            height: 24px;
+            background-color: white;
+            border-radius: 50%;
+            transition: transform 0.3s;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+        
+        .dark .theme-switcher::before {
+            transform: translateX(30px);
+            background-color: #1f2937;
+        }
+        
+        .theme-icon {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 12px;
+            transition: opacity 0.3s;
+        }
+        
+        .theme-icon.sun {
+            left: 6px;
+            color: #f59e0b;
+        }
+        
+        .theme-icon.moon {
+            right: 6px;
+            color: #60a5fa;
+            opacity: 0;
+        }
+        
+        .dark .theme-icon.sun {
+            opacity: 0;
+        }
+        
+        .dark .theme-icon.moon {
+            opacity: 1;
+        }
+        
+        /* Sidebar Minimize/Collapse Styles */
+        #sidebar.sidebar-minimized {
+            width: 4rem !important; /* 64px - icon width */
+        }
+        
+        #sidebar.sidebar-minimized .sidebar-text {
+            display: none !important;
+        }
+        
+        #sidebar.sidebar-minimized .sidebar-icon {
+            margin-right: 0 !important;
+            margin-left: 0 !important;
+        }
+        
+        #sidebar.sidebar-minimized nav a {
+            justify-content: center !important;
+            padding-left: 0.75rem !important;
+            padding-right: 0.75rem !important;
+        }
+        
+        #sidebar.sidebar-minimized > div:last-child {
+            justify-content: center !important;
+            background-color: inherit !important;
+        }
+        
+        #sidebar.sidebar-minimized #sidebarToggleIcon {
+            transform: rotate(180deg);
+        }
+        
+        /* Smooth transitions */
+        .sidebar-collapsible {
+            transition: width 0.3s ease !important;
+        }
+        
+        .sidebar-text {
+            transition: opacity 0.2s ease, display 0.2s ease;
+        }
+        
+        /* Force notifications to be completely opaque */
+        [style*="background-color"]:has(+ *),
+        div[style*="background-color"] {
+            /* This will be overridden by inline styles, but ensures base opacity */
+        }
+        
+        /* Notification animations */
+        @keyframes slideInRight {
+            from {
+                transform: translateX(100%);
+            }
+            to {
+                transform: translateX(0);
+            }
+        }
+    </style>
+    <script src="/static/js/server-control.js"></script>
+</head>
+<body class="bg-gray-50 dark:bg-gray-900">
+    <!-- Navigation -->
+    <nav class="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700">
+        <div class="flex justify-between items-center h-12 px-3">
+            <div class="flex items-center space-x-3">
+                <img src="/static/logo.png" alt="MATE Logo" class="h-8 w-8 object-contain">
+                <h1 class="text-xl font-bold text-gray-900 dark:text-white">MATE Dashboard</h1>
+            </div>
+            <div class="flex items-center space-x-4 pr-4">
+                    <!-- ADK Server Control -->
+                    <div class="flex items-center space-x-2">
+                        <div id="adkStatusIndicator" class="w-2 h-2 bg-gray-400 rounded-full"></div>
+                        <span id="adkStatusText" class="text-sm text-gray-600 dark:text-gray-400">Checking...</span>
+                        <div class="flex space-x-1">
+                            <button id="startAdkBtn" onclick="controlAdkServer('start')" class="px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 hidden">
+                                <i class="fas fa-play"></i>
+                            </button>
+                            <button id="stopAdkBtn" onclick="controlAdkServer('stop')" class="px-2 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700 hidden">
+                                <i class="fas fa-stop"></i>
+                            </button>
+                            <button id="restartAdkBtn" onclick="controlAdkServer('restart')" class="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 hidden">
+                                <i class="fas fa-redo"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <!-- Theme Switcher -->
+                    <div class="theme-switcher" onclick="toggleTheme()">
+                        <i class="fas fa-sun theme-icon sun"></i>
+                        <i class="fas fa-moon theme-icon moon"></i>
+                    </div>
+                    <span class="text-gray-700 dark:text-gray-300">Welcome, {{ username }}</span>
+                    <div class="relative">
+                        <button id="userMenuButton" onclick="toggleUserMenu()" class="bg-gray-200 dark:bg-gray-600 rounded-full w-8 h-8 flex items-center justify-center p-0 hover:bg-gray-300 dark:hover:bg-gray-500 transition-colors">
+                            <i class="fas fa-user text-gray-600 dark:text-gray-300 text-xs"></i>
+                        </button>
+                        <div id="userMenuDropdown" class="hidden absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-md shadow-lg py-1 z-50 border border-gray-200 dark:border-gray-700">
+                            <div class="px-4 py-2 text-sm text-gray-700 dark:text-gray-300 border-b border-gray-200 dark:border-gray-700">
+                                <div class="font-medium">{{ username }}</div>
+                                <div class="text-xs text-gray-500 dark:text-gray-400">Dashboard User</div>
+                            </div>
+                            <a href="#" onclick="handleLogout(event)" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">
+                                <i class="fas fa-sign-out-alt mr-2"></i>Logout
+                            </a>
+                        </div>
+                    </div>
+                </div>
+        </div>
+    </nav>
+
+    <div class="flex">
+        <!-- Sidebar -->
+        <aside id="sidebar" class="w-48 bg-white dark:bg-gray-800 shadow-sm h-screen sticky top-0 transition-all duration-300 sidebar-collapsible flex flex-col">
+            <nav class="mt-4 flex-1">
+                <div class="px-2 space-y-1">
+                    <a href="/dashboard" class="flex items-center px-3 py-2 text-sm text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 {% if request.url.path == '/dashboard' %}sidebar-active{% endif %}" title="Overview">
+                        <i class="fas fa-chart-line sidebar-icon mr-2 text-xs"></i>
+                        <span class="sidebar-text">Overview</span>
+                    </a>
+                    <a href="/dashboard/users" class="flex items-center px-3 py-2 text-sm text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 {% if request.url.path == '/dashboard/users' %}sidebar-active{% endif %}" title="Users">
+                        <i class="fas fa-users sidebar-icon mr-2 text-xs"></i>
+                        <span class="sidebar-text">Users</span>
+                    </a>
+                    <a href="/dashboard/agents" class="flex items-center px-3 py-2 text-sm text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 {% if request.url.path == '/dashboard/agents' %}sidebar-active{% endif %}" title="Agents">
+                        <i class="fas fa-robot sidebar-icon mr-2 text-xs"></i>
+                        <span class="sidebar-text">Agents</span>
+                    </a>
+                    <a href="/dashboard/migrations" class="flex items-center px-3 py-2 text-sm text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 {% if request.url.path == '/dashboard/migrations' %}sidebar-active{% endif %}" title="Migrations">
+                        <i class="fas fa-database sidebar-icon mr-2 text-xs"></i>
+                        <span class="sidebar-text">Migrations</span>
+                    </a>
+                    <a href="/dashboard/usage" class="flex items-center px-3 py-2 text-sm text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 {% if request.url.path == '/dashboard/usage' %}sidebar-active{% endif %}" title="Usage Analytics">
+                        <i class="fas fa-chart-bar sidebar-icon mr-2 text-xs"></i>
+                        <span class="sidebar-text">Usage Analytics</span>
+                    </a>
+                    <a href="/dashboard/docs" class="flex items-center px-3 py-2 text-sm text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 {% if request.url.path == '/dashboard/docs' %}sidebar-active{% endif %}" title="API Documentation">
+                        <i class="fas fa-book sidebar-icon mr-2 text-xs"></i>
+                        <span class="sidebar-text">API Documentation</span>
+                    </a>
+                </div>
+            </nav>
+            
+            <!-- Minimize Toggle Button -->
+            <div class="flex justify-end p-2 border-t border-gray-200 dark:border-gray-700 mt-auto sticky bottom-0 bg-white dark:bg-gray-800">
+                <button id="sidebarToggle" onclick="toggleSidebar()" class="p-1.5 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded" title="Toggle sidebar">
+                    <i id="sidebarToggleIcon" class="fas fa-chevron-left"></i>
+                </button>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="flex-1 p-4 bg-gray-50 dark:bg-gray-900">
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+
+    <script>
+        // Theme management
+        function initTheme() {
+            // Check localStorage first, then default to dark theme
+            const savedTheme = localStorage.getItem('theme');
+            const theme = savedTheme || 'dark';
+            
+            if (theme === 'dark') {
+                document.documentElement.classList.add('dark');
+            } else {
+                document.documentElement.classList.remove('dark');
+            }
+            
+            // Save the theme if it wasn't already saved (for default dark theme)
+            if (!savedTheme) {
+                localStorage.setItem('theme', 'dark');
+            }
+        }
+        
+        function toggleTheme() {
+            const isDark = document.documentElement.classList.contains('dark');
+            
+            if (isDark) {
+                document.documentElement.classList.remove('dark');
+                localStorage.setItem('theme', 'light');
+            } else {
+                document.documentElement.classList.add('dark');
+                localStorage.setItem('theme', 'dark');
+            }
+            
+            // Update chart colors if charts exist
+            if (typeof updateChartTheme === 'function') {
+                updateChartTheme();
+            }
+        }
+        
+        // Initialize theme before page loads
+        initTheme();
+        
+        // Initialize server control when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            initServerControl();
+        });
+        
+        // Global JavaScript functions
+        function showNotification(message, type = 'success') {
+            const notification = document.createElement('div');
+            const isDark = document.documentElement.classList.contains('dark');
+            
+            // Same background color as modal (white/gray-800)
+            const bgColorRgba = isDark ? 'rgba(31, 41, 55, 1)' : 'rgba(255, 255, 255, 1)'; // gray-800 : white
+            
+            // Border and icon colors based on type
+            let borderColor, icon, iconColor;
+            switch(type) {
+                case 'success':
+                    borderColor = isDark ? 'rgba(22, 163, 74, 1)' : 'rgba(22, 163, 74, 1)'; // green-600
+                    icon = 'fa-check-circle';
+                    iconColor = isDark ? 'text-green-500' : 'text-green-600';
+                    break;
+                case 'error':
+                case 'danger':
+                    borderColor = isDark ? 'rgba(220, 38, 38, 1)' : 'rgba(220, 38, 38, 1)'; // red-600
+                    icon = 'fa-exclamation-circle';
+                    iconColor = isDark ? 'text-red-500' : 'text-red-600';
+                    break;
+                case 'warning':
+                    borderColor = isDark ? 'rgba(202, 138, 4, 1)' : 'rgba(202, 138, 4, 1)'; // yellow-600
+                    icon = 'fa-exclamation-triangle';
+                    iconColor = isDark ? 'text-yellow-500' : 'text-yellow-600';
+                    break;
+                case 'info':
+                    borderColor = isDark ? 'rgba(37, 99, 235, 1)' : 'rgba(37, 99, 235, 1)'; // blue-600
+                    icon = 'fa-info-circle';
+                    iconColor = isDark ? 'text-blue-500' : 'text-blue-600';
+                    break;
+                default:
+                    borderColor = isDark ? 'rgba(75, 85, 99, 1)' : 'rgba(75, 85, 99, 1)'; // gray-600
+                    icon = 'fa-info-circle';
+                    iconColor = isDark ? 'text-gray-400' : 'text-gray-600';
+            }
+            
+            // Set a unique ID to target with CSS if needed
+            notification.id = 'mate-notification-' + Date.now();
+            const textColor = isDark ? 'text-white' : 'text-gray-900';
+            notification.className = `fixed top-4 right-4 px-4 py-3 rounded-lg ${textColor} z-[9999] shadow-2xl flex items-center space-x-2 min-w-[300px] max-w-[500px] border-2`;
+            // Force completely opaque background - same as modal
+            notification.style.setProperty('background-color', bgColorRgba, 'important');
+            notification.style.setProperty('background', bgColorRgba, 'important');
+            notification.style.setProperty('background-image', 'none', 'important');
+            notification.style.setProperty('opacity', '1', 'important');
+            notification.style.setProperty('backdrop-filter', 'none', 'important');
+            notification.style.setProperty('-webkit-backdrop-filter', 'none', 'important');
+            notification.style.setProperty('mix-blend-mode', 'normal', 'important');
+            notification.style.setProperty('--tw-bg-opacity', '1', 'important');
+            // Border color based on type
+            notification.style.setProperty('border-color', borderColor, 'important');
+            // Now set animation (which no longer affects opacity)
+            notification.style.animation = 'slideInRight 0.3s ease-out';
+            // Ensure opacity stays at 1 after animation
+            notification.addEventListener('animationend', function() {
+                notification.style.setProperty('opacity', '1', 'important');
+            }, { once: true });
+            notification.innerHTML = `
+                <i class="fas ${icon} ${iconColor} text-lg"></i>
+                <span class="flex-1 text-sm font-medium">${message}</span>
+                <button onclick="this.parentElement.remove()" class="ml-2 ${isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-600 hover:text-gray-800'} opacity-80 hover:opacity-100">
+                    <i class="fas fa-times text-sm"></i>
+                </button>
+            `;
+            document.body.appendChild(notification);
+            
+            // Auto remove after 5 seconds
+            setTimeout(() => {
+                if (notification.parentNode) {
+                    notification.style.opacity = '0';
+                    notification.style.transition = 'opacity 0.3s';
+                    setTimeout(() => notification.remove(), 300);
+                }
+            }, 5000);
+        }
+        
+        // Custom confirm dialog
+        function showConfirm(message, title = 'Confirm', confirmText = 'Confirm', cancelText = 'Cancel', type = 'warning') {
+            return new Promise((resolve) => {
+                const modal = document.createElement('div');
+                modal.className = 'fixed inset-0 bg-black/50 dark:bg-black/70 z-[10000] flex items-center justify-center';
+                modal.id = 'customConfirmModal';
+                
+                const isDark = document.documentElement.classList.contains('dark');
+                // Same background color as notifications (white/gray-800)
+                const bgColorRgba = isDark ? 'rgba(31, 41, 55, 1)' : 'rgba(255, 255, 255, 1)'; // gray-800 : white
+                
+                // Border and icon colors based on type
+                let iconClass, iconColor, borderColorRgba;
+                switch(type) {
+                    case 'danger':
+                        iconClass = 'fa-exclamation-triangle';
+                        iconColor = isDark ? 'text-red-500' : 'text-red-600';
+                        borderColorRgba = 'rgba(220, 38, 38, 1)'; // red-600
+                        break;
+                    case 'warning':
+                        iconClass = 'fa-exclamation-triangle';
+                        iconColor = isDark ? 'text-yellow-500' : 'text-yellow-600';
+                        borderColorRgba = 'rgba(202, 138, 4, 1)'; // yellow-600
+                        break;
+                    case 'info':
+                        iconClass = 'fa-info-circle';
+                        iconColor = isDark ? 'text-blue-500' : 'text-blue-600';
+                        borderColorRgba = 'rgba(37, 99, 235, 1)'; // blue-600
+                        break;
+                    default:
+                        iconClass = 'fa-question-circle';
+                        iconColor = isDark ? 'text-gray-400' : 'text-gray-600';
+                        borderColorRgba = isDark ? 'rgba(75, 85, 99, 1)' : 'rgba(75, 85, 99, 1)'; // gray-600
+                }
+                
+                modal.innerHTML = `
+                    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full mx-4 border-2" onclick="event.stopPropagation()" style="background-color: ${bgColorRgba} !important; border-color: ${borderColorRgba} !important; opacity: 1 !important; --tw-bg-opacity: 1 !important;">
+                        <div class="p-4" style="background-color: transparent !important; opacity: 1 !important;">
+                            <div class="flex items-start space-x-3">
+                                <i class="fas ${iconClass} ${iconColor} text-2xl mt-0.5"></i>
+                                <div class="flex-1">
+                                    <h3 class="text-sm font-semibold text-gray-900 dark:text-white mb-2">${title}</h3>
+                                    <div class="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-line">${message}</div>
+                                </div>
+                            </div>
+                            <div class="flex justify-end space-x-2 mt-4">
+                                <button id="confirmCancelBtn" class="px-4 py-2 text-xs border border-gray-300 dark:border-gray-600 rounded text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">
+                                    ${cancelText}
+                                </button>
+                                <button id="confirmOkBtn" class="px-4 py-2 text-xs ${type === 'danger' ? 'bg-red-600 hover:bg-red-700' : type === 'warning' ? 'bg-yellow-600 hover:bg-yellow-700' : 'bg-blue-600 hover:bg-blue-700'} text-white rounded">
+                                    ${confirmText}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                document.body.appendChild(modal);
+                
+                const cancelBtn = modal.querySelector('#confirmCancelBtn');
+                const okBtn = modal.querySelector('#confirmOkBtn');
+                
+                const cleanup = () => {
+                    modal.style.opacity = '0';
+                    modal.style.transition = 'opacity 0.2s';
+                    setTimeout(() => modal.remove(), 200);
+                };
+                
+                cancelBtn.onclick = () => {
+                    cleanup();
+                    resolve(false);
+                };
+                
+                okBtn.onclick = () => {
+                    cleanup();
+                    resolve(true);
+                };
+                
+                // Close on backdrop click
+                modal.onclick = (e) => {
+                    if (e.target === modal) {
+                        cleanup();
+                        resolve(false);
+                    }
+                };
+                
+                // Close on Escape key
+                const escapeHandler = (e) => {
+                    if (e.key === 'Escape') {
+                        cleanup();
+                        resolve(false);
+                        document.removeEventListener('keydown', escapeHandler);
+                    }
+                };
+                document.addEventListener('keydown', escapeHandler);
+            });
+        }
+
+        async function apiCall(url, method = 'GET', data = null) {
+            const options = {
+                method: method,
+                credentials: 'same-origin'  // Use same-origin credentials instead of manual auth
+            };
+            
+            // Add auth headers from localStorage
+            const token = localStorage.getItem('auth_token');
+            const username = localStorage.getItem('auth_username');
+            const password = localStorage.getItem('auth_password');
+            
+            if (!options.headers) {
+                options.headers = {};
+            }
+            
+            if (token) {
+                options.headers['Authorization'] = `Bearer ${token}`;
+            } else if (username && password) {
+                options.headers['Authorization'] = 'Basic ' + btoa(username + ':' + password);
+            }
+            
+            if (data && method !== 'GET') {
+                if (data instanceof FormData) {
+                    options.body = data;
+                } else {
+                    options.headers['Content-Type'] = 'application/json';
+                    options.body = JSON.stringify(data);
+                }
+            }
+            
+            const response = await fetch(url, options);
+            
+            // Check if response is JSON before parsing
+            const contentType = response.headers.get('content-type') || '';
+            if (contentType.includes('application/json')) {
+                // Try to parse JSON, even if response is an error
+                try {
+                    return await response.json();
+                } catch (e) {
+                    // If JSON parse fails, might be redirect to login
+                    const currentUrl = window.location.pathname + window.location.search;
+                    window.location.href = `/login?redirect=${encodeURIComponent(currentUrl)}`;
+                    return Promise.reject(new Error('Authentication required'));
+                }
+            } else {
+                // If not JSON (e.g., redirect to login page HTML), redirect to login
+                const currentUrl = window.location.pathname + window.location.search;
+                window.location.href = `/login?redirect=${encodeURIComponent(currentUrl)}`;
+                return Promise.reject(new Error('Authentication required'));
+            }
+        }
+        
+        // Chart theme colors
+        function getChartColors() {
+            const isDark = document.documentElement.classList.contains('dark');
+            
+            return {
+                primary: isDark ? '#60a5fa' : '#3b82f6',
+                secondary: isDark ? '#34d399' : '#10b981',
+                tertiary: isDark ? '#fbbf24' : '#f59e0b',
+                quaternary: isDark ? '#f87171' : '#ef4444',
+                quinary: isDark ? '#a78bfa' : '#8b5cf6',
+                text: isDark ? '#f3f4f6' : '#374151',
+                grid: isDark ? '#374151' : '#e5e7eb',
+                background: isDark ? '#1f2937' : '#ffffff'
+            };
+        }
+        
+        // Sidebar toggle functionality
+        function initSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const savedState = localStorage.getItem('sidebarMinimized');
+            
+            if (savedState === 'true') {
+                sidebar.classList.add('sidebar-minimized');
+            }
+        }
+        
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const isMinimized = sidebar.classList.contains('sidebar-minimized');
+            
+            if (isMinimized) {
+                sidebar.classList.remove('sidebar-minimized');
+                localStorage.setItem('sidebarMinimized', 'false');
+            } else {
+                sidebar.classList.add('sidebar-minimized');
+                localStorage.setItem('sidebarMinimized', 'true');
+            }
+        }
+        
+        // Initialize sidebar state on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            initSidebar();
+        });
+        
+        // User menu dropdown functionality
+        function toggleUserMenu() {
+            const dropdown = document.getElementById('userMenuDropdown');
+            dropdown.classList.toggle('hidden');
+        }
+        
+        // Close dropdown when clicking outside
+        document.addEventListener('click', function(event) {
+            const menuButton = document.getElementById('userMenuButton');
+            const dropdown = document.getElementById('userMenuDropdown');
+            
+            if (!menuButton.contains(event.target) && !dropdown.contains(event.target)) {
+                dropdown.classList.add('hidden');
+            }
+        });
+        
+        // Logout functionality
+        async function handleLogout(event) {
+            event.preventDefault();
+            
+            const token = localStorage.getItem('auth_token');
+            const username = localStorage.getItem('auth_username');
+            const password = localStorage.getItem('auth_password');
+            
+            // Build auth header - prefer token, fall back to basic auth
+            let authHeader = null;
+            if (token) {
+                authHeader = `Bearer ${token}`;
+            } else if (username && password) {
+                authHeader = 'Basic ' + btoa(username + ':' + password);
+            }
+            
+            // Prepare headers
+            const headers = {
+                'Content-Type': 'application/json'
+            };
+            if (authHeader) {
+                headers['Authorization'] = authHeader;
+            }
+            
+            // Send credentials in body so server can mark basic auth as logged out
+            // even when Bearer token is used
+            const body = {};
+            if (username && password) {
+                body.username = username;
+                body.password = password;
+            }
+            
+            // Try to revoke token and invalidate basic auth on server
+            try {
+                await fetch('/auth/logout', {
+                    method: 'POST',
+                    headers: headers,
+                    body: JSON.stringify(body),
+                    credentials: 'include'  // Include cookies
+                });
+            } catch (error) {
+                console.error('Logout error:', error);
+            }
+            
+            // Clear localStorage IMMEDIATELY before redirect
+            localStorage.removeItem('auth_token');
+            localStorage.removeItem('auth_username');
+            localStorage.removeItem('auth_password');
+            
+            // Clear auth cookies
+            document.cookie = 'auth_token=; path=/; max-age=0; SameSite=Lax';
+            document.cookie = 'auth_username=; path=/; max-age=0; SameSite=Lax';
+            document.cookie = 'auth_password=; path=/; max-age=0; SameSite=Lax';
+            
+            // Force redirect to login with cache-busting
+            window.location.replace('/login?logout=1');
+        }
+    </script>
+    
+    {% block scripts %}{% endblock %}
+</body>
+</html>
+

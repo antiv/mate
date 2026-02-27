@@ -1,0 +1,30 @@
+services:
+  mate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        AGENTS_LIST: ${AGENTS_LIST:-chess_mate_root}
+    container_name: mate
+    environment:
+      - AUTH_USERNAME=${AUTH_USERNAME:-admin}
+      - AUTH_PASSWORD=${AUTH_PASSWORD:-mate}
+      - DB_TYPE=sqlite
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-Mate2025!}
+      - DB_HOST=${DB_HOST:-localhost}
+      - DB_PORT=${DB_PORT:-5432}
+      - DB_NAME=${DB_NAME:-mate_agent}
+      - DB_PATH=data/my_agent_data.db
+      - ARTIFACT_SERVICE=supabase
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_KEY}
+      - SUPABASE_BUCKET=${SUPABASE_BUCKET}
+    volumes:
+      - ./data:/app/data
+      - ./artifacts:/app/artifacts
+    ports:
+      - "8000:8000"
+    stdin_open: true
+    tty: true
+    command: ["python", "auth_server.py"]

@@ -1,0 +1,274 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard Overview - MATE{% endblock %}
+
+{% block content %}
+<div class="space-y-4">
+    <!-- Header -->
+    <div>
+        <h2 class="text-xl font-bold text-gray-900 dark:text-white">Dashboard Overview</h2>
+        <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">Monitor your MATE usage and performance</p>
+    </div>
+
+    <!-- Stats Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-3">
+            <div class="flex items-center">
+                <div class="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center">
+                    <i class="fas fa-chart-line text-sm text-blue-600 dark:text-blue-400"></i>
+                </div>
+                <div class="ml-3">
+                    <h3 class="text-xs font-medium text-gray-500 dark:text-gray-400">Total Requests</h3>
+                    <p class="text-lg font-bold text-gray-900 dark:text-white">{{ stats.total_requests }}</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-3">
+            <div class="flex items-center">
+                <div class="w-10 h-10 rounded-full bg-green-100 dark:bg-green-900 flex items-center justify-center">
+                    <i class="fas fa-coins text-sm text-green-600 dark:text-green-400"></i>
+                </div>
+                <div class="ml-3">
+                    <h3 class="text-xs font-medium text-gray-500 dark:text-gray-400">Total Tokens</h3>
+                    <p class="text-lg font-bold text-gray-900 dark:text-white">{{ stats.total_prompt_tokens + stats.total_response_tokens }}</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-3">
+            <div class="flex items-center">
+                <div class="w-10 h-10 rounded-full bg-purple-100 dark:bg-purple-900 flex items-center justify-center">
+                    <i class="fas fa-users text-sm text-purple-600 dark:text-purple-400"></i>
+                </div>
+                <div class="ml-3">
+                    <h3 class="text-xs font-medium text-gray-500 dark:text-gray-400">Active Users</h3>
+                    <p class="text-lg font-bold text-gray-900 dark:text-white">{{ stats.unique_users }}</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-3">
+            <div class="flex items-center">
+                <div class="w-10 h-10 rounded-full bg-orange-100 dark:bg-orange-900 flex items-center justify-center">
+                    <i class="fas fa-robot text-sm text-orange-600 dark:text-orange-400"></i>
+                </div>
+                <div class="ml-3">
+                    <h3 class="text-xs font-medium text-gray-500 dark:text-gray-400">Active Agents</h3>
+                    <p class="text-lg font-bold text-gray-900 dark:text-white">{{ stats.unique_agents }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Charts Row -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <!-- Daily Usage Chart -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+            <h3 class="text-sm font-semibold text-gray-900 dark:text-white mb-2">Daily Usage (Last 7 Days)</h3>
+            <div style="height: 200px; max-height: 200px;">
+                <canvas id="dailyUsageChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Top Agents Chart -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+            <h3 class="text-sm font-semibold text-gray-900 dark:text-white mb-2">Top Agents by Requests</h3>
+            <div style="height: 200px; max-height: 200px;">
+                <canvas id="topAgentsChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- System Status -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow">
+        <div class="p-3 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+            <h3 class="text-sm font-semibold text-gray-900 dark:text-white">System Status</h3>
+            <button onclick="refreshSystemStatus()" class="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300">
+                <i class="fas fa-sync-alt mr-1"></i> Refresh
+            </button>
+        </div>
+        <div class="p-3">
+            <div class="space-y-2">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center">
+                        <div id="overviewAdkStatusIndicator" class="w-2 h-2 bg-gray-400 rounded-full mr-2"></div>
+                        <span class="text-sm text-gray-700 dark:text-gray-300">ADK Server</span>
+                    </div>
+                    <span id="overviewAdkStatusText" class="text-xs text-gray-600 dark:text-gray-400 font-medium">Checking...</span>
+                </div>
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center">
+                        <div class="w-2 h-2 bg-green-400 rounded-full mr-2"></div>
+                        <span class="text-sm text-gray-700 dark:text-gray-300">Database Connection</span>
+                    </div>
+                    <div class="text-right">
+                        <span class="text-xs text-green-600 dark:text-green-400 font-medium">Connected</span>
+                        <div class="text-xs text-gray-500 dark:text-gray-400">
+                            {% if stats.database_info.type == 'SQLITE' %}
+                                {{ stats.database_info.type }} - {{ stats.database_info.filename }}
+                            {% elif stats.database_info.type == 'POSTGRESQL' %}
+                                {{ stats.database_info.type }} - {{ stats.database_info.hostname }}:{{ stats.database_info.port }}/{{ stats.database_info.database }}
+                            {% elif stats.database_info.type == 'MYSQL' %}
+                                {{ stats.database_info.type }} - {{ stats.database_info.hostname }}:{{ stats.database_info.port }}/{{ stats.database_info.database }}
+                            {% else %}
+                                {{ stats.database_info.type }}
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center">
+                        <div class="w-2 h-2 bg-green-400 rounded-full mr-2"></div>
+                        <span class="text-sm text-gray-700 dark:text-gray-300">Authentication Service</span>
+                    </div>
+                    <span class="text-xs text-green-600 dark:text-green-400 font-medium">Active</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let dailyChart, agentsChart;
+    
+    function initCharts() {
+        const colors = getChartColors();
+        const dailyData = {{ stats.daily_usage | tojson }};
+        const agentsData = {{ stats.top_agents | tojson }};
+        
+        // Daily Usage Chart
+        const dailyCtx = document.getElementById('dailyUsageChart').getContext('2d');
+        dailyChart = new Chart(dailyCtx, {
+            type: 'line',
+            data: {
+                labels: dailyData.map(d => d.date),
+                datasets: [{
+                    label: 'Requests',
+                    data: dailyData.map(d => d.requests),
+                    borderColor: colors.primary,
+                    backgroundColor: colors.primary + '20',
+                    tension: 0.4,
+                    fill: true
+                }, {
+                    label: 'Tokens',
+                    data: dailyData.map(d => d.tokens),
+                    borderColor: colors.secondary,
+                    backgroundColor: colors.secondary + '20',
+                    tension: 0.4,
+                    fill: true,
+                    yAxisID: 'y1'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        position: 'left',
+                        title: {
+                            display: true,
+                            text: 'Requests',
+                            color: colors.text
+                        },
+                        ticks: { color: colors.text },
+                        grid: { color: colors.grid }
+                    },
+                    y1: {
+                        type: 'linear',
+                        display: true,
+                        position: 'right',
+                        title: {
+                            display: true,
+                            text: 'Tokens',
+                            color: colors.text
+                        },
+                        ticks: { color: colors.text },
+                        grid: { drawOnChartArea: false }
+                    },
+                    x: {
+                        ticks: { color: colors.text },
+                        grid: { color: colors.grid }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        position: 'top',
+                        labels: { color: colors.text }
+                    }
+                }
+            }
+        });
+
+        // Top Agents Chart
+        const agentsCtx = document.getElementById('topAgentsChart').getContext('2d');
+        agentsChart = new Chart(agentsCtx, {
+            type: 'doughnut',
+            data: {
+                labels: agentsData.map(a => a.agent || 'Unknown'),
+                datasets: [{
+                    data: agentsData.map(a => a.requests),
+                    backgroundColor: [
+                        colors.primary,
+                        colors.secondary,
+                        colors.tertiary,
+                        colors.quaternary,
+                        colors.quinary
+                    ],
+                    borderWidth: 2,
+                    borderColor: colors.background
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: { color: colors.text }
+                    }
+                }
+            }
+        });
+    }
+    
+    function updateChartTheme() {
+        if (dailyChart && agentsChart) {
+            const colors = getChartColors();
+            
+            // Update daily chart
+            dailyChart.data.datasets[0].borderColor = colors.primary;
+            dailyChart.data.datasets[0].backgroundColor = colors.primary + '20';
+            dailyChart.data.datasets[1].borderColor = colors.secondary;
+            dailyChart.data.datasets[1].backgroundColor = colors.secondary + '20';
+            
+            dailyChart.options.scales.y.title.color = colors.text;
+            dailyChart.options.scales.y.ticks.color = colors.text;
+            dailyChart.options.scales.y.grid.color = colors.grid;
+            dailyChart.options.scales.y1.title.color = colors.text;
+            dailyChart.options.scales.y1.ticks.color = colors.text;
+            dailyChart.options.scales.x.ticks.color = colors.text;
+            dailyChart.options.scales.x.grid.color = colors.grid;
+            dailyChart.options.plugins.legend.labels.color = colors.text;
+            
+            // Update agents chart
+            agentsChart.data.datasets[0].backgroundColor = [
+                colors.primary, colors.secondary, colors.tertiary, colors.quaternary, colors.quinary
+            ];
+            agentsChart.data.datasets[0].borderColor = colors.background;
+            agentsChart.options.plugins.legend.labels.color = colors.text;
+            
+            dailyChart.update();
+            agentsChart.update();
+        }
+    }
+    
+    // Initialize charts when page loads
+    document.addEventListener('DOMContentLoaded', function() {
+        initCharts();
+    });
+</script>
+{% endblock %}

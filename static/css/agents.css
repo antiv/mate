@@ -1,0 +1,251 @@
+/* Agent Management Page Styles */
+
+/* Slider styling for content generation parameters */
+.slider {
+    -webkit-appearance: none;
+    appearance: none;
+    background: transparent;
+    cursor: pointer;
+}
+
+.slider::-webkit-slider-track {
+    background: #e5e7eb;
+    height: 8px;
+    border-radius: 4px;
+}
+
+.slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    background: #3b82f6;
+    height: 20px;
+    width: 20px;
+    border-radius: 50%;
+    cursor: pointer;
+    border: 2px solid #ffffff;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.slider::-webkit-slider-thumb:hover {
+    background: #2563eb;
+}
+
+.slider::-moz-range-track {
+    background: #e5e7eb;
+    height: 8px;
+    border-radius: 4px;
+    border: none;
+}
+
+.slider::-moz-range-thumb {
+    background: #3b82f6;
+    height: 20px;
+    width: 20px;
+    border-radius: 50%;
+    cursor: pointer;
+    border: 2px solid #ffffff;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.slider::-moz-range-thumb:hover {
+    background: #2563eb;
+}
+
+/* Dark mode slider styling */
+.dark .slider::-webkit-slider-track {
+    background: #374151;
+}
+
+.dark .slider::-moz-range-track {
+    background: #374151;
+}
+
+/* Graph Context Menu */
+.graph-context-menu {
+    min-width: 150px;
+}
+
+.graph-context-menu-item {
+    display: block;
+    width: 100%;
+    padding: 8px 16px;
+    text-align: left;
+    border: none;
+    background: transparent;
+    color: #374151;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.graph-context-menu-item:hover {
+    background-color: #f3f4f6;
+}
+
+.graph-context-menu-item.danger {
+    color: #dc2626;
+}
+
+.graph-context-menu-item.danger:hover {
+    background-color: #fef2f2;
+}
+
+.dark .graph-context-menu-item {
+    color: #d1d5db;
+}
+
+.dark .graph-context-menu-item:hover {
+    background-color: #374151;
+}
+
+.dark .graph-context-menu-item.danger:hover {
+    background-color: #7f1d1d;
+}
+
+/* Table Sorting Styles */
+.sortable {
+    position: relative;
+    transition: background-color 0.2s ease;
+}
+
+.sortable:hover {
+    background-color: rgba(59, 130, 246, 0.1);
+}
+
+.dark .sortable:hover {
+    background-color: rgba(59, 130, 246, 0.2);
+}
+
+.sort-indicator {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 12px;
+}
+
+.sort-indicator i {
+    transition: color 0.2s ease;
+}
+
+.sortable:hover .sort-indicator i {
+    color: #3b82f6 !important;
+}
+
+.dark .sortable:hover .sort-indicator i {
+    color: #60a5fa !important;
+}
+
+/* Ensure sort indicators don't interfere with text */
+th.sortable {
+    padding-right: 30px !important;
+}
+
+/* Responsive table sorting */
+@media (max-width: 768px) {
+    .sort-indicator {
+        right: 4px;
+        font-size: 10px;
+    }
+    
+    th.sortable {
+        padding-right: 25px !important;
+    }
+}
+
+
+/* Agent row hover and active states */
+.agent-row {
+    transition: background-color 0.2s ease;
+}
+
+.agent-row:hover {
+    background-color: rgba(59, 130, 246, 0.05);
+}
+
+.dark .agent-row:hover {
+    background-color: rgba(59, 130, 246, 0.1);
+}
+
+.agent-row.bg-blue-50 {
+    background-color: rgba(59, 130, 246, 0.1) !important;
+}
+
+.dark .agent-row.bg-blue-50 {
+    background-color: rgba(59, 130, 246, 0.2) !important;
+}
+
+/* Side Panel Modal Styling */
+#createAgentModal,
+#editAgentModal,
+#copyAgentModal {
+    z-index: 70 !important;
+}
+
+#createAgentModal.hidden,
+#editAgentModal.hidden,
+#copyAgentModal.hidden {
+    display: none !important;
+}
+
+/* Side panel animation */
+#createAgentModal .modal-side-panel > div,
+#editAgentModal .modal-side-panel > div,
+#copyAgentModal .modal-side-panel > div {
+    transform: translateX(100%);
+    transition: transform 0.3s ease-in-out;
+}
+
+#createAgentModal:not(.hidden) .modal-side-panel > div,
+#editAgentModal:not(.hidden) .modal-side-panel > div,
+#copyAgentModal:not(.hidden) .modal-side-panel > div {
+    transform: translateX(0);
+}
+
+/* Sticky header and footer for side panels */
+#createAgentModal .modal-side-panel > div,
+#editAgentModal .modal-side-panel > div,
+#copyAgentModal .modal-side-panel > div {
+    display: flex !important;
+    flex-direction: column !important;
+    height: 100vh !important;
+}
+
+/* Ensure form content scrolls properly */
+#createAgentModal form,
+#editAgentModal form,
+#copyAgentModal form {
+    flex: 1 !important;
+    overflow-y: auto !important;
+    padding-bottom: 0 !important;
+}
+
+/* Sticky header styling */
+#createAgentModal .modal-side-panel > div > div:first-child,
+#editAgentModal .modal-side-panel > div > div:first-child,
+#copyAgentModal .modal-side-panel > div > div:first-child {
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 10 !important;
+    background-color: inherit !important;
+    border-bottom: 1px solid #e5e7eb !important;
+}
+
+.dark #createAgentModal .modal-side-panel > div > div:first-child,
+.dark #editAgentModal .modal-side-panel > div > div:first-child,
+.dark #copyAgentModal .modal-side-panel > div > div:first-child {
+    border-bottom-color: #374151 !important;
+}
+
+
+/* Agent chat side panel */
+body.chat-panel-open {
+    overflow: hidden;
+}
+
+#agentChatPanel.hidden {
+    display: none !important;
+}
+
+
+

@@ -1,0 +1,43 @@
+google-adk
+litellm
+python-dotenv
+requests
+fastapi
+uvicorn[standard]
+httpx
+websockets
+jinja2
+google-auth
+google-auth-httplib2
+google-api-python-client
+PyPDF2
+openai
+prometheus-client
+prometheus-fastapi-instrumentator
+# langchain-community
+tavily-python
+google-genai
+psutil
+# MCP dependencies for MCP servers
+mcp
+starlette
+# SQLAlchemy ORM
+sqlalchemy
+# Database drivers (install based on DB_TYPE)
+psycopg2-binary  # For PostgreSQL
+asyncpg  # For Async PostgreSQL
+# pymysql  # For MySQL (alternative to mysql-connector-python)
+# aiomysql # For Async MySQL
+# SQLite is included with Python standard library
+aiosqlite
+greenlet
+# Supabase for storage
+supabase
+# AWS S3 support
+boto3
+# Type hints and validation
+pydantic
+typing-extensions
+# adk-extra-services
+# A2A (Agent-to-Agent) dependencies
+a2a-sdk

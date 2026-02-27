@@ -1,0 +1,53 @@
+<!-- Import Agents Modal -->
+<div id="importAgentsModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden z-[70]">
+    <div class="flex items-center justify-center min-h-screen p-2">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full max-h-[95vh] overflow-y-auto">
+            <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+                <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Import Agent Configurations</h3>
+            </div>
+            <div class="px-6 py-3">
+                <div class="space-y-4">
+                    <div class="bg-blue-50 dark:bg-blue-900 border border-blue-200 dark:border-blue-700 rounded-lg p-4">
+                        <div class="flex">
+                            <i class="fas fa-info-circle text-blue-400 mr-3 mt-0.5"></i>
+                            <div>
+                                <strong class="text-blue-800 dark:text-blue-200">Import Instructions:</strong>
+                                <ul class="text-blue-700 dark:text-blue-300 text-sm mt-1 list-disc list-inside">
+                                    <li>Upload a JSON file exported from another server</li>
+                                    <li>Choose whether to overwrite existing agents with the same name</li>
+                                    <li>All agent configurations will be imported at once</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <label for="importFile" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Select JSON File</label>
+                        <input type="file" id="importFile" accept=".json" class="block w-full text-sm text-gray-500 dark:text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 dark:file:bg-blue-900 dark:file:text-blue-300 dark:hover:file:bg-blue-800">
+                    </div>
+                    
+                    <div class="flex items-center">
+                        <input type="checkbox" id="overwriteExisting" class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 dark:border-gray-600 rounded">
+                        <label for="overwriteExisting" class="ml-2 block text-sm text-gray-900 dark:text-gray-300">
+                            Overwrite existing agents with the same name
+                        </label>
+                    </div>
+                    
+                    <div id="importPreview" class="hidden">
+                        <h4 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Import Preview:</h4>
+                        <div id="importPreviewContent" class="bg-gray-50 dark:bg-gray-700 rounded-lg p-3 text-sm font-mono max-h-40 overflow-y-auto"></div>
+                    </div>
+                </div>
+                
+                <div class="flex justify-end space-x-3 mt-6">
+                    <button type="button" onclick="hideImportModal()" class="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-200 dark:bg-gray-600 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500">Cancel</button>
+                    <button type="button" id="importSubmitBtn" onclick="importAgents()" class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center" disabled>
+                        <i id="importLoader" class="fas fa-spinner fa-spin mr-2 hidden"></i>
+                        <span id="importBtnText">Import Agents</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+

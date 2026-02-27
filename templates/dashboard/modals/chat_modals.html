@@ -1,0 +1,80 @@
+<!-- Agent Chat Panel -->
+<div id="agentChatPanel" class="hidden fixed inset-0 z-[85] flex justify-end">
+    <div id="agentChatBackdrop" class="absolute inset-0 bg-black/40 dark:bg-black/60 cursor-pointer"></div>
+    <div class="relative w-full max-w-3xl h-full bg-white dark:bg-gray-900 shadow-2xl border-l border-gray-200 dark:border-gray-700 flex flex-col">
+        <div class="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
+            <div class="flex items-center space-x-3">
+                <h3 id="agentChatTitle" class="text-sm font-semibold text-gray-900 dark:text-white">Agent Chat</h3>
+                <div id="agentChatUserSelectorWrapper" class="hidden flex items-center space-x-2">
+                    <span class="text-xs font-medium text-gray-600 dark:text-gray-300">User</span>
+                    <div class="relative min-w-[180px]">
+                        <input
+                            id="agentChatUserInput"
+                            type="text"
+                            placeholder="Select user..."
+                            autocomplete="off"
+                            class="pl-2 pr-7 py-1 text-xs border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent w-full"
+                        >
+                        <div class="absolute inset-y-0 right-0 pr-2 flex items-center pointer-events-none">
+                            <i class="fas fa-search text-xs text-gray-400"></i>
+                        </div>
+                        <div id="agentChatUserSuggestions" class="hidden absolute left-0 right-0 mt-1 max-h-48 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 shadow-lg z-10"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="flex items-center space-x-2">
+                <button id="agentChatNewTabBtn" type="button" class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200" title="Open chat in new tab">
+                    <i class="fas fa-external-link-alt text-sm"></i>
+                </button>
+                <button type="button" class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200" onclick="hideAgentChatPanel()" title="Close chat panel">
+                    <i class="fas fa-times text-lg"></i>
+                </button>
+            </div>
+        </div>
+        <div class="flex-1 bg-gray-100 dark:bg-gray-900">
+            <iframe id="agentChatIframe" class="w-full h-full border-0 bg-white dark:bg-gray-900"></iframe>
+        </div>
+    </div>
+</div>
+
+<!-- Chat User Selection Modal -->
+<div id="chatUserSelectModal" class="hidden fixed inset-0 z-[95] flex items-center justify-center">
+    <div id="chatUserSelectBackdrop" class="absolute inset-0 bg-black/40 dark:bg-black/60"></div>
+    <div class="relative w-full max-w-sm bg-white dark:bg-gray-900 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700">
+        <div class="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+            <h4 class="text-sm font-semibold text-gray-900 dark:text-white">Select User</h4>
+            <button type="button" id="chatUserSelectCloseBtn" class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
+                <i class="fas fa-times text-base"></i>
+            </button>
+        </div>
+        <div class="px-4 py-4 space-y-3">
+            <p class="text-xs text-gray-600 dark:text-gray-400">Choose a user to scope the chat session. Your selection will be remembered for next time.</p>
+            <div id="chatUserSelectLoading" class="flex items-center text-xs text-gray-500 dark:text-gray-400">
+                <i class="fas fa-spinner fa-spin mr-2"></i>
+                Loading users...
+            </div>
+            <div id="chatUserSelectError" class="hidden text-xs text-red-500 dark:text-red-400"></div>
+            <div id="chatUserSelectField" class="hidden space-y-2">
+                <div class="relative">
+                    <input
+                        id="chatUserSelectInput"
+                        type="text"
+                        autocomplete="off"
+                        placeholder="Start typing a user ID..."
+                        class="w-full pl-3 pr-9 py-2 text-sm border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                    <div class="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                        <i class="fas fa-search text-xs text-gray-400"></i>
+                    </div>
+                </div>
+                <div id="chatUserSelectSuggestions" class="hidden max-h-48 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 shadow-lg"></div>
+                <p class="text-[10px] text-gray-500 dark:text-gray-400">Use arrow keys to navigate suggestions, Enter to select.</p>
+            </div>
+        </div>
+        <div class="px-4 py-3 border-t border-gray-200 dark:border-gray-700 flex justify-end space-x-2">
+            <button type="button" id="chatUserSelectCancelBtn" class="px-3 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded text-gray-600 dark:text-gray-300 hover:border-gray-400 dark:hover:border-gray-500">Cancel</button>
+            <button type="button" id="chatUserSelectConfirmBtn" class="px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded disabled:opacity-60 disabled:cursor-not-allowed" disabled>Start Chat</button>
+        </div>
+    </div>
+</div>
+

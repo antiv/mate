@@ -1,0 +1,93 @@
+<!-- Project Management Modal -->
+<div id="projectModal" class="fixed inset-0 bg-gray-600 bg-opacity-60 hidden z-[80]">
+    <div class="flex items-center justify-center min-h-screen p-4">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+            <div class="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between bg-gray-50 dark:bg-gray-900">
+                <div>
+                    <h3 id="projectModalTitle" class="text-sm font-semibold text-gray-900 dark:text-white">Create Project</h3>
+                    <p class="text-xs text-gray-500 dark:text-gray-400">Projects group related agents and their hierarchies.</p>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <button type="button" onclick="startCreateProject()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 text-xs rounded">
+                        <i class="fas fa-plus mr-1"></i>
+                        New Project
+                    </button>
+                    <button type="button" onclick="hideProjectModal()" class="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">
+                        <i class="fas fa-times text-lg"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="px-4 py-4 overflow-y-auto">
+                <form id="projectForm" class="space-y-3">
+                    <input type="hidden" id="projectFormId">
+                    <div>
+                        <label for="projectName" class="block text-xs font-medium text-gray-700 dark:text-gray-300">Name *</label>
+                        <input type="text" id="projectName" name="projectName" required class="mt-1 block w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500">
+                    </div>
+                    <div>
+                        <label for="projectDescription" class="block text-xs font-medium text-gray-700 dark:text-gray-300">Description</label>
+                        <textarea id="projectDescription" name="projectDescription" rows="3" class="mt-1 block w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"></textarea>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <p id="projectFormHint" class="text-xs text-gray-500 dark:text-gray-400">Fill out project details and click Save.</p>
+                        <div>
+                            <button type="submit" id="projectSubmitBtn" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 text-xs rounded inline-flex items-center">
+                                <i id="projectSubmitLoader" class="fas fa-spinner fa-spin mr-2 hidden"></i>
+                                <span id="projectSubmitText">Create Project</span>
+                            </button>
+                        </div>
+                    </div>
+                </form>
+
+                <div class="border-t border-gray-200 dark:border-gray-700 my-4"></div>
+
+                <div>
+                    <h4 class="text-sm font-semibold text-gray-900 dark:text-white mb-2">Existing Projects</h4>
+                    <div class="overflow-x-auto border border-gray-200 dark:border-gray-700 rounded">
+                        <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                            <thead class="bg-gray-50 dark:bg-gray-900">
+                                <tr>
+                                    <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Name</th>
+                                    <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Description</th>
+                                    <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                                {% if projects %}
+                                    {% for project in projects %}
+                                    <tr>
+                                        <td class="px-3 py-2 text-sm text-gray-900 dark:text-white">
+                                            {{ project.name }}
+                                            {% if selected_project_id and project.id == selected_project_id %}
+                                            <span class="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 uppercase">Current</span>
+                                            {% endif %}
+                                        </td>
+                                        <td class="px-3 py-2 text-sm text-gray-500 dark:text-gray-400">
+                                            {{ project.description or '—' }}
+                                        </td>
+                                        <td class="px-3 py-2 text-sm text-right space-x-2">
+                                            <button type="button" onclick="startEditProject({{ project.id }})" class="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-200">
+                                                <i class="fas fa-edit"></i>
+                                            </button>
+                                            <button type="button" onclick="deleteProject({{ project.id }})" class="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-200">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                {% else %}
+                                    <tr>
+                                        <td colspan="3" class="px-3 py-4 text-center text-sm text-gray-500 dark:text-gray-400">
+                                            No projects found. Create your first project to begin organizing agents.
+                                        </td>
+                                    </tr>
+                                {% endif %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
