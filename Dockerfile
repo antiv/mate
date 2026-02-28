@@ -62,6 +62,7 @@ RUN echo "$AGENTS_LIST" | tr ',' '\n' > /tmp/agents_list.txt && \
 
 # Copy the shared directories -- should be copied in each deployment
 COPY --chown=appuser:appuser shared/ ./shared/
+COPY --chown=appuser:appuser server/ ./server/
 COPY --chown=appuser:appuser auth_server.py ./auth_server.py
 COPY --chown=appuser:appuser adk_main.py ./adk_main.py
 COPY --chown=appuser:appuser templates/ ./templates/
