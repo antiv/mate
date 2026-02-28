@@ -77,5 +77,5 @@ USER appuser
 # Expose port for web interface (if needed)
 EXPOSE 8000
 
-# Default command to run the agent
-CMD ["python", "-c", "from agents.chess_mate_root.agent import root_agent; print('MATE loaded successfully. Use the agent by importing root_agent from agents.chess_mate_root.agent')"]
+# Default command: run auth server (same as docker-compose)
+CMD ["python", "auth_server.py"]
