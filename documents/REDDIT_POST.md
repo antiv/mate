@@ -11,6 +11,7 @@ I've been building **MATE** (Multi-Agent Tree Engine) - an open-source orchestra
 ## What it does
 
 - **Database-driven agent configuration** - create, modify, and organize agents from a web dashboard. No code changes needed.
+- **Self-building agents** - agents can create, update, and delete other agents at runtime through conversation. Enable the `create_agent` tool on any agent and it can spin up new sub-agents, rewire hierarchies, and evolve the system on the fly. Admin-only, RBAC-protected.
 - **Hierarchical agent trees** - root agents, sub-agents, sequential/parallel/loop execution patterns. Agents route to each other automatically.
 - **Universal LLM support** - Gemini (native), OpenAI, Anthropic, DeepSeek, Ollama (local), OpenRouter (100+ models), and any LiteLLM-supported provider. Switch models per agent with a single config change.
 - **Full MCP integration** - agents can consume MCP tools AND be exposed as MCP servers. Connect your agents to Claude Desktop, Cursor, or any MCP client.
@@ -62,7 +63,7 @@ Would love feedback. What features would you want to see next?
 
 **Title:** `Show HN: MATE - Open-source multi-agent orchestration with dashboard, memory, and 50+ LLM support`
 
-**Body:** Use the same content above but lead with the self-hosted angle and the "no code changes" database-driven configuration. HN audience cares about self-hosting and practical tooling over feature lists.
+**Body:** Use the same content above but lead with the self-hosted angle, the "no code changes" database-driven configuration, and the self-building agents feature (agents that create other agents at runtime). HN audience cares about self-hosting, practical tooling, and novel capabilities.
 
 ---
 
@@ -74,7 +75,7 @@ Would love feedback. What features would you want to see next?
 
 Built an open-source multi-agent orchestration engine that works with Ollama out of the box. Set `model_name` to `ollama_chat/llama3.2` (or any model) in the config and you're running agents locally.
 
-Features: hierarchical agent trees, web dashboard for configuration, persistent memory, MCP protocol support, RBAC, token tracking. Supports 50+ LLM providers via LiteLLM but the Ollama integration is first-class.
+Features: hierarchical agent trees, web dashboard for configuration, persistent memory, MCP protocol support, RBAC, token tracking, and self-building agents (agents that create/modify other agents at runtime). Supports 50+ LLM providers via LiteLLM but the Ollama integration is first-class.
 
 No data leaves your machine. PostgreSQL/MySQL/SQLite for storage, Docker for deployment.
 

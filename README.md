@@ -36,6 +36,7 @@ python auth_server.py
 | Memory persistence | In-memory only | DB-backed conversation history + persistent memory blocks |
 | Token cost tracking | DIY | 4-type token tracking with analytics dashboard |
 | MCP interop | Not included | Agents as MCP servers + MCP tool consumption |
+| Self-building agents | Not included | Agents create/update/delete other agents at runtime |
 | Deployment | Scripts | Docker Compose, auto-migrations, health checks |
 
 ## Screenshots
@@ -88,6 +89,7 @@ Built-in Swagger UI and ReDoc for both the Admin API and ADK API, accessible fro
 ## 🚀 Features
 
 - **Database-Driven Agent Management**: Agents configured through database with fallback support
+- **Self-Building Agents**: Agents can create, update, read, and delete other agents at runtime via the `create_agent` tool — your system evolves itself through conversation (admin-only, RBAC-protected)
 - **Project-Level Agent Grouping**: Agents are scoped to projects so teams can manage independent hierarchies
 - **Hardcoded Agent Integration**: Supports mixing database agents with hardcoded implementations
 - **Tool Factory System**: Extensible tool creation for MCP, Google services, and custom functions
