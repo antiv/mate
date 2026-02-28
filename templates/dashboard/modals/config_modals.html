@@ -51,6 +51,10 @@
                                             <input type="checkbox" id="{{ id_prefix }}CreateAgent" class="w-3 h-3 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-gray-800 focus:ring-1 dark:bg-gray-700 dark:border-gray-600">
                                             <label for="{{ id_prefix }}CreateAgent" class="ml-1.5 text-xs font-medium text-gray-700 dark:text-gray-300">Create Agent</label>
                                         </div>
+                                        <div class="flex items-center">
+                                            <input type="checkbox" id="{{ id_prefix }}CodeExecutor" class="w-3 h-3 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-gray-800 focus:ring-1 dark:bg-gray-700 dark:border-gray-600">
+                                            <label for="{{ id_prefix }}CodeExecutor" class="ml-1.5 text-xs font-medium text-gray-700 dark:text-gray-300">Code Executor</label>
+                                        </div>
                                     </div>
                                     <div class="md:col-span-2 space-y-2">
                                         <div class="flex items-center justify-between">
@@ -64,7 +68,7 @@
                                         </div>
                                         <textarea id="{{ id_prefix }}ToolConfig" name="{{ id_prefix }}ToolConfig" rows="8" placeholder='{"google_search": true, "google_drive": true}' class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500 text-xs font-mono"></textarea>
                                         <div id="{{ id_prefix }}ToolConfigEditor" style="display: none; height: 180px; border: 1px solid #d1d5db; border-radius: 0.25rem;" class="mt-0.5"></div>
-                                        <p class="text-xs text-gray-500 dark:text-gray-400">Available keys: google_search, google_drive, cv_tools, image_tools, memory_blocks, create_agent, custom_functions.</p>
+                                        <p class="text-xs text-gray-500 dark:text-gray-400">Available keys: google_search, google_drive, cv_tools, image_tools, memory_blocks, create_agent, custom_functions, code_executor.</p>
                                     </div>
                                 </div>
                             </div>

@@ -16,6 +16,7 @@ function syncToolConfigToJson(prefix = '') {
     const imageModel = document.getElementById(prefix + 'ImageModel');
     const memoryBlocks = document.getElementById(prefix + 'MemoryBlocks');
     const createAgent = document.getElementById(prefix + 'CreateAgent');
+    const codeExecutor = document.getElementById(prefix + 'CodeExecutor');
     
     if (googleDrive && googleDrive.checked) {
         config.google_drive = true;
@@ -36,6 +37,9 @@ function syncToolConfigToJson(prefix = '') {
     
     if (createAgent && createAgent.checked) {
         config.create_agent = true;
+    }
+    if (codeExecutor && codeExecutor.checked) {
+        config.code_executor = true;
     }
     
     const textarea = document.getElementById(prefix + 'ToolConfig');
@@ -95,10 +99,12 @@ function syncJsonToToolConfig(prefix = '') {
         const imageModelContainer = document.getElementById(prefix + 'ImageModelContainer');
         const memoryBlocks = document.getElementById(prefix + 'MemoryBlocks');
         const createAgent = document.getElementById(prefix + 'CreateAgent');
+        const codeExecutor = document.getElementById(prefix + 'CodeExecutor');
         
         if (googleDrive) googleDrive.checked = !!config.google_drive;
         if (cvTools) cvTools.checked = !!config.cv_tools;
         if (createAgent) createAgent.checked = !!config.create_agent;
+        if (codeExecutor) codeExecutor.checked = !!config.code_executor;
         if (memoryBlocks) {
             memoryBlocks.checked = config.memory_blocks === true ||
                 (config.memory_blocks && typeof config.memory_blocks === 'object' && config.memory_blocks.enabled !== false);
@@ -168,7 +174,8 @@ function setupToolListeners(prefix) {
                     prefix + 'CvTools',
                     prefix + 'MemoryBlocks',
                     prefix + 'ImageTools',
-                    prefix + 'CreateAgent'
+                    prefix + 'CreateAgent',
+                    prefix + 'CodeExecutor'
                 ];
                 
                 if (toolCheckboxIds.includes(checkboxId)) {
@@ -189,7 +196,8 @@ function setupToolListeners(prefix) {
             prefix + 'GoogleDrive', 
             prefix + 'CvTools',
             prefix + 'MemoryBlocks',
-            prefix + 'CreateAgent'
+            prefix + 'CreateAgent',
+            prefix + 'CodeExecutor'
         ];
         
         toolCheckboxes.forEach(checkboxId => {

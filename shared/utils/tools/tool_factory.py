@@ -27,7 +27,8 @@ class ToolFactory:
             'custom_functions': self._create_custom_function_tools,
             'memory_blocks': self._create_memory_blocks_tools,
             'file_search': self._create_file_search_tools,
-            'user_profile': self._create_user_profile_tools
+            'user_profile': self._create_user_profile_tools,
+            'code_executor': self._create_code_executor_tools
         }
     
     def create_tools(self, config: Dict[str, Any]) -> List[Any]:
@@ -165,6 +166,11 @@ class ToolFactory:
         """Create user profile tools using the specialized user profile tools module."""
         from .user_profile_tools import create_user_profile_tools_from_config
         return create_user_profile_tools_from_config(config)
+
+    def _create_code_executor_tools(self, config: Dict[str, Any]) -> List[Any]:
+        """Create code executor tools (Python & shell execution)."""
+        from .code_executor_tools import create_code_executor_tools_from_config
+        return create_code_executor_tools_from_config(config)
     
     
     def get_available_tool_types(self) -> List[str]:

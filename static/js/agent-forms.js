@@ -132,6 +132,9 @@ function updateToolConfigSummary(prefix) {
     if (parsed.memory_blocks) {
         tools.push('memory_blocks');
     }
+    if (parsed.code_executor) {
+        tools.push('code_executor');
+    }
 
     let preview = '';
     if (tools.length) {
@@ -358,7 +361,7 @@ function clearJsonField(prefix, fieldSuffix) {
 }
 
 function resetToolConfig(prefix) {
-    const ids = ['GoogleDrive', 'CvTools', 'ImageTools', 'MemoryBlocks', 'CreateAgent'];
+    const ids = ['GoogleDrive', 'CvTools', 'ImageTools', 'MemoryBlocks', 'CreateAgent', 'CodeExecutor'];
     ids.forEach(id => {
         const checkbox = document.getElementById(prefix + id);
         if (checkbox) {
