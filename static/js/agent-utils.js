@@ -1534,6 +1534,18 @@ function createAgentRow(config, depth, parentName, hasChildren, isHighlighted, r
                 openAgentChat(config.name);
             }
         }));
+
+        actionsCell.appendChild(createActionButton({
+            title: 'Widget Keys',
+            icon: 'fas fa-code',
+            className: 'text-teal-600 dark:text-teal-400 hover:text-teal-900 dark:hover:text-teal-300',
+            onClick: (event) => {
+                event.stopPropagation();
+                if (typeof showWidgetKeysModal === 'function') {
+                    showWidgetKeysModal(config.name, config.project_id);
+                }
+            }
+        }));
     }
 
     // Check if agent has memory tools configured

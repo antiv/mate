@@ -99,6 +99,7 @@ Built-in Swagger UI and ReDoc for both the Admin API and ADK API, accessible fro
 - **Model Flexibility**: Support for multiple AI models via OpenRouter and Gemini
 - **Dynamic Memory**: Database-backed memory blocks for agent context and bootstrap instructions
 - **HTTP Basic Authentication**: Secure access to web interface
+- **Embeddable Chat Widget**: Drop a `<script>` tag on any website to add AI chat connected to your agents
 - **Prometheus Metrics**: Automatic HTTP metrics via `/metrics` endpoint
 
 ## 🏗️ System Architecture
@@ -711,6 +712,103 @@ export AUTH_PASSWORD=your_password
 - **Session Management**: Secure session handling
 - **Audit Logging**: Comprehensive audit trail for all operations
 
+## 💬 Embeddable Chat Widget
+
+Add an AI chat assistant to any external website with a single script tag. The widget connects to your MATE instance and communicates with a specific root agent.
+
+### Quick Start
+
+1. **Generate a Widget API Key**: Dashboard → Agent Management → select root agent → click `</>` (Widget Keys) → Generate Key
+2. **Add to your site** (before `</body>`):
+
+```html
+<script
+  src="https://your-mate-instance.com/widget/mate-widget.js"
+  data-key="wk_abc123..."
+  data-server="https://your-mate-instance.com"
+></script>
+```
+
+A floating chat button appears on the page. Users click it to chat with your agent.
+
+### Configuration Options
+
+| Attribute | Default | Description |
+|---|---|---|
+| `data-key` | (required) | Widget API key |
+| `data-server` | (required) | MATE instance URL |
+| `data-position` | `bottom-right` | `bottom-right` or `bottom-left` |
+| `data-theme` | `auto` | `light`, `dark`, or `auto` |
+| `data-button-color` | `#2563eb` | CSS color for the floating button |
+| `data-button-text` | — | Text label instead of chat icon |
+| `data-width` | `400` | Chat panel width (px) |
+| `data-height` | `600` | Chat panel height (px) |
+
+### JavaScript API
+
+```javascript
+MateWidget.open();    // Open chat panel
+MateWidget.close();   // Close chat panel
+MateWidget.toggle();  // Toggle open/close
+```
+
+### Widget Admin Panel
+
+Each widget key has a standalone admin panel for managing the agent without the full dashboard:
+
+```
+https://your-mate-instance.com/widget/admin?key=wk_abc123...
+```
+
+From the admin panel you can:
+- Edit agent instruction, model, and description
+- Manage memory blocks (create, edit, delete)
+- Upload and manage files for RAG (file search stores)
+
+### Testing Locally
+
+```bash
+# 1. Start MATE
+source .venv/bin/activate
+python auth_server.py
+
+# 2. Open the dashboard, select a project, find a root agent
+#    Click the </> icon → Generate Key → copy the key
+
+# 3. Create a test HTML file (e.g. test_widget.html)
+```
+
+```html
+<!DOCTYPE html>
+<html>
+<head><title>Widget Test</title></head>
+<body>
+  <h1>My Website</h1>
+  <p>The chat widget should appear in the bottom-right corner.</p>
+
+  <script
+    src="http://localhost:8000/widget/mate-widget.js"
+    data-key="wk_YOUR_KEY_HERE"
+    data-server="http://localhost:8000"
+  ></script>
+</body>
+</html>
+```
+
+```bash
+# 4. Serve the test file (any static server works)
+python -m http.server 3000
+# Open http://localhost:3000/test_widget.html
+```
+
+### Security
+
+- **Origin restrictions**: Set allowed origins per key to lock widget to specific domains
+- **User scoping**: Widget users are automatically namespaced (`widget_{key_id}_{user_id}`) to prevent collision with dashboard users
+- **Key management**: Deactivate or delete keys instantly from the dashboard; all sites using that key stop immediately
+
+> Full documentation: **[documents/WIDGET_INTEGRATION.md](documents/WIDGET_INTEGRATION.md)**
+
 ## 🐳 Docker Deployment
 
 ### Quick Start with Docker Compose
@@ -1201,6 +1299,7 @@ This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENS
 For more detailed information, see:
 
 - **[documents/END_USER_GUIDE.md](documents/END_USER_GUIDE.md)**: End user guide—chatting with agents, dashboard usage, MCP client setup (Claude Desktop, Cursor)
+- **[documents/WIDGET_INTEGRATION.md](documents/WIDGET_INTEGRATION.md)**: Embeddable chat widget—embed code, JS API, admin panel, security, theming
 - **[documents/ARCHITECTURE.pdf](documents/ARCHITECTURE.pdf)**: System architecture documentation (PDF)—server layers, data flows, agent initialization, MCP integration
 - **[MCP_SERVERS.md](documents/MCP_SERVERS.md)**: Complete MCP server documentation
   - Built-in MCP servers (Image Generation, Google Drive)

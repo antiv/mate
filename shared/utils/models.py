@@ -435,6 +435,62 @@ class MemoryBlock(Base):
         }
 
 
+class WidgetApiKey(Base):
+    """Model for embeddable chat widget API keys, scoped to a project and root agent."""
+
+    __tablename__ = 'widget_api_keys'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    api_key = Column(String(255), unique=True, nullable=False, index=True)
+    project_id = Column(Integer, ForeignKey('projects.id'), nullable=False)
+    agent_name = Column(String(255), nullable=False)
+    label = Column(String(255), nullable=True)
+    allowed_origins = Column(Text, nullable=True)  # JSON array of allowed origins, null = all
+    is_active = Column(Boolean, default=True, nullable=False)
+    widget_config = Column(Text, nullable=True)  # JSON: greeting, theme, button color, etc.
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc),
+                       onupdate=lambda: datetime.now(timezone.utc), nullable=False)
+
+    project = relationship("Project")
+
+    def get_allowed_origins(self) -> Optional[list]:
+        if not self.allowed_origins:
+            return None
+        try:
+            return json.loads(self.allowed_origins)
+        except json.JSONDecodeError:
+            return None
+
+    def set_allowed_origins(self, origins: Optional[list]):
+        self.allowed_origins = json.dumps(origins) if origins else None
+
+    def get_widget_config(self) -> dict:
+        if not self.widget_config:
+            return {}
+        try:
+            return json.loads(self.widget_config)
+        except json.JSONDecodeError:
+            return {}
+
+    def set_widget_config(self, config: dict):
+        self.widget_config = json.dumps(config) if config else None
+
+    def to_dict(self) -> dict:
+        return {
+            'id': self.id,
+            'api_key': self.api_key,
+            'project_id': self.project_id,
+            'agent_name': self.agent_name,
+            'label': self.label,
+            'allowed_origins': self.get_allowed_origins(),
+            'is_active': self.is_active,
+            'widget_config': self.get_widget_config(),
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+
+
 class FileSearchDocument(Base):
     """Model for documents/files in file search stores."""
 

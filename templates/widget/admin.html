@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Widget Admin — {{ agent_name }}</title>
+  <link rel="stylesheet" href="/static/css/widget/admin.css">
+</head>
+<body>
+  <div class="admin-container">
+    <div class="admin-header">
+      <h1>Widget Admin</h1>
+      <span class="admin-header-badge">{{ agent_name }}</span>
+    </div>
+
+    <!-- Tabs -->
+    <div class="admin-tabs">
+      <button class="admin-tab active" data-tab="agent">Agent Settings</button>
+      <button class="admin-tab" data-tab="memory">Memory Blocks</button>
+      <button class="admin-tab" data-tab="files">Files</button>
+    </div>
+
+    <!-- Agent Settings Panel -->
+    <div id="panel-agent" class="admin-panel active">
+      <div class="admin-card">
+        <div class="admin-card-title">Agent Configuration</div>
+        <form id="agentForm">
+          <div class="admin-field">
+            <label for="agentDescription">Description</label>
+            <input type="text" id="agentDescription" placeholder="Brief description of this agent">
+          </div>
+          <div class="admin-field">
+            <label for="agentModel">Model</label>
+            <input type="text" id="agentModel" placeholder="e.g. openrouter/google/gemini-2.5-flash">
+          </div>
+          <div class="admin-field">
+            <label for="agentInstruction">Instruction</label>
+            <textarea id="agentInstruction" rows="10" placeholder="Agent system instruction..."></textarea>
+          </div>
+          <div class="admin-actions">
+            <button type="submit" class="admin-btn admin-btn-primary">Save Changes</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Memory Blocks Panel -->
+    <div id="panel-memory" class="admin-panel">
+      <div id="blocksList"></div>
+      <div class="admin-card" style="margin-top: 16px;">
+        <div class="admin-card-title" id="blockFormTitle">New Memory Block</div>
+        <form id="blockForm">
+          <div class="admin-field">
+            <label for="blockLabel">Label</label>
+            <input type="text" id="blockLabel" required placeholder="e.g. company_info">
+          </div>
+          <div class="admin-field">
+            <label for="blockValue">Value</label>
+            <textarea id="blockValue" rows="5" placeholder="Content of the memory block..."></textarea>
+          </div>
+          <div class="admin-field">
+            <label for="blockDescription">Description</label>
+            <input type="text" id="blockDescription" placeholder="Optional description">
+          </div>
+          <div class="admin-actions">
+            <button type="submit" class="admin-btn admin-btn-primary">Save</button>
+            <button type="button" id="blockFormCancel" class="admin-btn">Cancel</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Files Panel -->
+    <div id="panel-files" class="admin-panel">
+      <div id="fileStoresList"></div>
+      <div class="admin-card" style="margin-top: 16px;">
+        <div class="admin-card-title">Upload File</div>
+        <div class="admin-field">
+          <label for="uploadStore">Target Store</label>
+          <select id="uploadStore"></select>
+        </div>
+        <form id="uploadForm">
+          <div class="admin-upload-area" id="uploadArea">
+            <input type="file" id="uploadFile">
+            <p>Click or drag a file here to upload</p>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    window.WIDGET_API_KEY = "{{ api_key }}";
+    window.WIDGET_AGENT_NAME = "{{ agent_name }}";
+    window.WIDGET_PROJECT_ID = {{ project_id }};
+  </script>
+  <script src="/static/js/widget/admin.js"></script>
+</body>
+</html>

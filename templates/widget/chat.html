@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chat</title>
+  <link rel="stylesheet" href="/static/css/widget/chat.css">
+</head>
+<body>
+  <div class="widget-container">
+    <div class="widget-header">
+      <span class="widget-header-title" id="widgetHeaderTitle">{{ agent_name }}</span>
+      <div class="widget-header-actions">
+        <button class="widget-header-btn" id="widgetNewChat" title="New conversation">New Chat</button>
+      </div>
+    </div>
+
+    <div class="widget-messages" id="widgetMessages">
+      <div class="widget-greeting" id="widgetGreeting">How can I help you today?</div>
+      <div class="widget-typing" id="widgetTyping">
+        <span class="widget-typing-dot"></span>
+        <span class="widget-typing-dot"></span>
+        <span class="widget-typing-dot"></span>
+      </div>
+    </div>
+
+    <div class="widget-input-area">
+      <textarea class="widget-input" id="widgetInput" placeholder="Type a message…" rows="1"></textarea>
+      <button class="widget-send-btn" id="widgetSendBtn">Send</button>
+    </div>
+
+    <div class="widget-footer">
+      <a href="https://github.com/BjornMelin/adk-mate" target="_blank" rel="noopener">Powered by MATE</a>
+    </div>
+  </div>
+
+  <script>
+    window.WIDGET_API_KEY = "{{ api_key }}";
+    window.WIDGET_AGENT_NAME = "{{ agent_name }}";
+    window.WIDGET_CONFIG = {{ widget_config | safe }};
+  </script>
+  <script src="/static/js/widget/chat.js"></script>
+</body>
+</html>
