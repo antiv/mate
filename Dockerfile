@@ -58,9 +58,7 @@ RUN echo "$AGENTS_LIST" | tr ',' '\n' > /tmp/agents_list.txt && \
     done && \
     rm -f /tmp/agents_list.txt
 
-# COPY --chown=appuser:appuser agents/g0_agent ./agents/g0_agent
-# COPY --chown=appuser:appuser agents/wer_agent ./agents/wer_agent
-# COPY --chown=appuser:appuser agents/tribe_agent ./agents/tribe_agent
+
 
 # Copy the shared directories -- should be copied in each deployment
 COPY --chown=appuser:appuser shared/ ./shared/
@@ -79,5 +77,5 @@ USER appuser
 # Expose port for web interface (if needed)
 EXPOSE 8000
 
-# Default command to run the agent
-CMD ["python", "-c", "from agents.chess_mate_root.agent import root_agent; print('MATE loaded successfully. Use the agent by importing root_agent from agents.chess_mate_root.agent')"]
+# Default command: run auth server (same as docker-compose)
+CMD ["python", "auth_server.py"]
