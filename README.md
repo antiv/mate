@@ -1,6 +1,89 @@
 # MATE (Multi-Agent Tree Engine)
 
-A multi-agent orchestration system using Google ADK, with database-driven agent configuration, tool integration, and hierarchical agent trees (e.g. chess_mate_root).
+[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-green.svg)](LICENSE)
+[![Google ADK](https://img.shields.io/badge/Google-ADK-orange.svg)](https://github.com/google/adk-python)
+[![LiteLLM](https://img.shields.io/badge/LiteLLM-50%2B%20providers-purple.svg)](https://github.com/BerriAI/litellm)
+[![MCP](https://img.shields.io/badge/MCP-compatible-brightgreen.svg)](https://modelcontextprotocol.io/)
+
+A production-ready multi-agent orchestration engine built on Google ADK. Configure agents, tools, and LLM providers from a web dashboard — no code changes needed. Supports 50+ LLM providers including local Ollama, full MCP protocol integration, persistent memory, RBAC, and multi-tenant project isolation.
+
+## Quick Start
+
+```bash
+# Clone and setup
+git clone https://github.com/antiv/mate.git && cd mate
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+
+# Configure (minimum: set your API key)
+cp .env.example .env
+# Edit .env: set GOOGLE_API_KEY (or any supported LLM provider key)
+
+# Run (uses SQLite by default, migrations auto-apply)
+python auth_server.py
+# Open http://localhost:8000 — login with admin/mate
+```
+
+## Why MATE?
+
+| Challenge | Raw ADK | MATE |
+|---|---|---|
+| Adding/modifying agents | Edit Python code, redeploy | Web dashboard or database, no redeploy |
+| Switching LLM providers | Code changes per agent | Change `model_name` in config (e.g. `ollama_chat/llama3.2`) |
+| Multi-team isolation | Manual | Project-scoped agent hierarchies |
+| Access control | Build your own | Built-in RBAC per agent |
+| Memory persistence | In-memory only | DB-backed conversation history + persistent memory blocks |
+| Token cost tracking | DIY | 4-type token tracking with analytics dashboard |
+| MCP interop | Not included | Agents as MCP servers + MCP tool consumption |
+| Deployment | Scripts | Docker Compose, auto-migrations, health checks |
+
+## Screenshots
+
+### Dashboard Overview
+Monitor usage, active agents, system health, and request trends at a glance.
+
+![Dashboard Overview](documents/images/overview.png)
+
+### Agent Management
+View and manage your full agent hierarchy — models, parent relationships, and status per project.
+
+![Agent Management](documents/images/agents_tree.png)
+
+### Agent Configuration
+Edit every aspect of an agent: model, instruction, RBAC roles, memory blocks, tools, MCP servers, planner, content config, and schemas.
+
+![Agent Configuration](documents/images/config_agent.png)
+
+### Tool Configuration
+Toggle built-in tools or provide custom JSON — Google Drive, Search, CV, Image, Memory Blocks, Code Executor, and more.
+
+![Tool Configuration](documents/images/tools_agent_modal.png)
+
+### Chat Interface
+Multi-agent chat with event tracing, tool calls, and persistent memory — here a chess team delegates to specialized sub-agents.
+
+![Chat Interface](documents/images/caht_chess_exsample.png)
+
+### Image Generation
+Agents can generate images via MCP tools (DALL-E 3, GPT Image, Nano Banana) and return artifacts directly in chat.
+
+![Image Generation](documents/images/creative_agent_chat.png)
+
+### Usage Analytics
+Detailed token usage trends, agent performance, activity-by-hour, and per-agent success rates.
+
+![Usage Analytics](documents/images/usage.png)
+
+### Token Usage Details
+Drill into individual request logs — prompt/response/thought/tool-use token breakdown per request.
+
+![Token Usage Details](documents/images/usage_details.png)
+
+### API Documentation
+Built-in Swagger UI and ReDoc for both the Admin API and ADK API, accessible from the dashboard.
+
+![API Documentation](documents/images/swagger.png)
 
 ## 🚀 Features
 
@@ -20,13 +103,13 @@ A multi-agent orchestration system using Google ADK, with database-driven agent 
 
 ### Agent Hierarchy
 
-The system uses a hybrid approach combining database-configured agents with hardcoded agents:
+The system uses a hybrid approach combining database-configured agents with hardcoded agents. Agents form a tree where root agents route to specialized sub-agents:
 
 ```text
-chess_mate_root (Routing)
-├── chess_opening_book (Knowledge/Context)
-├── chess_engine_analyst (Hybrid/Computation)
-└── chess_historian (Search Tools)
+my_root_agent (Routing)
+├── research_agent (Search + Knowledge)
+├── analyst_agent (Data Processing)
+└── creative_agent (Content Generation)
 ```
 
 ### Current Agent Structure
@@ -425,30 +508,37 @@ python -m unittest shared.test.test_core_functionality -v
 python -m unittest shared.test.test_model_switching -v
 ```
 
+### Code Coverage
+
+```bash
+# Run tests with coverage
+coverage run -m unittest discover -s shared/test -p "test_*.py"
+
+# Terminal report
+coverage report --include="shared/utils/*,server/*,auth_server.py" --sort=cover
+
+# HTML report (browsable)
+coverage html --include="shared/utils/*,server/*,auth_server.py"
+open htmlcov/index.html
+```
+
 ### Test Coverage
 
-The test suite includes **23 tests** covering:
+The test suite includes **134 tests** covering:
 
-- **AgentManager (20 tests)**:
-  - Database session management
-  - Agent retrieval and caching
-  - Hardcoded agent integration
-  - Error handling
-
-- **ToolFactory (6 tests)**:
-  - Tool creation and configuration
-  - Error handling
-  - Method validation
-
-- **Model System (3 tests)**:
-  - Model configuration
-  - Model factory functionality
-  - Import validation
+- **AgentManager**: Session management, agent retrieval, caching, hardcoded integration, hierarchy initialization
+- **ToolFactory**: Tool creation, configuration, error handling, method validation
+- **Model System**: Configuration, factory, provider switching
+- **Auth Utils**: Token generation, verification, revocation, logout flow, credential hashing, expiry
+- **RBAC**: Access control, role checking, denied access, exception handling, middleware
+- **User Service**: CRUD operations, role management, profile data, session handling
+- **Migration System**: File parsing, SQL splitting, cross-DB conversion, checksum, status, creation
+- **Agent Types**: Sequential, parallel, loop, multi-parent agents
 
 ### Test Results
 
 ```bash
-Ran 23 tests in 0.026s
+Ran 134 tests in 0.111s
 OK
 ```
 
@@ -1094,23 +1184,15 @@ export LOG_LEVEL=INFO  # DEBUG, INFO, WARNING, ERROR
 
 ## 🤝 Contributing
 
-1. **Fork the repository**
-2. **Create a feature branch**: `git checkout -b feature/amazing-feature`
-3. **Run tests**: `python -m unittest discover -s shared/test -p "test_*.py" -v`
-4. **Commit changes**: `git commit -m 'Add amazing feature'`
-5. **Push to branch**: `git push origin feature/amazing-feature`
-6. **Open a Pull Request**
+Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, code style, and PR guidelines.
 
-### Development Guidelines
+## 🔒 Security
 
-- **Write tests** for new functionality
-- **Update documentation** for API changes
-- **Follow existing code style**
-- **Test database migrations** if schema changes
+For security best practices and vulnerability reporting, see [SECURITY.md](SECURITY.md).
 
 ## 📄 License
 
-[Add your license information here]
+This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
 
 ## 📚 Additional Documentation
 
