@@ -71,6 +71,9 @@ tags_metadata = [
     {"name": "Proxy - ADK Web", "description": "Proxies to the main ADK web interface"},
     {"name": "Proxy - ADK Documentation", "description": "Proxies to ADK API documentation (Swagger, ReDoc, OpenAPI schema)"},
     {"name": "Proxy - ADK API", "description": "Generic proxy for all ADK API endpoints with streaming support"},
+    {"name": "Widget", "description": "Embeddable chat widget endpoints (public, authenticated via widget API key)"},
+    {"name": "Widget - Admin API", "description": "Widget admin API for agent, memory blocks, and file management"},
+    {"name": "Dashboard - Widget Keys", "description": "Widget API key management endpoints"},
     {"name": "Examples", "description": "Example endpoints demonstrating authentication patterns"},
 ]
 
@@ -221,8 +224,19 @@ async def get_admin_redoc(username: str = Depends(get_auth_user)):
 # ---------- Include routers ----------
 from server.auth_routes import router as auth_router
 from server.proxy_routes import router as proxy_router
+from server.widget_routes import (
+    router as widget_router,
+    admin_api_router as widget_admin_api_router,
+    dashboard_widget_router,
+    configure_widget_proxy,
+)
+
+configure_widget_proxy(ADK_HOST, ADK_PORT)
 
 app.include_router(auth_router)
+app.include_router(widget_router)
+app.include_router(widget_admin_api_router)
+app.include_router(dashboard_widget_router)
 app.include_router(proxy_router)
 
 

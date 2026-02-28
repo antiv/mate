@@ -5,6 +5,28 @@ All notable changes to MATE (Multi-Agent Tree Engine) will be documented in this
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-02-28
+
+### Added
+
+- **Embeddable Chat Widget** - iframe-based chat widget for embedding agents on external websites
+- **Widget API Key system** - scoped API keys tied to project + agent with origin restrictions and custom config
+- **Widget Admin Panel** - site admins can manage agent instructions, memory blocks, and files through the widget
+- **Dashboard Widget Key management** - generate, list, toggle, delete widget keys with embed code generation
+- **Widget session isolation** - each site visitor gets a unique scoped session; conversations persist across page refreshes
+- **New Chat support** - users can start fresh conversations via "New Chat" button (always creates a new ADK session)
+- **SSE response filtering** - intelligent client-side filtering of agent routing, tool calls, and narration from the final response
+- **Inline thinking animation** - persistent "Thinking..." animation inside the response bubble during agent processing (no disappearing boxes)
+- **Widget theming** - light, dark, and auto theme support with parent page integration
+- **Widget documentation** - comprehensive integration guide at `documents/WIDGET_INTEGRATION.md`
+
+### Fixed
+
+- Widget session reuse bug — "New Chat" now always creates a fresh ADK session instead of silently reusing the previous one
+- Agent response bubble ordering — responses now appear directly below the user's message
+- Pre-tool narration text no longer leaks into the final chat response
+- SSE deduplication — partial + complete ADK events no longer produce repeated text
+
 ## [1.0.0] - 2025-02-28
 
 ### Added
