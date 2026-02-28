@@ -3,9 +3,12 @@ Shared authentication utilities for MATE (Multi-Agent Tree Engine)
 Provides token verification that can be used by both auth_server and dashboard_server
 """
 
+import logging
 import hashlib
 from datetime import datetime, timedelta
 from typing import Dict, Tuple
+
+logger = logging.getLogger(__name__)
 
 # In-memory token storage (shared across all modules)
 _active_tokens = set()
@@ -20,15 +23,14 @@ def generate_token() -> str:
     import secrets
     token = secrets.token_urlsafe(32)
     _active_tokens.add(token)
-    print(f"🔍 [AUTH_UTILS] Generated token: {token[:30]}..., active_tokens count: {len(_active_tokens)}")
+    logger.debug("Token generated, active_tokens count: %d", len(_active_tokens))
     return token
 
 def verify_token(token: str) -> bool:
     """Verify if a token is valid."""
     is_valid = token in _active_tokens
     if not is_valid:
-        print(f"🔍 [AUTH_UTILS] Token verification failed: {token[:30]}...")
-        print(f"🔍 [AUTH_UTILS] Active tokens count: {len(_active_tokens)}")
+        logger.debug("Token verification failed, active_tokens count: %d", len(_active_tokens))
     return is_valid
 
 def revoke_token(token: str):
@@ -45,7 +47,7 @@ def logout_basic_auth(username: str, password: str):
     These credentials will be rejected for LOGOUT_EXPIRY_MINUTES."""
     credential_hash = _hash_credentials(username, password)
     _logged_out_credentials[credential_hash] = datetime.now()
-    print(f"🔍 [AUTH_UTILS] Logged out basic auth for user: {username}")
+    logger.debug("Logged out basic auth for user: %s", username)
     # Clean up old entries
     _cleanup_logged_out_credentials()
 
@@ -72,7 +74,7 @@ def clear_logged_out_status(username: str, password: str):
     credential_hash = _hash_credentials(username, password)
     if credential_hash in _logged_out_credentials:
         del _logged_out_credentials[credential_hash]
-        print(f"🔍 [AUTH_UTILS] Cleared logged-out status for user: {username}")
+        logger.debug("Cleared logged-out status for user: %s", username)
 
 def _cleanup_logged_out_credentials():
     """Remove expired logged-out credentials."""

@@ -8,10 +8,10 @@ services:
     container_name: mate
     environment:
       - AUTH_USERNAME=${AUTH_USERNAME:-admin}
-      - AUTH_PASSWORD=${AUTH_PASSWORD:-mate}
+      - AUTH_PASSWORD=${AUTH_PASSWORD:?Set AUTH_PASSWORD in .env}
       - DB_TYPE=sqlite
       - DB_USER=${DB_USER:-postgres}
-      - DB_PASSWORD=${DB_PASSWORD:-Mate2025!}
+      - DB_PASSWORD=${DB_PASSWORD:?Set DB_PASSWORD in .env}
       - DB_HOST=${DB_HOST:-localhost}
       - DB_PORT=${DB_PORT:-5432}
       - DB_NAME=${DB_NAME:-mate_agent}

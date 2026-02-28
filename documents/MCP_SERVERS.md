@@ -275,7 +275,7 @@ For clients that support HTTP-based MCP servers:
       "auth": {
         "type": "basic",
         "username": "admin",
-        "password": "tribe"
+        "password": "mate"
       }
     }
   }

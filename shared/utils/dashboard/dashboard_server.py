@@ -1071,7 +1071,7 @@ class DashboardServer:
         """Get authenticated user for dashboard routes without triggering browser popup.
         Uses auth function from auth_server."""
         # Import here to avoid circular imports
-        from auth_server import require_dashboard_auth
+        from server.auth import require_dashboard_auth
         return require_dashboard_auth(request)
     
     def _has_memory_blocks(self, tool_config_dict):
