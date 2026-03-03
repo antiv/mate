@@ -11,7 +11,7 @@ Handles proxying requests to the ADK backend server, including:
 
 import logging
 import asyncio
-from typing import Optional
+from typing import Optional, Dict, Any
 from pathlib import Path
 
 import httpx
@@ -24,6 +24,21 @@ from shared.utils.auth_utils import verify_token
 from server.auth import get_auth_user, AUTH_USERNAME, AUTH_PASSWORD
 
 logger = logging.getLogger(__name__)
+
+
+def _inject_trace_headers(headers: Dict[str, str]) -> Dict[str, str]:
+    """Inject W3C trace context into headers for propagation to ADK."""
+    try:
+        from shared.utils.tracing.tracing_config import is_tracing_enabled
+        if not is_tracing_enabled():
+            return headers
+        from opentelemetry import trace
+        from opentelemetry.propagate import inject
+        carrier: Dict[str, str] = dict(headers)
+        inject(carrier)
+        return carrier
+    except Exception:
+        return headers
 
 router = APIRouter()
 
@@ -200,6 +215,7 @@ async def proxy_adk(request: Request, path: str, username: str = Depends(get_aut
     target_url = f"http://{ADK_HOST}:{ADK_PORT}/{path}"
     body = await request.body() if request.method in ["POST", "PUT", "PATCH"] else None
     headers = {key: value for key, value in request.headers.items() if key.lower() != "host"}
+    headers = _inject_trace_headers(headers)
 
     client = httpx.AsyncClient(timeout=900.0)
     try:

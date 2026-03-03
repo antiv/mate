@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+
+{% block title %}Traces - MATE{% endblock %}
+
+{% block content %}
+<div class="space-y-4">
+    <div class="flex justify-between items-center">
+        <div>
+            <h2 class="text-xl font-bold text-gray-900 dark:text-white">Distributed Traces</h2>
+            <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                OpenTelemetry trace viewer. Enable <code class="bg-gray-100 dark:bg-gray-700 px-1 rounded">OTEL_TRACING_ENABLED=true</code> and <code class="bg-gray-100 dark:bg-gray-700 px-1 rounded">OTEL_TRACES_DB_EXPORT=true</code> to capture traces.
+            </p>
+        </div>
+        <div class="flex space-x-2">
+            <select id="timeRangeSelect" onchange="loadTraces()" class="border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg px-2 py-1 text-xs">
+                <option value="1">Last 1 hour</option>
+                <option value="6">Last 6 hours</option>
+                <option value="24" selected>Last 24 hours</option>
+                <option value="72">Last 3 days</option>
+            </select>
+            <button onclick="loadTraces()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 text-xs rounded-lg flex items-center">
+                <i class="fas fa-sync-alt mr-1"></i>Refresh
+            </button>
+        </div>
+    </div>
+
+    <div id="tracesError" class="hidden bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-3 text-sm text-yellow-800 dark:text-yellow-200"></div>
+
+    <div id="tracesList" class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+        <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+            <thead class="bg-gray-50 dark:bg-gray-700">
+                <tr>
+                    <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300">Trace ID</th>
+                    <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300">Root Span</th>
+                    <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300">Duration</th>
+                    <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300">Spans</th>
+                    <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300">Actions</th>
+                </tr>
+            </thead>
+            <tbody id="tracesTableBody" class="divide-y divide-gray-200 dark:divide-gray-700">
+                <tr>
+                    <td colspan="5" class="px-3 py-8 text-center text-gray-500 dark:text-gray-400">Loading...</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div id="traceDetail" class="hidden mt-4 bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+        <div class="flex justify-between items-center mb-3">
+            <h3 class="font-semibold text-gray-900 dark:text-white">Trace Detail</h3>
+            <button onclick="closeTraceDetail()" class="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div id="traceDetailContent" class="space-y-2 max-h-96 overflow-y-auto"></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/traces.js"></script>
+{% endblock %}

@@ -220,6 +220,10 @@
                         <i class="fas fa-chart-bar sidebar-icon mr-2 text-xs"></i>
                         <span class="sidebar-text">Usage Analytics</span>
                     </a>
+                    <a href="/dashboard/traces" class="flex items-center px-3 py-2 text-sm text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 {% if request.url.path == '/dashboard/traces' %}sidebar-active{% endif %}" title="Traces">
+                        <i class="fas fa-project-diagram sidebar-icon mr-2 text-xs"></i>
+                        <span class="sidebar-text">Traces</span>
+                    </a>
                     <a href="/dashboard/docs" class="flex items-center px-3 py-2 text-sm text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 {% if request.url.path == '/dashboard/docs' %}sidebar-active{% endif %}" title="API Documentation">
                         <i class="fas fa-book sidebar-icon mr-2 text-xs"></i>
                         <span class="sidebar-text">API Documentation</span>

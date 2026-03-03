@@ -103,12 +103,28 @@ class DBMemoryService(BaseMemoryService):
 
     async def add_session_to_memory(self, session: 'ADKSession'):
         """Add a session to the database memory storage."""
-        db_session = self._get_session()
-        if not db_session:
-            logger.error("Could not get database session")
-            return
-
+        span = None
         try:
+            from shared.utils.tracing.tracing_config import is_tracing_enabled
+            if is_tracing_enabled():
+                from opentelemetry import trace
+                from shared.utils.tracing.tracer import get_tracer
+                tracer = get_tracer("mate", "1.0.0")
+                span = tracer.start_span("mate.memory")
+                span.set_attribute("mate.memory.operation", "add")
+        except Exception:
+            pass
+        try:
+            db_session = self._get_session()
+            if not db_session:
+                logger.error("Could not get database session")
+                if span:
+                    try:
+                        span.end()
+                    except Exception:
+                        pass
+                return
+
             # Check if session already exists
             existing_memory_session = db_session.query(MemorySession).filter(
                 MemorySession.session_id == session.id
@@ -176,7 +192,13 @@ class DBMemoryService(BaseMemoryService):
             logger.error(f"Unexpected error adding session to memory: {e}")
             db_session.rollback()
         finally:
-            db_session.close()
+            if span:
+                try:
+                    span.end()
+                except Exception:
+                    pass
+            if db_session:
+                db_session.close()
 
     async def search_memory(
         self, 
@@ -186,12 +208,28 @@ class DBMemoryService(BaseMemoryService):
         query: str
     ) -> SearchMemoryResponse:
         """Search for memories matching the query."""
-        db_session = self._get_session()
-        if not db_session:
-            logger.error("Could not get database session")
-            return SearchMemoryResponse()
-
+        span = None
         try:
+            from shared.utils.tracing.tracing_config import is_tracing_enabled
+            if is_tracing_enabled():
+                from opentelemetry import trace
+                from shared.utils.tracing.tracer import get_tracer
+                tracer = get_tracer("mate", "1.0.0")
+                span = tracer.start_span("mate.memory")
+                span.set_attribute("mate.memory.operation", "search")
+        except Exception:
+            pass
+        try:
+            db_session = self._get_session()
+            if not db_session:
+                logger.error("Could not get database session")
+                if span:
+                    try:
+                        span.end()
+                    except Exception:
+                        pass
+                return SearchMemoryResponse()
+
             # Get all memory sessions for this user
             memory_sessions = db_session.query(MemorySession).filter(
                 MemorySession.app_name == app_name,
@@ -246,4 +284,10 @@ class DBMemoryService(BaseMemoryService):
             logger.error(f"Unexpected error searching memory: {e}")
             return SearchMemoryResponse()
         finally:
-            db_session.close()
+            if span:
+                try:
+                    span.end()
+                except Exception:
+                    pass
+            if db_session:
+                db_session.close()

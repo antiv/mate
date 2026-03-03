@@ -10,8 +10,16 @@ import threading
 import time
 from pathlib import Path
 
+from dotenv import load_dotenv
+load_dotenv()
+
+from shared.utils.logging_config import configure_logging
+configure_logging()
+
 # Disable OpenTelemetry tracing to avoid TaskGroup errors with ParallelAgent
-os.environ['OTEL_SDK_DISABLED'] = 'true'
+# Only when OTEL_TRACING_ENABLED is not explicitly enabled
+if os.getenv("OTEL_TRACING_ENABLED", "false").lower() not in ("true", "1", "yes"):
+    os.environ["OTEL_SDK_DISABLED"] = "true"
 
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -20,8 +28,6 @@ from fastapi import HTTPException
 import uvicorn
 from dotenv import load_dotenv
 from prometheus_fastapi_instrumentator import Instrumentator
-
-load_dotenv()
 
 logger = logging.getLogger(__name__)
 

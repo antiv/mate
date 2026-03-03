@@ -33,24 +33,69 @@ def rbac_before_model_callback(callback_context: CallbackContext, llm_request: L
     Returns:
         LlmResponse with error message if access denied, None to continue normally
     """
+    span = None
+    try:
+        from shared.utils.tracing.tracing_config import is_tracing_enabled
+        if is_tracing_enabled():
+            from opentelemetry import trace
+            from shared.utils.tracing.tracer import get_tracer
+            from shared.utils.tracing.genai_attributes import MATE_AGENT_NAME, MATE_USER_ID, MATE_RBAC_ALLOWED
+            tracer = get_tracer("mate", "1.0.0")
+            span = tracer.start_span("mate.rbac_check")
+            logger.debug(
+                "trace: mate.rbac_check span started agent=%s",
+                getattr(callback_context, "agent_name", None),
+            )
+            agent_name = getattr(callback_context, 'agent_name', None) or (
+                getattr(callback_context.agent, 'name', None) if hasattr(callback_context, 'agent') and callback_context.agent else None
+            )
+            user_id = _get_user_id(callback_context)
+            if agent_name:
+                span.set_attribute(MATE_AGENT_NAME, agent_name)
+            if user_id:
+                span.set_attribute(MATE_USER_ID, user_id)
+    except Exception:
+        pass
+
     try:
         # Extract user information
         user_id = _get_user_id(callback_context)
         if not user_id:
+            if span:
+                try:
+                    span.set_attribute("mate.rbac.allowed", True)
+                    logger.debug("trace: mate.rbac_check span ended allowed=True")
+                    span.end()
+                except Exception:
+                    pass
             logger.warning("No user ID found, allowing access (fallback behavior)")
             return None
-        
+
         # Get agent information from context
         agent_name = getattr(callback_context, 'agent_name', None)
         if not agent_name and hasattr(callback_context, 'agent') and callback_context.agent:
             agent_name = getattr(callback_context.agent, 'name', None)
         
         if not agent_name:
+            if span:
+                try:
+                    span.set_attribute("mate.rbac.allowed", True)
+                    logger.debug("trace: mate.rbac_check span ended allowed=True")
+                    span.end()
+                except Exception:
+                    pass
             logger.warning("No agent name found in context, allowing access")
             return None
-        
+
         # Skip RBAC check for certain system agents or if no restrictions
         if _should_skip_rbac_check(agent_name):
+            if span:
+                try:
+                    span.set_attribute("mate.rbac.allowed", True)
+                    logger.debug("trace: mate.rbac_check span ended allowed=True")
+                    span.end()
+                except Exception:
+                    pass
             logger.debug(f"Skipping RBAC check for agent: {agent_name}")
             return None
         
@@ -61,6 +106,13 @@ def rbac_before_model_callback(callback_context: CallbackContext, llm_request: L
         # Get or create user (this will create user with default 'user' role if not exists)
         user = user_service.get_or_create_user(user_id)
         if not user:
+            if span:
+                try:
+                    span.set_attribute("mate.rbac.allowed", False)
+                    logger.debug("trace: mate.rbac_check span ended allowed=False")
+                    span.end()
+                except Exception:
+                    pass
             logger.error(f"Failed to get/create user {user_id}")
             return _create_access_denied_response(
                 "Authentication failed. Please try again.",
@@ -93,6 +145,13 @@ def rbac_before_model_callback(callback_context: CallbackContext, llm_request: L
             logger.error(f"Error getting agent config for {agent_name}: {e}")
         
         if not agent_config:
+            if span:
+                try:
+                    span.set_attribute("mate.rbac.allowed", True)
+                    logger.debug("trace: mate.rbac_check span ended allowed=True")
+                    span.end()
+                except Exception:
+                    pass
             logger.warning(f"Agent config not found for {agent_name}, allowing access")
             return None
         
@@ -114,6 +173,13 @@ def rbac_before_model_callback(callback_context: CallbackContext, llm_request: L
         has_access, error_message = rbac_middleware.check_agent_access(user_id, config_dict)
         
         if not has_access:
+            if span:
+                try:
+                    span.set_attribute("mate.rbac.allowed", False)
+                    logger.debug("trace: mate.rbac_check span ended allowed=False")
+                    span.end()
+                except Exception:
+                    pass
             user_roles = user.get_roles()
             required_roles = config_dict.get('allowed_for_roles', [])
             logger.error(f"RBAC: Access DENIED for user '{user_id}' to agent '{agent_name}'. User roles: {user_roles}, Required: {required_roles}")
@@ -127,10 +193,23 @@ def rbac_before_model_callback(callback_context: CallbackContext, llm_request: L
             )
         
         # Access granted, log success
+        if span:
+            try:
+                span.set_attribute("mate.rbac.allowed", True)
+                span.end()
+            except Exception:
+                pass
         logger.debug(f"RBAC: Access granted for user {user_id} to agent {agent_name}")
         return None  # Continue with normal processing
-        
+
     except Exception as e:
+        if span:
+            try:
+                span.set_attribute("mate.rbac.allowed", True)
+                logger.debug("trace: mate.rbac_check span ended allowed=True (exception path)")
+                span.end()
+            except Exception:
+                pass
         logger.error(f"Error in RBAC callback: {e}")
         # In case of errors, allow access to prevent system breakage
         return None
