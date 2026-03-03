@@ -21,8 +21,8 @@
         <div class="px-4 py-2 border-b border-gray-200 dark:border-gray-700">
             <h3 class="text-sm font-semibold text-gray-900 dark:text-white">Users</h3>
         </div>
-        <div class="overflow-auto max-h-[calc(100vh-200px)]">
-            <table id="usersTable" class="w-full divide-y divide-gray-200 dark:divide-gray-700 table-fixed">
+        <div class="overflow-auto max-h-[calc(100vh-200px)] table-responsive">
+            <table id="usersTable" class="w-full divide-y divide-gray-200 dark:divide-gray-700 table-fixed table-cards-mobile">
                 <thead class="bg-gray-50 dark:bg-gray-700">
                     <tr>
                         <th class="px-3 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-1/6">User ID</th>
@@ -36,13 +36,13 @@
                 <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700" id="usersTableBody">
                     {% for user in users %}
                     <tr class="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700" onclick="event.stopPropagation(); editUser('{{ user.user_id }}')">
-                        <td class="px-3 py-1.5 text-xs font-medium text-gray-900 dark:text-white truncate">{{ user.user_id }}</td>
-                        <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate">
+                        <td class="px-3 py-1.5 text-xs font-medium text-gray-900 dark:text-white truncate" data-label="User ID">{{ user.user_id }}</td>
+                        <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate" data-label="Roles">
                             {% for role in user.roles %}
                                 <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 mr-1">{{ role }}</span>
                             {% endfor %}
                         </td>
-                        <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate">
+                        <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate" data-label="Profile">
                             {% if user.profile_data %}
                                 <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200">
                                     <i class="fas fa-check mr-1"></i>Has Profile
@@ -53,13 +53,13 @@
                                 </span>
                             {% endif %}
                         </td>
-                        <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate">{{ user.created_at[:16].replace('T', ' ') if user.created_at else 'N/A' }}</td>
-                        <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate">{{ user.updated_at[:16].replace('T', ' ') if user.updated_at else 'N/A' }}</td>
-                        <td class="px-3 py-1.5 text-xs font-medium space-x-1">
-                            <button onclick="editUser('{{ user.user_id }}')" class="text-blue-600 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300">
+                        <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate" data-label="Created">{{ user.created_at[:16].replace('T', ' ') if user.created_at else 'N/A' }}</td>
+                        <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate" data-label="Last Updated">{{ user.updated_at[:16].replace('T', ' ') if user.updated_at else 'N/A' }}</td>
+                        <td class="px-3 py-1.5 text-xs font-medium space-x-1" data-label="Actions">
+                            <button onclick="event.stopPropagation(); editUser('{{ user.user_id }}')" class="text-blue-600 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300 min-h-[44px] min-w-[44px] touch-target px-2">
                                 <i class="fas fa-edit"></i> Edit
                             </button>
-                            <button onclick="deleteUser('{{ user.user_id }}')" class="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300">
+                            <button onclick="event.stopPropagation(); deleteUser('{{ user.user_id }}')" class="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300 min-h-[44px] min-w-[44px] touch-target px-2">
                                 <i class="fas fa-trash"></i> Delete
                             </button>
                         </td>
@@ -72,7 +72,7 @@
 </div>
 
 <!-- Create User Modal -->
-<div id="createUserModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden z-50">
+<div id="createUserModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden z-50 dashboard-modal">
     <div class="flex items-center justify-center min-h-screen p-4">
         <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full">
             <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
@@ -89,9 +89,9 @@
                         <input type="text" id="userRoles" name="userRoles" placeholder="user, admin" class="mt-1 block w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
                     </div>
                 </div>
-                <div class="flex justify-end space-x-3 mt-6">
-                    <button type="button" onclick="hideCreateUserModal()" class="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-200 dark:bg-gray-600 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500">Cancel</button>
-                    <button type="submit" id="createUserSubmitBtn" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center">
+                <div class="flex justify-end gap-3 mt-6">
+                    <button type="button" onclick="hideCreateUserModal()" class="px-4 py-2 min-h-[44px] text-gray-700 dark:text-gray-300 bg-gray-200 dark:bg-gray-600 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500 touch-target">Cancel</button>
+                    <button type="submit" id="createUserSubmitBtn" class="px-4 py-2 min-h-[44px] bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center touch-target">
                         <i id="createUserLoader" class="fas fa-spinner fa-spin mr-2 hidden"></i>
                         <span id="createUserBtnText">Create User</span>
                     </button>
@@ -102,7 +102,7 @@
 </div>
 
 <!-- Edit User Modal -->
-<div id="editUserModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden z-50">
+<div id="editUserModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden z-50 dashboard-modal">
     <div class="flex items-center justify-center min-h-screen p-4">
         <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
             <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
@@ -125,9 +125,9 @@
                         <textarea id="editUserProfile" name="editUserProfile" rows="12" class="mt-1 block w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-xs" placeholder="Enter user profile data..."></textarea>
                     </div>
                 </div>
-                <div class="flex justify-end space-x-3 mt-6">
-                    <button type="button" onclick="hideEditUserModal()" class="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-200 dark:bg-gray-600 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500">Cancel</button>
-                    <button type="submit" id="editUserSubmitBtn" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center">
+                <div class="flex justify-end gap-3 mt-6">
+                    <button type="button" onclick="hideEditUserModal()" class="px-4 py-2 min-h-[44px] text-gray-700 dark:text-gray-300 bg-gray-200 dark:bg-gray-600 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500 touch-target">Cancel</button>
+                    <button type="submit" id="editUserSubmitBtn" class="px-4 py-2 min-h-[44px] bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center touch-target">
                         <i id="editUserLoader" class="fas fa-spinner fa-spin mr-2 hidden"></i>
                         <span id="editUserBtnText">Update User</span>
                     </button>

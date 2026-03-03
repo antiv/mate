@@ -234,6 +234,18 @@ async def get_admin_redoc(username: str = Depends(get_auth_user)):
     )
 
 
+# ---------- Service Worker (PWA) - must be at root for scope ----------
+from fastapi.responses import FileResponse
+
+@app.get("/sw.js", include_in_schema=False)
+async def service_worker():
+    """Serve service worker at root for PWA scope."""
+    sw_path = project_root / "static" / "sw.js"
+    if sw_path.exists():
+        return FileResponse(sw_path, media_type="application/javascript")
+    return Response(status_code=404)
+
+
 # ---------- Include routers ----------
 from server.auth_routes import router as auth_router
 from server.proxy_routes import router as proxy_router

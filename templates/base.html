@@ -3,8 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#3b82f6">
     <title>{% block title %}MATE Dashboard{% endblock %}</title>
     <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <link rel="manifest" href="/static/manifest.json">
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -39,6 +41,7 @@
             border-radius: 15px;
             cursor: pointer;
             transition: background-color 0.3s;
+            overflow: visible;
         }
         
         .dark .theme-switcher {
@@ -50,8 +53,9 @@
             position: absolute;
             top: 3px;
             left: 3px;
-            width: 24px;
-            height: 24px;
+            height: calc(100% - 6px);
+            width: auto;
+            aspect-ratio: 1;
             background-color: white;
             border-radius: 50%;
             transition: transform 0.3s;
@@ -59,7 +63,7 @@
         }
         
         .dark .theme-switcher::before {
-            transform: translateX(30px);
+            transform: translateX(calc(60px - 100% - 6px));
             background-color: #1f2937;
         }
         
@@ -67,17 +71,20 @@
             position: absolute;
             top: 50%;
             transform: translateY(-50%);
-            font-size: 12px;
+            font-size: 11px;
             transition: opacity 0.3s;
+            width: 1em;
+            text-align: center;
         }
         
         .theme-icon.sun {
-            left: 6px;
+            left: 14px;
             color: #f59e0b;
         }
         
         .theme-icon.moon {
-            right: 6px;
+            left: 36px;
+            right: auto;
             color: #60a5fa;
             opacity: 0;
         }
@@ -143,42 +150,76 @@
                 transform: translateX(0);
             }
         }
+
+        /* Mobile sidebar - drawer overlay */
+        @media (max-width: 767px) {
+            #sidebar {
+                position: fixed;
+                top: 0;
+                left: 0;
+                z-index: 50;
+                width: 16rem !important;
+                height: 100vh;
+                transform: translateX(-100%);
+                transition: transform 0.3s ease;
+                box-shadow: none;
+            }
+            #sidebar.mobile-sidebar-open {
+                transform: translateX(0);
+                box-shadow: 4px 0 12px rgba(0,0,0,0.15);
+            }
+            #sidebar .sidebar-minimized { width: 16rem !important; }
+            #sidebarToggle { display: none !important; }
+        }
+        @media (min-width: 768px) {
+            #sidebarBackdrop { display: none !important; }
+            #hamburgerBtn { display: none !important; }
+        }
     </style>
+    <link rel="stylesheet" href="/static/css/dashboard-responsive.css">
+    {% block extra_head %}{% endblock %}
     <script src="/static/js/server-control.js"></script>
+    <script src="/static/js/dashboard-nav.js"></script>
 </head>
 <body class="bg-gray-50 dark:bg-gray-900">
+    <!-- Sidebar backdrop (mobile) -->
+    <div id="sidebarBackdrop" class="hidden fixed inset-0 bg-black/50 z-40 md:hidden" aria-hidden="true"></div>
+
     <!-- Navigation -->
     <nav class="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700">
-        <div class="flex justify-between items-center h-12 px-3">
+        <div class="flex justify-between items-center h-12 px-3 min-h-[48px]">
             <div class="flex items-center space-x-3">
+                <button id="hamburgerBtn" type="button" class="touch-target p-2 -ml-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white md:hidden" aria-label="Open menu">
+                    <i class="fas fa-bars text-lg"></i>
+                </button>
                 <img src="/static/logo.png" alt="MATE Logo" class="h-8 w-8 object-contain">
-                <h1 class="text-xl font-bold text-gray-900 dark:text-white">MATE Dashboard</h1>
+                <h1 class="text-xl font-bold text-gray-900 dark:text-white truncate">MATE Dashboard</h1>
             </div>
-            <div class="flex items-center space-x-4 pr-4">
-                    <!-- ADK Server Control -->
-                    <div class="flex items-center space-x-2">
+            <div class="flex items-center space-x-2 sm:space-x-4 pr-2 sm:pr-4">
+                    <!-- ADK Server Control - compact on mobile -->
+                    <div class="hidden sm:flex items-center space-x-2">
                         <div id="adkStatusIndicator" class="w-2 h-2 bg-gray-400 rounded-full"></div>
                         <span id="adkStatusText" class="text-sm text-gray-600 dark:text-gray-400">Checking...</span>
                         <div class="flex space-x-1">
-                            <button id="startAdkBtn" onclick="controlAdkServer('start')" class="px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 hidden">
+                            <button id="startAdkBtn" onclick="controlAdkServer('start')" class="px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 hidden touch-target">
                                 <i class="fas fa-play"></i>
                             </button>
-                            <button id="stopAdkBtn" onclick="controlAdkServer('stop')" class="px-2 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700 hidden">
+                            <button id="stopAdkBtn" onclick="controlAdkServer('stop')" class="px-2 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700 hidden touch-target">
                                 <i class="fas fa-stop"></i>
                             </button>
-                            <button id="restartAdkBtn" onclick="controlAdkServer('restart')" class="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 hidden">
+                            <button id="restartAdkBtn" onclick="controlAdkServer('restart')" class="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 hidden touch-target">
                                 <i class="fas fa-redo"></i>
                             </button>
                         </div>
                     </div>
                     <!-- Theme Switcher -->
-                    <div class="theme-switcher" onclick="toggleTheme()">
+                    <div class="theme-switcher touch-target flex items-center justify-center" onclick="toggleTheme()" role="button" tabindex="0" aria-label="Toggle theme">
                         <i class="fas fa-sun theme-icon sun"></i>
                         <i class="fas fa-moon theme-icon moon"></i>
                     </div>
-                    <span class="text-gray-700 dark:text-gray-300">Welcome, {{ username }}</span>
+                    <span class="text-gray-700 dark:text-gray-300 hidden sm:inline text-sm">Welcome, {{ username }}</span>
                     <div class="relative">
-                        <button id="userMenuButton" onclick="toggleUserMenu()" class="bg-gray-200 dark:bg-gray-600 rounded-full w-8 h-8 flex items-center justify-center p-0 hover:bg-gray-300 dark:hover:bg-gray-500 transition-colors">
+                        <button id="userMenuButton" onclick="toggleUserMenu()" class="bg-gray-200 dark:bg-gray-600 rounded-full w-9 h-9 flex items-center justify-center p-0 hover:bg-gray-300 dark:hover:bg-gray-500 transition-colors touch-target">
                             <i class="fas fa-user text-gray-600 dark:text-gray-300 text-xs"></i>
                         </button>
                         <div id="userMenuDropdown" class="hidden absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-md shadow-lg py-1 z-50 border border-gray-200 dark:border-gray-700">
@@ -198,6 +239,12 @@
     <div class="flex">
         <!-- Sidebar -->
         <aside id="sidebar" class="w-48 bg-white dark:bg-gray-800 shadow-sm h-screen sticky top-0 transition-all duration-300 sidebar-collapsible flex flex-col">
+            <div class="flex justify-between items-center p-3 border-b border-gray-200 dark:border-gray-700 md:hidden">
+                <span class="text-sm font-semibold text-gray-900 dark:text-white">Menu</span>
+                <button type="button" onclick="closeMobileSidebar()" class="touch-target p-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300" aria-label="Close menu">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
             <nav class="mt-4 flex-1">
                 <div class="px-2 space-y-1">
                     <a href="/dashboard" class="flex items-center px-3 py-2 text-sm text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 {% if request.url.path == '/dashboard' %}sidebar-active{% endif %}" title="Overview">
@@ -248,7 +295,7 @@
         </aside>
 
         <!-- Main Content -->
-        <main class="flex-1 p-4 bg-gray-50 dark:bg-gray-900">
+        <main class="flex-1 p-4 md:p-4 bg-gray-50 dark:bg-gray-900 min-w-0">
             {% block content %}{% endblock %}
         </main>
     </div>
@@ -295,6 +342,9 @@
         // Initialize server control when page loads
         document.addEventListener('DOMContentLoaded', function() {
             initServerControl();
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.register('/sw.js').catch(function() {});
+            }
         });
         
         // Global JavaScript functions
@@ -338,7 +388,7 @@
             // Set a unique ID to target with CSS if needed
             notification.id = 'mate-notification-' + Date.now();
             const textColor = isDark ? 'text-white' : 'text-gray-900';
-            notification.className = `fixed top-4 right-4 px-4 py-3 rounded-lg ${textColor} z-[9999] shadow-2xl flex items-center space-x-2 min-w-[300px] max-w-[500px] border-2`;
+            notification.className = `fixed top-4 right-4 mate-notification px-4 py-3 rounded-lg ${textColor} z-[9999] shadow-2xl flex items-center space-x-2 min-w-[300px] max-w-[500px] border-2`;
             // Force completely opaque background - same as modal
             notification.style.setProperty('background-color', bgColorRgba, 'important');
             notification.style.setProperty('background', bgColorRgba, 'important');

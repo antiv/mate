@@ -1,0 +1,354 @@
+/* MATE Dashboard Responsive Styles
+ * Breakpoints: 375px (mobile), 768px (tablet), 1024px (desktop)
+ */
+
+/* Config modals: scrollable body, sticky footer (all viewports) */
+.config-modal-box {
+  display: flex;
+  flex-direction: column;
+  max-height: min(90vh, 100dvh);
+}
+.config-modal-box.max-h-\[85vh\] {
+  max-height: min(85vh, 100dvh);
+}
+.config-modal-box > div:first-child,
+.config-modal-box > div:last-child {
+  flex-shrink: 0;
+}
+.config-modal-box > div:nth-child(2) {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Touch targets - WCAG 2.5.5 min 44x44px */
+@media (max-width: 767px) {
+  .touch-target {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* Table horizontal scroll (fallback when not using cards) */
+  .table-responsive {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .table-responsive table {
+    min-width: 600px;
+  }
+
+  /* Mobile table card layout: full width, no horizontal scroll */
+  .table-responsive:has(.table-cards-mobile) {
+    overflow-x: visible;
+  }
+  .table-responsive .table-cards-mobile {
+    min-width: 0 !important;
+    width: 100%;
+  }
+
+  /* Mobile table card layout: hide thead, show each row as a card with data-label on td */
+  .table-cards-mobile thead {
+    display: none;
+  }
+
+  .table-cards-mobile tbody tr {
+    display: block;
+    margin-bottom: 0.75rem;
+    border: 1px solid var(--tw-border-opacity, 1) rgb(229 231 235);
+    border-radius: 0.5rem;
+    padding: 0.75rem;
+    background: white;
+  }
+
+  .dark .table-cards-mobile tbody tr {
+    border-color: rgb(55 65 81);
+    background: rgb(31 41 55);
+  }
+
+  .table-cards-mobile tbody td {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.5rem 0;
+    border: none;
+    text-align: left;
+  }
+
+  .table-cards-mobile tbody td:not(:last-child) {
+    border-bottom: 1px solid rgb(243 244 246);
+  }
+
+  .dark .table-cards-mobile tbody td:not(:last-child) {
+    border-bottom-color: rgb(55 65 81);
+  }
+
+  .table-cards-mobile tbody td::before {
+    content: attr(data-label);
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: rgb(107 114 128);
+    flex-shrink: 0;
+    min-width: 6rem;
+  }
+
+  .dark .table-cards-mobile tbody td::before {
+    color: rgb(156 163 175);
+  }
+
+  .table-cards-mobile tbody td .truncate,
+  .table-cards-mobile tbody td.truncate {
+    white-space: normal;
+    word-break: break-word;
+  }
+
+  /* Actions cell: wrap buttons, full width */
+  .table-cards-mobile tbody td[data-label="Actions"] {
+    flex-wrap: wrap;
+    border-bottom: none;
+    padding-top: 0.75rem;
+  }
+
+  .table-cards-mobile tbody td[data-label="Actions"]::before {
+    width: 100%;
+    margin-bottom: 0.25rem;
+  }
+
+  .table-cards-mobile .table-card-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    width: 100%;
+  }
+
+  .table-cards-mobile .table-card-actions a,
+  .table-cards-mobile .table-card-actions button {
+    min-height: 44px;
+    min-width: 44px;
+    padding: 0.5rem 0.75rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* Modal full-width on mobile */
+  .modal-responsive {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    border-radius: 0 !important;
+  }
+
+  /* All fixed modals: full-screen inner content, scrollable */
+  .dashboard-modal.fixed,
+  .dashboard-modal[class*="inset-0"] {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 0;
+  }
+
+  .dashboard-modal .flex[class*="min-h-screen"],
+  .dashboard-modal .flex.items-center.justify-center {
+    padding: 0.5rem;
+    align-items: flex-start;
+  }
+
+  .dashboard-modal .flex[class*="min-h-screen"] > div,
+  .dashboard-modal .flex.items-center.justify-center > div {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    border-radius: 0 !important;
+    max-height: 100vh;
+    max-height: 100dvh;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Form controls: touch-friendly on mobile */
+  .dashboard-modal input:not([type="checkbox"]):not([type="radio"]),
+  .dashboard-modal select,
+  .dashboard-modal textarea {
+    min-height: 44px;
+    padding: 0.75rem 1rem;
+    font-size: 16px; /* avoids zoom on iOS */
+  }
+
+  .dashboard-modal button[type="submit"],
+  .dashboard-modal button[type="button"]:not(.close-icon),
+  .dashboard-modal .btn-primary {
+    min-height: 44px;
+    padding: 0.75rem 1rem;
+  }
+
+  .dashboard-modal label {
+    margin-bottom: 0.25rem;
+  }
+
+  /* Stats grid - stack on mobile */
+  .stats-grid-responsive {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Chart container */
+  .chart-responsive {
+    min-height: 200px;
+    max-height: 280px;
+  }
+
+  /* Agent modals - full width on mobile */
+  #createAgentModal .modal-side-panel > div,
+  #editAgentModal .modal-side-panel > div,
+  #copyAgentModal .modal-side-panel > div {
+    max-width: 100% !important;
+    width: 100% !important;
+    margin: 0 !important;
+    border-radius: 0 !important;
+    overflow-x: hidden;
+  }
+
+  /* Agent modal: prevent horizontal overflow in form */
+  #createAgentModal .modal-side-panel form,
+  #editAgentModal .modal-side-panel form,
+  #copyAgentModal .modal-side-panel form {
+    min-width: 0;
+  }
+  #createAgentModal .modal-side-panel input,
+  #editAgentModal .modal-side-panel input,
+  #copyAgentModal .modal-side-panel input,
+  #createAgentModal .modal-side-panel textarea,
+  #editAgentModal .modal-side-panel textarea,
+  #copyAgentModal .modal-side-panel textarea {
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  /* Agent modal form: single column on mobile */
+  #createAgentModal .modal-side-panel .grid.grid-cols-2,
+  #editAgentModal .modal-side-panel .grid.grid-cols-2,
+  #copyAgentModal .modal-side-panel .grid.grid-cols-2 {
+    grid-template-columns: 1fr;
+  }
+
+  /* Agents page: prevent main content overflow */
+  .agents-page-header {
+    min-width: 0;
+  }
+  .agents-toolbar {
+    width: 100%;
+  }
+  .agents-toolbar .relative {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+  .agents-toolbar select,
+  .agents-toolbar input[type="text"] {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100%;
+  }
+  .agents-toolbar > div.flex {
+    width: 100%;
+  }
+
+  /* Config modals on mobile: full width, safe height */
+  [id$="ToolConfigModal"] > div.relative.z-10,
+  [id$="McpServersConfigModal"] > div.relative.z-10,
+  [id$="PlannerConfigModal"] > div.relative.z-10,
+  [id$="GenerateContentConfigModal"] > div.relative.z-10,
+  [id$="InputSchemaModal"] > div.relative.z-10,
+  [id$="OutputSchemaModal"] > div.relative.z-10,
+  [id$="GuardrailConfigModal"] > div.relative.z-10 {
+    width: 100%;
+    max-width: 100%;
+    margin: 0.5rem 0;
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    min-height: 0;
+    max-height: calc(100dvh - 1rem);
+  }
+  .config-modal-box {
+    max-height: calc(100dvh - 1rem);
+    height: calc(100dvh - 1rem);
+    min-height: 0;
+  }
+  .config-modal-box textarea,
+  .config-modal-box pre {
+    word-break: break-word;
+    min-width: 0;
+  }
+  /* Tighter padding in config modal content on mobile so more fits above the fold */
+  .config-modal-box > div:nth-child(2) {
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+    padding-top: 0.75rem;
+    padding-bottom: 0.75rem;
+  }
+
+  /* Log Details modal: ensure content area is visible and scrollable on mobile */
+  .log-details-modal-inner {
+    max-height: calc(100dvh - 2rem);
+  }
+  #logDetailsContent {
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Rate limits page: config list items wrap on small screens */
+  #configList > div {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  #configList > div > div:first-child {
+    min-width: 0;
+  }
+  #configList > div > div:last-child {
+    flex-shrink: 0;
+  }
+}
+
+/* Traces table: truncate Trace ID on desktop, full wrap on mobile */
+.traces-table td.trace-id-cell {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Trace Detail modal: cap height so content scrolls */
+.trace-detail-modal-panel {
+  max-height: min(85vh, calc(100dvh - 2rem));
+  height: min(85vh, calc(100dvh - 2rem));
+}
+@media (max-width: 767px) {
+  .table-cards-mobile td.trace-id-cell {
+    max-width: none;
+    white-space: normal;
+    word-break: break-all;
+    overflow: visible;
+  }
+}
+
+/* Tablet */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .stats-grid-responsive {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}
+
+/* Notifications - responsive position */
+@media (max-width: 767px) {
+  .mate-notification {
+    top: 0.5rem;
+    right: 0.5rem;
+    left: 0.5rem;
+    min-width: auto;
+    max-width: none;
+  }
+}

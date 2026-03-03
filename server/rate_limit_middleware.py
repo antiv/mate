@@ -33,7 +33,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
     def __init__(self, app, skip_paths: Optional[list] = None):
         super().__init__(app)
-        self.skip_paths = set(skip_paths or ["/health", "/login", "/static", "/docs", "/redoc", "/admin-docs", "/admin-redoc", "/admin-openapi.json"])
+        self.skip_paths = set(skip_paths or ["/health", "/login", "/static", "/sw.js", "/docs", "/redoc", "/admin-docs", "/admin-redoc", "/admin-openapi.json"])
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         path = request.url.path

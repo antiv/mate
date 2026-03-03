@@ -4,21 +4,21 @@
 
 {% block content %}
 <div class="space-y-4">
-    <div class="flex justify-between items-center">
-        <div>
+    <div class="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center">
+        <div class="min-w-0">
             <h2 class="text-xl font-bold text-gray-900 dark:text-white">Distributed Traces</h2>
             <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">
                 OpenTelemetry trace viewer. Enable <code class="bg-gray-100 dark:bg-gray-700 px-1 rounded">OTEL_TRACING_ENABLED=true</code> and <code class="bg-gray-100 dark:bg-gray-700 px-1 rounded">OTEL_TRACES_DB_EXPORT=true</code> to capture traces.
             </p>
         </div>
-        <div class="flex space-x-2">
-            <select id="timeRangeSelect" onchange="loadTraces()" class="border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg px-2 py-1 text-xs">
+        <div class="flex flex-wrap items-center gap-2 flex-shrink-0">
+            <select id="timeRangeSelect" onchange="loadTraces()" class="border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg px-2 py-1.5 text-xs min-h-[44px] touch-target">
                 <option value="1">Last 1 hour</option>
                 <option value="6">Last 6 hours</option>
                 <option value="24" selected>Last 24 hours</option>
                 <option value="72">Last 3 days</option>
             </select>
-            <button onclick="loadTraces()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 text-xs rounded-lg flex items-center">
+            <button onclick="loadTraces()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 text-xs rounded-lg flex items-center min-h-[44px] touch-target">
                 <i class="fas fa-sync-alt mr-1"></i>Refresh
             </button>
         </div>
@@ -26,8 +26,8 @@
 
     <div id="tracesError" class="hidden bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-3 text-sm text-yellow-800 dark:text-yellow-200"></div>
 
-    <div id="tracesList" class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
-        <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+    <div id="tracesList" class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden table-responsive">
+        <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700 traces-table table-cards-mobile">
             <thead class="bg-gray-50 dark:bg-gray-700">
                 <tr>
                     <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300">Trace ID</th>
@@ -45,14 +45,17 @@
         </table>
     </div>
 
-    <div id="traceDetail" class="hidden mt-4 bg-white dark:bg-gray-800 rounded-lg shadow p-4">
-        <div class="flex justify-between items-center mb-3">
-            <h3 class="font-semibold text-gray-900 dark:text-white">Trace Detail</h3>
-            <button onclick="closeTraceDetail()" class="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">
-                <i class="fas fa-times"></i>
-            </button>
+    <!-- Trace Detail Modal -->
+    <div id="traceDetailModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden z-50 overflow-y-auto" onclick="if (event.target === this) closeTraceDetail()">
+        <div class="trace-detail-modal-panel relative top-4 md:top-20 mx-auto p-4 md:p-5 w-full max-w-3xl max-h-[85vh] flex flex-col bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700" onclick="event.stopPropagation()">
+            <div class="flex justify-between items-center mb-3 flex-shrink-0">
+                <h3 class="font-semibold text-gray-900 dark:text-white">Trace Detail</h3>
+                <button type="button" onclick="closeTraceDetail()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div id="traceDetailContent" class="space-y-2 flex-1 min-h-0 overflow-y-auto text-sm text-gray-700 dark:text-gray-300"></div>
         </div>
-        <div id="traceDetailContent" class="space-y-2 max-h-96 overflow-y-auto"></div>
     </div>
 </div>
 {% endblock %}

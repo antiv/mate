@@ -5,7 +5,7 @@
 {% block content %}
 <div class="space-y-4">
     <!-- Header -->
-    <div class="flex justify-between items-center">
+    <div class="flex flex-col gap-4 md:flex-row md:justify-between md:items-center">
         <div>
             <h2 class="text-xl font-bold text-gray-900 dark:text-white">
                 {% if view == "analytics" %}Usage Analytics{% else %}Token Usage Logs{% endif %}
@@ -18,15 +18,15 @@
                 {% endif %}
             </p>
         </div>
-        <div class="flex space-x-2">
+        <div class="flex flex-wrap gap-2 items-center">
             <!-- View Toggle Switch -->
             <div class="flex items-center space-x-1 bg-gray-100 dark:bg-gray-700 rounded-lg p-0.5">
                 <button onclick="switchView('analytics')" 
-                        class="px-3 py-1.5 rounded-md text-xs font-medium transition-colors {% if view == 'analytics' %}bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm{% else %}text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300{% endif %}">
+                        class="px-3 py-2 min-h-[44px] rounded-md text-xs font-medium transition-colors touch-target {% if view == 'analytics' %}bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm{% else %}text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300{% endif %}">
                     <i class="fas fa-chart-bar mr-1"></i>Analytics
                 </button>
                 <button onclick="switchView('logs')" 
-                        class="px-3 py-1.5 rounded-md text-xs font-medium transition-colors {% if view == 'logs' %}bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm{% else %}text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300{% endif %}">
+                        class="px-3 py-2 min-h-[44px] rounded-md text-xs font-medium transition-colors touch-target {% if view == 'logs' %}bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm{% else %}text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300{% endif %}">
                     <i class="fas fa-table mr-1"></i>Raw Data
                 </button>
             </div>
@@ -47,7 +47,7 @@
                     <option value="30d">Last 30 Days</option>
                 {% endif %}
             </select>
-            <button onclick="refreshPage()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 text-xs rounded-lg flex items-center">
+            <button onclick="refreshPage()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 text-xs rounded-lg flex items-center min-h-[44px] touch-target">
                 <i class="fas fa-sync-alt mr-1"></i>
                 Refresh
             </button>
@@ -173,8 +173,8 @@
         <div class="px-4 py-2 border-b border-gray-200 dark:border-gray-700">
             <h3 class="text-sm font-semibold text-gray-900 dark:text-white">Agent Performance Details</h3>
         </div>
-        <div class="overflow-auto max-h-[calc(100vh-200px)]">
-            <table id="usageAnalyticsTable" class="w-full divide-y divide-gray-200 dark:divide-gray-700 table-fixed">
+        <div class="overflow-x-auto overflow-y-auto max-h-[calc(100vh-200px)] table-responsive">
+            <table id="usageAnalyticsTable" class="w-full divide-y divide-gray-200 dark:divide-gray-700 min-w-[500px] table-cards-mobile">
                 <thead class="bg-gray-50 dark:bg-gray-700">
                     <tr>
                         <th class="px-3 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-2/5">Agent Name</th>
@@ -187,13 +187,13 @@
                 <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                     {% for agent in stats.top_agents %}
                     <tr>
-                        <td class="px-3 py-1.5 text-xs font-medium text-gray-900 dark:text-white truncate">{{ agent.agent or 'Unknown' }}</td>
-                        <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate">{{ agent.requests }}</td>
-                        <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate">~1.2s</td>
-                        <td class="px-3 py-1.5">
+                        <td class="px-3 py-1.5 text-xs font-medium text-gray-900 dark:text-white truncate" data-label="Agent Name">{{ agent.agent or 'Unknown' }}</td>
+                        <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate" data-label="Requests">{{ agent.requests }}</td>
+                        <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate" data-label="Avg. Response Time">~1.2s</td>
+                        <td class="px-3 py-1.5" data-label="Success Rate">
                             <span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200">98.5%</span>
                         </td>
-                        <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate">2 hours ago</td>
+                        <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate" data-label="Last Used">2 hours ago</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -219,8 +219,8 @@
                 </div>
             </div>
         </div>
-        <div class="overflow-auto max-h-[calc(100vh-200px)]">
-            <table id="usageLogsTable" class="w-full divide-y divide-gray-200 dark:divide-gray-700 table-fixed">
+        <div class="overflow-x-auto overflow-y-auto max-h-[calc(100vh-200px)] table-responsive">
+            <table id="usageLogsTable" class="w-full divide-y divide-gray-200 dark:divide-gray-700 min-w-[600px] table-cards-mobile">
                 <thead class="bg-gray-50 dark:bg-gray-700">
                     <tr>
                         <th class="px-3 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-1/6">Timestamp</th>
@@ -236,34 +236,34 @@
                 <tbody id="logsTableBody" class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                     {% for log in logs %}
                     <tr class="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700" onclick="showLogDetails('{{ log.id }}')">
-                        <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate">
+                        <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate" data-label="Timestamp">
                             {% if log.timestamp %}
                                 {{ log.timestamp[:19].replace('T', ' ') }}
                             {% else %}
                                 N/A
                             {% endif %}
                         </td>
-                        <td class="px-3 py-1.5 text-xs font-mono text-gray-900 dark:text-white truncate">
-                            <button onclick="event.stopPropagation(); showLogDetails('{{ log.id }}')" class="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 underline">
+                        <td class="px-3 py-1.5 text-xs font-mono text-gray-900 dark:text-white truncate" data-label="Request ID">
+                            <button onclick="event.stopPropagation(); showLogDetails('{{ log.id }}')" class="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 underline min-h-[44px] touch-target">
                                 {{ log.request_id[:8] }}...
                             </button>
                         </td>
-                        <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate">
+                        <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate" data-label="User ID">
                             {{ log.user_id or 'N/A' }}
                         </td>
-                        <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate">
+                        <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate" data-label="Agent">
                             {{ log.agent_name or 'N/A' }}
                         </td>
-                        <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate">
+                        <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate" data-label="Model">
                             {{ log.model_name or 'N/A' }}
                         </td>
-                        <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate">
+                        <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate" data-label="Prompt Tokens">
                             {{ log.prompt_tokens or 0 }}
                         </td>
-                        <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate">
+                        <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate" data-label="Response Tokens">
                             {{ log.response_tokens or 0 }}
                         </td>
-                        <td class="px-3 py-1.5">
+                        <td class="px-3 py-1.5" data-label="Status">
                             {% if log.status == 'SUCCESS' %}
                                 <span class="inline-flex items-center px-1 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-800 dark:text-green-100">
                                     {{ log.status }}
@@ -316,20 +316,20 @@
     {% endif %}
 
     <!-- Log Details Modal -->
-    <div id="logDetailsModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50">
-        <div class="relative top-20 mx-auto p-5 border w-11/12 md:w-3/4 lg:w-1/2 shadow-lg rounded-md bg-white dark:bg-gray-800">
-            <div class="mt-3">
-                <div class="flex items-center justify-between mb-4">
+    <div id="logDetailsModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50 dashboard-modal log-details-modal">
+        <div class="log-details-modal-inner relative top-4 md:top-20 mx-auto p-4 md:p-5 border w-full md:w-3/4 lg:w-1/2 max-w-full md:max-w-none shadow-lg rounded-md md:rounded-md bg-white dark:bg-gray-800 flex flex-col h-[calc(100dvh-2rem)] md:h-auto md:max-h-none max-h-[calc(100dvh-2rem)]">
+            <div class="mt-3 flex flex-col flex-1 min-h-0">
+                <div class="flex items-center justify-between mb-4 flex-shrink-0">
                     <h3 class="text-lg font-medium text-gray-900 dark:text-white">Log Details</h3>
-                    <button type="button" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300" onclick="closeModal('logDetailsModal')">
+                    <button type="button" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 flex items-center justify-center p-1" onclick="closeModal('logDetailsModal')">
                         <i class="fas fa-times"></i>
                     </button>
                 </div>
-                <div id="logDetailsContent" class="text-gray-700 dark:text-gray-300">
+                <div id="logDetailsContent" class="text-gray-700 dark:text-gray-300 flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
                     <!-- Details will be loaded here -->
                 </div>
-                <div class="flex justify-end mt-6">
-                    <button type="button" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg transition-colors" onclick="closeModal('logDetailsModal')">Close</button>
+                <div class="flex justify-end mt-6 flex-shrink-0">
+                    <button type="button" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 min-h-[44px] rounded-lg transition-colors touch-target" onclick="closeModal('logDetailsModal')">Close</button>
                 </div>
             </div>
         </div>
@@ -666,30 +666,30 @@
         
         tbody.innerHTML = logs.map(log => `
             <tr class="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700" onclick="showLogDetails('${log.id}')">
-                <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate">
+                <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate" data-label="Timestamp">
                     ${log.timestamp ? log.timestamp.substring(0, 19).replace('T', ' ') : 'N/A'}
                 </td>
-                <td class="px-3 py-1.5 text-xs font-mono text-gray-900 dark:text-white truncate">
-                    <button onclick="event.stopPropagation(); showLogDetails('${log.id}')" class="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 underline">
+                <td class="px-3 py-1.5 text-xs font-mono text-gray-900 dark:text-white truncate" data-label="Request ID">
+                    <button onclick="event.stopPropagation(); showLogDetails('${log.id}')" class="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 underline min-h-[44px] touch-target">
                         ${log.request_id.substring(0, 8)}...
                     </button>
                 </td>
-                <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate">
+                <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate" data-label="User ID">
                     ${log.user_id || 'N/A'}
                 </td>
-                <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate">
+                <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate" data-label="Agent">
                     ${log.agent_name || 'N/A'}
                 </td>
-                <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate">
+                <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate" data-label="Model">
                     ${log.model_name || 'N/A'}
                 </td>
-                <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate">
+                <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate" data-label="Prompt Tokens">
                     ${log.prompt_tokens || 0}
                 </td>
-                <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate">
+                <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate" data-label="Response Tokens">
                     ${log.response_tokens || 0}
                 </td>
-                <td class="px-3 py-1.5">
+                <td class="px-3 py-1.5" data-label="Status">
                     ${getStatusBadge(log.status)}
                 </td>
             </tr>

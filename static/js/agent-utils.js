@@ -1371,7 +1371,7 @@ function createStatusBadge(config) {
 function createActionButton({ title, icon, className, onClick }) {
     const button = document.createElement('button');
     button.type = 'button';
-    button.className = className;
+    button.className = className + ' touch-target inline-flex items-center justify-center min-h-[44px] min-w-[44px] px-2 py-1.5';
     button.title = title;
     button.innerHTML = `<i class="${icon}"></i>`;
     button.addEventListener('click', onClick);
@@ -1423,6 +1423,7 @@ function createAgentRow(config, depth, parentName, hasChildren, isHighlighted, r
     });
 
     const nameCell = document.createElement('td');
+    nameCell.setAttribute('data-label', 'Name');
     nameCell.className = 'px-3 py-1.5 text-xs font-medium text-gray-900 dark:text-white truncate';
     const nameContainer = document.createElement('div');
     nameContainer.className = 'flex items-center space-x-2';
@@ -1458,6 +1459,7 @@ function createAgentRow(config, depth, parentName, hasChildren, isHighlighted, r
     row.appendChild(nameCell);
 
     const typeCell = document.createElement('td');
+    typeCell.setAttribute('data-label', 'Type');
     typeCell.className = 'px-3 py-1.5';
     const typeBadge = document.createElement('span');
     typeBadge.className = createTypeBadgeClass(config.type);
@@ -1466,25 +1468,31 @@ function createAgentRow(config, depth, parentName, hasChildren, isHighlighted, r
     row.appendChild(typeCell);
 
     const modelCell = document.createElement('td');
+    modelCell.setAttribute('data-label', 'Model');
     modelCell.className = 'px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate';
     modelCell.textContent = config.model_name || 'N/A';
     row.appendChild(modelCell);
 
     const parentsCell = document.createElement('td');
+    parentsCell.setAttribute('data-label', 'Parents');
     parentsCell.className = 'px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate';
     parentsCell.textContent = parents.length ? parents.join(', ') : 'None';
     row.appendChild(parentsCell);
 
     const statusCell = document.createElement('td');
+    statusCell.setAttribute('data-label', 'Status');
     statusCell.className = 'px-3 py-1.5';
     const statusBadges = createStatusBadge(config);
     statusBadges.forEach(badge => statusCell.appendChild(badge));
     row.appendChild(statusCell);
 
     const actionsCell = document.createElement('td');
+    actionsCell.setAttribute('data-label', 'Actions');
     actionsCell.className = 'px-3 py-1.5 text-xs font-medium space-x-1';
+    const actionsWrap = document.createElement('div');
+    actionsWrap.className = 'table-card-actions flex flex-wrap gap-1';
 
-    actionsCell.appendChild(createActionButton({
+    actionsWrap.appendChild(createActionButton({
         title: 'Edit',
         icon: 'fas fa-edit',
         className: 'text-blue-600 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300',
@@ -1494,7 +1502,7 @@ function createAgentRow(config, depth, parentName, hasChildren, isHighlighted, r
         }
     }));
 
-    actionsCell.appendChild(createActionButton({
+    actionsWrap.appendChild(createActionButton({
         title: 'Copy',
         icon: 'fas fa-copy',
         className: 'text-purple-600 dark:text-purple-400 hover:text-purple-900 dark:hover:text-purple-300',
@@ -1504,7 +1512,7 @@ function createAgentRow(config, depth, parentName, hasChildren, isHighlighted, r
         }
     }));
 
-    actionsCell.appendChild(createActionButton({
+    actionsWrap.appendChild(createActionButton({
         title: 'Reload',
         icon: 'fas fa-redo',
         className: 'text-yellow-600 dark:text-yellow-400 hover:text-yellow-900 dark:hover:text-yellow-300',
@@ -1514,7 +1522,7 @@ function createAgentRow(config, depth, parentName, hasChildren, isHighlighted, r
         }
     }));
 
-    actionsCell.appendChild(createActionButton({
+    actionsWrap.appendChild(createActionButton({
         title: 'Delete',
         icon: 'fas fa-trash',
         className: 'text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300',
@@ -1525,7 +1533,7 @@ function createAgentRow(config, depth, parentName, hasChildren, isHighlighted, r
     }));
 
     if (isRootAgent) {
-        actionsCell.appendChild(createActionButton({
+        actionsWrap.appendChild(createActionButton({
             title: 'Chat',
             icon: 'fas fa-comments',
             className: 'text-green-600 dark:text-green-400 hover:text-green-900 dark:hover:text-green-300',
@@ -1535,7 +1543,7 @@ function createAgentRow(config, depth, parentName, hasChildren, isHighlighted, r
             }
         }));
 
-        actionsCell.appendChild(createActionButton({
+        actionsWrap.appendChild(createActionButton({
             title: 'Widget Keys',
             icon: 'fas fa-code',
             className: 'text-teal-600 dark:text-teal-400 hover:text-teal-900 dark:hover:text-teal-300',
@@ -1568,7 +1576,7 @@ function createAgentRow(config, depth, parentName, hasChildren, isHighlighted, r
     }
     
     if (hasMemoryTools) {
-        actionsCell.appendChild(createActionButton({
+        actionsWrap.appendChild(createActionButton({
             title: 'Memory Blocks',
             icon: 'fas fa-database',
             className: 'text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300',
@@ -1583,6 +1591,7 @@ function createAgentRow(config, depth, parentName, hasChildren, isHighlighted, r
         }));
     }
 
+    actionsCell.appendChild(actionsWrap);
     row.appendChild(actionsCell);
 
     return {

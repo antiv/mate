@@ -19,8 +19,8 @@
 
 <div class="space-y-4 overflow-y-auto flex-1 p-4">
     <!-- Header -->
-    <div class="flex justify-between items-center">
-        <div>
+    <div class="flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-center agents-page-header">
+        <div class="min-w-0">
             <h2 class="text-xl font-bold text-gray-900 dark:text-white">Agent Management</h2>
             <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">Manage agent configurations and settings</p>
             {% if selected_project_id %}
@@ -30,32 +30,32 @@
             {% endif %}
             {% endif %}
         </div>
-        <div class="flex space-x-2">
-            <button onclick="exportAgents()" class="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 text-xs rounded-lg flex items-center disabled:bg-gray-400 disabled:cursor-not-allowed" {% if not selected_project_id %}disabled title="Select a project first"{% endif %}>
+        <div class="flex flex-wrap gap-2 min-w-0 flex-1 sm:flex-initial justify-end">
+            <button onclick="exportAgents()" class="bg-green-600 hover:bg-green-700 text-white px-3 py-2 text-xs rounded-lg flex items-center min-h-[44px] disabled:bg-gray-400 disabled:cursor-not-allowed touch-target" {% if not selected_project_id %}disabled title="Select a project first"{% endif %}>
                 <i class="fas fa-download mr-1.5"></i>
                 Export
             </button>
-            <button onclick="showImportModal()" class="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1.5 text-xs rounded-lg flex items-center">
+            <button onclick="showImportModal()" class="bg-purple-600 hover:bg-purple-700 text-white px-3 py-2 text-xs rounded-lg flex items-center min-h-[44px] touch-target">
                 <i class="fas fa-upload mr-1.5"></i>
                 Import
             </button>
-            <button id="saveTemplateBtn" class="bg-teal-600 hover:bg-teal-700 text-white px-3 py-1.5 text-xs rounded-lg flex items-center disabled:bg-gray-400 disabled:cursor-not-allowed" {% if not selected_project_id %}disabled title="Select a project and root agent first"{% endif %}>
+            <button id="saveTemplateBtn" class="bg-teal-600 hover:bg-teal-700 text-white px-3 py-2 text-xs rounded-lg flex items-center min-h-[44px] touch-target disabled:bg-gray-400 disabled:cursor-not-allowed" {% if not selected_project_id %}disabled title="Select a project and root agent first"{% endif %}>
                 <i class="fas fa-layer-group mr-1.5"></i>
                 Save as Template
             </button>
-            <button onclick="reinitializeAllAgents()" class="bg-yellow-600 hover:bg-yellow-700 text-white px-3 py-1.5 text-xs rounded-lg flex items-center" title="Reload all agents with fresh configuration">
+            <button onclick="reinitializeAllAgents()" class="bg-yellow-600 hover:bg-yellow-700 text-white px-3 py-2 text-xs rounded-lg flex items-center min-h-[44px] touch-target" title="Reload all agents with fresh configuration">
                 <i class="fas fa-redo mr-1.5"></i>
                 Reload All
             </button>
-            <button onclick="refreshAgentsPage()" class="bg-orange-600 hover:bg-orange-700 text-white px-3 py-1.5 text-xs rounded-lg flex items-center">
+            <button onclick="refreshAgentsPage()" class="bg-orange-600 hover:bg-orange-700 text-white px-3 py-2 text-xs rounded-lg flex items-center min-h-[44px] touch-target">
                 <i class="fas fa-sync-alt mr-1.5"></i>
                 Refresh
             </button>
-            <button id="graphEditorBtn" onclick="showCytoscapeGraphEditor()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 text-xs rounded-lg flex items-center disabled:bg-gray-400 disabled:cursor-not-allowed" {% if not selected_project_id %}disabled title="Select a project first"{% endif %}>
+            <button id="graphEditorBtn" onclick="showCytoscapeGraphEditor()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 text-xs rounded-lg flex items-center min-h-[44px] touch-target disabled:bg-gray-400 disabled:cursor-not-allowed" {% if not selected_project_id %}disabled title="Select a project first"{% endif %}>
                 <i class="fas fa-project-diagram mr-2"></i>
                 Graph Editor
             </button>
-            <button onclick="showCreateAgentModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 text-xs rounded-lg flex items-center disabled:bg-gray-400 disabled:cursor-not-allowed" {% if not selected_project_id %}disabled title="Select a project first"{% endif %}>
+            <button onclick="showCreateAgentModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 text-xs rounded-lg flex items-center min-h-[44px] touch-target disabled:bg-gray-400 disabled:cursor-not-allowed" {% if not selected_project_id %}disabled title="Select a project first"{% endif %}>
                 <i class="fas fa-plus mr-1.5"></i>
                 Add Agent
             </button>
@@ -65,9 +65,9 @@
     <!-- Agents Table -->
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
         <div class="px-4 py-2 border-b border-gray-200 dark:border-gray-700">
-            <div class="flex justify-between items-center">
+            <div class="flex flex-col gap-3 md:flex-row md:justify-between md:items-center agents-toolbar">
                 <h3 class="text-sm font-semibold text-gray-900 dark:text-white">Agent Configurations</h3>
-                <div class="flex space-x-2">
+                <div class="flex flex-wrap gap-2 min-w-0">
                     <div class="relative">
                         <select id="projectSelector" onchange="handleProjectSelection(this.value)" class="pl-2 pr-8 py-1.5 text-xs border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent min-w-[180px] {{ '' if selected_project_id else 'bg-gray-200 dark:bg-gray-800 text-gray-500 dark:text-gray-500 cursor-not-allowed' }}">
                             <option value="">Select project...</option>
@@ -104,8 +104,8 @@
                 </div>
             </div>
         </div>
-        <div class="overflow-auto max-h-[calc(100vh-200px)]">
-            <table id="agentsTable" class="w-full divide-y divide-gray-200 dark:divide-gray-700 table-fixed">
+        <div class="overflow-x-auto overflow-y-auto max-h-[calc(100vh-200px)] table-responsive">
+            <table id="agentsTable" class="w-full divide-y divide-gray-200 dark:divide-gray-700 min-w-[600px] table-cards-mobile">
                 <thead class="bg-gray-50 dark:bg-gray-700">
                     <tr>
                         <th class="px-3 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-1/6">Name</th>
