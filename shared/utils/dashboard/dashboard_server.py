@@ -47,7 +47,7 @@ class DashboardServer:
             from shared.utils.database_client import get_database_client
             from shared.utils.user_service import UserService
             from shared.utils.token_usage_service import TokenUsageService
-            from shared.utils.models import AgentConfig, AgentConfigVersion, Project, User, TokenUsageLog
+            from shared.utils.models import AgentConfig, AgentConfigVersion, Project, User, TokenUsageLog, GuardrailLog
             
             self.db_client = get_database_client()
             self.user_service = UserService()
@@ -57,6 +57,7 @@ class DashboardServer:
             self.Project = Project
             self.User = User
             self.TokenUsageLog = TokenUsageLog
+            self.GuardrailLog = GuardrailLog
             
             print("✅ Dashboard database services initialized successfully")
         except Exception as e:
@@ -618,6 +619,8 @@ class DashboardServer:
                 processed_data['planner_config'] = json.dumps(processed_data['planner_config']) if processed_data['planner_config'] else None
             if 'generate_content_config' in processed_data and isinstance(processed_data['generate_content_config'], dict):
                 processed_data['generate_content_config'] = json.dumps(processed_data['generate_content_config']) if processed_data['generate_content_config'] else None
+            if 'guardrail_config' in processed_data and isinstance(processed_data['guardrail_config'], dict):
+                processed_data['guardrail_config'] = json.dumps(processed_data['guardrail_config']) if processed_data['guardrail_config'] else None
             if 'input_schema' in processed_data and isinstance(processed_data['input_schema'], dict):
                 processed_data['input_schema'] = json.dumps(processed_data['input_schema']) if processed_data['input_schema'] else None
             if 'output_schema' in processed_data and isinstance(processed_data['output_schema'], dict):
@@ -664,7 +667,7 @@ class DashboardServer:
                         # Handle JSON fields specially - convert lists/dicts to JSON strings
                         if key in ['parent_agents', 'allowed_for_roles', 'include_contents'] and isinstance(value, list):
                             setattr(config, key, json.dumps(value) if value else None)
-                        elif key in ['mcp_servers_config', 'tool_config', 'planner_config', 'generate_content_config', 'input_schema', 'output_schema'] and isinstance(value, dict):
+                        elif key in ['mcp_servers_config', 'tool_config', 'planner_config', 'generate_content_config', 'input_schema', 'output_schema', 'guardrail_config'] and isinstance(value, dict):
                             setattr(config, key, json.dumps(value) if value else None)
                         elif key == 'project_id' and value is not None:
                             try:
@@ -758,6 +761,7 @@ class DashboardServer:
             'input_schema': config.input_schema,
             'output_schema': config.output_schema,
             'include_contents': config.include_contents,
+            'guardrail_config': config.guardrail_config,
             'disabled': config.disabled,
             'hardcoded': config.hardcoded,
             'project_id': config.project_id,
@@ -911,6 +915,7 @@ class DashboardServer:
                     "parent_agents": config.get_parent_agents(),
                     "allowed_for_roles": config.allowed_for_roles,
                     "tool_config": config.tool_config,
+                    "guardrail_config": config.guardrail_config,
                     "project_id": config.project_id,
                     "disabled": config.disabled,
                     "hardcoded": config.hardcoded
@@ -1111,6 +1116,7 @@ class DashboardServer:
                             parent_agents=parent_agents_json,
                             allowed_for_roles=agent_data.get("allowed_for_roles"),
                             tool_config=agent_data.get("tool_config"),
+                            guardrail_config=agent_data.get("guardrail_config"),
                             project_id=int(agent_data.get("project_id") or 1),
                             disabled=agent_data.get("disabled", False),
                             hardcoded=agent_data.get("hardcoded", False)
@@ -1536,6 +1542,7 @@ class DashboardServer:
             input_schema: str = Form(""),
             output_schema: str = Form(""),
             include_contents: str = Form(""),
+            guardrail_config: str = Form(""),
             max_iterations: str = Form(""),
             disabled: bool = Form(False),
             hardcoded: bool = Form(False)
@@ -1564,6 +1571,7 @@ class DashboardServer:
                 "input_schema": input_schema,
                 "output_schema": output_schema,
                 "include_contents": include_contents,
+                "guardrail_config": guardrail_config,
                 "max_iterations": int(max_iterations) if max_iterations else None,
                 "disabled": disabled,
                 "hardcoded": hardcoded
@@ -1591,6 +1599,7 @@ class DashboardServer:
             input_schema: str = Form(""),
             output_schema: str = Form(""),
             include_contents: str = Form(""),
+            guardrail_config: str = Form(""),
             max_iterations: str = Form(""),
             disabled: bool = Form(False),
             hardcoded: bool = Form(False)
@@ -1619,6 +1628,7 @@ class DashboardServer:
                 "input_schema": input_schema,
                 "output_schema": output_schema,
                 "include_contents": include_contents,
+                "guardrail_config": guardrail_config,
                 "max_iterations": int(max_iterations) if max_iterations else None,
                 "disabled": disabled,
                 "hardcoded": hardcoded
@@ -2368,4 +2378,45 @@ class DashboardServer:
         async def restart_server(request: Request, username: str = Depends(self._get_auth_user_dependency)):
             """Restart ADK server."""
             return self._restart_adk_server()
+
+        # ─── Guardrail Logs API ─────────────────────────────────────────
+
+        @self.app.get("/dashboard/api/guardrail-logs", tags=["Dashboard - Guardrails"])
+        async def get_guardrail_logs(
+            request: Request,
+            username: str = Depends(self._get_auth_user_dependency),
+            agent_name: str = None,
+            guardrail_type: str = None,
+            action_taken: str = None,
+            limit: int = 100,
+            offset: int = 0,
+        ):
+            """Get guardrail trigger logs with optional filters."""
+            if not self.db_client:
+                return {"logs": [], "total": 0}
+            session = self.db_client.get_session()
+            if not session:
+                return {"logs": [], "total": 0}
+            try:
+                from sqlalchemy import func
+                query = session.query(self.GuardrailLog)
+                if agent_name:
+                    query = query.filter(self.GuardrailLog.agent_name == agent_name)
+                if guardrail_type:
+                    query = query.filter(self.GuardrailLog.guardrail_type == guardrail_type)
+                if action_taken:
+                    query = query.filter(self.GuardrailLog.action_taken == action_taken)
+                total = query.count()
+                logs = (
+                    query.order_by(self.GuardrailLog.timestamp.desc())
+                    .offset(offset)
+                    .limit(limit)
+                    .all()
+                )
+                return {"logs": [l.to_dict() for l in logs], "total": total}
+            except Exception as e:
+                logger.error(f"Error fetching guardrail logs: {e}")
+                return {"logs": [], "total": 0, "error": str(e)}
+            finally:
+                session.close()
 

@@ -257,6 +257,7 @@ class AgentManager:
                 'input_schema': config.input_schema,
                 'output_schema': config.output_schema,
                 'include_contents': config.include_contents,
+                'guardrail_config': config.guardrail_config,
                 'allowed_for_roles': allowed_roles,
                 'project_id': config.project_id
             }
@@ -332,6 +333,7 @@ class AgentManager:
         from ..callbacks.token_usage_callback import capture_model_name_callback, log_token_usage_callback
         from ..callbacks.rbac_callback import combined_rbac_and_token_callback
         from ..callbacks.user_profile_callback import combined_user_profile_and_rbac_callback
+        from ..callbacks.guardrail_callback import guardrail_after_model_callback
         
         try:
             agent_type = config.get('type', 'llm').lower()
@@ -375,13 +377,20 @@ class AgentManager:
                 # Default to standard Agent for llm type
                 # For sub-agents of parallel agents, use simpler callbacks to avoid TaskGroup issues
                 if parent_agent_type == 'parallel':
-                    # Use only token usage callback for sub-agents of parallel agents
                     before_callback = capture_model_name_callback
                     after_callback = log_token_usage_callback
                 else:
-                    # Use full callbacks for standalone agents (includes user profile injection + RBAC + token capture)
+                    # Full callbacks: user profile + RBAC + guardrails (before) and guardrails + token logging (after)
                     before_callback = combined_user_profile_and_rbac_callback
-                    after_callback = log_token_usage_callback
+
+                    def _combined_after_with_guardrails(callback_context, llm_response):
+                        guardrail_result = guardrail_after_model_callback(callback_context, llm_response)
+                        if guardrail_result is not None:
+                            log_token_usage_callback(callback_context, guardrail_result)
+                            return guardrail_result
+                        return log_token_usage_callback(callback_context, llm_response)
+
+                    after_callback = _combined_after_with_guardrails
                 
                 # Initialize planner from configuration if present
                 planner = None
@@ -776,6 +785,7 @@ class AgentManager:
                         'input_schema': subagent_config.input_schema,
                         'output_schema': subagent_config.output_schema,
                         'include_contents': subagent_config.include_contents,
+                        'guardrail_config': subagent_config.guardrail_config,
                         'allowed_for_roles': subagent_config.allowed_for_roles
                     }
                     

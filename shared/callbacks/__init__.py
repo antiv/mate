@@ -24,6 +24,10 @@ from .token_usage_callback import (
     get_agent_token_breakdown,
     print_agent_breakdown
 )
+from .guardrail_callback import (
+    guardrail_before_model_callback,
+    guardrail_after_model_callback,
+)
 
 __all__ = [
     "block_keyword_guardrail", 
@@ -35,5 +39,7 @@ __all__ = [
     "get_complete_token_data",
     "print_token_usage_summary",
     "get_agent_token_breakdown",
-    "print_agent_breakdown"
+    "print_agent_breakdown",
+    "guardrail_before_model_callback",
+    "guardrail_after_model_callback",
 ]

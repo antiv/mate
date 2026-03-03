@@ -277,6 +277,118 @@ function updateSchemaSummary(prefix, suffix) {
     updateSummaryElement(summaryEl, parts.join(' · ') || truncateText(textarea.value.trim()), summaryEl.dataset.emptyText);
 }
 
+function updateGuardrailConfigSummary(prefix) {
+    const textarea = document.getElementById(prefix + 'GuardrailConfig');
+    const summaryEl = document.getElementById(prefix + 'GuardrailConfigSummary');
+    if (!textarea || !summaryEl) return;
+    const parsed = safeJsonParse(textarea.value);
+    if (!parsed || !parsed.guardrails || !Array.isArray(parsed.guardrails) || parsed.guardrails.length === 0) {
+        updateSummaryElement(summaryEl, '', summaryEl.dataset.emptyText);
+        return;
+    }
+    const enabled = parsed.guardrails.filter(g => g.enabled);
+    if (enabled.length === 0) {
+        updateSummaryElement(summaryEl, 'All guardrails disabled', summaryEl.dataset.emptyText);
+        return;
+    }
+    const parts = enabled.map(g => `${g.type} (${g.action || 'log'})`);
+    updateSummaryElement(summaryEl, parts.join(' · '), summaryEl.dataset.emptyText);
+}
+
+function syncJsonToGuardrailConfig(prefix) {
+    const textarea = document.getElementById(prefix + 'GuardrailConfig');
+    if (!textarea) return;
+    const parsed = safeJsonParse(textarea.value);
+    const guardrails = (parsed && parsed.guardrails && Array.isArray(parsed.guardrails)) ? parsed.guardrails : [];
+    const _set = (id, val) => { const el = document.getElementById(id); if (el) el.checked = !!val; };
+    const _setVal = (id, val) => { const el = document.getElementById(id); if (el) el.value = val || ''; };
+    if (guardrails.length === 0) {
+        _set(prefix + 'GrPii', false);
+        _set(prefix + 'GrInjection', false);
+        _set(prefix + 'GrContentPolicy', false);
+        _set(prefix + 'GrOutputLength', false);
+        _set(prefix + 'GrHallucination', false);
+    }
+    for (const g of guardrails) {
+        switch (g.type) {
+            case 'pii_detection':
+                _set(prefix + 'GrPii', g.enabled);
+                _setVal(prefix + 'GrPiiAction', g.action);
+                break;
+            case 'prompt_injection':
+                _set(prefix + 'GrInjection', g.enabled);
+                _setVal(prefix + 'GrInjectionAction', g.action);
+                _setVal(prefix + 'GrInjectionSensitivity', (g.config || {}).sensitivity || 'medium');
+                break;
+            case 'content_policy':
+                _set(prefix + 'GrContentPolicy', g.enabled);
+                _setVal(prefix + 'GrContentPolicyAction', g.action);
+                break;
+            case 'output_length':
+                _set(prefix + 'GrOutputLength', g.enabled);
+                _setVal(prefix + 'GrOutputLengthAction', g.action);
+                _setVal(prefix + 'GrMaxChars', (g.config || {}).max_characters || 10000);
+                _setVal(prefix + 'GrMaxWords', (g.config || {}).max_words || 2000);
+                break;
+            case 'hallucination_check':
+                _set(prefix + 'GrHallucination', g.enabled);
+                _setVal(prefix + 'GrHallucinationAction', g.action);
+                break;
+        }
+    }
+    updateGuardrailConfigSummary(prefix);
+}
+
+function buildGuardrailConfigFromPresets(prefix) {
+    const _checked = (id) => { const el = document.getElementById(id); return el ? el.checked : false; };
+    const _val = (id) => { const el = document.getElementById(id); return el ? el.value : ''; };
+    const guardrails = [];
+    guardrails.push({
+        type: 'pii_detection', enabled: _checked(prefix + 'GrPii'),
+        action: _val(prefix + 'GrPiiAction') || 'redact',
+        config: { detect_email: true, detect_phone: true, detect_ssn: true, detect_credit_card: true, detect_ip_address: true }
+    });
+    guardrails.push({
+        type: 'prompt_injection', enabled: _checked(prefix + 'GrInjection'),
+        action: _val(prefix + 'GrInjectionAction') || 'block',
+        config: { sensitivity: _val(prefix + 'GrInjectionSensitivity') || 'medium' }
+    });
+    guardrails.push({
+        type: 'content_policy', enabled: _checked(prefix + 'GrContentPolicy'),
+        action: _val(prefix + 'GrContentPolicyAction') || 'block',
+        config: { blocklist: [], regex_patterns: [], case_sensitive: false }
+    });
+    const maxChars = parseInt(_val(prefix + 'GrMaxChars')) || 10000;
+    const maxWords = parseInt(_val(prefix + 'GrMaxWords')) || 2000;
+    guardrails.push({
+        type: 'output_length', enabled: _checked(prefix + 'GrOutputLength'),
+        action: _val(prefix + 'GrOutputLengthAction') || 'warn',
+        config: { max_characters: maxChars, max_words: maxWords }
+    });
+    guardrails.push({
+        type: 'hallucination_check', enabled: _checked(prefix + 'GrHallucination'),
+        action: _val(prefix + 'GrHallucinationAction') || 'warn',
+        config: {}
+    });
+    return { guardrails: guardrails };
+}
+
+function applyGuardrailConfig(prefix) {
+    const config = buildGuardrailConfigFromPresets(prefix);
+    const textarea = document.getElementById(prefix + 'GuardrailConfig');
+    if (textarea) textarea.value = JSON.stringify(config, null, 2);
+    if (monacoEditors && monacoEditors[prefix + 'GuardrailConfigEditor']) {
+        setJsonInEditor(monacoEditors[prefix + 'GuardrailConfigEditor'], JSON.stringify(config, null, 2));
+    }
+    updateGuardrailConfigSummary(prefix);
+    closeConfigModal(prefix, 'GuardrailConfig');
+}
+
+window.syncJsonToGuardrailConfig = syncJsonToGuardrailConfig;
+window.updateGuardrailConfigSummary = updateGuardrailConfigSummary;
+window.applyGuardrailConfig = applyGuardrailConfig;
+window.buildGuardrailConfigFromPresets = buildGuardrailConfigFromPresets;
+
 function updateConfigSummaries(prefix) {
     updateToolConfigSummary(prefix);
     updateMcpServersConfigSummary(prefix);
@@ -284,6 +396,7 @@ function updateConfigSummaries(prefix) {
     updateGenerateContentSummary(prefix);
     updateSchemaSummary(prefix, 'InputSchema');
     updateSchemaSummary(prefix, 'OutputSchema');
+    updateGuardrailConfigSummary(prefix);
     
     // Update memory blocks section visibility based on current tool config
     const textarea = document.getElementById(prefix + 'ToolConfig');
@@ -324,6 +437,9 @@ function attachSummaryListeners(prefix) {
 function openConfigModal(prefix, fieldSuffix) {
     const modal = document.getElementById(`${prefix}${fieldSuffix}Modal`);
     if (!modal) return;
+    if (fieldSuffix === 'GuardrailConfig' && typeof syncJsonToGuardrailConfig === 'function') {
+        syncJsonToGuardrailConfig(prefix);
+    }
     modal.classList.remove('hidden');
     document.body.classList.add('config-modal-open');
 }
@@ -445,6 +561,17 @@ function applyConfigModal(prefix, fieldSuffix) {
             break;
         case 'OutputSchema':
             updateSchemaSummary(prefix, 'OutputSchema');
+            break;
+        case 'GuardrailConfig':
+            if (typeof buildGuardrailConfigFromPresets === 'function') {
+                const config = buildGuardrailConfigFromPresets(prefix);
+                const textarea = document.getElementById(prefix + 'GuardrailConfig');
+                if (textarea) textarea.value = JSON.stringify(config, null, 2);
+                if (typeof monacoEditors !== 'undefined' && monacoEditors[prefix + 'GuardrailConfigEditor']) {
+                    setJsonInEditor(monacoEditors[prefix + 'GuardrailConfigEditor'], JSON.stringify(config, null, 2));
+                }
+                updateGuardrailConfigSummary(prefix);
+            }
             break;
         default:
             break;
@@ -586,6 +713,13 @@ function editAgent(config) {
     document.getElementById('editAgentInputSchema').value = safeStringify(config.input_schema);
     document.getElementById('editAgentOutputSchema').value = safeStringify(config.output_schema);
     document.getElementById('editAgentIncludeContents').value = config.include_contents || '';
+
+    // Populate guardrail configuration
+    const guardrailEl = document.getElementById('editAgentGuardrailConfig');
+    if (guardrailEl) {
+        guardrailEl.value = safeStringify(config.guardrail_config);
+        syncJsonToGuardrailConfig('editAgent');
+    }
     document.getElementById('editAgentMaxIterations').value = config.max_iterations || '';
     document.getElementById('editAgentDisabled').checked = normalizeBoolean(config.disabled);
     document.getElementById('editAgentHardcoded').checked = normalizeBoolean(config.hardcoded);
@@ -688,6 +822,11 @@ function copyAgent(config) {
     document.getElementById('copyAgentInputSchema').value = config.input_schema || '';
     document.getElementById('copyAgentOutputSchema').value = config.output_schema || '';
     document.getElementById('copyAgentIncludeContents').value = config.include_contents || '';
+    const copyGuardrailEl = document.getElementById('copyAgentGuardrailConfig');
+    if (copyGuardrailEl) {
+        copyGuardrailEl.value = config.guardrail_config || '';
+        syncJsonToGuardrailConfig('copyAgent');
+    }
     document.getElementById('copyAgentMaxIterations').value = config.max_iterations || '';
     document.getElementById('copyAgentDisabled').checked = normalizeBoolean(config.disabled);
     document.getElementById('copyAgentHardcoded').checked = normalizeBoolean(config.hardcoded);
@@ -739,6 +878,9 @@ function copyAgent(config) {
         }
         if (monacoEditors['copyAgentIncludeContentsEditor']) {
             setJsonInEditor(monacoEditors['copyAgentIncludeContentsEditor'], document.getElementById('copyAgentIncludeContents').value);
+        }
+        if (monacoEditors['copyAgentGuardrailConfigEditor']) {
+            setJsonInEditor(monacoEditors['copyAgentGuardrailConfigEditor'], document.getElementById('copyAgentGuardrailConfig').value);
         }
     }, 100);
 }
@@ -861,6 +1003,9 @@ window.copyAgent = copyAgent;
 window.openConfigModal = openConfigModal;
 window.closeConfigModal = closeConfigModal;
 window.applyConfigModal = applyConfigModal;
+window.applyGuardrailConfig = applyGuardrailConfig;
+window.syncJsonToGuardrailConfig = syncJsonToGuardrailConfig;
+window.buildGuardrailConfigFromPresets = buildGuardrailConfigFromPresets;
 window.resetToolConfig = resetToolConfig;
 window.resetPlannerConfig = resetPlannerConfig;
 window.resetContentConfig = resetContentConfig;

@@ -181,7 +181,7 @@ def combined_user_profile_and_rbac_callback(
     except Exception as e:
         logger.warning(f"Error in user profile callback: {e}")
     
-    # Finally perform RBAC check
+    # Then perform RBAC check
     try:
         from .rbac_callback import rbac_before_model_callback
         rbac_response = rbac_before_model_callback(callback_context, llm_request)
@@ -189,7 +189,15 @@ def combined_user_profile_and_rbac_callback(
             return rbac_response  # Access denied
     except Exception as e:
         logger.warning(f"Error in RBAC callback: {e}")
-    
-    # If RBAC passed, continue normally
+
+    # Finally run input guardrails (PII, prompt injection, content policy, etc.)
+    try:
+        from .guardrail_callback import guardrail_before_model_callback
+        guardrail_response = guardrail_before_model_callback(callback_context, llm_request)
+        if guardrail_response:
+            return guardrail_response  # Blocked by guardrail
+    except Exception as e:
+        logger.warning(f"Error in guardrail before_model callback: {e}")
+
     return None
 
