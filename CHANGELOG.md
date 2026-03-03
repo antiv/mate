@@ -5,6 +5,23 @@ All notable changes to MATE (Multi-Agent Tree Engine) will be documented in this
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.4] - 2026-03-03
+
+### Added
+
+- **OpenTelemetry Distributed Tracing** - structured spans for agent turns, LLM calls, tool invocations, RBAC, and memory
+- **GenAI Semantic Conventions** - `gen_ai.inference` spans with operation, provider, model, token usage attributes
+- **W3C Trace Context propagation** - traceparent/tracestate headers forwarded through auth proxy to ADK
+- **Dashboard Trace Viewer** - `/dashboard/traces` page with trace list and call graph
+- **DB Span Exporter** - optional storage of spans in `trace_spans` table for dashboard (V007 migration)
+- **OTLP Export** - export to Jaeger, Grafana Tempo, Datadog, Honeycomb via `OTEL_EXPORTER_OTLP_ENDPOINT`
+- **Zero overhead when disabled** - `OTEL_TRACING_ENABLED=false` (default) incurs no performance impact
+- **Tracing documentation** - `documents/TRACING.md`
+
+### Fixed
+
+- **ADK TracerProvider integration** - adds DB exporter to ADK's provider instead of overriding (avoids "Overriding of current TracerProvider is not allowed" warning)
+
 ## [1.0.3] - 2026-03-03
 
 ### Added

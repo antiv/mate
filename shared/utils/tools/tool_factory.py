@@ -114,6 +114,14 @@ class ToolFactory:
             except Exception as e:
                 logger.warning(f"Failed to automatically add get_user_profile tool: {e}")
         
+        # Wrap tools with tracing when enabled
+        agent_name = config.get("name")
+        try:
+            from shared.utils.tracing.tool_wrapper import wrap_tool_with_tracing
+            tools = [wrap_tool_with_tracing(t, agent_name) for t in tools]
+        except Exception as e:
+            logger.debug("Tool tracing wrap skipped: %s", e)
+        
         return tools
     
     def _create_mcp_tools(self, config: Dict[str, Any]) -> List[Any]:

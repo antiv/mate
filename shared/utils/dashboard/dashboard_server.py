@@ -441,7 +441,119 @@ class DashboardServer:
             return {"error": str(e)}
         finally:
             session.close()
-    
+
+    def _get_traces(self, hours: int = 24, limit: int = 50, trace_id: Optional[str] = None) -> Dict[str, Any]:
+        """Get traces from trace_spans table. Returns list of traces with span trees."""
+        if not self.db_client:
+            return {"traces": [], "error": "Database connection failed"}
+
+        session = self.db_client.get_session()
+        if not session:
+            return {"traces": [], "error": "Database connection failed"}
+
+        try:
+            from sqlalchemy import text
+            from datetime import datetime, timedelta
+
+            time_threshold = datetime.now() - timedelta(hours=hours)
+
+            if trace_id:
+                rows = session.execute(
+                    text("""
+                        SELECT trace_id, span_id, parent_span_id, name, kind, start_time, end_time, duration_ms, attributes, status, error_message
+                        FROM trace_spans WHERE trace_id = :tid AND start_time >= :threshold
+                        ORDER BY start_time ASC
+                    """),
+                    {"tid": trace_id, "threshold": time_threshold},
+                ).fetchall()
+            else:
+                # Fetch all spans in time range, group by trace_id, take top N traces by most recent
+                rows = session.execute(
+                    text("""
+                        SELECT trace_id, span_id, parent_span_id, name, kind, start_time, end_time, duration_ms, attributes, status, error_message
+                        FROM trace_spans
+                        WHERE start_time >= :threshold
+                        ORDER BY start_time DESC
+                    """),
+                    {"threshold": time_threshold},
+                ).fetchall()
+                # Build trace_id -> max(start_time) to sort traces, keep top N
+                trace_max_time = {}
+                for r in rows:
+                    tid, _, _, _, _, st, _, _, _, _, _ = r
+                    if tid not in trace_max_time or (st and (not trace_max_time[tid] or st > trace_max_time[tid])):
+                        trace_max_time[tid] = st
+                sorted_traces = sorted(
+                    trace_max_time.keys(),
+                    key=lambda t: trace_max_time[t] if trace_max_time[t] else time_threshold,
+                    reverse=True,
+                )[:limit]
+                keep = set(sorted_traces)
+                rows = [r for r in rows if r[0] in keep]
+
+            # Group by trace_id and build span list
+            def _ts(val):
+                if val is None:
+                    return None
+                if hasattr(val, "isoformat"):
+                    return val.isoformat()
+                return str(val)
+
+            def _parse_attrs(attrs):
+                if not attrs:
+                    return {}
+                try:
+                    return json.loads(attrs)
+                except (json.JSONDecodeError, TypeError):
+                    return {}
+
+            traces = {}
+            for row in rows:
+                tid, sid, pid, name, kind, st, et, dur, attrs, status, err = row
+                span_data = {
+                    "span_id": sid,
+                    "parent_span_id": pid,
+                    "name": name,
+                    "kind": kind,
+                    "start_time": _ts(st),
+                    "end_time": _ts(et),
+                    "duration_ms": dur,
+                    "attributes": _parse_attrs(attrs),
+                    "status": status,
+                    "error_message": err,
+                }
+                if tid not in traces:
+                    traces[tid] = {"trace_id": tid, "spans": [], "latest_start": None}
+                traces[tid]["spans"].append(span_data)
+                if st:
+                    prev = traces[tid]["latest_start"]
+                    traces[tid]["latest_start"] = st if prev is None else (st if st > prev else prev)
+
+            # Compute root span and total duration per trace, sort by latest activity
+            result = []
+            for tid, data in traces.items():
+                spans = data["spans"]
+                root = next((s for s in spans if not s["parent_span_id"]), spans[0] if spans else None)
+                total_dur = max((s["duration_ms"] or 0) for s in spans) if spans else 0
+                result.append({
+                    "trace_id": tid,
+                    "root_name": root["name"] if root else "unknown",
+                    "root_duration_ms": root.get("duration_ms") if root else 0,
+                    "total_duration_ms": total_dur,
+                    "span_count": len(spans),
+                    "spans": spans,
+                    "_latest_start": data["latest_start"],
+                })
+            result.sort(key=lambda t: (t["_latest_start"] or time_threshold), reverse=True)
+            for t in result:
+                t.pop("_latest_start", None)
+            return {"traces": result}
+        except Exception as e:
+            logger.warning("Error getting traces (trace_spans table may not exist): %s", e)
+            return {"traces": [], "error": str(e)}
+        finally:
+            session.close()
+
     def _create_user(self, user_id: str, roles: List[str]) -> bool:
         """Create a new user."""
         if not self.db_client:
@@ -1295,6 +1407,15 @@ class DashboardServer:
                 "view": view
             })
 
+        @self.app.get("/dashboard/traces", response_class=HTMLResponse, tags=["Dashboard - Pages"])
+        async def dashboard_traces(request: Request, username: str = Depends(self._get_auth_user_dependency)):
+            """Dashboard traces page - OpenTelemetry distributed tracing viewer"""
+            return self.templates.TemplateResponse("dashboard/traces.html", {
+                "request": request,
+                "page_title": "Traces",
+                "username": username,
+            })
+
         @self.app.get("/dashboard/docs", response_class=HTMLResponse, tags=["Dashboard - Pages"])
         async def dashboard_docs(request: Request, username: str = Depends(self._get_auth_user_dependency)):
             """Dashboard docs page"""
@@ -1324,6 +1445,17 @@ class DashboardServer:
         ):
             """Get paginated token usage logs."""
             return self._get_token_usage_logs(hours, limit, page)
+
+        @self.app.get("/dashboard/api/traces", tags=["Dashboard - Traces"])
+        async def get_traces_api(
+            request: Request,
+            username: str = Depends(self._get_auth_user_dependency),
+            hours: int = 24,
+            limit: int = 50,
+            trace_id: Optional[str] = None,
+        ):
+            """Get traces from trace_spans table for dashboard viewer."""
+            return self._get_traces(hours, limit, trace_id)
 
         @self.app.get("/dashboard/api/users", tags=["Dashboard - Users"])
         async def get_users(request: Request, username: str = Depends(self._get_auth_user_dependency)):

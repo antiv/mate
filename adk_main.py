@@ -22,6 +22,9 @@ from shared.utils.artifacts import SupabaseArtifactService, S3ArtifactService, L
 # Load environment variables from .env file
 load_dotenv()
 
+from shared.utils.logging_config import configure_logging
+configure_logging()
+
 parser = argparse.ArgumentParser()
 parser.add_argument("--session-db-url", default="sqlite:///session_db.db")
 parser.add_argument("--host", default="0.0.0.0")
