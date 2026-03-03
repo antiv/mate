@@ -137,11 +137,19 @@ Agents can connect to external MCP servers via the `mcp_servers_config` field in
     "server_name": {
       "command": "npx",
       "args": ["mcp-remote", "https://mcp.example.com/mcp/?apiKey=..."],
-      "env": {}
+      "env": {},
+      "timeout": 60
     }
   }
 }
 ```
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `command` | string | required | Command to execute (e.g. `npx`) |
+| `args` | array | required | Command arguments |
+| `env` | object | `{}` | Environment variables |
+| `timeout` | number | 60 | Request timeout in seconds. Use higher values (e.g. 300) for slow tools like `tavily_research`. |
 
 **Example - Tavily Search MCP:**
 ```json
@@ -150,7 +158,8 @@ Agents can connect to external MCP servers via the `mcp_servers_config` field in
     "tavily-search-mcp": {
       "command": "npx",
       "args": ["mcp-remote", "https://mcp.tavily.com/mcp/?tavilyApiKey=..."],
-      "env": {}
+      "env": {},
+      "timeout": 300
     }
   }
 }

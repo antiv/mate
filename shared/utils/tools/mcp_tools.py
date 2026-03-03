@@ -10,29 +10,37 @@ from typing import Dict, List, Any
 logger = logging.getLogger(__name__)
 
 
-def create_mcp_toolset_command(command: str, args: List[str], env: Dict[str, str], agent_name: str = "unknown") -> Any:
+def create_mcp_toolset_command(
+    command: str,
+    args: List[str],
+    env: Dict[str, str],
+    agent_name: str = "unknown",
+    timeout: int = 60,
+) -> Any:
     """
     Create an MCP toolset with command-based server configuration (like Supabase).
-    
+
     Args:
         command: Command to execute (e.g., 'npx')
         args: List of command arguments
         env: Environment variables as dictionary
         agent_name: Name of the agent (for logging)
-        
+        timeout: Timeout in seconds for MCP requests (default 60). Use higher values
+            for slow tools like tavily_research (e.g. 300).
+
     Returns:
         MCPToolset instance or None if creation fails
     """
     try:
         from google.adk.tools.mcp_tool.mcp_toolset import MCPToolset, StdioConnectionParams, StdioServerParameters
-        
+
         # Set environment variables
         env_vars = os.environ.copy()
         env_vars.update(env)
-        
+
         mcp_toolset = MCPToolset(
             connection_params=StdioConnectionParams(
-                timeout=60,
+                timeout=float(timeout),
                 server_params=StdioServerParameters(
                     command=command,
                     args=args,
@@ -104,8 +112,9 @@ def create_mcp_tools_from_config(config: Dict[str, Any]) -> List[Any]:
                         env = env_raw
                     
                     if command and args:
+                        timeout = server_config.get('timeout', 60)
                         mcp_toolset = create_mcp_toolset_command(
-                            command, args, env, f"{agent_name}_{server_name}"
+                            command, args, env, f"{agent_name}_{server_name}", timeout=timeout
                         )
                         if mcp_toolset:
                             tools.append(mcp_toolset)
