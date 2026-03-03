@@ -1,0 +1,240 @@
+{% extends "base.html" %}
+
+{% block title %}Rate Limits & Budgets - MATE{% endblock %}
+
+{% block content %}
+<div class="space-y-4">
+    <div class="flex justify-between items-center">
+        <div>
+            <h2 class="text-xl font-bold text-gray-900 dark:text-white">Rate Limits & Budgets</h2>
+            <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                Configure per-user, per-agent, and per-project limits. Enable with <code class="bg-gray-100 dark:bg-gray-700 px-1 rounded">RATE_LIMIT_ENABLED=true</code>.
+            </p>
+        </div>
+        <button onclick="openAddModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm flex items-center">
+            <i class="fas fa-plus mr-2"></i>Add Config
+        </button>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+            <h3 class="text-sm font-semibold text-gray-900 dark:text-white mb-3">Configs</h3>
+            <div id="configList" class="space-y-2">
+                <p class="text-sm text-gray-500 dark:text-gray-400">Loading...</p>
+            </div>
+        </div>
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+            <h3 class="text-sm font-semibold text-gray-900 dark:text-white mb-3">Usage vs Limits</h3>
+            <p class="text-xs text-gray-500 dark:text-gray-400 mb-2">Select a config to view current usage</p>
+            <div id="usagePanel" class="space-y-2 text-sm text-gray-500 dark:text-gray-400">
+                Select a config or enter scope below
+            </div>
+            <div class="mt-3 flex gap-2">
+                <input type="text" id="usageUserId" placeholder="user_id" class="flex-1 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 rounded px-2 py-1 text-sm">
+                <input type="text" id="usageAgentName" placeholder="agent_name" class="flex-1 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 rounded px-2 py-1 text-sm">
+                <input type="number" id="usageProjectId" placeholder="project_id" class="w-24 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 rounded px-2 py-1 text-sm">
+                <button onclick="loadUsage()" class="bg-gray-600 hover:bg-gray-700 text-white px-3 py-1 rounded text-sm">Load</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add/Edit Modal -->
+<div id="configModal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full mx-4 p-4">
+        <h3 id="modalTitle" class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Add Rate Limit Config</h3>
+        <form id="configForm" class="space-y-3">
+            <div>
+                <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Scope</label>
+                <select id="formScope" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 rounded px-2 py-1.5 text-sm" required>
+                    <option value="user">User</option>
+                    <option value="agent">Agent</option>
+                    <option value="project">Project</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Scope ID (user_id, agent_name, or project_id)</label>
+                <input type="text" id="formScopeId" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 rounded px-2 py-1.5 text-sm" required placeholder="e.g. user123 or chess_mate_root">
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+                <div>
+                    <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Requests/min</label>
+                    <input type="number" id="formRequestsPerMin" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 rounded px-2 py-1.5 text-sm" placeholder="60" min="1">
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Tokens/hour</label>
+                    <input type="number" id="formTokensPerHour" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 rounded px-2 py-1.5 text-sm" placeholder="10000" min="0">
+                </div>
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+                <div>
+                    <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Tokens/day</label>
+                    <input type="number" id="formTokensPerDay" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 rounded px-2 py-1.5 text-sm" placeholder="50000" min="0">
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Tokens/month (project)</label>
+                    <input type="number" id="formTokensPerMonth" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 rounded px-2 py-1.5 text-sm" placeholder="500000" min="0">
+                </div>
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Max tokens/request (agent)</label>
+                <input type="number" id="formMaxTokensPerRequest" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 rounded px-2 py-1.5 text-sm" placeholder="4096" min="0">
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Action on limit</label>
+                <select id="formActionOnLimit" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 rounded px-2 py-1.5 text-sm">
+                    <option value="warn">Warn (log + continue)</option>
+                    <option value="throttle">Throttle (delay)</option>
+                    <option value="block">Block (429)</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Alert webhook URL</label>
+                <input type="url" id="formAlertWebhook" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 rounded px-2 py-1.5 text-sm" placeholder="https://...">
+            </div>
+            <div class="flex justify-end gap-2 pt-2">
+                <button type="button" onclick="closeModal()" class="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded text-sm text-gray-700 dark:text-gray-300">Cancel</button>
+                <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm">Save</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let editingId = null;
+    let configsCache = [];
+
+    async function loadConfigs() {
+        const res = await apiCall('/dashboard/api/rate-limits');
+        const list = document.getElementById('configList');
+        configsCache = res.configs || [];
+        if (configsCache.length === 0) {
+            list.innerHTML = '<p class="text-sm text-gray-500 dark:text-gray-400">No configs. Click Add Config to create one.</p>';
+            return;
+        }
+        const esc = s => String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        list.innerHTML = configsCache.map((c, i) => `
+            <div class="flex items-center justify-between p-2 rounded bg-gray-50 dark:bg-gray-700/50">
+                <div>
+                    <span class="font-medium text-gray-900 dark:text-white">${esc(c.scope)}:${esc(c.scope_id)}</span>
+                    <span class="text-xs text-gray-500 dark:text-gray-400 ml-2">
+                        ${c.requests_per_minute ? c.requests_per_minute + '/min' : ''}
+                        ${c.tokens_per_day ? '| ' + c.tokens_per_day + ' tokens/day' : ''}
+                        ${c.action_on_limit ? '| ' + c.action_on_limit : ''}
+                    </span>
+                </div>
+                <div class="flex gap-1">
+                    <button onclick="loadUsageFor('${esc(c.scope)}', '${esc(c.scope_id)}')" class="text-blue-600 dark:text-blue-400 text-xs px-2 py-1 hover:underline">Usage</button>
+                    <button onclick="editConfigByIndex(${i})" class="text-gray-600 dark:text-gray-400 text-xs px-2 py-1 hover:underline">Edit</button>
+                    <button onclick="deleteConfig('${esc(c.scope)}', '${esc(c.scope_id)}')" class="text-red-600 dark:text-red-400 text-xs px-2 py-1 hover:underline">Delete</button>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    function editConfigByIndex(i) {
+        editConfig(configsCache[i]);
+    }
+
+    function loadUsageFor(scope, scopeId) {
+        if (scope === 'user') {
+            document.getElementById('usageUserId').value = scopeId;
+            document.getElementById('usageAgentName').value = '';
+            document.getElementById('usageProjectId').value = '';
+        } else if (scope === 'agent') {
+            document.getElementById('usageUserId').value = '';
+            document.getElementById('usageAgentName').value = scopeId;
+            document.getElementById('usageProjectId').value = '';
+        } else {
+            document.getElementById('usageUserId').value = '';
+            document.getElementById('usageAgentName').value = '';
+            document.getElementById('usageProjectId').value = scopeId;
+        }
+        loadUsage();
+    }
+
+    async function loadUsage() {
+        const userId = document.getElementById('usageUserId').value.trim() || null;
+        const agentName = document.getElementById('usageAgentName').value.trim() || null;
+        const projectId = document.getElementById('usageProjectId').value ? parseInt(document.getElementById('usageProjectId').value) : null;
+        if (!userId && !agentName && !projectId) {
+            document.getElementById('usagePanel').innerHTML = 'Enter user_id, agent_name, or project_id and click Load';
+            return;
+        }
+        const params = new URLSearchParams();
+        if (userId) params.set('user_id', userId);
+        if (agentName) params.set('agent_name', agentName);
+        if (projectId) params.set('project_id', projectId);
+        const res = await apiCall('/dashboard/api/rate-limits/usage?' + params.toString());
+        document.getElementById('usagePanel').innerHTML = `
+            <div class="space-y-1">
+                <div>Requests (last min): <strong>${res.requests_last_min ?? 0}</strong></div>
+                <div>Tokens (last hour): <strong>${(res.tokens_last_hour ?? 0).toLocaleString()}</strong></div>
+                <div>Tokens (last day): <strong>${(res.tokens_last_day ?? 0).toLocaleString()}</strong></div>
+                <div>Tokens (last 30 days): <strong>${(res.tokens_last_month ?? 0).toLocaleString()}</strong></div>
+            </div>
+        `;
+    }
+
+    function openAddModal() {
+        editingId = null;
+        document.getElementById('modalTitle').textContent = 'Add Rate Limit Config';
+        document.getElementById('configForm').reset();
+        document.getElementById('configModal').classList.remove('hidden');
+    }
+
+    function editConfig(c) {
+        editingId = c.id;
+        document.getElementById('modalTitle').textContent = 'Edit Rate Limit Config';
+        document.getElementById('formScope').value = c.scope;
+        document.getElementById('formScope').disabled = true;
+        document.getElementById('formScopeId').value = c.scope_id;
+        document.getElementById('formScopeId').disabled = true;
+        document.getElementById('formRequestsPerMin').value = c.requests_per_minute || '';
+        document.getElementById('formTokensPerHour').value = c.tokens_per_hour || '';
+        document.getElementById('formTokensPerDay').value = c.tokens_per_day || '';
+        document.getElementById('formTokensPerMonth').value = c.tokens_per_month || '';
+        document.getElementById('formMaxTokensPerRequest').value = c.max_tokens_per_request || '';
+        document.getElementById('formActionOnLimit').value = c.action_on_limit || 'block';
+        document.getElementById('formAlertWebhook').value = c.alert_webhook_url || '';
+        document.getElementById('configModal').classList.remove('hidden');
+    }
+
+    function closeModal() {
+        document.getElementById('configModal').classList.add('hidden');
+        document.getElementById('formScope').disabled = false;
+        document.getElementById('formScopeId').disabled = false;
+    }
+
+    document.getElementById('configForm').onsubmit = async (e) => {
+        e.preventDefault();
+        const body = {
+            scope: document.getElementById('formScope').value,
+            scope_id: document.getElementById('formScopeId').value,
+            requests_per_minute: document.getElementById('formRequestsPerMin').value ? parseInt(document.getElementById('formRequestsPerMin').value) : null,
+            tokens_per_hour: document.getElementById('formTokensPerHour').value ? parseInt(document.getElementById('formTokensPerHour').value) : null,
+            tokens_per_day: document.getElementById('formTokensPerDay').value ? parseInt(document.getElementById('formTokensPerDay').value) : null,
+            tokens_per_month: document.getElementById('formTokensPerMonth').value ? parseInt(document.getElementById('formTokensPerMonth').value) : null,
+            max_tokens_per_request: document.getElementById('formMaxTokensPerRequest').value ? parseInt(document.getElementById('formMaxTokensPerRequest').value) : null,
+            action_on_limit: document.getElementById('formActionOnLimit').value,
+            alert_webhook_url: document.getElementById('formAlertWebhook').value || null,
+            alert_thresholds: [80, 90, 100],
+        };
+        await apiCall('/dashboard/api/rate-limits', 'POST', body);
+        showNotification('Config saved');
+        closeModal();
+        loadConfigs();
+    };
+
+    async function deleteConfig(scope, scopeId) {
+        if (!await showConfirm(`Delete rate limit config for ${scope}:${scopeId}?`, 'Delete Config', 'Delete', 'Cancel', 'danger')) return;
+        await apiCall(`/dashboard/api/rate-limits/${scope}/${encodeURIComponent(scopeId)}`, 'DELETE');
+        showNotification('Config deleted');
+        loadConfigs();
+    }
+
+    document.addEventListener('DOMContentLoaded', loadConfigs);
+</script>
+{% endblock %}

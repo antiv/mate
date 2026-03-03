@@ -10,6 +10,7 @@ Handles proxying requests to the ADK backend server, including:
 """
 
 import logging
+import os
 import asyncio
 from typing import Optional, Dict, Any
 from pathlib import Path
@@ -166,6 +167,39 @@ async def websocket_run_live(
     if not authenticated:
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return
+
+    # Rate limit check (when RATE_LIMIT_ENABLED=true)
+    if os.getenv("RATE_LIMIT_ENABLED", "false").lower() in ("true", "1", "yes"):
+        try:
+            import base64
+            auth_username = None
+            ah = websocket.headers.get("authorization", "")
+            if ah.startswith("Basic "):
+                try:
+                    decoded = base64.b64decode(ah[6:]).decode("utf-8")
+                    auth_username = decoded.split(":", 1)[0]
+                except Exception:
+                    pass
+            from shared.utils.rate_limit_service import get_rate_limit_service
+            from fastapi.responses import JSONResponse
+            svc = get_rate_limit_service()
+            result, _ = await svc.check_request_limit(
+                user_id=user_id,
+                agent_name=app_name,
+                auth_username=auth_username,
+            )
+            if not result.allowed:
+                await websocket.send_denial_response(
+                    JSONResponse(
+                        status_code=429,
+                        content={"detail": result.message, "retry_after": int(result.retry_after_seconds or 60)},
+                        headers={"Retry-After": str(int(result.retry_after_seconds or 60))},
+                    )
+                )
+                return
+            await svc.record_request(user_id=user_id, agent_name=app_name)
+        except Exception as e:
+            logger.warning("Rate limit check failed for run_live: %s", e, exc_info=True)
 
     backend_ws_url = f"ws://{ADK_HOST}:{ADK_PORT}/run_live?app_name={app_name}&user_id={user_id}&session_id={session_id}"
 

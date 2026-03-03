@@ -25,6 +25,70 @@ _inference_span_var: ContextVar[Optional[Any]] = ContextVar("_inference_span", d
 # runs in a different async context (contextvar would be None).
 _inference_span_by_context_id: Dict[int, Any] = {}
 
+# Track which alerts we've already sent this period to avoid spam
+_budget_alert_sent: Dict[str, set] = {}  # key -> set of threshold_pct
+
+
+def _maybe_fire_budget_alerts(user_id: Optional[str], agent_name: Optional[str], usage: Any):
+    """Check rate limit configs and fire webhook when crossing alert thresholds."""
+    if not user_id and not agent_name:
+        return
+    try:
+        from datetime import timedelta
+        from ..utils.rate_limit_service import get_rate_limit_service
+        from ..utils.database_client import get_database_client
+        from ..utils.models import RateLimitConfig
+
+        svc = get_rate_limit_service()
+        db = get_database_client()
+        if not db or not db.is_connected():
+            return
+        session = db.get_session()
+        if not session:
+            return
+        try:
+            now = datetime.now()
+            token_service = get_token_usage_service()
+            configs = []
+            if user_id:
+                uc = session.query(RateLimitConfig).filter(
+                    RateLimitConfig.scope == "user",
+                    RateLimitConfig.scope_id == user_id,
+                ).first()
+                if uc and uc.alert_webhook_url and uc.tokens_per_day:
+                    tokens = token_service.get_user_tokens_since(
+                        user_id, now - timedelta(days=1)
+                    )
+                    configs.append((uc, tokens, uc.tokens_per_day, "user", user_id))
+            if agent_name:
+                ac = session.query(RateLimitConfig).filter(
+                    RateLimitConfig.scope == "agent",
+                    RateLimitConfig.scope_id == agent_name,
+                ).first()
+                if ac and ac.alert_webhook_url and ac.tokens_per_day:
+                    tokens = token_service.get_agent_tokens_since(
+                        agent_name, now - timedelta(days=1)
+                    )
+                    configs.append((ac, tokens, ac.tokens_per_day, "agent", agent_name))
+            for cfg, current, limit, scope, sid in configs:
+                if limit is None or limit <= 0:
+                    continue
+                pct = int(100 * current / limit)
+                for thresh in cfg.get_alert_thresholds():
+                    if pct >= thresh:
+                        key = f"{scope}:{sid}:day:{thresh}"
+                        if key not in _budget_alert_sent:
+                            _budget_alert_sent[key] = set()
+                        if thresh not in _budget_alert_sent[key]:
+                            svc.send_alert_webhook_sync(
+                                scope, sid, thresh, current, limit, cfg.alert_webhook_url
+                            )
+                            _budget_alert_sent.setdefault(key, set()).add(thresh)
+        finally:
+            session.close()
+    except Exception as e:
+        logger.debug("Budget alert check failed: %s", e)
+
 
 def _get_provider_from_model(model_name: Optional[str]) -> str:
     """Infer GenAI provider from model name."""
@@ -183,16 +247,18 @@ def log_token_usage_callback(
             "tool_use_tokens": usage.tool_use_prompt_token_count or 0
         }
         
-        # Save to Supabase
+        # Save to database
         token_usage_service = get_token_usage_service()
         if token_usage_service.is_connected():
             result = token_usage_service.insert_token_usage(token_data)
             if result:
                 logger.info(f"Successfully saved token usage to database: {result.get('id')}")
+                # Fire budget alerts if approaching thresholds (async, non-blocking)
+                _maybe_fire_budget_alerts(user_id, callback_context.agent_name, usage)
             else:
                 logger.error("Failed to save token usage to database")
         else:
-            logger.error("Supabase client not connected, cannot save token usage")
+            logger.error("Database client not connected, cannot save token usage")
         
         # Keep backward compatibility with session state for existing code
         if not hasattr(callback_context, 'state'):

@@ -5,6 +5,19 @@ All notable changes to MATE (Multi-Agent Tree Engine) will be documented in this
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.5] - 2026-03-03
+
+### Added
+
+- **Rate Limits & Budgets** - per-user, per-agent, per-project limits with configurable actions (warn, throttle, block)
+- **Request rate limiting** - in-memory sliding window for requests/min (optional Redis for distributed)
+- **Token budget caps** - tokens/hour, tokens/day (user/agent), tokens/month (project)
+- **Dashboard Rate Limits UI** - configure limits, view usage vs limits, usage gauges
+- **Budget alerts** - webhook on 80%, 90%, 100% threshold with `rate_limit_alert` event payload
+- **429 responses** - clear message and `Retry-After` header when blocked
+- **V008 migration** - `rate_limit_config` table for SQLite, PostgreSQL, MySQL
+- **RATE_LIMIT_ENABLED** - opt-in via env var; `documents/RATE_LIMITS.md`
+
 ## [1.0.4] - 2026-03-03
 
 ### Added
