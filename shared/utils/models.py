@@ -243,6 +243,41 @@ class AgentConfig(Base):
         }
 
 
+class AgentConfigVersion(Base):
+    """Versioned snapshots of agent configurations for history, diff, and rollback."""
+
+    __tablename__ = 'agent_config_versions'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    agent_config_id = Column(Integer, ForeignKey('agents_config.id', ondelete='CASCADE'), nullable=False)
+    version_number = Column(Integer, nullable=False)
+    config_snapshot = Column(Text, nullable=False)
+    changed_by = Column(String(255), nullable=True)
+    change_type = Column(String(50), nullable=False, default='update')
+    tag = Column(String(255), nullable=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+
+    agent_config = relationship("AgentConfig", backref="versions")
+
+    def get_snapshot(self) -> dict:
+        try:
+            return json.loads(self.config_snapshot) if self.config_snapshot else {}
+        except json.JSONDecodeError:
+            return {}
+
+    def to_dict(self) -> dict:
+        return {
+            'id': self.id,
+            'agent_config_id': self.agent_config_id,
+            'version_number': self.version_number,
+            'config_snapshot': self.get_snapshot(),
+            'changed_by': self.changed_by,
+            'change_type': self.change_type,
+            'tag': self.tag,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+        }
+
+
 class Credential(Base):
     """Model for storing tool credentials."""
     
