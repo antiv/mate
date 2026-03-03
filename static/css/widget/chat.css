@@ -45,6 +45,7 @@ html, body {
   display: flex;
   flex-direction: column;
   height: 100vh;
+  height: 100dvh;
   overflow: hidden;
 }
 
@@ -239,9 +240,22 @@ html, body {
   transition: background 0.15s;
   white-space: nowrap;
   flex-shrink: 0;
+  min-height: 44px;
+  min-width: 44px;
 }
 .widget-send-btn:hover { background: var(--w-primary-hover); }
 .widget-send-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Mobile chat */
+@media (max-width: 767px) {
+  .widget-container { height: 100dvh; }
+  .widget-header { padding: 10px 12px; }
+  .widget-header-title { font-size: 14px; }
+  .widget-header-btn { padding: 8px 12px; min-height: 44px; }
+  .widget-messages { padding: 12px; }
+  .widget-input-area { padding: 10px 12px; gap: 10px; }
+  .widget-input { padding: 10px 12px; font-size: 16px; }
+}
 
 /* Footer */
 .widget-footer {

@@ -2,13 +2,13 @@
 {% from 'dashboard/modals/parent_agents_modal.html' import parent_agents_modal %}
 
 {% macro agent_modal(modal_id, form_id, title, id_prefix, submit_btn_id, submit_loader_id, submit_text_id, submit_text, cancel_fn, show_id_field=False, show_type_empty_option=False, submit_btn_color='bg-blue-600 hover:bg-blue-700', container_class='', projects_list=None, current_project_id=None) %}
-<div id="{{ modal_id }}" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden z-[70]" data-cancel-fn="{{ cancel_fn }}">
+<div id="{{ modal_id }}" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden z-[70] dashboard-modal" data-cancel-fn="{{ cancel_fn }}">
     <div class="{% if container_class == 'modal-side-panel' %}flex justify-end items-stretch min-h-screen p-0{% else %}flex items-center justify-center min-h-screen p-1{% endif %} {{ container_class }}" onclick="event.stopPropagation()">
-        <div class="bg-white dark:bg-gray-800 {% if container_class == 'modal-side-panel' %}rounded-none shadow-xl w-[600px] h-screen flex flex-col{% else %}rounded-lg shadow-xl max-w-2xl w-full max-h-[95vh] overflow-y-auto{% endif %}">
+        <div class="bg-white dark:bg-gray-800 {% if container_class == 'modal-side-panel' %}rounded-none shadow-xl w-[600px] max-w-full h-screen flex flex-col min-w-0{% else %}rounded-lg shadow-xl max-w-2xl w-full max-h-[95vh] overflow-y-auto{% endif %}">
             <!-- Sticky Header -->
-            <div class="px-3 py-1.5 border-b border-gray-200 dark:border-gray-700 flex-shrink-0 sticky top-0 bg-white dark:bg-gray-800 z-10 flex items-center justify-between">
+            <div class="px-3 py-1.5 border-b border-gray-200 dark:border-gray-700 flex-shrink-0 sticky top-0 bg-white dark:bg-gray-800 z-10 flex flex-wrap items-center justify-between gap-2">
                 <h3 class="text-xs font-semibold text-gray-900 dark:text-white">{{ title }}</h3>
-                <div class="flex items-center space-x-2">
+                <div class="flex flex-wrap items-center justify-end gap-2 min-w-0">
                     {% if show_id_field %}
                     <button type="button" id="{{ id_prefix }}VersionHistoryBtn" onclick="showVersionHistoryModal(document.getElementById('{{ id_prefix }}Id').value, document.getElementById('{{ id_prefix }}Name').value)" class="px-3 py-1.5 text-xs bg-gray-600 hover:bg-gray-700 text-white rounded flex items-center" title="Version History">
                         <i class="fas fa-history mr-1"></i>
@@ -25,7 +25,7 @@
                 </div>
             </div>
             <!-- Scrollable Form Content -->
-            <form id="{{ form_id }}" class="px-3 py-1.5 pb-6 flex-1 overflow-y-auto">
+            <form id="{{ form_id }}" class="px-3 py-1.5 pb-6 flex-1 overflow-y-auto min-w-0 overflow-x-hidden">
                 {% if show_id_field %}
                 <input type="hidden" id="{{ id_prefix }}Id" name="{{ id_prefix }}Id">
                 {% endif %}

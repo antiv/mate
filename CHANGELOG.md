@@ -5,6 +5,22 @@ All notable changes to MATE (Multi-Agent Tree Engine) will be documented in this
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.7] - 2026-03-03
+
+### Added
+
+- **Responsive Dashboard** - mobile (375px+) and tablet (768px+) support for all dashboard pages
+- **Mobile Navigation** - hamburger menu with slide-out drawer for sidebar on small screens
+- **Touch-Friendly UI** - 44px min tap targets, responsive tables with horizontal scroll
+- **PWA Support** - Web App Manifest, service worker for offline shell, home screen install
+- **PWA Icons** - 192x192 and 512x512 icons in `static/icons/`
+- **Responsive Chat Widget** - 100dvh viewport, larger send button on mobile
+- **Responsive Pages** - Overview, Agents, Usage Analytics with stacked layouts on mobile
+
+### Fixed
+
+- **Base template** - added `{% block extra_head %}` so agents page Monaco/agents.css loads correctly
+
 ## [1.0.6] - 2026-03-03
 
 ### Added

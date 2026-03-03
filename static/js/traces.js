@@ -27,12 +27,12 @@ async function loadTraces() {
 
         tbody.innerHTML = traces.map(t => `
             <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
-                <td class="px-3 py-2 text-xs font-mono text-gray-700 dark:text-gray-300 truncate max-w-[120px]" title="${t.trace_id}">${t.trace_id.slice(0, 16)}...</td>
-                <td class="px-3 py-2 text-xs text-gray-900 dark:text-white">${escapeHtml(t.root_name)}</td>
-                <td class="px-3 py-2 text-xs text-gray-600 dark:text-gray-400">${t.total_duration_ms != null ? t.total_duration_ms + ' ms' : '-'}</td>
-                <td class="px-3 py-2 text-xs text-gray-600 dark:text-gray-400">${t.span_count}</td>
-                <td class="px-3 py-2">
-                    <button onclick="showTraceDetail('${t.trace_id}', ${hours})" class="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 text-xs">
+                <td data-label="Trace ID" class="px-3 py-2 text-xs font-mono text-gray-700 dark:text-gray-300 trace-id-cell" title="${escapeHtml(t.trace_id)}">${escapeHtml(t.trace_id)}</td>
+                <td data-label="Root Span" class="px-3 py-2 text-xs text-gray-900 dark:text-white">${escapeHtml(t.root_name)}</td>
+                <td data-label="Duration" class="px-3 py-2 text-xs text-gray-600 dark:text-gray-400">${t.total_duration_ms != null ? t.total_duration_ms + ' ms' : '-'}</td>
+                <td data-label="Spans" class="px-3 py-2 text-xs text-gray-600 dark:text-gray-400">${t.span_count}</td>
+                <td data-label="Actions" class="px-3 py-2">
+                    <button type="button" data-trace-id="${escapeHtml(t.trace_id)}" data-hours="${hours}" onclick="showTraceDetail(this.dataset.traceId, parseInt(this.dataset.hours, 10))" class="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 text-xs min-h-[44px] touch-target px-2">
                         <i class="fas fa-expand-alt mr-1"></i>View
                     </button>
                 </td>
@@ -46,9 +46,10 @@ async function loadTraces() {
 }
 
 async function showTraceDetail(traceId, hours) {
-    const detailEl = document.getElementById('traceDetail');
+    const modalEl = document.getElementById('traceDetailModal') || document.getElementById('traceDetail');
     const contentEl = document.getElementById('traceDetailContent');
-    detailEl.classList.remove('hidden');
+    if (!modalEl || !contentEl) return;
+    modalEl.classList.remove('hidden');
     contentEl.innerHTML = '<div class="text-gray-500 dark:text-gray-400">Loading...</div>';
 
     try {
@@ -109,7 +110,8 @@ async function showTraceDetail(traceId, hours) {
 }
 
 function closeTraceDetail() {
-    document.getElementById('traceDetail').classList.add('hidden');
+    const modalEl = document.getElementById('traceDetailModal') || document.getElementById('traceDetail');
+    if (modalEl) modalEl.classList.add('hidden');
 }
 
 function escapeHtml(s) {

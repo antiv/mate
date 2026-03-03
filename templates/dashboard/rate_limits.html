@@ -4,43 +4,43 @@
 
 {% block content %}
 <div class="space-y-4">
-    <div class="flex justify-between items-center">
-        <div>
+    <div class="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center">
+        <div class="min-w-0">
             <h2 class="text-xl font-bold text-gray-900 dark:text-white">Rate Limits & Budgets</h2>
             <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">
                 Configure per-user, per-agent, and per-project limits. Enable with <code class="bg-gray-100 dark:bg-gray-700 px-1 rounded">RATE_LIMIT_ENABLED=true</code>.
             </p>
         </div>
-        <button onclick="openAddModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm flex items-center">
+        <button onclick="openAddModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm flex items-center min-h-[44px] touch-target flex-shrink-0">
             <i class="fas fa-plus mr-2"></i>Add Config
         </button>
     </div>
 
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 min-w-0">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 min-w-0">
             <h3 class="text-sm font-semibold text-gray-900 dark:text-white mb-3">Configs</h3>
             <div id="configList" class="space-y-2">
                 <p class="text-sm text-gray-500 dark:text-gray-400">Loading...</p>
             </div>
         </div>
-        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 min-w-0">
             <h3 class="text-sm font-semibold text-gray-900 dark:text-white mb-3">Usage vs Limits</h3>
             <p class="text-xs text-gray-500 dark:text-gray-400 mb-2">Select a config to view current usage</p>
             <div id="usagePanel" class="space-y-2 text-sm text-gray-500 dark:text-gray-400">
                 Select a config or enter scope below
             </div>
-            <div class="mt-3 flex gap-2">
-                <input type="text" id="usageUserId" placeholder="user_id" class="flex-1 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 rounded px-2 py-1 text-sm">
-                <input type="text" id="usageAgentName" placeholder="agent_name" class="flex-1 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 rounded px-2 py-1 text-sm">
-                <input type="number" id="usageProjectId" placeholder="project_id" class="w-24 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 rounded px-2 py-1 text-sm">
-                <button onclick="loadUsage()" class="bg-gray-600 hover:bg-gray-700 text-white px-3 py-1 rounded text-sm">Load</button>
+            <div class="mt-3 flex flex-col gap-2 sm:flex-row sm:gap-2">
+                <input type="text" id="usageUserId" placeholder="user_id" class="w-full sm:flex-1 min-w-0 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-sm">
+                <input type="text" id="usageAgentName" placeholder="agent_name" class="w-full sm:flex-1 min-w-0 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-sm">
+                <input type="number" id="usageProjectId" placeholder="project_id" class="w-full sm:w-24 min-w-0 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-sm">
+                <button onclick="loadUsage()" class="bg-gray-600 hover:bg-gray-700 text-white px-3 py-1.5 rounded text-sm min-h-[44px] touch-target w-full sm:w-auto">Load</button>
             </div>
         </div>
     </div>
 </div>
 
 <!-- Add/Edit Modal -->
-<div id="configModal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
+<div id="configModal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center dashboard-modal">
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full mx-4 p-4">
         <h3 id="modalTitle" class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Add Rate Limit Config</h3>
         <form id="configForm" class="space-y-3">

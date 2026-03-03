@@ -73,8 +73,8 @@
         </div>
         <div class="p-4">
             {% if migrations %}
-            <div class="overflow-auto max-h-[calc(100vh-200px)]">
-                <table id="migrationsTable" class="w-full divide-y divide-gray-200 dark:divide-gray-700 table-fixed">
+            <div class="overflow-auto max-h-[calc(100vh-200px)] table-responsive">
+                <table id="migrationsTable" class="w-full divide-y divide-gray-200 dark:divide-gray-700 table-fixed table-cards-mobile">
                     <thead class="bg-gray-50 dark:bg-gray-700">
                         <tr>
                             <th class="px-3 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider w-1/6">Version</th>
@@ -87,15 +87,15 @@
                     <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                         {% for migration in migrations %}
                         <tr class="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700" onclick="event.stopPropagation(); showMigrationDetails('{{ migration.version }}', '{{ migration.name }}', '{{ migration.applied_at or 'Not Applied' }}', '{{ migration.checksum or 'No checksum' }}')">
-                            <td class="px-3 py-1.5">
+                            <td class="px-3 py-1.5" data-label="Version">
                                 <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-600 dark:text-gray-200">
                                     {{ migration.version }}
                                 </span>
                             </td>
-                            <td class="px-3 py-1.5">
+                            <td class="px-3 py-1.5" data-label="Name">
                                 <div class="text-xs font-medium text-gray-900 dark:text-white truncate">{{ migration.name }}</div>
                             </td>
-                            <td class="px-3 py-1.5">
+                            <td class="px-3 py-1.5" data-label="Applied At">
                                 {% if migration.applied_at %}
                                     <div class="flex items-center text-xs text-green-600 dark:text-green-400">
                                         <i class="fas fa-check-circle mr-1"></i>
@@ -108,28 +108,28 @@
                                     </div>
                                 {% endif %}
                             </td>
-                            <td class="px-3 py-1.5">
+                            <td class="px-3 py-1.5" data-label="Checksum">
                                 {% if migration.checksum %}
                                     <code class="text-xs bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-gray-800 dark:text-gray-200 truncate">{{ migration.checksum[:16] }}...</code>
                                 {% else %}
                                     <span class="text-xs text-gray-500 dark:text-gray-400">No checksum</span>
                                 {% endif %}
                             </td>
-                            <td class="px-3 py-1.5 text-xs font-medium">
-                                <div class="flex space-x-2">
-                                    <button class="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300" 
-                                            onclick="showMigrationDetails('{{ migration.version }}', '{{ migration.name }}', '{{ migration.applied_at or 'Not Applied' }}', '{{ migration.checksum or 'No checksum' }}')"
+                            <td class="px-3 py-1.5 text-xs font-medium" data-label="Actions">
+                                <div class="flex flex-wrap gap-2">
+                                    <button class="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300 min-h-[44px] min-w-[44px] touch-target inline-flex items-center justify-center" 
+                                            onclick="event.stopPropagation(); showMigrationDetails('{{ migration.version }}', '{{ migration.name }}', '{{ migration.applied_at or 'Not Applied' }}', '{{ migration.checksum or 'No checksum' }}')"
                                             title="View Details">
                                         <i class="fas fa-eye"></i>
                                     </button>
                                     {% if migration.applied_at %}
-                                    <button class="text-yellow-600 hover:text-yellow-900 dark:text-yellow-400 dark:hover:text-yellow-300" 
-                                            onclick="rerunMigration('{{ migration.version }}', '{{ migration.name }}')"
+                                    <button class="text-yellow-600 hover:text-yellow-900 dark:text-yellow-400 dark:hover:text-yellow-300 min-h-[44px] min-w-[44px] touch-target inline-flex items-center justify-center" 
+                                            onclick="event.stopPropagation(); rerunMigration('{{ migration.version }}', '{{ migration.name }}')"
                                             title="Re-run Migration">
                                         <i class="fas fa-redo"></i>
                                     </button>
-                                    <button class="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300" 
-                                            onclick="deleteMigration('{{ migration.version }}', '{{ migration.name }}')"
+                                    <button class="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300 min-h-[44px] min-w-[44px] touch-target inline-flex items-center justify-center" 
+                                            onclick="event.stopPropagation(); deleteMigration('{{ migration.version }}', '{{ migration.name }}')"
                                             title="Delete Migration Record">
                                         <i class="fas fa-trash"></i>
                                     </button>
@@ -153,8 +153,8 @@
 </div>
 
 <!-- Migration Details Modal -->
-<div id="migrationDetailsModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50">
-    <div class="relative top-20 mx-auto p-5 border w-11/12 md:w-3/4 lg:w-1/2 shadow-lg rounded-md bg-white dark:bg-gray-800">
+<div id="migrationDetailsModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50 dashboard-modal">
+    <div class="relative top-4 md:top-20 mx-auto p-4 md:p-5 border w-full md:w-3/4 lg:w-1/2 max-w-full md:max-w-none shadow-lg rounded-md bg-white dark:bg-gray-800">
         <div class="mt-3">
             <div class="flex items-center justify-between mb-4">
                 <h3 class="text-lg font-medium text-gray-900 dark:text-white">Migration Details</h3>
@@ -188,8 +188,8 @@
 </div>
 
 <!-- Re-run Migration Modal -->
-<div id="rerunMigrationModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50">
-    <div class="relative top-20 mx-auto p-5 border w-11/12 md:w-1/2 shadow-lg rounded-md bg-white dark:bg-gray-800">
+<div id="rerunMigrationModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50 dashboard-modal">
+    <div class="relative top-4 md:top-20 mx-auto p-4 md:p-5 border w-full md:w-1/2 max-w-full md:max-w-none shadow-lg rounded-md bg-white dark:bg-gray-800">
         <div class="mt-3">
             <div class="flex items-center justify-between mb-4">
                 <h3 class="text-lg font-medium text-gray-900 dark:text-white">Re-run Migration</h3>
@@ -210,17 +210,17 @@
                     </div>
                 </div>
             </div>
-            <div class="flex justify-end space-x-3">
-                <button type="button" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg transition-colors" onclick="closeModal('rerunMigrationModal')">Cancel</button>
-                <button type="button" class="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded-lg transition-colors" id="confirm-rerun-migration">Re-run</button>
+            <div class="flex justify-end gap-3">
+                <button type="button" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 min-h-[44px] rounded-lg transition-colors touch-target" onclick="closeModal('rerunMigrationModal')">Cancel</button>
+                <button type="button" class="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 min-h-[44px] rounded-lg transition-colors touch-target" id="confirm-rerun-migration">Re-run</button>
             </div>
         </div>
     </div>
 </div>
 
 <!-- Delete Confirmation Modal -->
-<div id="deleteMigrationModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50">
-    <div class="relative top-20 mx-auto p-5 border w-11/12 md:w-1/2 shadow-lg rounded-md bg-white dark:bg-gray-800">
+<div id="deleteMigrationModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50 dashboard-modal">
+    <div class="relative top-4 md:top-20 mx-auto p-4 md:p-5 border w-full md:w-1/2 max-w-full md:max-w-none shadow-lg rounded-md bg-white dark:bg-gray-800">
         <div class="mt-3">
             <div class="flex items-center justify-between mb-4">
                 <h3 class="text-lg font-medium text-gray-900 dark:text-white">Delete Migration</h3>
@@ -241,9 +241,9 @@
                     </div>
                 </div>
             </div>
-            <div class="flex justify-end space-x-3">
-                <button type="button" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg transition-colors" onclick="closeModal('deleteMigrationModal')">Cancel</button>
-                <button type="button" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-colors" id="confirm-delete-migration">Delete</button>
+            <div class="flex justify-end gap-3">
+                <button type="button" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 min-h-[44px] rounded-lg transition-colors touch-target" onclick="closeModal('deleteMigrationModal')">Cancel</button>
+                <button type="button" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 min-h-[44px] rounded-lg transition-colors touch-target" id="confirm-delete-migration">Delete</button>
             </div>
         </div>
     </div>
