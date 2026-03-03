@@ -572,6 +572,55 @@ class WidgetApiKey(Base):
         }
 
 
+class RateLimitConfig(Base):
+    """Model for rate limit and budget configuration per user, agent, or project."""
+
+    __tablename__ = 'rate_limit_config'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    scope = Column(String(20), nullable=False)  # user, agent, project
+    scope_id = Column(String(500), nullable=False)
+    requests_per_minute = Column(Integer, nullable=True)
+    tokens_per_hour = Column(Integer, nullable=True)
+    tokens_per_day = Column(Integer, nullable=True)
+    tokens_per_month = Column(Integer, nullable=True)
+    max_tokens_per_request = Column(Integer, nullable=True)
+    action_on_limit = Column(String(20), nullable=False, default='block')  # warn, throttle, block
+    alert_thresholds = Column(Text, nullable=True)  # JSON array e.g. [80, 90, 100]
+    alert_webhook_url = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc),
+                       onupdate=lambda: datetime.now(timezone.utc), nullable=False)
+
+    def get_alert_thresholds(self) -> list:
+        if not self.alert_thresholds:
+            return [80, 90, 100]
+        try:
+            return json.loads(self.alert_thresholds)
+        except json.JSONDecodeError:
+            return [80, 90, 100]
+
+    def set_alert_thresholds(self, thresholds: list):
+        self.alert_thresholds = json.dumps(thresholds) if thresholds else None
+
+    def to_dict(self) -> dict:
+        return {
+            'id': self.id,
+            'scope': self.scope,
+            'scope_id': self.scope_id,
+            'requests_per_minute': self.requests_per_minute,
+            'tokens_per_hour': self.tokens_per_hour,
+            'tokens_per_day': self.tokens_per_day,
+            'tokens_per_month': self.tokens_per_month,
+            'max_tokens_per_request': self.max_tokens_per_request,
+            'action_on_limit': self.action_on_limit,
+            'alert_thresholds': self.get_alert_thresholds(),
+            'alert_webhook_url': self.alert_webhook_url,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
 class FileSearchDocument(Base):
     """Model for documents/files in file search stores."""
 

@@ -74,6 +74,7 @@ tags_metadata = [
     {"name": "Dashboard - Migrations", "description": "Database migration management API endpoints"},
     {"name": "Dashboard - Server Control", "description": "ADK server control API endpoints (start, stop, restart)"},
     {"name": "Dashboard - Usage Analytics", "description": "Token usage and analytics API endpoints"},
+    {"name": "Dashboard - Rate Limits", "description": "Rate limit and budget configuration API endpoints"},
     {"name": "Proxy - ADK Web", "description": "Proxies to the main ADK web interface"},
     {"name": "Proxy - ADK Documentation", "description": "Proxies to ADK API documentation (Swagger, ReDoc, OpenAPI schema)"},
     {"name": "Proxy - ADK API", "description": "Generic proxy for all ADK API endpoints with streaming support"},
@@ -153,6 +154,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Rate limit middleware (optional, enable with RATE_LIMIT_ENABLED=true)
+if os.getenv("RATE_LIMIT_ENABLED", "false").lower() in ("true", "1", "yes"):
+    from server.rate_limit_middleware import RateLimitMiddleware
+    app.add_middleware(RateLimitMiddleware)
 
 from shared.utils.server_control_service import ServerControlService
 

@@ -1407,6 +1407,15 @@ class DashboardServer:
                 "view": view
             })
 
+        @self.app.get("/dashboard/rate-limits", response_class=HTMLResponse, tags=["Dashboard - Pages"])
+        async def dashboard_rate_limits(request: Request, username: str = Depends(self._get_auth_user_dependency)):
+            """Dashboard rate limits and budgets page"""
+            return self.templates.TemplateResponse("dashboard/rate_limits.html", {
+                "request": request,
+                "page_title": "Rate Limits & Budgets",
+                "username": username,
+            })
+
         @self.app.get("/dashboard/traces", response_class=HTMLResponse, tags=["Dashboard - Pages"])
         async def dashboard_traces(request: Request, username: str = Depends(self._get_auth_user_dependency)):
             """Dashboard traces page - OpenTelemetry distributed tracing viewer"""
@@ -1445,6 +1454,84 @@ class DashboardServer:
         ):
             """Get paginated token usage logs."""
             return self._get_token_usage_logs(hours, limit, page)
+
+        @self.app.get("/dashboard/api/rate-limits", tags=["Dashboard - Rate Limits"])
+        async def get_rate_limits_api(request: Request, username: str = Depends(self._get_auth_user_dependency), scope: Optional[str] = None):
+            """Get rate limit configs, optionally filtered by scope (user, agent, project)."""
+            from shared.utils.rate_limit_service import get_rate_limit_service
+            svc = get_rate_limit_service()
+            configs = svc.get_configs(scope=scope)
+            return {"configs": configs}
+
+        @self.app.get("/dashboard/api/rate-limits/usage", tags=["Dashboard - Rate Limits"])
+        async def get_rate_limit_usage_api(
+            request: Request,
+            username: str = Depends(self._get_auth_user_dependency),
+            user_id: Optional[str] = None,
+            agent_name: Optional[str] = None,
+            project_id: Optional[int] = None,
+        ):
+            """Get current usage vs limits for user/agent/project."""
+            from shared.utils.rate_limit_service import get_rate_limit_service
+            svc = get_rate_limit_service()
+            usage = svc.get_usage_snapshot(
+                user_id=user_id,
+                agent_name=agent_name,
+                project_id=project_id,
+            )
+            return {
+                "requests_last_min": usage.requests_last_min,
+                "tokens_last_hour": usage.tokens_last_hour,
+                "tokens_last_day": usage.tokens_last_day,
+                "tokens_last_month": usage.tokens_last_month,
+            }
+
+        @self.app.post("/dashboard/api/rate-limits", tags=["Dashboard - Rate Limits"])
+        async def upsert_rate_limit_api(
+            request: Request,
+            username: str = Depends(self._get_auth_user_dependency),
+        ):
+            """Create or update rate limit config."""
+            from shared.utils.rate_limit_service import get_rate_limit_service
+            body = await request.json()
+            scope = body.get("scope")
+            scope_id = body.get("scope_id")
+            if not scope or not scope_id:
+                raise HTTPException(status_code=400, detail="scope and scope_id required")
+            if scope not in ("user", "agent", "project"):
+                raise HTTPException(status_code=400, detail="scope must be user, agent, or project")
+            svc = get_rate_limit_service()
+            result = svc.upsert_config(
+                scope=scope,
+                scope_id=str(scope_id),
+                requests_per_minute=body.get("requests_per_minute"),
+                tokens_per_hour=body.get("tokens_per_hour"),
+                tokens_per_day=body.get("tokens_per_day"),
+                tokens_per_month=body.get("tokens_per_month"),
+                max_tokens_per_request=body.get("max_tokens_per_request"),
+                action_on_limit=body.get("action_on_limit", "block"),
+                alert_thresholds=body.get("alert_thresholds", [80, 90, 100]),
+                alert_webhook_url=body.get("alert_webhook_url"),
+            )
+            if not result:
+                raise HTTPException(status_code=500, detail="Failed to save config")
+            return result
+
+        @self.app.delete("/dashboard/api/rate-limits/{scope}/{scope_id:path}", tags=["Dashboard - Rate Limits"])
+        async def delete_rate_limit_api(
+            scope: str,
+            scope_id: str,
+            request: Request,
+            username: str = Depends(self._get_auth_user_dependency),
+        ):
+            """Delete rate limit config."""
+            from shared.utils.rate_limit_service import get_rate_limit_service
+            if scope not in ("user", "agent", "project"):
+                raise HTTPException(status_code=400, detail="scope must be user, agent, or project")
+            svc = get_rate_limit_service()
+            if not svc.delete_config(scope=scope, scope_id=scope_id):
+                raise HTTPException(status_code=404, detail="Config not found")
+            return {"deleted": True}
 
         @self.app.get("/dashboard/api/traces", tags=["Dashboard - Traces"])
         async def get_traces_api(

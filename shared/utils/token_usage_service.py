@@ -8,8 +8,9 @@ separated from the database connection logic.
 import logging
 import uuid
 from typing import Optional, Dict, Any, List
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from sqlalchemy.exc import SQLAlchemyError
 from .database_client import get_database_client
 from .models import TokenUsageLog
@@ -298,6 +299,96 @@ class TokenUsageService:
             token_data['timestamp'] = timestamp
             
         return self.insert_token_usage(token_data)
+
+    def get_user_tokens_since(self, user_id: str, since: datetime) -> int:
+        """Total tokens (prompt+response) for user since given datetime."""
+        session = self._get_session()
+        if not session:
+            return 0
+        try:
+            row = session.query(
+                func.coalesce(func.sum(
+                    func.coalesce(TokenUsageLog.prompt_tokens, 0) +
+                    func.coalesce(TokenUsageLog.response_tokens, 0)
+                ), 0)
+            ).filter(
+                TokenUsageLog.user_id == user_id,
+                TokenUsageLog.timestamp >= since
+            ).scalar()
+            return int(row or 0)
+        except SQLAlchemyError as e:
+            logger.error("Failed to get user tokens since: %s", e)
+            return 0
+        finally:
+            session.close()
+
+    def get_agent_tokens_since(self, agent_name: str, since: datetime) -> int:
+        """Total tokens for agent since given datetime."""
+        session = self._get_session()
+        if not session:
+            return 0
+        try:
+            row = session.query(
+                func.coalesce(func.sum(
+                    func.coalesce(TokenUsageLog.prompt_tokens, 0) +
+                    func.coalesce(TokenUsageLog.response_tokens, 0)
+                ), 0)
+            ).filter(
+                TokenUsageLog.agent_name == agent_name,
+                TokenUsageLog.timestamp >= since
+            ).scalar()
+            return int(row or 0)
+        except SQLAlchemyError as e:
+            logger.error("Failed to get agent tokens since: %s", e)
+            return 0
+        finally:
+            session.close()
+
+    def get_project_tokens_since(self, project_id: int, since: datetime) -> int:
+        """Total tokens for project (via agents) since given datetime."""
+        session = self._get_session()
+        if not session:
+            return 0
+        try:
+            from .models import AgentConfig
+            agent_names = [
+                r[0] for r in session.query(AgentConfig.name).filter(
+                    AgentConfig.project_id == project_id
+                ).all()
+            ]
+            if not agent_names:
+                return 0
+            row = session.query(
+                func.coalesce(func.sum(
+                    func.coalesce(TokenUsageLog.prompt_tokens, 0) +
+                    func.coalesce(TokenUsageLog.response_tokens, 0)
+                ), 0)
+            ).filter(
+                TokenUsageLog.agent_name.in_(agent_names),
+                TokenUsageLog.timestamp >= since
+            ).scalar()
+            return int(row or 0)
+        except SQLAlchemyError as e:
+            logger.error("Failed to get project tokens since: %s", e)
+            return 0
+        finally:
+            session.close()
+
+    def get_user_request_count_since(self, user_id: str, since: datetime) -> int:
+        """Request count for user since given datetime."""
+        session = self._get_session()
+        if not session:
+            return 0
+        try:
+            return session.query(func.count(TokenUsageLog.id)).filter(
+                TokenUsageLog.user_id == user_id,
+                TokenUsageLog.timestamp >= since
+            ).scalar() or 0
+        except SQLAlchemyError as e:
+            logger.error("Failed to get user request count: %s", e)
+            return 0
+        finally:
+            session.close()
 
 
 # Global instance
