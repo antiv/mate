@@ -369,6 +369,8 @@
         formData.append('input_schema', inputSchema);
         formData.append('output_schema', outputSchema);
         formData.append('include_contents', document.getElementById('agentIncludeContents').value || '');
+        const guardrailConfig = monacoEditors['agentGuardrailConfigEditor'] ? getJsonFromEditor(monacoEditors['agentGuardrailConfigEditor']) : document.getElementById('agentGuardrailConfig').value || '';
+        formData.append('guardrail_config', guardrailConfig);
         formData.append('max_iterations', document.getElementById('agentMaxIterations').value || '');
         const hardcoded = document.getElementById('agentHardcoded').checked;
         formData.append('disabled', document.getElementById('agentDisabled').checked);
@@ -529,6 +531,8 @@
         formData.append('input_schema', inputSchema);
         formData.append('output_schema', outputSchema);
         formData.append('include_contents', document.getElementById('editAgentIncludeContents').value || '');
+        const editGuardrailConfig = monacoEditors['editAgentGuardrailConfigEditor'] ? getJsonFromEditor(monacoEditors['editAgentGuardrailConfigEditor']) : document.getElementById('editAgentGuardrailConfig').value || '';
+        formData.append('guardrail_config', editGuardrailConfig);
         formData.append('max_iterations', document.getElementById('editAgentMaxIterations').value || '');
         formData.append('disabled', document.getElementById('editAgentDisabled').checked);
         const newHardcoded = document.getElementById('editAgentHardcoded').checked;
@@ -703,6 +707,7 @@
                             input_schema: safeJsonParse(inputSchema, {}),
                             output_schema: safeJsonParse(outputSchema, {}),
                             include_contents: document.getElementById('editAgentIncludeContents').value || '',
+                            guardrail_config: safeJsonParse(editGuardrailConfig, {}),
                             max_iterations: document.getElementById('editAgentMaxIterations').value || '',
                             disabled: document.getElementById('editAgentDisabled').checked,
                             hardcoded: document.getElementById('editAgentHardcoded').checked,
@@ -808,6 +813,8 @@
         formData.append('input_schema', inputSchema);
         formData.append('output_schema', outputSchema);
         formData.append('include_contents', document.getElementById('copyAgentIncludeContents').value || '');
+        const copyGuardrailConfig = monacoEditors['copyAgentGuardrailConfigEditor'] ? getJsonFromEditor(monacoEditors['copyAgentGuardrailConfigEditor']) : document.getElementById('copyAgentGuardrailConfig').value || '';
+        formData.append('guardrail_config', copyGuardrailConfig);
         formData.append('max_iterations', document.getElementById('copyAgentMaxIterations').value || '');
         const hardcoded = document.getElementById('copyAgentHardcoded').checked;
         formData.append('disabled', document.getElementById('copyAgentDisabled').checked);

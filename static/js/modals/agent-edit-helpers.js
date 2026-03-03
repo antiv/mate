@@ -117,6 +117,11 @@ function populateEditModalSchemaConfiguration(row) {
     document.getElementById('editAgentOutputSchema').value = JSON.stringify(outputSchema, null, 2);
 }
 
+function populateEditModalGuardrailConfiguration(row) {
+    const guardrailConfig = row.dataset.guardrailConfig ? JSON.parse(row.dataset.guardrailConfig) : {};
+    document.getElementById('editAgentGuardrailConfig').value = JSON.stringify(guardrailConfig, null, 2);
+}
+
 function populateEditModalOtherConfiguration(row) {
     // Set include contents
     document.getElementById('editAgentIncludeContents').value = row.dataset.includeContents || '';
@@ -206,6 +211,7 @@ window.populateEditModalToolConfiguration = populateEditModalToolConfiguration;
 window.populateEditModalPlannerConfiguration = populateEditModalPlannerConfiguration;
 window.populateEditModalContentConfiguration = populateEditModalContentConfiguration;
 window.populateEditModalSchemaConfiguration = populateEditModalSchemaConfiguration;
+window.populateEditModalGuardrailConfiguration = populateEditModalGuardrailConfiguration;
 window.populateEditModalOtherConfiguration = populateEditModalOtherConfiguration;
 window.setupPanelEventListeners = setupPanelEventListeners;
 

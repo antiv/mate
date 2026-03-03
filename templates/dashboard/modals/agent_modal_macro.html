@@ -194,6 +194,26 @@
                         <pre id="{{ id_prefix }}PlannerConfigSummary" class="mt-1 text-xs text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-900/60 border border-dashed border-gray-200 dark:border-gray-700 rounded px-2 py-1.5 whitespace-pre-wrap font-mono" data-empty-text="No planner configured">No planner configured</pre>
                     </div>
                     
+                    <div class="space-y-1.5">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <label class="block text-xs font-medium text-gray-700 dark:text-gray-300">Guardrails</label>
+                                <p class="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">Configure input/output safety guardrails (PII, injection, content policy).</p>
+                            </div>
+                            <div class="flex items-center space-x-1">
+                                <button type="button" class="px-2 py-1 text-xs bg-orange-600 hover:bg-orange-700 text-white rounded flex items-center" onclick="openConfigModal('{{ id_prefix }}', 'GuardrailConfig')">
+                                    <i class="fas fa-shield-alt text-[11px] mr-1"></i>
+                                    Configure
+                                </button>
+                                <button type="button" class="px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 rounded hover:border-gray-400 dark:hover:border-gray-500 flex items-center" onclick="clearJsonField('{{ id_prefix }}', 'GuardrailConfig')">
+                                    <i class="fas fa-undo text-[11px] mr-1"></i>
+                                    Clear
+                                </button>
+                            </div>
+                        </div>
+                        <pre id="{{ id_prefix }}GuardrailConfigSummary" class="mt-1 text-xs text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-900/60 border border-dashed border-gray-200 dark:border-gray-700 rounded px-2 py-1.5 whitespace-pre-wrap font-mono" data-empty-text="No guardrails configured">No guardrails configured</pre>
+                    </div>
+                    
                     <!-- Delimiter -->
                     <div class="border-t border-gray-200 dark:border-gray-600 my-6"></div>
                     

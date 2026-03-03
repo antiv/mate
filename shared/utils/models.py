@@ -111,6 +111,39 @@ class TokenUsageLog(Base):
         }
 
 
+class GuardrailLog(Base):
+    """Model for guardrail trigger logs."""
+
+    __tablename__ = 'guardrail_logs'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    request_id = Column(String(255), nullable=False)
+    session_id = Column(String(255), nullable=True)
+    user_id = Column(String(255), nullable=True)
+    agent_name = Column(String(255), nullable=True)
+    guardrail_type = Column(String(100), nullable=False)
+    phase = Column(String(20), nullable=False, default='input')  # input | output
+    action_taken = Column(String(50), nullable=False)  # block | warn | log | redact
+    matched_content = Column(Text, nullable=True)
+    details = Column(Text, nullable=True)
+    timestamp = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+
+    def to_dict(self) -> dict:
+        return {
+            'id': self.id,
+            'request_id': self.request_id,
+            'session_id': self.session_id,
+            'user_id': self.user_id,
+            'agent_name': self.agent_name,
+            'guardrail_type': self.guardrail_type,
+            'phase': self.phase,
+            'action_taken': self.action_taken,
+            'matched_content': self.matched_content,
+            'details': self.details,
+            'timestamp': self.timestamp.isoformat() if self.timestamp else None
+        }
+
+
 class Project(Base):
     """Model for grouping agents under projects."""
     
@@ -157,6 +190,7 @@ class AgentConfig(Base):
     input_schema = Column(Text, nullable=True)  # JSON string for input validation schema
     output_schema = Column(Text, nullable=True)  # JSON string for output structure schema
     include_contents = Column(Text, nullable=True)  # JSON array for managing context/history
+    guardrail_config = Column(Text, nullable=True)  # JSON config for safety guardrails (PII, injection, content policy, etc.)
     disabled = Column(Boolean, nullable=False, default=False)  # Flag to disable agent
     hardcoded = Column(Boolean, nullable=False, default=False)  # Flag to mark agent as hardcoded (skip folder creation)
     project_id = Column(Integer, ForeignKey('projects.id'), nullable=False, default=1)
@@ -213,6 +247,17 @@ class AgentConfig(Base):
         """Set planner configuration from a dictionary."""
         self.planner_config = json.dumps(config) if config else None
     
+    def get_guardrail_config(self) -> dict:
+        """Get guardrail configuration as a dictionary."""
+        try:
+            return json.loads(self.guardrail_config) if self.guardrail_config else {}
+        except json.JSONDecodeError:
+            return {}
+
+    def set_guardrail_config(self, config: dict):
+        """Set guardrail configuration from a dictionary."""
+        self.guardrail_config = json.dumps(config) if config else None
+
     def has_parent_agent(self, parent_agent: str) -> bool:
         """Check if agent has a specific parent agent."""
         return parent_agent in self.get_parent_agents()
@@ -236,6 +281,7 @@ class AgentConfig(Base):
             'input_schema': self.input_schema,
             'output_schema': self.output_schema,
             'include_contents': self.include_contents,
+            'guardrail_config': self.guardrail_config,
             'disabled': self.disabled,
             'hardcoded': self.hardcoded,
             'project_id': self.project_id,
