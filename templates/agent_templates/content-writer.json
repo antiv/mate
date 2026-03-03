@@ -1,0 +1,82 @@
+{
+  "template_meta": {
+    "id": "content-writer",
+    "name": "Content Writer",
+    "description": "Multi-agent content pipeline: research, write, and edit content with style guide support.",
+    "category": "content",
+    "version": "1.0",
+    "compatibility_tags": ["mcp", "memory_blocks"],
+    "root_agent": "writer_root",
+    "agent_prefix": "writer"
+  },
+  "project": {
+    "name": "Content Writer",
+    "description": "Pre-built content writing hierarchy: researcher, writer, editor"
+  },
+  "agents": [
+    {
+      "name": "writer_root",
+      "type": "llm",
+      "model_name": "openrouter/deepseek/deepseek-chat-v3.1",
+      "description": "Content captain. Routes to researcher, writer, or editor.",
+      "instruction": "You are the Content Captain. Route requests:\n- Research, gather info -> writer_researcher\n- Draft, write -> writer_writer\n- Edit, polish -> writer_editor\nCall list_shared_blocks for style guide and instructions.",
+      "parent_agents": [],
+      "allowed_for_roles": "[\"admin\", \"user\"]",
+      "tool_config": "{\"memory_blocks\": true}",
+      "mcp_servers_config": null,
+      "disabled": false,
+      "hardcoded": false
+    },
+    {
+      "name": "writer_researcher",
+      "type": "llm",
+      "model_name": "openrouter/deepseek/deepseek-chat-v3.1",
+      "description": "Research agent. Gathers information for content.",
+      "instruction": "You are the Content Researcher. Use search tools to gather relevant information. Return structured notes with sources.",
+      "parent_agents": ["writer_root"],
+      "allowed_for_roles": "[\"admin\", \"user\"]",
+      "tool_config": "{\"memory_blocks\": true}",
+      "mcp_servers_config": "{\"mcpServers\": {\"tavily\": {\"command\": \"npx\", \"args\": [\"-y\", \"mcp-remote\", \"https://mcp.tavily.com/mcp/?tavilyApiKey=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\"], \"timeout\": 300}}}",
+      "disabled": false,
+      "hardcoded": false
+    },
+    {
+      "name": "writer_writer",
+      "type": "llm",
+      "model_name": "openrouter/deepseek/deepseek-chat-v3.1",
+      "description": "Writer agent. Drafts content from research.",
+      "instruction": "You are the Content Writer. Draft content based on research. Follow the style guide from memory blocks.",
+      "parent_agents": ["writer_root"],
+      "allowed_for_roles": "[\"admin\", \"user\"]",
+      "tool_config": "{\"memory_blocks\": true}",
+      "mcp_servers_config": null,
+      "disabled": false,
+      "hardcoded": false
+    },
+    {
+      "name": "writer_editor",
+      "type": "llm",
+      "model_name": "openrouter/deepseek/deepseek-chat-v3.1",
+      "description": "Editor agent. Polishes and improves content.",
+      "instruction": "You are the Content Editor. Polish content for clarity, grammar, and style. Apply the style guide from memory blocks.",
+      "parent_agents": ["writer_root"],
+      "allowed_for_roles": "[\"admin\", \"user\"]",
+      "tool_config": "{\"memory_blocks\": true}",
+      "mcp_servers_config": null,
+      "disabled": false,
+      "hardcoded": false
+    }
+  ],
+  "memory_blocks": [
+    {
+      "label": "system_instruction_writer_root",
+      "value": "Route content requests:\n- \"Research...\", \"Find info about...\" -> writer_researcher\n- \"Write...\", \"Draft...\" -> writer_writer\n- \"Edit...\", \"Polish...\" -> writer_editor",
+      "description": "Content routing rules"
+    },
+    {
+      "label": "system_instruction_style_guide",
+      "value": "DEFAULT STYLE GUIDE:\n- Use clear, concise language\n- Prefer active voice\n- Break long paragraphs into shorter ones\n- Include headings for structure",
+      "description": "Content style guide"
+    }
+  ]
+}

@@ -39,6 +39,10 @@
                 <i class="fas fa-upload mr-1.5"></i>
                 Import
             </button>
+            <button id="saveTemplateBtn" class="bg-teal-600 hover:bg-teal-700 text-white px-3 py-1.5 text-xs rounded-lg flex items-center disabled:bg-gray-400 disabled:cursor-not-allowed" {% if not selected_project_id %}disabled title="Select a project and root agent first"{% endif %}>
+                <i class="fas fa-layer-group mr-1.5"></i>
+                Save as Template
+            </button>
             <button onclick="reinitializeAllAgents()" class="bg-yellow-600 hover:bg-yellow-700 text-white px-3 py-1.5 text-xs rounded-lg flex items-center" title="Reload all agents with fresh configuration">
                 <i class="fas fa-redo mr-1.5"></i>
                 Reload All
@@ -198,6 +202,9 @@
 
 <!-- Import Agents Modal -->
 {% include 'dashboard/modals/import_agents_modal.html' %}
+
+<!-- Save as Template Modal -->
+{% include 'dashboard/modals/save_template_modal.html' %}
 
 <!-- Memory Blocks Modal -->
 {% include 'dashboard/modals/memory_blocks_modal.html' %}

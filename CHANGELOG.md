@@ -5,6 +5,16 @@ All notable changes to MATE (Multi-Agent Tree Engine) will be documented in this
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.6] - 2026-03-03
+
+### Added
+
+- **Template Library** - curated pre-built agent configurations (customer support, research assistant, code reviewer, content writer, Chess MATE)
+- **Dashboard Template Gallery** - `/dashboard/templates` with search, categories, one-click import
+- **One-click import** - creates project, agents, and memory blocks; agent names prefixed to avoid collisions
+- **Community contribution** - add JSON to `templates/agent_templates/` via GitHub PR; see `documents/TEMPLATE_LIBRARY.md`
+- **Template API** - `GET/POST /dashboard/api/templates`, `GET /dashboard/api/templates/{id}`
+
 ## [1.0.5] - 2026-03-03
 
 ### Added

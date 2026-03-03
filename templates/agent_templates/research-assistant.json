@@ -1,0 +1,77 @@
+{
+  "template_meta": {
+    "id": "research-assistant",
+    "name": "Research Assistant",
+    "description": "Multi-agent research pipeline: search, summarize, and write reports using web search (Tavily MCP).",
+    "category": "research",
+    "version": "1.0",
+    "compatibility_tags": ["mcp", "memory_blocks"],
+    "root_agent": "research_root",
+    "agent_prefix": "research"
+  },
+  "project": {
+    "name": "Research Assistant",
+    "description": "Pre-built research agent hierarchy: search, summarizer, writer"
+  },
+  "agents": [
+    {
+      "name": "research_root",
+      "type": "llm",
+      "model_name": "openrouter/deepseek/deepseek-chat-v3.1",
+      "description": "Research orchestrator. Routes to search, summarizer, or writer.",
+      "instruction": "You are the Research Captain. Route requests:\n- Web search -> research_search\n- Summarize content -> research_summarizer\n- Write report -> research_writer\nCall list_shared_blocks for instructions at session start.",
+      "parent_agents": [],
+      "allowed_for_roles": "[\"admin\", \"user\"]",
+      "tool_config": "{\"memory_blocks\": true}",
+      "mcp_servers_config": null,
+      "disabled": false,
+      "hardcoded": false
+    },
+    {
+      "name": "research_search",
+      "type": "llm",
+      "model_name": "openrouter/deepseek/deepseek-chat-v3.1",
+      "description": "Web search agent. Uses Tavily MCP for research.",
+      "instruction": "You are the Research Search agent. Use Tavily search tools to find relevant information. Return concise, cited results.",
+      "parent_agents": ["research_root"],
+      "allowed_for_roles": "[\"admin\", \"user\"]",
+      "tool_config": "{\"memory_blocks\": true}",
+      "mcp_servers_config": "{\"mcpServers\": {\"tavily\": {\"command\": \"npx\", \"args\": [\"-y\", \"mcp-remote\", \"https://mcp.tavily.com/mcp/?tavilyApiKey=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\"], \"timeout\": 300}}}",
+      "disabled": false,
+      "hardcoded": false
+    },
+    {
+      "name": "research_summarizer",
+      "type": "llm",
+      "model_name": "openrouter/deepseek/deepseek-chat-v3.1",
+      "description": "Summarizer agent. Condenses long content.",
+      "instruction": "You are the Summarizer. Condense provided content into clear, structured summaries. Preserve key facts and citations.",
+      "parent_agents": ["research_root"],
+      "allowed_for_roles": "[\"admin\", \"user\"]",
+      "tool_config": "{\"memory_blocks\": true}",
+      "mcp_servers_config": null,
+      "disabled": false,
+      "hardcoded": false
+    },
+    {
+      "name": "research_writer",
+      "type": "llm",
+      "model_name": "openrouter/deepseek/deepseek-chat-v3.1",
+      "description": "Report writer. Produces structured research reports.",
+      "instruction": "You are the Report Writer. Create well-structured research reports with sections, citations, and clear conclusions.",
+      "parent_agents": ["research_root"],
+      "allowed_for_roles": "[\"admin\", \"user\"]",
+      "tool_config": "{\"memory_blocks\": true}",
+      "mcp_servers_config": null,
+      "disabled": false,
+      "hardcoded": false
+    }
+  ],
+  "memory_blocks": [
+    {
+      "label": "system_instruction_research_root",
+      "value": "Route research requests:\n- \"Search for...\", \"Find information about...\" -> research_search\n- \"Summarize...\", \"Condense...\" -> research_summarizer\n- \"Write a report...\", \"Draft...\" -> research_writer",
+      "description": "Research routing rules"
+    }
+  ]
+}

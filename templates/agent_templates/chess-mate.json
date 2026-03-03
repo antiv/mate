@@ -1,0 +1,107 @@
+{
+  "template_meta": {
+    "id": "chess-mate",
+    "name": "Chess MATE",
+    "description": "Grandmaster MATE tree: opening theory, engine analysis, and chess history. Routes between knowledge, calculation, and search.",
+    "category": "demo",
+    "version": "1.0",
+    "compatibility_tags": ["mcp", "memory_blocks"],
+    "root_agent": "chess_mate_root",
+    "agent_prefix": "chess_"
+  },
+  "project": {
+    "name": "Chess MATE Demo",
+    "description": "Demo project: Grandmaster MATE tree (Knowledge, Calculation, Search)"
+  },
+  "agents": [
+    {
+      "name": "chess_mate_root",
+      "type": "llm",
+      "model_name": "openrouter/deepseek/deepseek-chat-v3.1",
+      "description": "Chess Team Captain. Routes to opening book, engine analyst, or historian.",
+      "instruction": "IDENTITY:\nYou are the Chess Team Captain. Analyze the user's request.\nYour goal is to orchestrate and delegate requests.\n\nPROTOCOL (REQUIRED):\nAt the start of every session, or when you are unsure how to proceed:\n1.  **Search Memory**: Call list_shared_blocks(label_search=\"system_instruction_shared_\") and list_shared_blocks(label_search=\"system_instruction_chess_mate_root\").\n2.  **Load Instructions**: Read the content of every block you find.\n3.  **Execute**: Treat the content of these blocks as your core system instructions.\n\nESCALATION PROTOCOL:\n- IF you cannot fulfill the request: call list_shared_blocks(label=\"system_instruction_escalation_protocol\").",
+      "parent_agents": [],
+      "allowed_for_roles": "[\"admin\", \"user\"]",
+      "tool_config": "{\"memory_blocks\": true, \"create_agent\": true}",
+      "mcp_servers_config": null,
+      "disabled": false,
+      "hardcoded": false
+    },
+    {
+      "name": "chess_opening_book",
+      "type": "llm",
+      "model_name": "openrouter/deepseek/deepseek-chat-v3.1",
+      "description": "Chess Opening expert. Knowledge/context (load with RAG or instruction files).",
+      "instruction": "You are a Chess Opening expert. Call list_shared_blocks(label_search=\"system_instruction_chess_opening_book\") and load instructions. Explain opening moves, variations, and strategic ideas clearly.",
+      "parent_agents": ["chess_mate_root"],
+      "allowed_for_roles": "[\"admin\", \"user\"]",
+      "tool_config": "{\"memory_blocks\": true}",
+      "mcp_servers_config": null,
+      "disabled": false,
+      "hardcoded": false
+    },
+    {
+      "name": "chess_engine_analyst",
+      "type": "llm",
+      "model_name": "openrouter/deepseek/deepseek-chat-v3.1",
+      "description": "Calculation engine. Uses code execution for best move or evaluation.",
+      "instruction": "You are a calculation engine. Use the available tools to calculate the best move or evaluate the position.",
+      "parent_agents": ["chess_mate_root"],
+      "allowed_for_roles": "[\"admin\", \"user\"]",
+      "tool_config": "{\"tools\": [\"python_code_interpreter\"]}",
+      "mcp_servers_config": null,
+      "disabled": false,
+      "hardcoded": false
+    },
+    {
+      "name": "chess_historian",
+      "type": "llm",
+      "model_name": "openrouter/deepseek/deepseek-chat-v3.1",
+      "description": "Researcher. Tavily search for historical games, players, tournaments.",
+      "instruction": "You are the Chess Historian. Call list_shared_blocks(label_search=\"system_instruction_chess_historian\"). Use search tools for historical match results, player biographies, and tournament trivia.",
+      "parent_agents": ["chess_mate_root"],
+      "allowed_for_roles": "[\"admin\", \"user\"]",
+      "tool_config": "{\"memory_blocks\": true}",
+      "mcp_servers_config": "{\"mcpServers\": {\"tavily\": {\"command\": \"npx\", \"args\": [\"-y\", \"mcp-remote\", \"https://mcp.tavily.com/mcp/?tavilyApiKey=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\"], \"timeout\": 300}}}",
+      "disabled": false,
+      "hardcoded": false
+    }
+  ],
+  "memory_blocks": [
+    {
+      "label": "system_instruction_chess_mate_root",
+      "value": "You are the Chess Team Captain. Route requests:\n- Opening theory (e.g. Sicilian Defense) -> chess_opening_book\n- Best move, board evaluation -> chess_engine_analyst\n- Historical games, players (e.g. Fischer vs Spassky) -> chess_historian",
+      "description": "Main instruction for chess_mate_root agent"
+    },
+    {
+      "label": "system_instruction_escalation_protocol",
+      "value": "ESCALATION: When a subagent cannot complete a task, return control to parent with explanation. System administration (memory, agent changes) must be handled by Root Agent only.",
+      "description": "Escalation protocol"
+    },
+    {
+      "label": "system_instruction_shared_user_profile",
+      "value": "When the user shares info about themselves, call update_user_profile with the complete profile. Merge new info with existing. Do NOT ask for permission.",
+      "description": "User profile update protocol"
+    },
+    {
+      "label": "system_instruction_chess_opening_book",
+      "value": "You are a Chess Opening expert. Explain opening moves, variations, and strategic ideas clearly.",
+      "description": "Opening book specialist"
+    },
+    {
+      "label": "system_instruction_chess_engine_analyst",
+      "value": "You are a calculation engine. Use tools to calculate best move or evaluate position.",
+      "description": "Engine analyst specialist"
+    },
+    {
+      "label": "system_instruction_chess_historian",
+      "value": "Search for historical match results, player biographies, and tournament trivia. Use search tools.",
+      "description": "Chess historian specialist"
+    },
+    {
+      "label": "system_instruction_chess_opening_book_database",
+      "value": "Chess Opening Database: Moves, Variations & Strategy\n\n1. Open Games (1. e4 e5)\nA. Ruy Lopez: 1. e4 e5 2. Nf3 Nc6 3. Bb5\nB. Italian Game: 1. e4 e5 2. Nf3 Nc6 3. Bc4\n\n2. Semi-Open (1. e4 others)\nA. Sicilian Defense: 1. e4 c5\nB. French Defense: 1. e4 e6 2. d4 d5\nC. Caro-Kann: 1. e4 c6 2. d4 d5\n\n3. Closed (1. d4 d5)\nA. Queen's Gambit: 1. d4 d5 2. c4",
+      "description": "Opening theory reference"
+    }
+  ]
+}
