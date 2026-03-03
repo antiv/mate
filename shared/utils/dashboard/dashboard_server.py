@@ -47,12 +47,13 @@ class DashboardServer:
             from shared.utils.database_client import get_database_client
             from shared.utils.user_service import UserService
             from shared.utils.token_usage_service import TokenUsageService
-            from shared.utils.models import AgentConfig, Project, User, TokenUsageLog
+            from shared.utils.models import AgentConfig, AgentConfigVersion, Project, User, TokenUsageLog
             
             self.db_client = get_database_client()
             self.user_service = UserService()
             self.token_service = TokenUsageService()
             self.AgentConfig = AgentConfig
+            self.AgentConfigVersion = AgentConfigVersion
             self.Project = Project
             self.User = User
             self.TokenUsageLog = TokenUsageLog
@@ -592,7 +593,7 @@ class DashboardServer:
                 "error": True
             }
     
-    def _create_agent_config(self, config_data: Dict[str, Any]) -> bool:
+    def _create_agent_config(self, config_data: Dict[str, Any], changed_by: str = None) -> bool:
         """Create a new agent configuration."""
         if not self.db_client:
             return False
@@ -629,6 +630,7 @@ class DashboardServer:
             config = self.AgentConfig(**processed_data)
             session.add(config)
             session.commit()
+            self._snapshot_agent_config(session, config, change_type='create', changed_by=changed_by)
             return True
         except Exception as e:
             print(f"Error creating agent config: {e}")
@@ -637,7 +639,7 @@ class DashboardServer:
         finally:
             session.close()
     
-    def _update_agent_config(self, config_id: int, config_data: Dict[str, Any]) -> bool:
+    def _update_agent_config(self, config_id: int, config_data: Dict[str, Any], changed_by: str = None) -> bool:
         """Update an agent configuration."""
         if not self.db_client:
             return False
@@ -703,6 +705,7 @@ class DashboardServer:
                     _propagate_project_to_descendants(config.name, config.project_id)
 
                 session.commit()
+                self._snapshot_agent_config(session, config, change_type='update', changed_by=changed_by)
                 return True
             return False
         except Exception as e:
@@ -735,6 +738,133 @@ class DashboardServer:
         finally:
             session.close()
     
+    # ─── Agent Config Versioning ──────────────────────────────────────────
+
+    def _build_config_snapshot(self, config) -> dict:
+        """Build a plain dict snapshot of an AgentConfig (no relationships)."""
+        return {
+            'name': config.name,
+            'type': config.type,
+            'model_name': config.model_name,
+            'description': config.description,
+            'instruction': config.instruction,
+            'mcp_servers_config': config.mcp_servers_config,
+            'parent_agents': config.parent_agents,
+            'allowed_for_roles': config.allowed_for_roles,
+            'tool_config': config.tool_config,
+            'planner_config': config.planner_config,
+            'max_iterations': config.max_iterations,
+            'generate_content_config': config.generate_content_config,
+            'input_schema': config.input_schema,
+            'output_schema': config.output_schema,
+            'include_contents': config.include_contents,
+            'disabled': config.disabled,
+            'hardcoded': config.hardcoded,
+            'project_id': config.project_id,
+        }
+
+    def _snapshot_agent_config(self, session, config, change_type: str = 'update', changed_by: str = None):
+        """Create a versioned snapshot of the given AgentConfig inside an existing session."""
+        try:
+            from sqlalchemy import func
+            max_ver = session.query(func.max(self.AgentConfigVersion.version_number)).filter(
+                self.AgentConfigVersion.agent_config_id == config.id
+            ).scalar() or 0
+
+            version = self.AgentConfigVersion(
+                agent_config_id=config.id,
+                version_number=max_ver + 1,
+                config_snapshot=json.dumps(self._build_config_snapshot(config)),
+                changed_by=changed_by,
+                change_type=change_type,
+            )
+            session.add(version)
+            session.commit()
+        except Exception as e:
+            logger.error(f"Error creating config version snapshot: {e}")
+            session.rollback()
+
+    def _get_agent_versions(self, agent_config_id: int) -> List[Dict[str, Any]]:
+        """Return all version snapshots for an agent, newest first."""
+        if not self.db_client:
+            return []
+        session = self.db_client.get_session()
+        if not session:
+            return []
+        try:
+            versions = (
+                session.query(self.AgentConfigVersion)
+                .filter(self.AgentConfigVersion.agent_config_id == agent_config_id)
+                .order_by(self.AgentConfigVersion.version_number.desc())
+                .all()
+            )
+            return [v.to_dict() for v in versions]
+        except Exception as e:
+            logger.error(f"Error fetching agent versions: {e}")
+            return []
+        finally:
+            session.close()
+
+    def _rollback_agent_config(self, agent_config_id: int, version_id: int, changed_by: str = None) -> Optional[Dict[str, Any]]:
+        """Restore an agent config to the state captured in *version_id*.
+        Returns the updated config dict on success, None on failure."""
+        if not self.db_client:
+            return None
+        session = self.db_client.get_session()
+        if not session:
+            return None
+        session.rollback()
+        try:
+            version = session.query(self.AgentConfigVersion).filter(
+                self.AgentConfigVersion.id == version_id,
+                self.AgentConfigVersion.agent_config_id == agent_config_id,
+            ).first()
+            if not version:
+                return None
+
+            config = session.query(self.AgentConfig).filter(self.AgentConfig.id == agent_config_id).first()
+            if not config:
+                return None
+
+            snapshot = version.get_snapshot()
+            for key, value in snapshot.items():
+                if hasattr(config, key) and key not in ('id', 'project'):
+                    setattr(config, key, value)
+
+            session.commit()
+            self._snapshot_agent_config(session, config, change_type='rollback', changed_by=changed_by)
+            return config.to_dict()
+        except Exception as e:
+            logger.error(f"Error rolling back agent config: {e}")
+            session.rollback()
+            return None
+        finally:
+            session.close()
+
+    def _tag_agent_version(self, version_id: int, tag: str) -> bool:
+        """Set or clear a tag on a config version."""
+        if not self.db_client:
+            return False
+        session = self.db_client.get_session()
+        if not session:
+            return False
+        session.rollback()
+        try:
+            version = session.query(self.AgentConfigVersion).filter(
+                self.AgentConfigVersion.id == version_id
+            ).first()
+            if not version:
+                return False
+            version.tag = tag if tag else None
+            session.commit()
+            return True
+        except Exception as e:
+            logger.error(f"Error tagging agent version: {e}")
+            session.rollback()
+            return False
+        finally:
+            session.close()
+
     def _export_agent_configs(self, search: str = None, root_agent: str = None, project_id: Optional[int] = None) -> Dict[str, Any]:
         """Export agent configurations to JSON format with optional filtering."""
         if not self.db_client:
@@ -1438,7 +1568,7 @@ class DashboardServer:
                 "disabled": disabled,
                 "hardcoded": hardcoded
             }
-            success = self._create_agent_config(config_data)
+            success = self._create_agent_config(config_data, changed_by=username)
             return {"success": success, "message": "Agent created successfully" if success else "Failed to create agent"}
 
         @self.app.put("/dashboard/api/agents/{config_id}", tags=["Dashboard - Agents"])
@@ -1493,7 +1623,7 @@ class DashboardServer:
                 "disabled": disabled,
                 "hardcoded": hardcoded
             }
-            success = self._update_agent_config(config_id, config_data)
+            success = self._update_agent_config(config_id, config_data, changed_by=username)
             return {"success": success, "message": "Agent updated successfully" if success else "Failed to update agent"}
 
         @self.app.delete("/dashboard/api/agents/{config_id}", tags=["Dashboard - Agents"])
@@ -1594,6 +1724,33 @@ class DashboardServer:
                     "agent_name": agent_name
                 }
         
+        # ── Agent Config Versioning Endpoints ────────────────────────────────
+
+        @self.app.get("/dashboard/api/agents/{config_id}/versions", tags=["Dashboard - Agent Versions"])
+        async def get_agent_versions(config_id: int, request: Request, username: str = Depends(self._get_auth_user_dependency)):
+            """Return all version snapshots for an agent config."""
+            versions = self._get_agent_versions(config_id)
+            return {"success": True, "versions": versions}
+
+        @self.app.post("/dashboard/api/agents/{config_id}/rollback/{version_id}", tags=["Dashboard - Agent Versions"])
+        async def rollback_agent(config_id: int, version_id: int, request: Request, username: str = Depends(self._get_auth_user_dependency)):
+            """Rollback an agent config to a previous version snapshot."""
+            result = self._rollback_agent_config(config_id, version_id, changed_by=username)
+            if result:
+                return {"success": True, "message": "Agent rolled back successfully", "config": result}
+            return {"success": False, "message": "Failed to rollback agent"}
+
+        @self.app.put("/dashboard/api/agents/versions/{version_id}/tag", tags=["Dashboard - Agent Versions"])
+        async def tag_agent_version(version_id: int, request: Request, username: str = Depends(self._get_auth_user_dependency)):
+            """Set or clear a tag on a specific version."""
+            body = await request.json()
+            tag = body.get("tag", "")
+            success = self._tag_agent_version(version_id, tag)
+            return {
+                "success": success,
+                "message": "Version tagged successfully" if success else "Failed to tag version",
+            }
+
         # File Search API Endpoints
         @self.app.get("/dashboard/api/agents/{agent_name}/file-search/config", tags=["Dashboard - File Search"])
         async def get_agent_file_search_config(

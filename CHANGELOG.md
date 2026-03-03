@@ -5,7 +5,18 @@ All notable changes to MATE (Multi-Agent Tree Engine) will be documented in this
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.1.0] - 2026-02-28
+## [1.0.2] - 2026-03-03
+
+### Added
+
+- **Agent Config Versioning** - every agent config change (create, update, rollback) is captured as a versioned JSON snapshot
+- **Version History panel** - two-pane modal accessible from the edit agent form with full version list and Monaco diff editor
+- **One-click rollback** - restore any previous agent configuration with automatic agent reinitialization
+- **Version tagging** - label versions with custom tags (e.g. "v1-production") for easy identification
+- **`agent_config_versions` table** - new DB table with V005 migrations for SQLite, PostgreSQL, and MySQL
+- **Versioning API** - `GET /dashboard/api/agents/{id}/versions`, `POST .../rollback/{version_id}`, `PUT .../versions/{id}/tag`
+
+## [1.0.1] - 2026-02-28
 
 ### Added
 

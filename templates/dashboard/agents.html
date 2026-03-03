@@ -207,6 +207,9 @@
 
 <!-- Graph Editor Modal -->
 {% include 'dashboard/modals/graph_editor_modals.html' %}
+
+<!-- Version History Modal -->
+{% include 'dashboard/modals/version_history_modal.html' %}
 {% endblock %}
 
 {% block scripts %}
@@ -234,6 +237,7 @@
 <script src="/static/js/modals/agent-edit-helpers.js"></script>
 <script src="/static/js/modals/memory-blocks.js"></script>
 <script src="/static/js/modals/widget-keys.js"></script>
+<script src="/static/js/modals/version-history.js"></script>
 <!-- Graph Editor - Load after Cytoscape.js and other dependencies -->
 <script src="/static/js/modals/cytoscape-graph-editor.js"></script>
 
