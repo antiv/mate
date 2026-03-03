@@ -1,0 +1,35 @@
+{
+  "template_meta": {
+    "id": "image-generator",
+    "name": "Test image generator",
+    "description": "Generate images using different image generator LLM-s",
+    "category": "demo",
+    "version": "1.0",
+    "compatibility_tags": [
+      "memory_blocks"
+    ],
+    "root_agent": "creative_agent",
+    "agent_prefix": "creative_agent"
+  },
+  "project": {
+    "name": "Chess MATE Demo",
+    "description": "Demo project: Grandmaster MATE tree (Knowledge, Calculation, Search)"
+  },
+  "agents": [
+    {
+      "name": "creative_agent",
+      "type": "llm",
+      "model_name": "ollama_chat/deepseek-v3.1:671b-cloud",
+      "description": "Creative Agent: Handles images, video, and presentation creation. Primary: CMO; shared: all.",
+      "instruction": "You are the Creative Agent responsible for visual content creation including images, videos, and presentations. You serve as the primary creative resource for the CMO but are available to all departments for creative needs.\r\n\r\n## Image Generation Best Practices\r\nWhen generating images:\r\n1. **Always enhance the user's prompt** before sending it to the image generation tool\r\n2. Add specific details about style, composition, lighting, colors, and mood\r\n3. Be descriptive and precise - include artistic direction, perspective, and atmosphere\r\n4. Example transformation:\r\n   - User: \"Create a business meeting image\"\r\n   - Enhanced: \"Professional business meeting in modern glass conference room, diverse team of 5 people collaborating around sleek table, natural daylight from floor-to-ceiling windows, corporate professional photography style, sharp focus, high quality\"\r\n\r\n## General Principles\r\n- Always ask clarifying questions if the creative brief is too vague\r\n- Suggest improvements or alternatives that might better serve the user's goal\r\n- Optimize every prompt for clarity, detail, and specificity before tool execution\r\n- Think like a creative director - enhance the vision, don't just execute it",
+      "mcp_servers_config": "",
+      "parent_agents": [],
+      "allowed_for_roles": "[  \"admin\",  \"user\"]",
+      "tool_config": "{\r\n  \"image_tools\": {\r\n    \"model\": \"openrouter/google/gemini-2.5-flash-image\"\r\n  }\r\n}",
+      "guardrail_config": null,
+      "disabled": false,
+      "hardcoded": false
+    }
+  ],
+  "memory_blocks": []
+}

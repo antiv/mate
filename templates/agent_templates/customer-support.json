@@ -1,0 +1,74 @@
+{
+  "template_meta": {
+    "id": "customer-support",
+    "name": "Customer Support Bot",
+    "description": "Multi-agent customer support with triage, knowledge base lookup, and escalation to human agents.",
+    "category": "support",
+    "version": "1.0",
+    "compatibility_tags": ["memory_blocks"],
+    "root_agent": "support_root",
+    "agent_prefix": "support"
+  },
+  "project": {
+    "name": "Customer Support",
+    "description": "Pre-built customer support agent hierarchy with triage, knowledge base, and escalation"
+  },
+  "agents": [
+    {
+      "name": "support_root",
+      "type": "llm",
+      "model_name": "openrouter/deepseek/deepseek-chat-v3.1",
+      "description": "Support triage captain. Routes to knowledge agent or escalation agent.",
+      "instruction": "You are the Customer Support Captain. Analyze the user's request.\n\nPROTOCOL:\n1. Call list_shared_blocks(label_search=\"system_instruction_shared_\") and list_shared_blocks(label_search=\"system_instruction_support_root\") at session start.\n2. Load and execute instructions from those blocks.\n3. Route: FAQ/knowledge questions -> support_knowledge. Complex or unresolved issues -> support_escalation.",
+      "parent_agents": [],
+      "allowed_for_roles": "[\"admin\", \"user\"]",
+      "tool_config": "{\"memory_blocks\": true, \"create_agent\": true}",
+      "mcp_servers_config": null,
+      "disabled": false,
+      "hardcoded": false
+    },
+    {
+      "name": "support_knowledge",
+      "type": "llm",
+      "model_name": "openrouter/deepseek/deepseek-chat-v3.1",
+      "description": "Knowledge base agent. Answers FAQs from memory blocks.",
+      "instruction": "You are the Knowledge Base agent. Answer customer questions using shared memory blocks. Call list_shared_blocks(label_search=\"system_instruction_support_knowledge\") and load instructions. Use memory blocks for product info, policies, and FAQs.",
+      "parent_agents": ["support_root"],
+      "allowed_for_roles": "[\"admin\", \"user\"]",
+      "tool_config": "{\"memory_blocks\": true}",
+      "mcp_servers_config": null,
+      "disabled": false,
+      "hardcoded": false
+    },
+    {
+      "name": "support_escalation",
+      "type": "llm",
+      "model_name": "openrouter/deepseek/deepseek-chat-v3.1",
+      "description": "Escalation agent. Handles complex issues and human handoff.",
+      "instruction": "You are the Escalation agent. When issues cannot be resolved by knowledge base, gather context and prepare for human handoff. Call list_shared_blocks(label_search=\"system_instruction_escalation_protocol\") for escalation rules.",
+      "parent_agents": ["support_root"],
+      "allowed_for_roles": "[\"admin\", \"user\"]",
+      "tool_config": "{\"memory_blocks\": true}",
+      "mcp_servers_config": null,
+      "disabled": false,
+      "hardcoded": false
+    }
+  ],
+  "memory_blocks": [
+    {
+      "label": "system_instruction_support_root",
+      "value": "You are the Customer Support Captain. Route requests:\n- FAQ, product info, policies -> delegate to support_knowledge\n- Complex issues, complaints, refunds, human handoff -> delegate to support_escalation",
+      "description": "Main routing rules for support_root"
+    },
+    {
+      "label": "system_instruction_support_knowledge",
+      "value": "Answer FAQs from memory. Be concise and accurate. If unsure, escalate to support_escalation.",
+      "description": "Knowledge agent instructions"
+    },
+    {
+      "label": "system_instruction_escalation_protocol",
+      "value": "ESCALATION PROTOCOL:\n1. Acknowledge the customer's frustration.\n2. Summarize the issue and what was tried.\n3. Inform that a human agent will follow up.\n4. Collect: name, contact, issue summary.",
+      "description": "Escalation protocol"
+    }
+  ]
+}

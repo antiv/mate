@@ -228,6 +228,75 @@ function refreshAgentsPage() {
     location.reload();
 }
 
+// Save as Template
+function showSaveTemplateModal() {
+    const projectId = window.selectedProjectId;
+    const rootAgentFilter = document.getElementById('rootAgentFilter');
+    const rootAgent = rootAgentFilter ? rootAgentFilter.value : '';
+    if (!projectId) {
+        showNotification('Select a project first', 'warning');
+        return;
+    }
+    if (!rootAgent) {
+        showNotification('Select a root agent (filter by hierarchy) first', 'warning');
+        return;
+    }
+    document.getElementById('saveTemplateId').value = '';
+    document.getElementById('saveTemplateName').value = '';
+    document.getElementById('saveTemplateDescription').value = '';
+    document.getElementById('saveTemplateCategory').value = 'custom';
+    document.getElementById('saveTemplateModal').classList.remove('hidden');
+}
+
+function hideSaveTemplateModal() {
+    document.getElementById('saveTemplateModal').classList.add('hidden');
+}
+
+async function submitSaveTemplate() {
+    const templateId = document.getElementById('saveTemplateId').value.trim();
+    if (!templateId) {
+        showNotification('Template ID is required', 'error');
+        return;
+    }
+    const projectId = window.selectedProjectId;
+    const rootAgentFilter = document.getElementById('rootAgentFilter');
+    const rootAgent = rootAgentFilter ? rootAgentFilter.value : '';
+    if (!projectId || !rootAgent) {
+        showNotification('Project and root agent selection lost. Please try again.', 'error');
+        return;
+    }
+    const submitBtn = document.getElementById('saveTemplateSubmitBtn');
+    const loader = document.getElementById('saveTemplateLoader');
+    const btnText = document.getElementById('saveTemplateBtnText');
+    submitBtn.disabled = true;
+    loader.classList.remove('hidden');
+    btnText.textContent = 'Saving...';
+    try {
+        const result = await apiCall('/dashboard/api/templates/create-from-agents', 'POST', {
+            project_id: projectId,
+            root_agent: rootAgent,
+            template_id: templateId,
+            template_name: document.getElementById('saveTemplateName').value.trim() || templateId,
+            description: document.getElementById('saveTemplateDescription').value.trim(),
+            category: document.getElementById('saveTemplateCategory').value || 'custom',
+        });
+        if (result.success) {
+            showNotification(`Template saved: ${result.template_id}.json`, 'success');
+            hideSaveTemplateModal();
+            window.location.href = '/dashboard/templates';
+        } else {
+            showNotification(result.error || result.detail || 'Failed to save template', 'error');
+        }
+    } catch (error) {
+        const msg = error?.detail || error?.message || 'Failed to save template';
+        showNotification(typeof msg === 'string' ? msg : JSON.stringify(msg), 'error');
+    } finally {
+        submitBtn.disabled = false;
+        loader.classList.add('hidden');
+        btnText.textContent = 'Save Template';
+    }
+}
+
 // Export functions to window for global access
 window.exportAgents = exportAgents;
 window.importAgents = importAgents;
@@ -235,19 +304,24 @@ window.handleFileSelect = handleFileSelect;
 window.reinitializeAgent = reinitializeAgent;
 window.reinitializeAllAgents = reinitializeAllAgents;
 window.refreshAgentsPage = refreshAgentsPage;
+window.showSaveTemplateModal = showSaveTemplateModal;
+window.hideSaveTemplateModal = hideSaveTemplateModal;
+window.submitSaveTemplate = submitSaveTemplate;
 
 // Attach file input handler for import when DOM is ready
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', function() {
-        const importFileInput = document.getElementById('importFile');
-        if (importFileInput) {
-            importFileInput.addEventListener('change', handleFileSelect);
-        }
-    });
-} else {
+function attachAgentManagementHandlers() {
     const importFileInput = document.getElementById('importFile');
     if (importFileInput) {
         importFileInput.addEventListener('change', handleFileSelect);
     }
+    const saveTemplateBtn = document.getElementById('saveTemplateBtn');
+    if (saveTemplateBtn) {
+        saveTemplateBtn.addEventListener('click', showSaveTemplateModal);
+    }
+}
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', attachAgentManagementHandlers);
+} else {
+    attachAgentManagementHandlers();
 }
 

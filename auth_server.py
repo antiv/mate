@@ -71,6 +71,7 @@ tags_metadata = [
     {"name": "Dashboard - Pages", "description": "Web interface pages for system management"},
     {"name": "Dashboard - Users", "description": "User management API endpoints"},
     {"name": "Dashboard - Agents", "description": "Agent configuration and management API endpoints"},
+    {"name": "Dashboard - Templates", "description": "Template library and one-click import API endpoints"},
     {"name": "Dashboard - Migrations", "description": "Database migration management API endpoints"},
     {"name": "Dashboard - Server Control", "description": "ADK server control API endpoints (start, stop, restart)"},
     {"name": "Dashboard - Usage Analytics", "description": "Token usage and analytics API endpoints"},

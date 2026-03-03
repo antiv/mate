@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+
+{% block title %}Template Library - MATE{% endblock %}
+
+{% block content %}
+<div class="space-y-4">
+    <!-- Header -->
+    <div class="flex justify-between items-center">
+        <div>
+            <h2 class="text-xl font-bold text-gray-900 dark:text-white">Template Library</h2>
+            <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                Pre-built agent configurations. One-click import creates project, agents, and memory blocks.
+            </p>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="flex flex-wrap gap-3 items-center">
+        <div class="relative flex-1 min-w-[200px] max-w-xs">
+            <input type="text" id="templateSearch" placeholder="Search templates..." 
+                class="pl-8 pr-3 py-2 text-sm border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 w-full">
+            <div class="absolute inset-y-0 left-0 pl-2 flex items-center pointer-events-none">
+                <i class="fas fa-search text-gray-400"></i>
+            </div>
+        </div>
+        <select id="categoryFilter" class="border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg px-3 py-2 text-sm">
+            <option value="">All Categories</option>
+            <option value="support">Support</option>
+            <option value="research">Research</option>
+            <option value="code">Code</option>
+            <option value="content">Content</option>
+            <option value="demo">Demo</option>
+        </select>
+        <button onclick="loadTemplates()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 text-sm rounded-lg flex items-center">
+            <i class="fas fa-sync-alt mr-1"></i>
+            Refresh
+        </button>
+    </div>
+
+    <!-- Template Grid -->
+    <div id="templateGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div id="templateLoading" class="col-span-full text-center py-12 text-gray-500 dark:text-gray-400">
+            <i class="fas fa-spinner fa-spin text-2xl mb-2"></i>
+            <p>Loading templates...</p>
+        </div>
+        <div id="templateEmpty" class="hidden col-span-full text-center py-12 text-gray-500 dark:text-gray-400">
+            <i class="fas fa-folder-open text-2xl mb-2"></i>
+            <p>No templates found. Try adjusting your search or filters.</p>
+        </div>
+    </div>
+</div>
+
+<script src="/static/js/template-gallery.js"></script>
+{% endblock %}

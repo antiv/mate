@@ -46,23 +46,32 @@ The MATE Dashboard is a web-based management interface for the agent system.
 - **Export/Import**: 
   - Export all agents to JSON file
   - Import agents from JSON file (with overwrite option)
+- **Save as Template**: Create a reusable template from the selected project and root agent hierarchy (saved to `templates/agent_templates/`)
 - **Monaco JSON Editor**: Advanced JSON editing with syntax highlighting and validation
 
-### 3. User Management (`/dashboard/users`)
+### 3. Template Library (`/dashboard/templates`)
+- **Template Gallery**: Pre-built agent configurations with search and category filters
+- **One-Click Import**: Creates project, agents, and memory blocks; redirects to agents page
+- **Categories**: support, research, code, content, demo
+- **Built-in Templates**: Customer Support Bot, Research Assistant, Code Reviewer, Content Writer, Chess MATE
+- **Save as Template**: From Agents page, select project + root agent, click "Save as Template" to create a new template from existing hierarchy
+- See `documents/TEMPLATE_LIBRARY.md` for schema and community contribution
+
+### 4. User Management (`/dashboard/users`)
 - **User Listing**: View all registered users
 - **Create Users**: Add new users with role assignments
 - **Edit Users**: Modify user roles
 - **Delete Users**: Remove users from the system
 - **Role Management**: Assign/remove roles (admin, user, custom roles)
 
-### 4. Database Migrations (`/dashboard/migrations`)
+### 5. Database Migrations (`/dashboard/migrations`)
 - **Migration History**: View all applied database migrations
 - **Migration Details**: See version, name, timestamp, and checksum
 - **Delete Migration**: Remove a migration record (admin operation)
 - **Re-run Migration**: Delete and re-apply a specific migration
 - **Run All Pending**: Apply all pending migrations
 
-### 5. Usage Analytics (`/dashboard/usage`)
+### 6. Usage Analytics (`/dashboard/usage`)
 - **Analytics View**: 
   - Total requests and tokens (prompt + response)
   - Unique users and agents
@@ -79,7 +88,7 @@ The MATE Dashboard is a web-based management interface for the agent system.
   - Request tracking with session IDs
   - Error status tracking
 
-### 6. API Documentation (`/dashboard/docs`)
+### 7. API Documentation (`/dashboard/docs`)
 - **Interactive API Docs**: Links to agent API documentation
 - **Server Control**: Start/Stop/Restart ADK server
 - **Server Status**: Real-time ADK server health check
@@ -250,6 +259,10 @@ Dashboard includes full dark mode support with automatic detection and manual to
 - `DELETE /dashboard/api/agents/{config_id}` - Delete agent
 - `GET /dashboard/api/agents/export` - Export all agents
 - `POST /dashboard/api/agents/import?overwrite=false` - Import agents
+- `GET /dashboard/api/templates?category=&search=` - List templates
+- `GET /dashboard/api/templates/{id}` - Get template by id
+- `POST /dashboard/api/templates/import` - One-click import (body: `{template_id, project_name?}`)
+- `POST /dashboard/api/templates/create-from-agents` - Create template from existing agents (body: `{project_id, root_agent, template_id, template_name?, description?, category?}`)
 - `GET /dashboard/api/migrations` - List migrations
 - `DELETE /dashboard/api/migrations/{version}` - Delete migration
 - `POST /dashboard/api/migrations/{version}/rerun` - Re-run migration

@@ -1,0 +1,51 @@
+<!-- Save as Template Modal -->
+<div id="saveTemplateModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden z-[70]">
+    <div class="flex items-center justify-center min-h-screen p-2">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-lg w-full max-h-[95vh] overflow-y-auto">
+            <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+                <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Save as Template</h3>
+            </div>
+            <div class="px-6 py-3">
+                <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                    Create a reusable template from the selected project and root agent hierarchy.
+                </p>
+                <div class="space-y-4">
+                    <div>
+                        <label for="saveTemplateId" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Template ID <span class="text-red-500">*</span></label>
+                        <input type="text" id="saveTemplateId" placeholder="e.g. my-custom-support" 
+                            class="block w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg focus:ring-blue-500 focus:border-blue-500">
+                        <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Letters, numbers, hyphens, underscores only. Used as filename.</p>
+                    </div>
+                    <div>
+                        <label for="saveTemplateName" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Display Name</label>
+                        <input type="text" id="saveTemplateName" placeholder="My Custom Support Bot" 
+                            class="block w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label for="saveTemplateDescription" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Description</label>
+                        <textarea id="saveTemplateDescription" rows="2" placeholder="Brief description for the template gallery" 
+                            class="block w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg focus:ring-blue-500 focus:border-blue-500"></textarea>
+                    </div>
+                    <div>
+                        <label for="saveTemplateCategory" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Category</label>
+                        <select id="saveTemplateCategory" class="block w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg focus:ring-blue-500 focus:border-blue-500">
+                            <option value="custom">Custom</option>
+                            <option value="support">Support</option>
+                            <option value="research">Research</option>
+                            <option value="code">Code</option>
+                            <option value="content">Content</option>
+                            <option value="demo">Demo</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="flex justify-end space-x-3 mt-6">
+                    <button type="button" onclick="hideSaveTemplateModal()" class="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-200 dark:bg-gray-600 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500">Cancel</button>
+                    <button type="button" id="saveTemplateSubmitBtn" onclick="submitSaveTemplate()" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center">
+                        <i id="saveTemplateLoader" class="fas fa-spinner fa-spin mr-2 hidden"></i>
+                        <span id="saveTemplateBtnText">Save Template</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

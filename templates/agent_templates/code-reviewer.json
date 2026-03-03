@@ -1,0 +1,64 @@
+{
+  "template_meta": {
+    "id": "code-reviewer",
+    "name": "Code Reviewer",
+    "description": "Multi-agent code review: analyze code, suggest improvements, and explain changes.",
+    "category": "code",
+    "version": "1.0",
+    "compatibility_tags": ["memory_blocks"],
+    "root_agent": "review_root",
+    "agent_prefix": "review"
+  },
+  "project": {
+    "name": "Code Reviewer",
+    "description": "Pre-built code review agent hierarchy: reviewer and suggester"
+  },
+  "agents": [
+    {
+      "name": "review_root",
+      "type": "llm",
+      "model_name": "openrouter/deepseek/deepseek-chat-v3.1",
+      "description": "Code review captain. Routes to reviewer or suggester.",
+      "instruction": "You are the Code Review Captain. Route requests:\n- Full review, bugs, style -> review_reviewer\n- Suggestions, refactoring ideas -> review_suggester\nCall list_shared_blocks for instructions.",
+      "parent_agents": [],
+      "allowed_for_roles": "[\"admin\", \"user\"]",
+      "tool_config": "{\"memory_blocks\": true}",
+      "mcp_servers_config": null,
+      "disabled": false,
+      "hardcoded": false
+    },
+    {
+      "name": "review_reviewer",
+      "type": "llm",
+      "model_name": "openrouter/deepseek/deepseek-chat-v3.1",
+      "description": "Code reviewer. Analyzes code for bugs, style, best practices.",
+      "instruction": "You are the Code Reviewer. Analyze provided code for bugs, style issues, security, and best practices. Provide structured feedback with severity levels.",
+      "parent_agents": ["review_root"],
+      "allowed_for_roles": "[\"admin\", \"user\"]",
+      "tool_config": "{\"tools\": [\"python_code_interpreter\"], \"memory_blocks\": true}",
+      "mcp_servers_config": null,
+      "disabled": false,
+      "hardcoded": false
+    },
+    {
+      "name": "review_suggester",
+      "type": "llm",
+      "model_name": "openrouter/deepseek/deepseek-chat-v3.1",
+      "description": "Suggestion agent. Proposes refactoring and improvements.",
+      "instruction": "You are the Code Suggester. Propose refactoring, optimizations, and alternative implementations. Include code snippets when helpful.",
+      "parent_agents": ["review_root"],
+      "allowed_for_roles": "[\"admin\", \"user\"]",
+      "tool_config": "{\"tools\": [\"python_code_interpreter\"], \"memory_blocks\": true}",
+      "mcp_servers_config": null,
+      "disabled": false,
+      "hardcoded": false
+    }
+  ],
+  "memory_blocks": [
+    {
+      "label": "system_instruction_review_root",
+      "value": "Route code review requests:\n- \"Review this code\", \"Find bugs\" -> review_reviewer\n- \"Suggest improvements\", \"Refactor\" -> review_suggester",
+      "description": "Code review routing rules"
+    }
+  ]
+}

@@ -38,6 +38,10 @@ class DashboardServer:
         # Initialize templates and static files
         self._setup_templates_and_static()
         
+        # Initialize template service
+        from shared.utils.template_service import TemplateService
+        self.template_service = TemplateService(project_root)
+        
         # Register all dashboard endpoints
         self._register_endpoints()
     
@@ -1305,6 +1309,190 @@ class DashboardServer:
         finally:
             session.close()
     
+    def _import_template(self, template_id: str, project_name: Optional[str] = None, changed_by: str = None) -> Dict[str, Any]:
+        """Import a template: create project, agents, memory blocks. Apply name prefix to avoid collisions."""
+        template = self.template_service.get_template(template_id)
+        if not template:
+            return {"error": f"Template not found: {template_id}"}
+        
+        project_data = template.get("project") or {}
+        proj_name = (project_name or project_data.get("name") or "Imported Project").strip()
+        if not proj_name:
+            return {"error": "Project name is required"}
+        
+        # Create project
+        try:
+            project = self._create_project(proj_name, project_data.get("description"))
+        except HTTPException as e:
+            return {"error": str(e.detail)}
+        
+        project_id = project["id"]
+        slug = self.template_service.slugify_project_name(proj_name)
+        agent_prefix = (template.get("template_meta") or {}).get("agent_prefix") or "tpl"
+        replace_with = f"{slug}_" if agent_prefix.endswith("_") else slug
+        
+        # Build replacement map: old_agent_name -> new_agent_name
+        agents_data = template.get("agents") or []
+        name_map = {}
+        for a in agents_data:
+            old_name = a.get("name", "")
+            if old_name:
+                new_name = old_name.replace(agent_prefix, replace_with, 1) if agent_prefix in old_name else f"{slug}_{old_name}"
+                name_map[old_name] = new_name
+        
+        # Substitute in agent names and parent_agents
+        def sub_names(obj):
+            if isinstance(obj, str):
+                for old, new in name_map.items():
+                    obj = obj.replace(old, new)
+                return obj
+            if isinstance(obj, list):
+                return [sub_names(x) for x in obj]
+            if isinstance(obj, dict):
+                return {k: sub_names(v) for k, v in obj.items()}
+            return obj
+        
+        # Create agents in order: root first (no parents), then children
+        agents_created = 0
+        ordered = sorted(agents_data, key=lambda a: (len(a.get("parent_agents") or []), a.get("name", "")))
+        
+        for agent_data in ordered:
+            old_name = agent_data.get("name", "")
+            new_name = name_map.get(old_name, old_name)
+            config_data = {
+                "name": new_name,
+                "type": agent_data.get("type", "llm"),
+                "model_name": agent_data.get("model_name"),
+                "description": agent_data.get("description"),
+                "instruction": sub_names(agent_data.get("instruction") or ""),
+                "parent_agents": sub_names(agent_data.get("parent_agents") or []),
+                "allowed_for_roles": agent_data.get("allowed_for_roles"),
+                "tool_config": agent_data.get("tool_config"),
+                "mcp_servers_config": agent_data.get("mcp_servers_config"),
+                "guardrail_config": agent_data.get("guardrail_config"),
+                "project_id": project_id,
+                "disabled": agent_data.get("disabled", False),
+                "hardcoded": agent_data.get("hardcoded", False),
+            }
+            if isinstance(config_data["allowed_for_roles"], str):
+                try:
+                    config_data["allowed_for_roles"] = json.loads(config_data["allowed_for_roles"])
+                except json.JSONDecodeError:
+                    pass
+            if self._create_agent_config(config_data, changed_by=changed_by):
+                agents_created += 1
+                # Create agent folder for root agent only (ADK entry point)
+                if not (agent_data.get("parent_agents") or []):
+                    self._copy_template_agent(new_name)
+        
+        # Create memory blocks
+        memory_blocks_created = 0
+        from shared.utils.memory_blocks_service import MemoryBlocksService
+        mem_service = MemoryBlocksService(self.db_client)
+        for block in template.get("memory_blocks") or []:
+            label = sub_names(block.get("label", "").strip())
+            if not label:
+                continue
+            value = sub_names(block.get("value", ""))
+            desc = block.get("description")
+            result = mem_service.create_block(project_id=project_id, label=label, value=value, description=desc)
+            if result.get("status") == "success":
+                memory_blocks_created += 1
+        
+        # Reload all agents
+        try:
+            from shared.utils.utils import get_adk_config
+            import httpx
+            adk_config = get_adk_config()
+            adk_url = f"http://{adk_config['adk_host']}:{adk_config['adk_port']}/api/reload-all-agents"
+            with httpx.Client(timeout=30.0) as client:
+                client.post(adk_url)
+        except Exception:
+            pass
+        
+        return {
+            "success": True,
+            "project_id": project_id,
+            "project_name": proj_name,
+            "agents_created": agents_created,
+            "memory_blocks_created": memory_blocks_created,
+        }
+    
+    def _create_template_from_agents(
+        self,
+        project_id: int,
+        root_agent: str,
+        template_id: str,
+        template_name: str,
+        description: str = "",
+        category: str = "custom",
+    ) -> Dict[str, Any]:
+        """Create a template JSON file from existing agents (project + root agent hierarchy)."""
+        export_data = self._export_agent_configs(project_id=project_id, root_agent=root_agent)
+        if "error" in export_data:
+            return {"error": export_data["error"]}
+        
+        agents = export_data.get("agents") or []
+        memory_blocks = export_data.get("memory_blocks") or []
+        if not agents:
+            return {"error": "No agents found for the selected project and root agent"}
+        
+        # Get project info
+        session = self.db_client.get_session()
+        if not session:
+            return {"error": "Database connection failed"}
+        try:
+            project = session.query(self.Project).filter(self.Project.id == project_id).first()
+            project_name = project.name if project else "Imported Project"
+            project_desc = project.description if project else ""
+        finally:
+            session.close()
+        
+        # Derive agent_prefix (longest common prefix of agent names)
+        agent_names = [a.get("name", "") for a in agents if a.get("name")]
+        agent_prefix = self.template_service.longest_common_prefix(agent_names)
+        if not agent_prefix:
+            agent_prefix = "tpl"
+        
+        # Build template (strip project_id from agents/blocks - template uses it at import time)
+        template_agents = []
+        for a in agents:
+            agent_copy = {k: v for k, v in a.items() if k != "project_id"}
+            template_agents.append(agent_copy)
+        
+        template_blocks = []
+        for b in memory_blocks:
+            block_copy = {k: v for k, v in b.items() if k != "project_id"}
+            template_blocks.append(block_copy)
+        
+        template_data = {
+            "template_meta": {
+                "id": template_id,
+                "name": template_name,
+                "description": description or f"Template created from {project_name}",
+                "category": category,
+                "version": "1.0",
+                "compatibility_tags": ["memory_blocks"],
+                "root_agent": root_agent,
+                "agent_prefix": agent_prefix,
+            },
+            "project": {
+                "name": project_name,
+                "description": project_desc,
+            },
+            "agents": template_agents,
+            "memory_blocks": template_blocks,
+        }
+        
+        # Sanitize template_id for filename
+        safe_id = "".join(c if c.isalnum() or c in "-_" else "_" for c in template_id).strip("_") or "template"
+        
+        try:
+            path = self.template_service.save_template(safe_id, template_data)
+            return {"success": True, "template_id": safe_id, "path": path}
+        except Exception as e:
+            return {"error": f"Failed to save template: {str(e)}"}
+    
     def _setup_templates_and_static(self):
         """Setup templates and static file serving"""
         templates_dir = self.project_root / "templates"
@@ -1379,6 +1567,15 @@ class DashboardServer:
                 "configs": configs,
                 "projects": projects,
                 "selected_project_id": selected_project_id
+            })
+
+        @self.app.get("/dashboard/templates", response_class=HTMLResponse, tags=["Dashboard - Pages"])
+        async def dashboard_templates(request: Request, username: str = Depends(self._get_auth_user_dependency)):
+            """Dashboard templates gallery page"""
+            return self.templates.TemplateResponse("dashboard/templates.html", {
+                "request": request,
+                "page_title": "Template Library",
+                "username": username,
             })
 
         @self.app.get("/dashboard/migrations", response_class=HTMLResponse, tags=["Dashboard - Pages"])
@@ -1658,6 +1855,85 @@ class DashboardServer:
                 return result
             except Exception as e:
                 raise HTTPException(status_code=400, detail=f"Invalid JSON data: {str(e)}")
+
+        @self.app.get("/dashboard/api/templates", tags=["Dashboard - Templates"])
+        async def get_templates(
+            request: Request,
+            username: str = Depends(self._get_auth_user_dependency),
+            category: Optional[str] = None,
+            search: Optional[str] = None,
+        ):
+            """List available agent templates."""
+            templates = self.template_service.list_templates(category=category, search=search)
+            return {"templates": templates}
+
+        @self.app.get("/dashboard/api/templates/{template_id}", tags=["Dashboard - Templates"])
+        async def get_template(
+            template_id: str,
+            request: Request,
+            username: str = Depends(self._get_auth_user_dependency),
+        ):
+            """Get single template by id."""
+            template = self.template_service.get_template(template_id)
+            if not template:
+                raise HTTPException(status_code=404, detail=f"Template not found: {template_id}")
+            return template
+
+        @self.app.post("/dashboard/api/templates/import", tags=["Dashboard - Templates"])
+        async def import_template(
+            request: Request,
+            username: str = Depends(self._get_auth_user_dependency),
+        ):
+            """One-click import: create project, agents, memory blocks from template."""
+            try:
+                body = await request.json()
+                template_id = body.get("template_id")
+                project_name = body.get("project_name")
+                if not template_id:
+                    raise HTTPException(status_code=400, detail="template_id is required")
+                result = self._import_template(template_id, project_name=project_name, changed_by=username)
+                if "error" in result:
+                    raise HTTPException(status_code=400, detail=result["error"])
+                return result
+            except HTTPException:
+                raise
+            except Exception as e:
+                raise HTTPException(status_code=400, detail=str(e))
+
+        @self.app.post("/dashboard/api/templates/create-from-agents", tags=["Dashboard - Templates"])
+        async def create_template_from_agents(
+            request: Request,
+            username: str = Depends(self._get_auth_user_dependency),
+        ):
+            """Create a template from existing agents (project + root agent hierarchy)."""
+            try:
+                body = await request.json()
+                project_id = body.get("project_id")
+                root_agent = body.get("root_agent")
+                template_id = body.get("template_id")
+                template_name = body.get("template_name") or template_id
+                description = body.get("description", "")
+                category = body.get("category", "custom")
+                if not project_id or not root_agent or not template_id:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="project_id, root_agent, and template_id are required",
+                    )
+                result = self._create_template_from_agents(
+                    project_id=int(project_id),
+                    root_agent=str(root_agent).strip(),
+                    template_id=str(template_id).strip(),
+                    template_name=str(template_name).strip(),
+                    description=str(description).strip(),
+                    category=str(category).strip() or "custom",
+                )
+                if "error" in result:
+                    raise HTTPException(status_code=400, detail=result["error"])
+                return result
+            except HTTPException:
+                raise
+            except Exception as e:
+                raise HTTPException(status_code=400, detail=str(e))
 
         @self.app.get("/dashboard/api/migrations", tags=["Dashboard - Migrations"])
         async def get_migrations(request: Request, username: str = Depends(self._get_auth_user_dependency)):
