@@ -15,6 +15,8 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 
+from shared.utils import audit_service
+
 logger = logging.getLogger(__name__)
 
 
@@ -51,7 +53,7 @@ class DashboardServer:
             from shared.utils.database_client import get_database_client
             from shared.utils.user_service import UserService
             from shared.utils.token_usage_service import TokenUsageService
-            from shared.utils.models import AgentConfig, AgentConfigVersion, Project, User, TokenUsageLog, GuardrailLog
+            from shared.utils.models import AgentConfig, AgentConfigVersion, Project, User, TokenUsageLog, GuardrailLog, AuditLog
             
             self.db_client = get_database_client()
             self.user_service = UserService()
@@ -62,6 +64,7 @@ class DashboardServer:
             self.User = User
             self.TokenUsageLog = TokenUsageLog
             self.GuardrailLog = GuardrailLog
+            self.AuditLog = AuditLog
             
             print("✅ Dashboard database services initialized successfully")
         except Exception as e:
@@ -1635,6 +1638,15 @@ class DashboardServer:
                 "adk_port": 8000
             })
 
+        @self.app.get("/dashboard/audit-logs", response_class=HTMLResponse, tags=["Dashboard - Pages"])
+        async def dashboard_audit_logs(request: Request, username: str = Depends(self._get_auth_user_dependency)):
+            """Dashboard audit log viewer (EU AI Act compliance)."""
+            return self.templates.TemplateResponse("dashboard/audit_logs.html", {
+                "request": request,
+                "page_title": "Audit Logs",
+                "username": username,
+            })
+
         # API Endpoints for Dashboard
         @self.app.get("/dashboard/api/stats", tags=["Dashboard - Usage Analytics"])
         async def get_stats(request: Request, username: str = Depends(self._get_auth_user_dependency), days: int = 7):
@@ -1791,6 +1803,8 @@ class DashboardServer:
                 import json
                 roles_list = json.loads(roles) if roles else ["user"]
                 success = self._create_user(user_id, roles_list)
+                if success:
+                    audit_service.log(username, audit_service.ACTION_USER_CREATE, audit_service.RESOURCE_USER, resource_id=user_id, details={"roles": roles_list}, request=request)
                 return {"success": success, "message": "User created successfully" if success else "Failed to create user"}
             except json.JSONDecodeError:
                 return {"success": False, "message": "Invalid roles format"}
@@ -1803,6 +1817,8 @@ class DashboardServer:
                 roles_list = json.loads(roles) if roles else ["user"]
                 profile_data_value = profile_data if profile_data else None
                 success = self._update_user(user_id, roles_list, profile_data_value)
+                if success:
+                    audit_service.log(username, audit_service.ACTION_USER_UPDATE, audit_service.RESOURCE_USER, resource_id=user_id, details={"roles": roles_list}, request=request)
                 return {"success": success, "message": "User updated successfully" if success else "Failed to update user"}
             except json.JSONDecodeError:
                 return {"success": False, "message": "Invalid roles format"}
@@ -1811,6 +1827,8 @@ class DashboardServer:
         async def delete_user(user_id: str, request: Request, username: str = Depends(self._get_auth_user_dependency)):
             """Delete a user."""
             success = self._delete_user(user_id)
+            if success:
+                audit_service.log(username, audit_service.ACTION_USER_DELETE, audit_service.RESOURCE_USER, resource_id=user_id, request=request)
             return {"success": success, "message": "User deleted successfully" if success else "Failed to delete user"}
 
         @self.app.get("/dashboard/api/agents", tags=["Dashboard - Agents"])
@@ -2072,6 +2090,8 @@ class DashboardServer:
                 "hardcoded": hardcoded
             }
             success = self._create_agent_config(config_data, changed_by=username)
+            if success:
+                audit_service.log(username, audit_service.ACTION_AGENT_CREATE, audit_service.RESOURCE_AGENT, resource_id=name, details={"project_id": config_data.get("project_id")}, request=request)
             return {"success": success, "message": "Agent created successfully" if success else "Failed to create agent"}
 
         @self.app.put("/dashboard/api/agents/{config_id}", tags=["Dashboard - Agents"])
@@ -2129,6 +2149,8 @@ class DashboardServer:
                 "hardcoded": hardcoded
             }
             success = self._update_agent_config(config_id, config_data, changed_by=username)
+            if success:
+                audit_service.log(username, audit_service.ACTION_AGENT_UPDATE, audit_service.RESOURCE_AGENT, resource_id=name, details={"config_id": config_id}, request=request)
             return {"success": success, "message": "Agent updated successfully" if success else "Failed to update agent"}
 
         @self.app.delete("/dashboard/api/agents/{config_id}", tags=["Dashboard - Agents"])
@@ -2171,6 +2193,9 @@ class DashboardServer:
                         folder_deleted = True
                 except Exception as e:
                     print(f"Error deleting agent folder '{agent_name}': {e}")
+
+            if success:
+                audit_service.log(username, audit_service.ACTION_AGENT_DELETE, audit_service.RESOURCE_AGENT, resource_id=agent_name or str(config_id), details={"config_id": config_id, "folder_deleted": folder_deleted}, request=request)
 
             return {
                 "success": success,
@@ -2914,4 +2939,142 @@ class DashboardServer:
                 return {"logs": [], "total": 0, "error": str(e)}
             finally:
                 session.close()
+
+        # ─── Audit Logs API (EU AI Act compliance) ─────────────────────
+
+        @self.app.get("/dashboard/api/audit-logs", tags=["Dashboard - Audit"])
+        async def get_audit_logs(
+            request: Request,
+            username: str = Depends(self._get_auth_user_dependency),
+            actor: Optional[str] = None,
+            action: Optional[str] = None,
+            resource_type: Optional[str] = None,
+            resource_id: Optional[str] = None,
+            date_from: Optional[str] = None,
+            date_to: Optional[str] = None,
+            limit: int = 100,
+            offset: int = 0,
+        ):
+            """List audit logs with filters. Append-only, immutable."""
+            if not self.db_client:
+                return {"logs": [], "total": 0}
+            session = self.db_client.get_session()
+            if not session:
+                return {"logs": [], "total": 0}
+            try:
+                from datetime import datetime as dt
+                query = session.query(self.AuditLog)
+                if actor:
+                    query = query.filter(self.AuditLog.actor == actor)
+                if action:
+                    query = query.filter(self.AuditLog.action == action)
+                if resource_type:
+                    query = query.filter(self.AuditLog.resource_type == resource_type)
+                if resource_id:
+                    query = query.filter(self.AuditLog.resource_id == resource_id)
+                if date_from:
+                    try:
+                        query = query.filter(self.AuditLog.timestamp >= dt.fromisoformat(date_from.replace("Z", "+00:00")))
+                    except ValueError:
+                        pass
+                if date_to:
+                    try:
+                        query = query.filter(self.AuditLog.timestamp <= dt.fromisoformat(date_to.replace("Z", "+00:00")))
+                    except ValueError:
+                        pass
+                total = query.count()
+                logs = (
+                    query.order_by(self.AuditLog.timestamp.desc())
+                    .offset(offset)
+                    .limit(limit)
+                    .all()
+                )
+                return {"logs": [l.to_dict() for l in logs], "total": total}
+            except Exception as e:
+                logger.error("Error fetching audit logs: %s", e)
+                return {"logs": [], "total": 0, "error": str(e)}
+            finally:
+                session.close()
+
+        @self.app.get("/dashboard/api/audit-logs/export", tags=["Dashboard - Audit"])
+        async def export_audit_logs(
+            request: Request,
+            username: str = Depends(self._get_auth_user_dependency),
+            format: str = "json",
+            actor: Optional[str] = None,
+            action: Optional[str] = None,
+            resource_type: Optional[str] = None,
+            resource_id: Optional[str] = None,
+            date_from: Optional[str] = None,
+            date_to: Optional[str] = None,
+            limit: int = 10000,
+        ):
+            """Export audit logs as JSON or CSV for compliance reporting."""
+            if not self.db_client:
+                raise HTTPException(status_code=503, detail="Database unavailable")
+            session = self.db_client.get_session()
+            if not session:
+                raise HTTPException(status_code=503, detail="Database unavailable")
+            try:
+                from datetime import datetime as dt
+                query = session.query(self.AuditLog)
+                if actor:
+                    query = query.filter(self.AuditLog.actor == actor)
+                if action:
+                    query = query.filter(self.AuditLog.action == action)
+                if resource_type:
+                    query = query.filter(self.AuditLog.resource_type == resource_type)
+                if resource_id:
+                    query = query.filter(self.AuditLog.resource_id == resource_id)
+                if date_from:
+                    try:
+                        query = query.filter(self.AuditLog.timestamp >= dt.fromisoformat(date_from.replace("Z", "+00:00")))
+                    except ValueError:
+                        pass
+                if date_to:
+                    try:
+                        query = query.filter(self.AuditLog.timestamp <= dt.fromisoformat(date_to.replace("Z", "+00:00")))
+                    except ValueError:
+                        pass
+                rows = query.order_by(self.AuditLog.timestamp.asc()).limit(limit).all()
+                data = [r.to_dict() for r in rows]
+                if format.lower() == "csv":
+                    import csv
+                    from io import StringIO
+                    out = StringIO()
+                    if data:
+                        writer = csv.DictWriter(out, fieldnames=["id", "timestamp", "actor", "action", "resource_type", "resource_id", "details", "ip_address"])
+                        writer.writeheader()
+                        for row in data:
+                            row_flat = {k: (json.dumps(v) if isinstance(v, (dict, list)) else v) for k, v in row.items()}
+                            writer.writerow(row_flat)
+                    from fastapi.responses import PlainTextResponse
+                    return PlainTextResponse(out.getvalue(), media_type="text/csv", headers={"Content-Disposition": "attachment; filename=audit_logs.csv"})
+                from fastapi.responses import Response
+                return Response(content=json.dumps(data), media_type="application/json", headers={"Content-Disposition": "attachment; filename=audit_logs.json"})
+            except Exception as e:
+                logger.error("Export audit logs failed: %s", e)
+                raise HTTPException(status_code=500, detail=str(e))
+            finally:
+                session.close()
+
+        @self.app.post("/dashboard/api/audit-logs/retention", tags=["Dashboard - Audit"])
+        async def run_audit_retention(request: Request, username: str = Depends(self._get_auth_user_dependency)):
+            """Run retention policy: delete entries older than AUDIT_RETENTION_DAYS."""
+            try:
+                from shared.utils.audit_service import run_retention
+                result = run_retention()
+                return result
+            except Exception as e:
+                logger.error("Audit retention run failed: %s", e)
+                raise HTTPException(status_code=500, detail=str(e))
+
+        @self.app.get("/dashboard/api/audit-logs/retention-config", tags=["Dashboard - Audit"])
+        async def get_audit_retention_config(request: Request, username: str = Depends(self._get_auth_user_dependency)):
+            """Get configured retention days (0 = keep forever)."""
+            try:
+                from shared.utils.audit_service import get_retention_days
+                return {"retention_days": get_retention_days()}
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=str(e))
 

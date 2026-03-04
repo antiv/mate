@@ -1,0 +1,234 @@
+{% extends "base.html" %}
+
+{% block title %}Audit Logs - MATE{% endblock %}
+
+{% block content %}
+<div class="space-y-4">
+    <div class="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center">
+        <div class="min-w-0">
+            <h2 class="text-xl font-bold text-gray-900 dark:text-white">Audit Logs</h2>
+            <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                Immutable audit trail for compliance (EU AI Act). Append-only; who changed what, when. Retention: <span id="retentionInfo" class="font-medium">—</span>
+            </p>
+        </div>
+        <div class="flex flex-wrap gap-2 items-center flex-shrink-0">
+            <button type="button" onclick="runRetention()" class="px-3 py-2 text-xs border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 min-h-[44px] touch-target">
+                <i class="fas fa-broom mr-1"></i>Run retention
+            </button>
+            <a id="exportCsvLink" href="#" class="px-3 py-2 text-xs bg-gray-600 hover:bg-gray-700 text-white rounded-lg flex items-center min-h-[44px] touch-target">
+                <i class="fas fa-file-csv mr-1"></i>Export CSV
+            </a>
+            <a id="exportJsonLink" href="#" class="px-3 py-2 text-xs bg-gray-600 hover:bg-gray-700 text-white rounded-lg flex items-center min-h-[44px] touch-target">
+                <i class="fas fa-file-code mr-1"></i>Export JSON
+            </a>
+            <button type="button" onclick="loadLogs()" class="px-3 py-2 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center min-h-[44px] touch-target">
+                <i class="fas fa-sync-alt mr-1"></i>Refresh
+            </button>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+        <h3 class="text-sm font-semibold text-gray-900 dark:text-white mb-3">Filters</h3>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
+            <div>
+                <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Actor</label>
+                <input type="text" id="filterActor" placeholder="username" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-sm">
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Action</label>
+                <input type="text" id="filterAction" placeholder="e.g. agent.create" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-sm">
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Resource type</label>
+                <input type="text" id="filterResourceType" placeholder="e.g. agent, user" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-sm">
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Resource ID</label>
+                <input type="text" id="filterResourceId" placeholder="id or name" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-sm">
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">From (ISO date)</label>
+                <input type="date" id="filterDateFrom" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-sm">
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">To (ISO date)</label>
+                <input type="date" id="filterDateTo" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-sm">
+            </div>
+        </div>
+        <div class="mt-2 flex justify-end">
+            <button type="button" onclick="applyFilters()" class="px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded">Apply</button>
+        </div>
+    </div>
+
+    <!-- Table -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+        <div class="overflow-x-auto overflow-y-auto max-h-[calc(100vh-200px)] table-responsive">
+            <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700 audit-logs-table table-cards-mobile">
+                <thead class="bg-gray-50 dark:bg-gray-700">
+                    <tr>
+                        <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Time</th>
+                        <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Actor</th>
+                        <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Action</th>
+                        <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Resource</th>
+                        <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">ID</th>
+                        <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">IP</th>
+                        <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Details</th>
+                    </tr>
+                </thead>
+                <tbody id="auditLogBody" class="divide-y divide-gray-200 dark:divide-gray-700">
+                    <tr><td colspan="7" class="px-3 py-4 text-sm text-gray-500 dark:text-gray-400">Loading...</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="px-3 py-2 bg-gray-50 dark:bg-gray-700/50 text-xs text-gray-600 dark:text-gray-400">
+            Total: <span id="totalCount">0</span> — Show <span id="limitDisplay">100</span> per page
+            <span id="paginationArea" class="ml-2"></span>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+    const LIMIT = 100;
+    let currentOffset = 0;
+    let totalCount = 0;
+
+    function buildQuery() {
+        const params = new URLSearchParams();
+        params.set('limit', String(LIMIT));
+        params.set('offset', String(currentOffset));
+        const actor = document.getElementById('filterActor').value.trim();
+        const action = document.getElementById('filterAction').value.trim();
+        const resourceType = document.getElementById('filterResourceType').value.trim();
+        const resourceId = document.getElementById('filterResourceId').value.trim();
+        const dateFrom = document.getElementById('filterDateFrom').value;
+        const dateTo = document.getElementById('filterDateTo').value;
+        if (actor) params.set('actor', actor);
+        if (action) params.set('action', action);
+        if (resourceType) params.set('resource_type', resourceType);
+        if (resourceId) params.set('resource_id', resourceId);
+        if (dateFrom) params.set('date_from', dateFrom + 'T00:00:00');
+        if (dateTo) params.set('date_to', dateTo + 'T23:59:59');
+        return params;
+    }
+
+    function buildExportUrl(format) {
+        const params = buildQuery();
+        params.delete('offset');
+        params.set('limit', '10000');
+        params.set('format', format);
+        return '/dashboard/api/audit-logs/export?' + params.toString();
+    }
+
+    function updateExportLinks() {
+        document.getElementById('exportCsvLink').href = buildExportUrl('csv');
+        document.getElementById('exportJsonLink').href = buildExportUrl('json');
+    }
+
+    async function loadRetentionConfig() {
+        try {
+            const r = await apiCall('/dashboard/api/audit-logs/retention-config');
+            const days = r.retention_days || 0;
+            document.getElementById('retentionInfo').textContent = days === 0 ? 'Keep forever (set AUDIT_RETENTION_DAYS to auto-delete)' : days + ' days (auto-delete older)';
+        } catch (e) {
+            document.getElementById('retentionInfo').textContent = 'Unable to load';
+        }
+    }
+
+    async function loadLogs() {
+        const tbody = document.getElementById('auditLogBody');
+        tbody.innerHTML = '<tr><td colspan="7" class="px-3 py-4 text-sm text-gray-500">Loading...</td></tr>';
+        try {
+            const url = '/dashboard/api/audit-logs?' + buildQuery().toString();
+            const data = await apiCall(url);
+            totalCount = data.total || 0;
+            const logs = data.logs || [];
+            document.getElementById('totalCount').textContent = totalCount;
+            document.getElementById('limitDisplay').textContent = LIMIT;
+            updateExportLinks();
+
+            if (logs.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" class="px-3 py-4 text-sm text-gray-500 dark:text-gray-400">No audit logs match the filters.</td></tr>';
+                document.getElementById('paginationArea').textContent = '';
+                return;
+            }
+
+            tbody.innerHTML = logs.map(function(row) {
+                var time = row.timestamp ? new Date(row.timestamp).toLocaleString() : '—';
+                var details = row.details ? (typeof row.details === 'object' ? JSON.stringify(row.details) : row.details) : '—';
+                var detailsEsc = (details + '').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                var resourceId = row.resource_id || '—';
+                var resourceIdEsc = (resourceId + '').replace(/"/g, '&quot;');
+                return '<tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50">' +
+                    '<td data-label="Time" class="px-3 py-2 text-xs text-gray-900 dark:text-white whitespace-nowrap">' + time + '</td>' +
+                    '<td data-label="Actor" class="px-3 py-2 text-xs text-gray-900 dark:text-white">' + (row.actor || '—') + '</td>' +
+                    '<td data-label="Action" class="px-3 py-2 text-xs text-gray-900 dark:text-white">' + (row.action || '—') + '</td>' +
+                    '<td data-label="Resource" class="px-3 py-2 text-xs text-gray-900 dark:text-white">' + (row.resource_type || '—') + '</td>' +
+                    '<td data-label="ID" class="px-3 py-2 text-xs text-gray-900 dark:text-white max-w-[120px] truncate" title="' + resourceIdEsc + '">' + resourceId + '</td>' +
+                    '<td data-label="IP" class="px-3 py-2 text-xs text-gray-500 dark:text-gray-400">' + (row.ip_address || '—') + '</td>' +
+                    '<td data-label="Details" class="px-3 py-2 text-xs text-gray-600 dark:text-gray-300 max-w-[200px] truncate" title="' + detailsEsc + '">' + details + '</td>' +
+                    '</tr>';
+            }).join('');
+
+            var pagination = document.getElementById('paginationArea');
+            if (totalCount <= LIMIT) {
+                pagination.textContent = '';
+            } else {
+                var prevDisabled = currentOffset === 0;
+                var nextDisabled = currentOffset + LIMIT >= totalCount;
+                pagination.innerHTML = '<button onclick="window.auditLogPrev()" ' + (prevDisabled ? 'disabled' : '') + ' class="px-2 py-1 text-xs rounded ' + (prevDisabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-200 dark:hover:bg-gray-600') + '">Prev</button> ' +
+                    '<button onclick="window.auditLogNext()" ' + (nextDisabled ? 'disabled' : '') + ' class="px-2 py-1 text-xs rounded ' + (nextDisabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-200 dark:hover:bg-gray-600') + '">Next</button>';
+            }
+        } catch (e) {
+            tbody.innerHTML = '<tr><td colspan="7" class="px-3 py-4 text-sm text-red-600 dark:text-red-400">Failed to load: ' + (e.message || 'Unknown error') + '</td></tr>';
+            document.getElementById('totalCount').textContent = '0';
+            document.getElementById('paginationArea').textContent = '';
+        }
+    }
+
+    function applyFilters() {
+        currentOffset = 0;
+        loadLogs();
+    }
+
+    window.auditLogPrev = function() {
+        if (currentOffset >= LIMIT) {
+            currentOffset -= LIMIT;
+            loadLogs();
+        }
+    };
+    window.auditLogNext = function() {
+        if (currentOffset + LIMIT < totalCount) {
+            currentOffset += LIMIT;
+            loadLogs();
+        }
+    };
+
+    async function runRetention() {
+        try {
+            const r = await apiCall('/dashboard/api/audit-logs/retention', 'POST');
+            if (r.error) {
+                showNotification(r.error, 'error');
+            } else {
+                showNotification('Retention run: deleted ' + (r.deleted_count || 0) + ' row(s).');
+                loadLogs();
+                loadRetentionConfig();
+            }
+        } catch (e) {
+            showNotification('Failed to run retention: ' + (e.message || 'Unknown error'), 'error');
+        }
+    }
+
+    window.loadLogs = loadLogs;
+    window.runRetention = runRetention;
+    window.applyFilters = applyFilters;
+    document.addEventListener('DOMContentLoaded', function() {
+        loadRetentionConfig();
+        loadLogs();
+    });
+})();
+</script>
+{% endblock %}

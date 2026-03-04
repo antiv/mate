@@ -41,6 +41,11 @@ async def generate_auth_token(credentials: HTTPBasicCredentials = Depends(verify
     """Generate a Bearer token for authenticated users."""
     clear_logged_out_status(credentials.username, credentials.password)
     token = generate_token()
+    try:
+        from shared.utils.audit_service import log, ACTION_LOGIN, RESOURCE_AUTH
+        log(credentials.username, ACTION_LOGIN, RESOURCE_AUTH, details={"method": "token"}, request=None)
+    except Exception as e:
+        logger.debug("Audit log login: %s", e)
     logger.debug("Token generated, active_tokens count: %d", len(active_tokens))
     return {"access_token": token, "token_type": "bearer", "username": credentials.username}
 
@@ -108,6 +113,12 @@ async def logout(request: Request):
         if token or auth_header.startswith("Bearer "):
             logger.debug("Logout: fallback - marking configured credentials as logged out")
             logout_basic_auth(AUTH_USERNAME, AUTH_PASSWORD)
+
+    try:
+        from shared.utils.audit_service import log, ACTION_LOGOUT, RESOURCE_AUTH
+        log(username or AUTH_USERNAME, ACTION_LOGOUT, RESOURCE_AUTH, details={"method": "logout"}, request=request)
+    except Exception as e:
+        logger.debug("Audit log logout: %s", e)
 
     response = JSONResponse({"message": "Logged out successfully"})
     response.set_cookie("auth_token", "", max_age=0, path="/", httponly=False, samesite="lax")
