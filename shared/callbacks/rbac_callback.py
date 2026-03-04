@@ -184,8 +184,16 @@ def rbac_before_model_callback(callback_context: CallbackContext, llm_request: L
             required_roles = config_dict.get('allowed_for_roles', [])
             logger.error(f"RBAC: Access DENIED for user '{user_id}' to agent '{agent_name}'. User roles: {user_roles}, Required: {required_roles}")
             
-            # Log this access denial as a token usage event for tracking
-            _log_access_denied_event(callback_context, user_id, agent_name, user_roles, required_roles)
+        # Log this access denial to audit log (EU AI Act)
+        try:
+            from shared.utils.audit_service import log, ACTION_RBAC_DENIAL, RESOURCE_AGENT
+            log(user_id, ACTION_RBAC_DENIAL, RESOURCE_AGENT, resource_id=agent_name,
+                details={"user_roles": user_roles, "required_roles": required_roles}, request=None)
+        except Exception as e:
+            logger.debug("Audit log RBAC denial: %s", e)
+
+        # Log this access denial as a token usage event for tracking
+        _log_access_denied_event(callback_context, user_id, agent_name, user_roles, required_roles)
             
             return _create_access_denied_response(
                 error_message or "Insufficient permissions",

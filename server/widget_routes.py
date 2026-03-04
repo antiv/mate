@@ -498,6 +498,11 @@ async def create_widget_key(
         session.add(wk)
         session.commit()
         session.refresh(wk)
+        try:
+            from shared.utils.audit_service import log, ACTION_KEY_CREATE, RESOURCE_WIDGET_KEY
+            log(username, ACTION_KEY_CREATE, RESOURCE_WIDGET_KEY, resource_id=str(wk.id), details={"agent_name": agent_name, "project_id": project_id}, request=request)
+        except Exception as e:
+            logger.debug("Audit log widget key create: %s", e)
         return {"success": True, "key": wk.to_dict()}
     except Exception as e:
         session.rollback()
@@ -531,6 +536,11 @@ async def update_widget_key(
                 setattr(wk, field, val)
         session.commit()
         session.refresh(wk)
+        try:
+            from shared.utils.audit_service import log, ACTION_KEY_UPDATE, RESOURCE_WIDGET_KEY
+            log(username, ACTION_KEY_UPDATE, RESOURCE_WIDGET_KEY, resource_id=str(key_id), details={"agent_name": wk.agent_name}, request=request)
+        except Exception as e:
+            logger.debug("Audit log widget key update: %s", e)
         return {"success": True, "key": wk.to_dict()}
     except Exception as e:
         session.rollback()
@@ -555,8 +565,14 @@ async def delete_widget_key(
         wk = session.query(WidgetApiKey).filter_by(id=key_id).first()
         if not wk:
             raise HTTPException(status_code=404, detail="Widget key not found")
+        agent_name = wk.agent_name
         session.delete(wk)
         session.commit()
+        try:
+            from shared.utils.audit_service import log, ACTION_KEY_DELETE, RESOURCE_WIDGET_KEY
+            log(username, ACTION_KEY_DELETE, RESOURCE_WIDGET_KEY, resource_id=str(key_id), details={"agent_name": agent_name}, request=request)
+        except Exception as e:
+            logger.debug("Audit log widget key delete: %s", e)
         return {"success": True}
     except Exception as e:
         session.rollback()

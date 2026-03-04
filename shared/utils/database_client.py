@@ -125,7 +125,8 @@ class DatabaseClient:
             # Run migrations first, then auto-create/update tables
             self._run_migrations()
             self._auto_create_tables()
-            
+            self._run_audit_retention()
+
         except Exception as e:
             logger.error(f"Failed to initialize database client: {e}")
             self._engine = None
@@ -150,7 +151,17 @@ class DatabaseClient:
                 logger.warning("Some database migrations may have failed")
         except Exception as e:
             logger.warning(f"Failed to run database migrations: {e}")
-    
+
+    def _run_audit_retention(self):
+        """Run audit log retention (delete entries older than AUDIT_RETENTION_DAYS)."""
+        try:
+            from .audit_service import run_retention
+            result = run_retention()
+            if result.get("deleted_count", 0) > 0:
+                logger.info("Audit retention: deleted %s row(s)", result["deleted_count"])
+        except Exception as e:
+            logger.debug("Audit retention on startup: %s", e)
+
     def _auto_create_tables(self):
         """Automatically create/update tables on initialization."""
         if not self._engine:

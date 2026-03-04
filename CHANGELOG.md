@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Audit trail (EU AI Act)** - append-only `audit_logs` table: who changed what config when, user/agent CRUD, RBAC denials, login/logout, widget key management. Immutable log with configurable retention (`AUDIT_RETENTION_DAYS`). Dashboard viewer at `/dashboard/audit-logs` with filters (actor, action, resource, date range) and JSON/CSV export for compliance reporting.
 - **Responsive Dashboard** - mobile (375px+) and tablet (768px+) support for all dashboard pages
 - **Mobile Navigation** - hamburger menu with slide-out drawer for sidebar on small screens
 - **Touch-Friendly UI** - 44px min tap targets, responsive tables with horizontal scroll

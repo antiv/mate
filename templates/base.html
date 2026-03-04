@@ -153,19 +153,25 @@
 
         /* Mobile sidebar - drawer overlay */
         @media (max-width: 767px) {
+            nav.dashboard-nav {
+                position: relative;
+                z-index: 40;
+            }
             #sidebar {
                 position: fixed;
                 top: 0;
                 left: 0;
-                z-index: 50;
+                z-index: 30;
                 width: 16rem !important;
                 height: 100vh;
                 transform: translateX(-100%);
-                transition: transform 0.3s ease;
+                transition: transform 0.3s ease, z-index 0s 0.3s;
                 box-shadow: none;
             }
             #sidebar.mobile-sidebar-open {
                 transform: translateX(0);
+                z-index: 50;
+                transition: transform 0.3s ease;
                 box-shadow: 4px 0 12px rgba(0,0,0,0.15);
             }
             #sidebar .sidebar-minimized { width: 16rem !important; }
@@ -186,7 +192,7 @@
     <div id="sidebarBackdrop" class="hidden fixed inset-0 bg-black/50 z-40 md:hidden" aria-hidden="true"></div>
 
     <!-- Navigation -->
-    <nav class="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700">
+    <nav class="dashboard-nav bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700">
         <div class="flex justify-between items-center h-12 px-3 min-h-[48px]">
             <div class="flex items-center space-x-3">
                 <button id="hamburgerBtn" type="button" class="touch-target p-2 -ml-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white md:hidden" aria-label="Open menu">
@@ -278,6 +284,10 @@
                     <a href="/dashboard/traces" class="flex items-center px-3 py-2 text-sm text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 {% if request.url.path == '/dashboard/traces' %}sidebar-active{% endif %}" title="Traces">
                         <i class="fas fa-project-diagram sidebar-icon mr-2 text-xs"></i>
                         <span class="sidebar-text">Traces</span>
+                    </a>
+                    <a href="/dashboard/audit-logs" class="flex items-center px-3 py-2 text-sm text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 {% if request.url.path == '/dashboard/audit-logs' %}sidebar-active{% endif %}" title="Audit Logs">
+                        <i class="fas fa-clipboard-list sidebar-icon mr-2 text-xs"></i>
+                        <span class="sidebar-text">Audit Logs</span>
                     </a>
                     <a href="/dashboard/docs" class="flex items-center px-3 py-2 text-sm text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 {% if request.url.path == '/dashboard/docs' %}sidebar-active{% endif %}" title="API Documentation">
                         <i class="fas fa-book sidebar-icon mr-2 text-xs"></i>

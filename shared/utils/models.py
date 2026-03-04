@@ -516,6 +516,44 @@ class MemoryBlock(Base):
         }
 
 
+class AuditLog(Base):
+    """Append-only audit log for compliance (EU AI Act). No UPDATE/DELETE on application side."""
+
+    __tablename__ = 'audit_logs'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    timestamp = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    actor = Column(String(255), nullable=False)
+    action = Column(String(100), nullable=False)
+    resource_type = Column(String(100), nullable=False)
+    resource_id = Column(String(500), nullable=True)
+    details = Column(Text, nullable=True)  # JSON string for portability (SQLite/MySQL/PostgreSQL)
+    ip_address = Column(String(45), nullable=True)
+
+    def get_details(self) -> Optional[dict]:
+        if not self.details:
+            return None
+        try:
+            return json.loads(self.details)
+        except json.JSONDecodeError:
+            return None
+
+    def set_details(self, data: Optional[dict]):
+        self.details = json.dumps(data) if data else None
+
+    def to_dict(self) -> dict:
+        return {
+            'id': self.id,
+            'timestamp': self.timestamp.isoformat() if self.timestamp else None,
+            'actor': self.actor,
+            'action': self.action,
+            'resource_type': self.resource_type,
+            'resource_id': self.resource_id,
+            'details': self.get_details(),
+            'ip_address': self.ip_address,
+        }
+
+
 class WidgetApiKey(Base):
     """Model for embeddable chat widget API keys, scoped to a project and root agent."""
 
