@@ -56,6 +56,11 @@ Edit every aspect of an agent: model, instruction, RBAC roles, memory blocks, to
 
 ![Agent Configuration](documents/images/config_agent.png)
 
+### Agent Visual Builder
+Drag-and-drop canvas for building agent hierarchies visually. See tool and MCP nodes attached to each agent, click to configure them inline, and create connections between agents without touching any JSON.
+
+![Agent Visual Builder](documents/images/visual_builder.png)
+
 ### Tool Configuration
 Toggle built-in tools or provide custom JSON — Google Drive, Search, CV, Image, Memory Blocks, Code Executor, and more.
 
@@ -89,6 +94,7 @@ Built-in Swagger UI and ReDoc for both the Admin API and ADK API, accessible fro
 ## 🚀 Features
 
 - **Database-Driven Agent Management**: Agents configured through database with fallback support
+- **Agent Visual Builder**: Drag-and-drop React Flow canvas — create agents, draw parent→child connections, and configure tools/MCP/File Search/Memory Blocks inline without opening the full edit form
 - **Self-Building Agents**: Agents can create, update, read, and delete other agents at runtime via the `create_agent` tool — your system evolves itself through conversation (admin-only, RBAC-protected)
 - **Project-Level Agent Grouping**: Agents are scoped to projects so teams can manage independent hierarchies
 - **Hardcoded Agent Integration**: Supports mixing database agents with hardcoded implementations

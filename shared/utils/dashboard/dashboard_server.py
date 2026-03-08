@@ -849,6 +849,8 @@ class DashboardServer:
         try:
             config = session.query(self.AgentConfig).filter(self.AgentConfig.id == config_id).first()
             if config:
+                from shared.utils.models import AgentConfigVersion
+                session.query(AgentConfigVersion).filter(AgentConfigVersion.agent_config_id == config_id).delete(synchronize_session=False)
                 session.delete(config)
                 session.commit()
                 return True
@@ -1570,6 +1572,26 @@ class DashboardServer:
                 "configs": configs,
                 "projects": projects,
                 "selected_project_id": selected_project_id
+            })
+
+        @self.app.get("/dashboard/agents/visual", response_class=HTMLResponse, tags=["Dashboard - Pages"])
+        async def dashboard_agents_visual(request: Request, username: str = Depends(self._get_auth_user_dependency)):
+            """Dashboard visual agent builder page"""
+            project_param = request.query_params.get("project_id")
+            try:
+                selected_project_id = int(project_param) if project_param else None
+            except (TypeError, ValueError):
+                selected_project_id = None
+
+            projects = self._get_all_projects()
+            configs = self._get_all_agent_configs(selected_project_id) if selected_project_id else []
+            return self.templates.TemplateResponse("dashboard/agents_visual.html", {
+                "request": request,
+                "page_title": "Agent Visual Builder",
+                "username": username,
+                "configs": configs,
+                "projects": projects,
+                "selected_project_id": selected_project_id,
             })
 
         @self.app.get("/dashboard/templates", response_class=HTMLResponse, tags=["Dashboard - Pages"])

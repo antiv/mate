@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+
+{% block title %}Agent Visual Builder - MATE{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="/static/css/agents.css">
+{% endblock %}
+
+{% block content %}
+{% from 'dashboard/modals/config_modals.html' import config_modals %}
+{% from 'dashboard/modals/agent_modal_macro.html' import agent_modal %}
+<div class="flex h-screen">
+    <div class="flex-1 flex flex-col h-screen">
+        <div class="space-y-4 overflow-y-auto flex-1 p-4">
+            <!-- Header -->
+            <div class="flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-center">
+                <div class="min-w-0">
+                    <h2 class="text-xl font-bold text-gray-900 dark:text-white">Agent Visual Builder</h2>
+                    <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                        Drag agents, connect hierarchies, and edit configs visually.
+                    </p>
+                    {% if selected_project_id %}
+                    {% set selected_project = (projects | selectattr('id', 'equalto', selected_project_id) | list |
+                    first) %}
+                    {% if selected_project %}
+                    <p class="text-xs text-blue-600 dark:text-blue-300 mt-0.5">
+                        Project: {{ selected_project.name }}
+                    </p>
+                    {% endif %}
+                    {% endif %}
+                </div>
+                <div class="flex flex-wrap gap-2 min-w-0 flex-1 sm:flex-initial justify-end">
+                    <button
+                        onclick="window.location.href = '/dashboard/agents{% if selected_project_id %}?project_id={{ selected_project_id }}{% endif %}'"
+                        class="bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 px-3 py-2 text-xs rounded-lg flex items-center min-h-[44px] touch-target">
+                        <i class="fas fa-table mr-1.5"></i>
+                        Agents Table
+                    </button>
+                </div>
+            </div>
+
+            <!-- React Flow Visual Builder Root -->
+            <div class="h-[calc(100vh-160px)]">
+                <div id="agentVisualRoot" class="w-full h-full"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{{ config_modals('vb') }}
+
+<!-- Edit Agent Modal -->
+{{ agent_modal(
+'editAgentModal',
+'editAgentForm',
+'Edit Agent',
+'editAgent',
+'editAgentSubmitBtn',
+'editAgentLoader',
+'editAgentBtnText',
+'Update Agent',
+'hideEditAgentModal()',
+show_id_field=True,
+show_type_empty_option=False,
+submit_btn_color='bg-blue-600 hover:bg-blue-700',
+container_class='modal-side-panel',
+projects_list=projects
+) }}
+
+<!-- Other required modals for editing -->
+{% include 'dashboard/modals/parent_agents_modal.html' %}
+{% include 'dashboard/modals/memory_blocks_modal.html' %}
+{% include 'dashboard/modals/widget_keys_modal.html' %}
+{% endblock %}
+
+{% block scripts %}
+<script id="visual-configs-json" type="application/json">{{ configs | tojson | safe }}</script>
+<script id="visual-projects-json" type="application/json">{{ projects | tojson | safe }}</script>
+
+<!-- React and ReactDOM (UMD builds) -->
+<script src="https://cdn.jsdelivr.net/npm/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+
+<!-- React Flow (UMD build + styles) -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reactflow@11.11.4/dist/style.css">
+<script src="https://cdn.jsdelivr.net/npm/reactflow@11.11.4/dist/umd/index.js" crossorigin></script>
+
+<!-- Monaco Editor (Placed after React/ReactFlow to avoid AMD loader conflicts) -->
+<script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.44.0/min/vs/loader.js"></script>
+
+<!-- Agent Management Scripts (Required for editAgent) -->
+<script src="/static/js/agent-utils.js"></script>
+<script src="/static/js/agent-config.js"></script>
+<script src="/static/js/agent-tools.js"></script>
+<script src="/static/js/modals/file-search.js"></script>
+<script src="/static/js/agent-forms.js"></script>
+<script src="/static/js/modals/agent-edit-helpers.js"></script>
+<script src="/static/js/modals/parent-agents-modal.js"></script>
+<script src="/static/js/modals/memory-blocks.js"></script>
+<script src="/static/js/modals/widget-keys.js"></script>
+<script src="/static/js/agents-visual-builder.js?v=17"></script>
+
+<script>
+    window.visualBuilderInitialState = {
+        configs: JSON.parse(document.getElementById('visual-configs-json').textContent || '[]'),
+        projects: JSON.parse(document.getElementById('visual-projects-json').textContent || '[]'),
+        selectedProjectId: {{ selected_project_id |default ('null') }}
+    };
+    window.configs = window.visualBuilderInitialState.configs;
+    window.projects = window.visualBuilderInitialState.projects;
+    window.selectedProjectId = window.visualBuilderInitialState.selectedProjectId;
+</script>
+{% endblock %}

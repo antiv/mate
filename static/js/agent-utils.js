@@ -15,7 +15,7 @@ let monacoEditors = {};
  */
 function initMonacoEditor(containerId, initialValue = '') {
     return new Promise((resolve) => {
-        require.config({ paths: { 'vs': 'https://cdn.jsdelivr.net/npm/monaco-editor@0.44.0/min/vs' }});
+        require.config({ paths: { 'vs': 'https://cdn.jsdelivr.net/npm/monaco-editor@0.44.0/min/vs' } });
         require(['vs/editor/editor.main'], function () {
             const editor = monaco.editor.create(document.getElementById(containerId), {
                 value: initialValue,
@@ -41,14 +41,14 @@ function initMonacoEditor(containerId, initialValue = '') {
                 fontSize: 14,
                 lineHeight: 20
             });
-            
+
             // Add JSON validation
             monaco.languages.json.jsonDefaults.setDiagnosticsOptions({
                 validate: true,
                 allowComments: false,
                 schemas: []
             });
-            
+
             resolve(editor);
         });
     });
@@ -76,12 +76,12 @@ function setJsonInEditor(editor, value) {
 function toggleJsonEditor(textareaId, editorId) {
     const textarea = document.getElementById(textareaId);
     const editorContainer = document.getElementById(editorId);
-    
+
     if (editorContainer.style.display === 'none') {
         // Show Monaco editor
         textarea.style.display = 'none';
         editorContainer.style.display = 'block';
-        
+
         if (!monacoEditors[editorId]) {
             initMonacoEditor(editorId, textarea.value).then(editor => {
                 monacoEditors[editorId] = editor;
@@ -91,7 +91,7 @@ function toggleJsonEditor(textareaId, editorId) {
         // Show textarea
         editorContainer.style.display = 'none';
         textarea.style.display = 'block';
-        
+
         if (monacoEditors[editorId]) {
             textarea.value = getJsonFromEditor(monacoEditors[editorId]);
             textarea.dispatchEvent(new Event('input', { bubbles: true }));
@@ -112,12 +112,12 @@ function showCreateAgentModal() {
         }
         return;
     }
-    
+
     const projectSelect = document.getElementById('agentProject');
     if (projectSelect) {
         projectSelect.value = String(window.selectedProjectId);
     }
-    
+
     document.getElementById('createAgentModal').classList.remove('hidden');
 }
 
@@ -134,24 +134,10 @@ function showEditAgentModal() {
 }
 
 function hideEditAgentModal() {
-    console.log('hideEditAgentModal called');
-    console.log('editingFromGraphEditor:', window.editingFromGraphEditor);
-    console.log('isSubmittingEditForm:', window.isSubmittingEditForm);
-    
     document.getElementById('editAgentModal').classList.add('hidden');
     document.getElementById('editAgentForm').reset();
     if (typeof updateConfigSummaries === 'function') {
         updateConfigSummaries('editAgent');
-    }
-    
-    // Clear graph editor flags if modal is closed without saving
-    // But only if we're not in the middle of a form submission
-    if (window.editingFromGraphEditor && !window.isSubmittingEditForm) {
-        console.log('Edit modal closed, clearing graph editor flags');
-        window.editingFromGraphEditor = false;
-        window.graphEditorInstance = null;
-    } else if (window.editingFromGraphEditor && window.isSubmittingEditForm) {
-        console.log('Edit modal closed during form submission, keeping graph editor flags');
     }
 }
 
@@ -1128,7 +1114,7 @@ function hideImportModal() {
  */
 function buildAgentHierarchy(configs) {
     const hierarchy = {};
-    
+
     // First pass: identify all agents and their direct children
     configs.forEach(config => {
         hierarchy[config.name] = {
@@ -1136,7 +1122,7 @@ function buildAgentHierarchy(configs) {
             children: []
         };
     });
-    
+
     // Second pass: build parent-child relationships
     configs.forEach(config => {
         if (config.parent_agents && Array.isArray(config.parent_agents)) {
@@ -1147,12 +1133,12 @@ function buildAgentHierarchy(configs) {
             });
         }
     });
-    
+
     // Ensure children arrays are sorted for consistent ordering
     Object.keys(hierarchy).forEach(name => {
         hierarchy[name].children.sort((a, b) => a.localeCompare(b));
     });
-    
+
     return hierarchy;
 }
 
@@ -1161,14 +1147,14 @@ function buildAgentHierarchy(configs) {
  */
 function getAllDescendants(agentName, hierarchy, descendants = new Set()) {
     if (!hierarchy[agentName]) return descendants;
-    
+
     descendants.add(agentName);
-    
+
     const children = hierarchy[agentName].children;
     children.forEach(childName => {
         getAllDescendants(childName, hierarchy, descendants);
     });
-    
+
     return descendants;
 }
 
@@ -1350,21 +1336,21 @@ function createTypeBadgeClass(agentType) {
 
 function createStatusBadge(config) {
     const wrappers = [];
-    
+
     const statusSpan = document.createElement('span');
     statusSpan.className = config.disabled
         ? 'inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200'
         : 'inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200';
     statusSpan.textContent = config.disabled ? 'Disabled' : 'Active';
     wrappers.push(statusSpan);
-    
+
     if (config.hardcoded) {
         const hardcodedSpan = document.createElement('span');
         hardcodedSpan.className = 'inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200 ml-1';
         hardcodedSpan.innerHTML = '<i class="fas fa-code text-xs mr-1"></i>HC';
         wrappers.push(hardcodedSpan);
     }
-    
+
     return wrappers;
 }
 
@@ -1574,7 +1560,7 @@ function createAgentRow(config, depth, parentName, hasChildren, isHighlighted, r
             console.warn('Failed to parse tool_config for memory tools check:', e);
         }
     }
-    
+
     if (hasMemoryTools) {
         actionsWrap.appendChild(createActionButton({
             title: 'Memory Blocks',
