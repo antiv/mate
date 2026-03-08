@@ -5,6 +5,22 @@ All notable changes to MATE (Multi-Agent Tree Engine) will be documented in this
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.8] - 2026-03-09
+
+### Added
+
+- **Agent Visual Builder** - drag-and-drop React Flow canvas at `/dashboard/agents/visual`. Create agents, draw parent→child connections, and manage the full hierarchy without editing JSON or Python
+- **Visual Builder — Tool Settings panel** - click any tool node (or the "Configure" button in the Agent Configuration panel) to open the Tool Settings modal directly from the canvas; active tools displayed as pills
+- **Visual Builder — MCP panel** - each MCP server rendered as a clickable node and as a row in the Agent Configuration panel; clicking navigates to the inline MCP Settings panel for that server; "Add" button opens the MCP Server form
+- **Visual Builder — File Search panel** - "Manage" button in Agent Configuration panel pre-fills the agent context and opens the File Search (RAG) modal for store and document management
+- **Visual Builder — Memory Blocks button** - "Manage" button appears in Agent Configuration panel when the `memory_blocks` tool is enabled, opening the Memory Blocks modal for that agent
+- **Visual Builder — Import / Export** - one-click JSON export and file-based import of entire agent hierarchies per project
+- **Config modal minimum heights** - all config modals (Tool, MCP, Planner, GenerateContent, InputSchema, Guardrail, OutputSchema) now have `min-h` so forms are fully visible on open
+
+### Fixed
+
+- Removed unused `childrenByName` Map from `buildGraph()` (dead code since hierarchy rendering uses depth-first parent traversal)
+
 ## [1.0.7] - 2026-03-03
 
 ### Added
