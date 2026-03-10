@@ -127,6 +127,42 @@ class TemplateService:
             json.dump(data, f, indent=2, ensure_ascii=False)
         return str(path)
 
+    def delete_template(self, template_id: str) -> bool:
+        """Delete template JSON from templates/agent_templates/. Returns True if deleted."""
+        if not self.templates_dir.exists():
+            return False
+        
+        path = self.templates_dir / f"{template_id}.json"
+        
+        # Security check: ensure the path is within templates_dir
+        try:
+            path.resolve().relative_to(self.templates_dir.resolve())
+        except ValueError:
+            logger.warning("Attempted to delete template outside templates directory: %s", template_id)
+            return False
+
+        if path.exists():
+            try:
+                path.unlink()
+                logger.info("Deleted template: %s", path.name)
+                return True
+            except Exception as e:
+                logger.error("Failed to delete template %s: %s", path.name, e)
+                return False
+        
+        # Fallback search if id doesn't match stem
+        for p in self.templates_dir.glob("*.json"):
+            try:
+                data = self._load_json(p)
+                if (data.get("template_meta") or {}).get("id") == template_id:
+                    p.unlink()
+                    logger.info("Deleted template (by meta ID): %s", p.name)
+                    return True
+            except Exception:
+                continue
+
+        return False
+
     @staticmethod
     def slugify_project_name(name: str) -> str:
         """Convert project name to slug for agent prefix."""

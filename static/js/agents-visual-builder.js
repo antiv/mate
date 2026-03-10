@@ -1616,8 +1616,11 @@
                         }
                     }
                 },
+                getSelectedNode: function () {
+                    return selectedAgentName || null;
+                }
             };
-        }, [syncFromDb, props.projectId]);
+        }, [syncFromDb, props.projectId, selectedAgentName]);
 
 
 

@@ -152,6 +152,9 @@ class Project(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String(255), nullable=False, unique=True)
     description = Column(Text, nullable=True)
+    template_id = Column(String(255), nullable=True)  # Source template ID (e.g., "jira-worklog-assistant")
+    template_version = Column(String(50), nullable=True)  # Template version at import/sync (e.g., "3.0")
+    template_prefix = Column(String(255), nullable=True)  # Template agent_prefix for name mapping
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc),
                         onupdate=lambda: datetime.now(timezone.utc), nullable=False)
@@ -164,6 +167,9 @@ class Project(Base):
             'id': self.id,
             'name': self.name,
             'description': self.description,
+            'template_id': self.template_id,
+            'template_version': self.template_version,
+            'template_prefix': self.template_prefix,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }

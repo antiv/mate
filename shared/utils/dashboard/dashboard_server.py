@@ -1333,8 +1333,22 @@ class DashboardServer:
         
         project_id = project["id"]
         slug = self.template_service.slugify_project_name(proj_name)
-        agent_prefix = (template.get("template_meta") or {}).get("agent_prefix") or "tpl"
+        template_meta = template.get("template_meta") or {}
+        agent_prefix = template_meta.get("agent_prefix") or "tpl"
         replace_with = f"{slug}_" if agent_prefix.endswith("_") else slug
+        
+        # Store template provenance on the project for future sync/upgrade
+        try:
+            session = self.db_client.get_session()
+            proj = session.query(self.Project).filter(self.Project.id == project_id).first()
+            if proj:
+                proj.template_id = template_id
+                proj.template_version = template_meta.get("version")
+                proj.template_prefix = agent_prefix
+                session.commit()
+            session.close()
+        except Exception as e:
+            logger.warning(f"Failed to store template provenance for project {project_id}: {e}")
         
         # Build replacement map: old_agent_name -> new_agent_name
         agents_data = template.get("agents") or []
@@ -1497,6 +1511,379 @@ class DashboardServer:
             return {"success": True, "template_id": safe_id, "path": path}
         except Exception as e:
             return {"error": f"Failed to save template: {str(e)}"}
+    
+    def _get_template_sync_status(self, project_id: int) -> Dict[str, Any]:
+        """Get sync status: compare project agents with source template to find differences."""
+        if not self.db_client:
+            return {"error": "Database connection failed"}
+        
+        session = self.db_client.get_session()
+        if not session:
+            return {"error": "Database connection failed"}
+        
+        try:
+            project = session.query(self.Project).filter(self.Project.id == project_id).first()
+            if not project:
+                return {"error": f"Project not found: {project_id}"}
+            
+            if not project.template_id:
+                return {"error": "Project was not created from a template"}
+            
+            template = self.template_service.get_template(project.template_id)
+            if not template:
+                return {"error": f"Template not found: {project.template_id}"}
+            
+            template_meta = template.get("template_meta") or {}
+            latest_version = template_meta.get("version", "unknown")
+            current_version = project.template_version or "unknown"
+            
+            # Build name map (template name -> project name)
+            slug = self.template_service.slugify_project_name(project.name)
+            tpl_prefix = project.template_prefix or template_meta.get("agent_prefix") or "tpl"
+            replace_with = f"{slug}_" if tpl_prefix.endswith("_") else slug
+            
+            template_agents = template.get("agents") or []
+            name_map = {}
+            for a in template_agents:
+                old_name = a.get("name", "")
+                if old_name:
+                    new_name = old_name.replace(tpl_prefix, replace_with, 1) if tpl_prefix in old_name else f"{slug}_{old_name}"
+                    name_map[old_name] = new_name
+            
+            # Get existing DB agents for this project
+            db_agents = session.query(self.AgentConfig).filter(
+                self.AgentConfig.project_id == project_id
+            ).all()
+            db_agent_names = {a.name for a in db_agents}
+            
+            agents_to_add = []
+            agents_to_update = []
+            
+            def sub_names(text):
+                if isinstance(text, str):
+                    for old, new in name_map.items():
+                        text = text.replace(old, new)
+                return text
+
+            for tpl_agent in template_agents:
+                tpl_name = tpl_agent.get("name", "")
+                proj_name = name_map.get(tpl_name, tpl_name)
+                
+                if proj_name not in db_agent_names:
+                    agents_to_add.append({"template_name": tpl_name, "project_name": proj_name})
+                else:
+                    # Check if instruction/description/mcp changed
+                    db_agent = next((a for a in db_agents if a.name == proj_name), None)
+                    if db_agent:
+                        changes = []
+                        
+                        def to_json_str(val):
+                            if val is None:
+                                return ""
+                            if isinstance(val, (dict, list)):
+                                return json.dumps(val, sort_keys=True)
+                            return str(val)
+                            
+                        # Apply name mapping to template strings before comparing
+                        tpl_instr = sub_names(tpl_agent.get("instruction") or "")
+                        db_instr = db_agent.instruction or ""
+                        if tpl_instr != db_instr:
+                            changes.append("instruction")
+                            
+                        tpl_desc = sub_names(tpl_agent.get("description") or "")
+                        db_desc = db_agent.description or ""
+                        if tpl_desc != db_desc:
+                            changes.append("description")
+                            
+                        # Compare JSON structure properly, applying mapping
+                        tpl_mcp_raw = tpl_agent.get("mcp_servers_config")
+                        if isinstance(tpl_mcp_raw, str) and tpl_mcp_raw:
+                            try:
+                                tpl_mcp_raw = json.loads(sub_names(tpl_mcp_raw))
+                            except json.JSONDecodeError:
+                                tpl_mcp_raw = sub_names(tpl_mcp_raw)
+                        tpl_mcp = to_json_str(tpl_mcp_raw)
+                        
+                        db_mcp_raw = db_agent.mcp_servers_config if isinstance(db_agent.mcp_servers_config, (dict, list)) else json.loads(db_agent.mcp_servers_config) if db_agent.mcp_servers_config else ""
+                        db_mcp = to_json_str(db_mcp_raw)
+                        if tpl_mcp != db_mcp:
+                            changes.append("mcp_servers_config")
+                            
+                        tpl_tool_raw = tpl_agent.get("tool_config")
+                        if isinstance(tpl_tool_raw, str) and tpl_tool_raw:
+                            try:
+                                tpl_tool_raw = json.loads(sub_names(tpl_tool_raw))
+                            except json.JSONDecodeError:
+                                tpl_tool_raw = sub_names(tpl_tool_raw)
+                        tpl_tool = to_json_str(tpl_tool_raw)
+                        
+                        db_tool_raw = db_agent.tool_config if isinstance(db_agent.tool_config, (dict, list)) else json.loads(db_agent.tool_config) if db_agent.tool_config else ""
+                        db_tool = to_json_str(db_tool_raw)
+                        if tpl_tool != db_tool:
+                            changes.append("tool_config")
+                            
+                        if changes:
+                            # Return simple string so JS UI can render it directly
+                            agents_to_update.append(f"{proj_name} (changes: {', '.join(changes)})")
+            
+            # Check memory blocks
+            template_blocks = template.get("memory_blocks") or []
+            from shared.utils.models import MemoryBlock
+            db_blocks = session.query(MemoryBlock).filter(
+                MemoryBlock.project_id == project_id
+            ).all()
+            db_block_labels = {b.label for b in db_blocks}
+            
+            def sub_names(text):
+                if isinstance(text, str):
+                    for old, new in name_map.items():
+                        text = text.replace(old, new)
+                return text
+            
+            blocks_to_add = []
+            blocks_to_update = []
+            for block in template_blocks:
+                label = sub_names(block.get("label", "").strip())
+                if not label:
+                    continue
+                if label not in db_block_labels:
+                    blocks_to_add.append(label)
+                else:
+                    db_block = next((b for b in db_blocks if b.label == label), None)
+                    if db_block and sub_names(block.get("value", "")) != (db_block.value or ""):
+                        blocks_to_update.append(label)
+            
+            return {
+                "project_id": project_id,
+                "project_name": project.name,
+                "template_id": project.template_id,
+                "current_version": current_version,
+                "latest_version": latest_version,
+                "up_to_date": current_version == latest_version and not agents_to_add and not agents_to_update and not blocks_to_add and not blocks_to_update,
+                "agents_to_add": agents_to_add,
+                "agents_to_update": agents_to_update,
+                "memory_blocks_to_add": blocks_to_add,
+                "memory_blocks_to_update": blocks_to_update,
+            }
+        except Exception as e:
+            logger.error(f"Error getting template sync status: {e}")
+            return {"error": str(e)}
+        finally:
+            session.close()
+    
+    def _sync_template(self, project_id: int, changed_by: str = None) -> Dict[str, Any]:
+        """Sync a project with its source template: add new agents, update changed agents, add/update memory blocks."""
+        if not self.db_client:
+            return {"error": "Database connection failed"}
+        
+        session = self.db_client.get_session()
+        if not session:
+            return {"error": "Database connection failed"}
+        
+        session.rollback()
+        
+        try:
+            project = session.query(self.Project).filter(self.Project.id == project_id).first()
+            if not project:
+                return {"error": f"Project not found: {project_id}"}
+            if not project.template_id:
+                return {"error": "Project was not created from a template"}
+            
+            template = self.template_service.get_template(project.template_id)
+            if not template:
+                return {"error": f"Template not found: {project.template_id}"}
+            
+            template_meta = template.get("template_meta") or {}
+            
+            # Build name map
+            slug = self.template_service.slugify_project_name(project.name)
+            tpl_prefix = project.template_prefix or template_meta.get("agent_prefix") or "tpl"
+            replace_with = f"{slug}_" if tpl_prefix.endswith("_") else slug
+            
+            template_agents = template.get("agents") or []
+            name_map = {}
+            for a in template_agents:
+                old_name = a.get("name", "")
+                if old_name:
+                    new_name = old_name.replace(tpl_prefix, replace_with, 1) if tpl_prefix in old_name else f"{slug}_{old_name}"
+                    name_map[old_name] = new_name
+            
+            def sub_names(obj):
+                if isinstance(obj, str):
+                    for old, new in name_map.items():
+                        obj = obj.replace(old, new)
+                    return obj
+                if isinstance(obj, list):
+                    return [sub_names(x) for x in obj]
+                if isinstance(obj, dict):
+                    return {k: sub_names(v) for k, v in obj.items()}
+                return obj
+            
+            # Get existing DB agents
+            db_agents = session.query(self.AgentConfig).filter(
+                self.AgentConfig.project_id == project_id
+            ).all()
+            db_agent_map = {a.name: a for a in db_agents}
+            
+            agents_added = 0
+            agents_updated = 0
+            
+            # Sort: root agents first
+            ordered = sorted(template_agents, key=lambda a: (len(a.get("parent_agents") or []), a.get("name", "")))
+            
+            for tpl_agent in ordered:
+                tpl_name = tpl_agent.get("name", "")
+                proj_name = name_map.get(tpl_name, tpl_name)
+                
+                if proj_name not in db_agent_map:
+                    # Add new agent
+                    config_data = {
+                        "name": proj_name,
+                        "type": tpl_agent.get("type", "llm"),
+                        "model_name": tpl_agent.get("model_name"),
+                        "description": tpl_agent.get("description"),
+                        "instruction": sub_names(tpl_agent.get("instruction") or ""),
+                        "parent_agents": sub_names(tpl_agent.get("parent_agents") or []),
+                        "allowed_for_roles": tpl_agent.get("allowed_for_roles"),
+                        "tool_config": tpl_agent.get("tool_config"),
+                        "mcp_servers_config": tpl_agent.get("mcp_servers_config"),
+                        "guardrail_config": tpl_agent.get("guardrail_config"),
+                        "project_id": project_id,
+                        "disabled": tpl_agent.get("disabled", False),
+                        "hardcoded": tpl_agent.get("hardcoded", False),
+                    }
+                    if isinstance(config_data["allowed_for_roles"], str):
+                        try:
+                            config_data["allowed_for_roles"] = json.loads(config_data["allowed_for_roles"])
+                        except json.JSONDecodeError:
+                            pass
+                    if self._create_agent_config(config_data, changed_by=changed_by):
+                        agents_added += 1
+                        # Create agent folder for root agent only
+                        if not (tpl_agent.get("parent_agents") or []):
+                            self._copy_template_agent(proj_name)
+                else:
+                    # Update existing agent — preserve user customizations
+                    db_agent = db_agent_map[proj_name]
+                    changed = False
+                    
+                    def to_json_str(val):
+                        if val is None:
+                            return ""
+                        if isinstance(val, (dict, list)):
+                            return json.dumps(val, sort_keys=True)
+                        return str(val)
+                    
+                    new_instruction = sub_names(tpl_agent.get("instruction") or "")
+                    if new_instruction and new_instruction != (db_agent.instruction or ""):
+                        db_agent.instruction = new_instruction
+                        changed = True
+                    
+                    new_desc = sub_names(tpl_agent.get("description") or "")
+                    if new_desc and new_desc != (db_agent.description or ""):
+                        db_agent.description = new_desc
+                        changed = True
+                    
+                    # Convert template MCP to string, map names, and set
+                    tpl_mcp_raw = tpl_agent.get("mcp_servers_config")
+                    if isinstance(tpl_mcp_raw, str):
+                        tpl_mcp_raw = sub_names(tpl_mcp_raw)
+                    new_mcp = to_json_str(tpl_mcp_raw)
+                    
+                    db_mcp_raw = db_agent.mcp_servers_config if isinstance(db_agent.mcp_servers_config, (dict, list)) else json.loads(db_agent.mcp_servers_config) if db_agent.mcp_servers_config else ""
+                    db_mcp = to_json_str(db_mcp_raw)
+                    if new_mcp and new_mcp != db_mcp:
+                        db_agent.mcp_servers_config = new_mcp
+                        changed = True
+                    
+                    # Convert template Tool to string, map names, and set
+                    tpl_tool_raw = tpl_agent.get("tool_config")
+                    if isinstance(tpl_tool_raw, str):
+                        tpl_tool_raw = sub_names(tpl_tool_raw)
+                    new_tool = to_json_str(tpl_tool_raw)
+                    
+                    db_tool_raw = db_agent.tool_config if isinstance(db_agent.tool_config, (dict, list)) else json.loads(db_agent.tool_config) if db_agent.tool_config else ""
+                    db_tool = to_json_str(db_tool_raw)
+                    if new_tool and new_tool != db_tool:
+                        db_agent.tool_config = new_tool
+                        changed = True
+                    
+                    # Update parent_agents if new agents were added
+                    new_parents = sub_names(tpl_agent.get("parent_agents") or [])
+                    if new_parents:
+                        new_parents_json = json.dumps(new_parents) if isinstance(new_parents, list) else new_parents
+                        if new_parents_json != (db_agent.parent_agents or ""):
+                            db_agent.parent_agents = new_parents_json
+                            changed = True
+                    
+                    if changed:
+                        agents_updated += 1
+            
+            session.commit()
+            
+            # Sync memory blocks
+            memory_blocks_added = 0
+            memory_blocks_updated = 0
+            from shared.utils.memory_blocks_service import MemoryBlocksService
+            from shared.utils.models import MemoryBlock
+            mem_service = MemoryBlocksService(self.db_client)
+            
+            db_blocks = session.query(MemoryBlock).filter(
+                MemoryBlock.project_id == project_id
+            ).all()
+            db_block_map = {b.label: b for b in db_blocks}
+            
+            for block in template.get("memory_blocks") or []:
+                label = sub_names(block.get("label", "").strip())
+                if not label:
+                    continue
+                value = sub_names(block.get("value", ""))
+                desc = block.get("description")
+                
+                if label not in db_block_map:
+                    result = mem_service.create_block(project_id=project_id, label=label, value=value, description=desc)
+                    if result.get("status") == "success":
+                        memory_blocks_added += 1
+                else:
+                    # Update existing block value
+                    existing = db_block_map[label]
+                    if value != (existing.value or ""):
+                        existing.value = value
+                        if desc:
+                            existing.description = desc
+                        memory_blocks_updated += 1
+            
+            # Update project template version
+            project.template_version = template_meta.get("version")
+            session.commit()
+            
+            # Reload agents
+            try:
+                from shared.utils.utils import get_adk_config
+                import httpx
+                adk_config = get_adk_config()
+                adk_url = f"http://{adk_config['adk_host']}:{adk_config['adk_port']}/api/reload-all-agents"
+                with httpx.Client(timeout=30.0) as client:
+                    client.post(adk_url)
+            except Exception:
+                pass
+            
+            return {
+                "success": True,
+                "project_id": project_id,
+                "template_id": project.template_id,
+                "synced_to_version": template_meta.get("version"),
+                "agents_added": agents_added,
+                "agents_updated": agents_updated,
+                "memory_blocks_added": memory_blocks_added,
+                "memory_blocks_updated": memory_blocks_updated,
+            }
+        except Exception as e:
+            session.rollback()
+            logger.error(f"Error syncing template: {e}")
+            return {"error": str(e)}
+        finally:
+            session.close()
     
     def _setup_templates_and_static(self):
         """Setup templates and static file serving"""
@@ -1919,6 +2306,32 @@ class DashboardServer:
                 raise HTTPException(status_code=404, detail=f"Template not found: {template_id}")
             return template
 
+        @self.app.delete("/dashboard/api/templates/{template_id}", tags=["Dashboard - Templates"])
+        async def delete_template(
+            template_id: str,
+            request: Request,
+            username: str = Depends(self._get_auth_user_dependency),
+        ):
+            """Delete a template."""
+            success = self.template_service.delete_template(template_id)
+            if not success:
+                raise HTTPException(status_code=404, detail=f"Template not found or could not be deleted: {template_id}")
+            
+            # Audit the deletion
+            if hasattr(self, 'AuditLog'):
+                try:
+                    audit_service.log_event(
+                        action="delete_template",
+                        actor=username,
+                        target_type="template",
+                        target_id=template_id,
+                        description=f"Deleted template: {template_id}"
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to audit template deletion: {e}")
+
+            return {"success": True}
+
         @self.app.post("/dashboard/api/templates/import", tags=["Dashboard - Templates"])
         async def import_template(
             request: Request,
@@ -1967,6 +2380,38 @@ class DashboardServer:
                     description=str(description).strip(),
                     category=str(category).strip() or "custom",
                 )
+                if "error" in result:
+                    raise HTTPException(status_code=400, detail=result["error"])
+                return result
+            except HTTPException:
+                raise
+            except Exception as e:
+                raise HTTPException(status_code=400, detail=str(e))
+
+        @self.app.get("/dashboard/api/templates/sync-status/{project_id}", tags=["Dashboard - Templates"])
+        async def get_template_sync_status(
+            project_id: int,
+            request: Request,
+            username: str = Depends(self._get_auth_user_dependency),
+        ):
+            """Get sync status: what changes would be applied if syncing with the source template."""
+            result = self._get_template_sync_status(project_id)
+            if "error" in result:
+                raise HTTPException(status_code=400, detail=result["error"])
+            return result
+
+        @self.app.post("/dashboard/api/templates/sync", tags=["Dashboard - Templates"])
+        async def sync_template(
+            request: Request,
+            username: str = Depends(self._get_auth_user_dependency),
+        ):
+            """Sync a project with its source template: add new agents, update changed agents."""
+            try:
+                body = await request.json()
+                project_id = body.get("project_id")
+                if not project_id:
+                    raise HTTPException(status_code=400, detail="project_id is required")
+                result = self._sync_template(int(project_id), changed_by=username)
                 if "error" in result:
                     raise HTTPException(status_code=400, detail=result["error"])
                 return result

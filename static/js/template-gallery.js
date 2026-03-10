@@ -68,9 +68,12 @@ function renderTemplates(templates) {
                 <p class="text-sm text-gray-600 dark:text-gray-400 line-clamp-3">${escapeHtml(t.description || '')}</p>
                 ${t.version ? `<p class="text-xs text-gray-500 dark:text-gray-500 mt-2">v${escapeHtml(t.version)}</p>` : ''}
             </div>
-            <div class="mt-4">
-                <button onclick="importTemplate('${escapeHtml(t.id)}')" class="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg flex items-center justify-center">
-                    <i class="fas fa-download mr-2"></i>Import
+            <div class="mt-4 flex gap-2">
+                <button onclick="importTemplate('${escapeHtml(t.id)}')" class="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg flex items-center justify-center">
+                    <i class="fas fa-download mr-1"></i>Import
+                </button>
+                <button onclick="deleteTemplate('${escapeHtml(t.id)}', '${escapeHtml(t.name || t.id)}')" class="px-3 py-2 bg-red-100 hover:bg-red-200 text-red-700 dark:bg-red-900/30 dark:hover:bg-red-900/50 dark:text-red-400 text-sm rounded-lg flex items-center justify-center" title="Delete Template">
+                    <i class="fas fa-trash-alt"></i>
                 </button>
             </div>
         `;
@@ -107,6 +110,34 @@ async function importTemplate(templateId) {
         }
     } catch (error) {
         const msg = error?.detail || error?.message || 'Import failed';
+        showNotification(typeof msg === 'string' ? msg : JSON.stringify(msg), 'error');
+    }
+}
+
+async function deleteTemplate(templateId, templateName) {
+    const confirmed = await showConfirm(
+        `Are you sure you want to delete the template "${templateName}"?\nThis action cannot be undone.`,
+        'Delete Template',
+        'Delete',
+        'Cancel',
+        'danger'
+    );
+
+    if (!confirmed) {
+        return;
+    }
+
+    try {
+        const result = await apiCall(`/dashboard/api/templates/${templateId}`, 'DELETE');
+        if (result.success) {
+            showNotification(`Template "${templateName}" deleted successfully.`, 'success');
+            loadTemplates(); // Reload the grid
+        } else {
+            const errMsg = result.error || result.detail || 'Delete failed';
+            showNotification(typeof errMsg === 'string' ? errMsg : JSON.stringify(errMsg), 'error');
+        }
+    } catch (error) {
+        const msg = error?.detail || error?.message || 'Delete failed';
         showNotification(typeof msg === 'string' ? msg : JSON.stringify(msg), 'error');
     }
 }
