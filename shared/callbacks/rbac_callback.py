@@ -195,10 +195,10 @@ def rbac_before_model_callback(callback_context: CallbackContext, llm_request: L
         # Log this access denial as a token usage event for tracking
         _log_access_denied_event(callback_context, user_id, agent_name, user_roles, required_roles)
             
-            return _create_access_denied_response(
-                error_message or "Insufficient permissions",
-                user_id, agent_name, user_roles, required_roles
-            )
+        return _create_access_denied_response(
+            error_message or "Insufficient permissions",
+            user_id, agent_name, user_roles, required_roles
+        )
         
         # Access granted, log success
         if span:

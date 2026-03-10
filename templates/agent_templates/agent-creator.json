@@ -1,0 +1,38 @@
+{
+  "template_meta": {
+    "id": "agent-creator",
+    "name": "Agent Creator",
+    "description": "Multi-agent creator: An autonomous agent capable of designing, creating, and managing other specialized agents.",
+    "category": "support",
+    "version": "1.0",
+    "compatibility_tags": ["memory_blocks"],
+    "root_agent": "creator_root",
+    "agent_prefix": "creator"
+  },
+  "project": {
+    "name": "Agent Factory",
+    "description": "A workspace dedicated to generating and managing new AI agents."
+  },
+  "agents": [
+    {
+      "name": "creator_root",
+      "type": "llm",
+      "model_name": "openrouter/deepseek/deepseek-chat-v3.1",
+      "description": "Agent Creator Captain. Designs and creates new agents.",
+      "instruction": "You are the Agent Creator. Your goal is to design and instantiate new agents based on user requirements. When asked to create an agent, you must:\n1. Clarify the agent's purpose, role, and required tools.\n2. Write a precise system instruction for the new agent.\n3. Identify the best model to use.\n4. Call the `create_agent` tool to build the agent in this project.\n5. If needed, use `update_agent`, `delete_agent`, and `read_agent` to manage the agents you create.",
+      "parent_agents": [],
+      "allowed_for_roles": "[\"admin\", \"user\"]",
+      "tool_config": "{\"create_agent\": true, \"memory_blocks\": true}",
+      "mcp_servers_config": null,
+      "disabled": false,
+      "hardcoded": false
+    }
+  ],
+  "memory_blocks": [
+    {
+      "label": "system_instruction_creator_root",
+      "value": "Agent Creation Guidelines:\n- Always give new agents descriptive names.\n- Keep instructions focused on a single responsibility.\n- Review your created agents using read_agent to ensure they are configured correctly.",
+      "description": "Guidelines for creating and managing agents."
+    }
+  ]
+}
