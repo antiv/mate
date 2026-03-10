@@ -174,3 +174,7 @@ tramp
 # Sublime Text
 *.sublime-project
 *.sublime-workspace
+
+# Agents
+agents/*
+!agents/__init__.py
