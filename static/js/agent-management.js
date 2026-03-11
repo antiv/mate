@@ -307,6 +307,235 @@ window.refreshAgentsPage = refreshAgentsPage;
 window.showSaveTemplateModal = showSaveTemplateModal;
 window.hideSaveTemplateModal = hideSaveTemplateModal;
 window.submitSaveTemplate = submitSaveTemplate;
+window.downloadBinary = downloadBinary;
+
+// Download binary functionality (async with background build + polling)
+async function downloadBinary() {
+    if (!window.selectedProjectId) {
+        showNotification('Select a project before downloading binary.', 'warning');
+        return;
+    }
+
+    // Determine root agent from filter (agents page) or visual builder
+    let rootAgent = '';
+    const rootAgentFilter = document.getElementById('rootAgentFilter');
+    if (rootAgentFilter && rootAgentFilter.value) {
+        rootAgent = rootAgentFilter.value;
+    } else if (window.visualBuilder && window.visualBuilder.getSelectedNode) {
+        rootAgent = window.visualBuilder.getSelectedNode() || '';
+    }
+
+    if (!rootAgent) {
+        const roots = (window.configs || []).filter(a =>
+            !a.parent_agents || a.parent_agents.length === 0
+        );
+        if (roots.length === 1) {
+            rootAgent = roots[0].name;
+        } else if (roots.length > 1) {
+            showNotification('Multiple root agents found. Select one using the root agent filter.', 'warning');
+            return;
+        } else {
+            showNotification('No root agent found in this project.', 'warning');
+            return;
+        }
+    }
+
+    const confirmed = await showConfirmDialog(
+        `Build a standalone binary for agent "${rootAgent}"?\n\nThis runs in the background — you can switch tabs safely.`,
+        'Build Standalone Binary',
+        'Build & Download',
+        'Cancel',
+        'info'
+    );
+    if (!confirmed) return;
+
+    // Step 1: Start the build (returns immediately with build_id)
+    let buildId;
+    try {
+        const response = await fetch('/dashboard/api/agents/build-binary', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({
+                root_agent: rootAgent,
+                project_id: window.selectedProjectId,
+                app_name: rootAgent.replace(/[^a-zA-Z0-9_-]/g, '_'),
+            }),
+        });
+
+        if (!response.ok) {
+            let detail = 'Failed to start build';
+            try { detail = (await response.json()).detail || detail; } catch (_) {}
+            showNotification(detail, 'error');
+            return;
+        }
+
+        const result = await response.json();
+        buildId = result.build_id;
+    } catch (error) {
+        showNotification('Error starting build: ' + error.message, 'error');
+        return;
+    }
+
+    // Step 2: Show persistent build progress banner
+    _showBuildProgress(buildId, rootAgent);
+
+    // Step 3: Poll for build completion
+    _pollBuildStatus(buildId);
+}
+
+// Show a persistent build progress banner at the top of the page
+function _showBuildProgress(buildId, agentName) {
+    // Remove any existing banner
+    const existing = document.getElementById('buildProgressBanner');
+    if (existing) existing.remove();
+
+    const banner = document.createElement('div');
+    banner.id = 'buildProgressBanner';
+    banner.dataset.buildId = buildId;
+    banner.className = 'fixed top-0 left-0 right-0 z-[9999] bg-indigo-600 text-white px-4 py-3 shadow-lg flex items-center justify-between transition-all';
+    banner.innerHTML = `
+        <div class="flex items-center gap-3">
+            <div class="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full" id="buildSpinner"></div>
+            <div>
+                <span class="font-semibold">Building "${agentName}"</span>
+                <span class="text-indigo-200 text-sm ml-2" id="buildProgressText">Starting build...</span>
+            </div>
+        </div>
+        <button onclick="_cancelBuildBanner()" class="text-indigo-200 hover:text-white text-sm px-2 py-1 rounded hover:bg-indigo-700" title="Dismiss (build continues in background)">
+            <i class="fas fa-times"></i>
+        </button>
+    `;
+    document.body.prepend(banner);
+
+    // Push content down so banner doesn't overlap
+    document.body.style.paddingTop = banner.offsetHeight + 'px';
+}
+
+function _cancelBuildBanner() {
+    const banner = document.getElementById('buildProgressBanner');
+    if (banner) {
+        banner.remove();
+        document.body.style.paddingTop = '';
+    }
+}
+
+function _updateBuildBanner(progress, status) {
+    const text = document.getElementById('buildProgressText');
+    if (text) text.textContent = progress;
+}
+
+function _completeBuildBanner(filename, fileSize, buildId) {
+    const banner = document.getElementById('buildProgressBanner');
+    if (!banner) return;
+
+    const sizeMB = fileSize ? ` (${(fileSize / (1024 * 1024)).toFixed(1)} MB)` : '';
+    banner.className = banner.className.replace('bg-indigo-600', 'bg-green-600');
+    banner.innerHTML = `
+        <div class="flex items-center gap-3">
+            <i class="fas fa-check-circle text-xl"></i>
+            <div>
+                <span class="font-semibold">Build complete!</span>
+                <span class="text-green-200 text-sm ml-2">${filename}${sizeMB}</span>
+            </div>
+        </div>
+        <div class="flex items-center gap-2">
+            <button onclick="_triggerBuildDownload('${buildId}', '${filename}')" class="bg-white text-green-700 font-semibold text-sm px-4 py-1.5 rounded-lg hover:bg-green-50 transition-colors">
+                <i class="fas fa-download mr-1.5"></i> Download
+            </button>
+            <button onclick="_cancelBuildBanner()" class="text-green-200 hover:text-white text-sm px-2 py-1 rounded hover:bg-green-700">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+    `;
+}
+
+function _failBuildBanner(error) {
+    const banner = document.getElementById('buildProgressBanner');
+    if (!banner) {
+        showNotification('Build failed: ' + error, 'error');
+        return;
+    }
+
+    banner.className = banner.className.replace('bg-indigo-600', 'bg-red-600');
+    banner.innerHTML = `
+        <div class="flex items-center gap-3">
+            <i class="fas fa-exclamation-circle text-xl"></i>
+            <div>
+                <span class="font-semibold">Build failed</span>
+                <span class="text-red-200 text-sm ml-2">${error.substring(0, 200)}</span>
+            </div>
+        </div>
+        <button onclick="_cancelBuildBanner()" class="text-red-200 hover:text-white text-sm px-2 py-1 rounded hover:bg-red-700">
+            <i class="fas fa-times"></i>
+        </button>
+    `;
+}
+
+async function _pollBuildStatus(buildId) {
+    const POLL_INTERVAL = 3000; // 3 seconds
+
+    const poll = async () => {
+        try {
+            const response = await fetch(`/dashboard/api/agents/build-binary/${buildId}/status`, {
+                credentials: 'same-origin',
+            });
+
+            if (!response.ok) {
+                _failBuildBanner('Lost connection to build server');
+                return;
+            }
+
+            const data = await response.json();
+
+            if (data.status === 'building') {
+                _updateBuildBanner(data.progress || 'Building...');
+                setTimeout(poll, POLL_INTERVAL);
+            } else if (data.status === 'completed') {
+                _completeBuildBanner(data.filename, data.file_size, buildId);
+                // Auto-trigger download
+                _triggerBuildDownload(buildId, data.filename);
+            } else if (data.status === 'failed') {
+                _failBuildBanner(data.error || 'Unknown error');
+            }
+        } catch (error) {
+            // Network error — retry a few times
+            console.error('Poll error:', error);
+            setTimeout(poll, POLL_INTERVAL * 2);
+        }
+    };
+
+    poll();
+}
+
+async function _triggerBuildDownload(buildId, filename) {
+    try {
+        const response = await fetch(`/dashboard/api/agents/build-binary/${buildId}/download`, {
+            credentials: 'same-origin',
+        });
+
+        if (!response.ok) {
+            showNotification('Download failed', 'error');
+            return;
+        }
+
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+
+        showNotification(`Binary "${filename}" downloaded!`, 'success');
+    } catch (error) {
+        showNotification('Download error: ' + error.message, 'error');
+    }
+}
+
+
 
 // Attach file input handler for import when DOM is ready
 function attachAgentManagementHandlers() {

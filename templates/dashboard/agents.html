@@ -58,6 +58,13 @@
                         <i class="fas fa-download mr-1.5"></i>
                         Export
                     </button>
+                    <button onclick="downloadBinary()"
+                        class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 text-xs rounded-lg flex items-center min-h-[44px] disabled:bg-gray-400 disabled:cursor-not-allowed touch-target"
+                        {% if not selected_project_id %}disabled title="Select a project first" {% endif %}
+                        title="Build & download standalone executable">
+                        <i class="fas fa-box mr-1.5"></i>
+                        Download Binary
+                    </button>
                     <button onclick="showImportModal()"
                         class="bg-purple-600 hover:bg-purple-700 text-white px-3 py-2 text-xs rounded-lg flex items-center min-h-[44px] touch-target">
                         <i class="fas fa-upload mr-1.5"></i>

@@ -5,9 +5,47 @@ MCP (Model Context Protocol) tools creation and management.
 import logging
 import json
 import os
-from typing import Dict, List, Any
+import shutil
+from typing import Dict, List, Any, Optional
 
 logger = logging.getLogger(__name__)
+
+# Human-readable install hints for common MCP server commands
+_MCP_COMMAND_INSTALL_HINTS: Dict[str, str] = {
+    "npx": "Install Node.js from https://nodejs.org/ (includes npx)",
+    "node": "Install Node.js from https://nodejs.org/",
+    "uvx": "Install uv from https://github.com/astral-sh/uv (includes uvx)",
+    "uv": "Install uv from https://github.com/astral-sh/uv",
+    "python": "Ensure Python is installed and in PATH",
+    "python3": "Ensure Python 3 is installed and in PATH",
+    "bun": "Install Bun from https://bun.sh/",
+    "deno": "Install Deno from https://deno.land/",
+}
+
+
+def resolve_mcp_command(command: str) -> Optional[str]:
+    """
+    Resolve the full path of an MCP server command using shutil.which().
+
+    Returns the resolved absolute path if found, or None if not found.
+    Logging a warning with an install hint when the command cannot be resolved.
+    """
+    if os.path.isabs(command) and os.path.isfile(command):
+        return command  # Already an absolute path — use as-is
+
+    resolved = shutil.which(command)
+    if resolved:
+        logger.debug(f"Resolved MCP command '{command}' -> '{resolved}'")
+        return resolved
+
+    # Not found — emit a clear, actionable warning
+    hint = _MCP_COMMAND_INSTALL_HINTS.get(command, f"Ensure '{command}' is installed and in your PATH")
+    logger.warning(
+        f"MCP command '{command}' not found in PATH. "
+        f"This MCP server will fail to start. "
+        f"Fix: {hint}"
+    )
+    return None
 
 
 def create_mcp_toolset_command(
@@ -34,6 +72,18 @@ def create_mcp_toolset_command(
     try:
         from google.adk.tools.mcp_tool.mcp_toolset import MCPToolset, StdioConnectionParams, StdioServerParameters
 
+        # Resolve the command to a full absolute path before spawning.
+        # This avoids a cryptic FileNotFoundError at subprocess-creation time and
+        # provides a clear, actionable error message when the command is missing.
+        resolved_command = resolve_mcp_command(command)
+        if resolved_command is None:
+            logger.error(
+                f"Skipping MCP server for agent '{agent_name}': "
+                f"command '{command}' not found. "
+                f"The agent will respond without this MCP tool."
+            )
+            return None
+
         # Set environment variables
         env_vars = os.environ.copy()
         env_vars.update(env)
@@ -42,16 +92,19 @@ def create_mcp_toolset_command(
             connection_params=StdioConnectionParams(
                 timeout=float(timeout),
                 server_params=StdioServerParameters(
-                    command=command,
+                    command=resolved_command,
                     args=args,
                     env=env_vars,
                 ),
             ),
         )
-        
-        logger.info(f"Created command-based MCP toolset for {agent_name} with command: {command} {' '.join(args)}")
+
+        logger.info(
+            f"Created command-based MCP toolset for {agent_name} "
+            f"with command: {resolved_command} {' '.join(str(a) for a in args)}"
+        )
         return mcp_toolset
-        
+
     except ImportError as e:
         logger.warning(f"MCP tools not available for agent {agent_name}: {e}")
         return None

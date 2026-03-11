@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ agent_name }} — MATE</title>
+  <link rel="stylesheet" href="/static/css/widget/chat.css">
+  <style>
+    /* Standalone overrides — slightly wider container on desktop */
+    @media (min-width: 768px) {
+      .widget-container {
+        max-width: 800px;
+        margin: 0 auto;
+        border-left: 1px solid var(--w-border);
+        border-right: 1px solid var(--w-border);
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="widget-container">
+    <div class="widget-header">
+      <span class="widget-header-title" id="widgetHeaderTitle">{{ agent_name }}</span>
+      <div class="widget-header-actions">
+        <button class="widget-header-btn" id="widgetNewChat" title="New conversation">New Chat</button>
+      </div>
+    </div>
+
+    <div class="widget-messages" id="widgetMessages">
+      <div class="widget-greeting" id="widgetGreeting">How can I help you today?</div>
+      <div class="widget-typing" id="widgetTyping">
+        <span class="widget-typing-dot"></span>
+        <span class="widget-typing-dot"></span>
+        <span class="widget-typing-dot"></span>
+      </div>
+    </div>
+
+    <div class="widget-input-area">
+      <textarea class="widget-input" id="widgetInput" placeholder="Type a message…" rows="1"></textarea>
+      <button class="widget-send-btn" id="widgetSendBtn">Send</button>
+    </div>
+
+    <div class="widget-footer">
+      <a href="https://github.com/BjornMelin/adk-mate" target="_blank" rel="noopener">Powered by MATE</a>
+    </div>
+  </div>
+
+  <script>
+    // Standalone mode — talks directly to local ADK endpoints
+    window.STANDALONE_AGENT_NAME = "{{ agent_name }}";
+  </script>
+  <script src="/static/js/standalone/chat.js"></script>
+</body>
+</html>
