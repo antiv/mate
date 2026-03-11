@@ -2135,6 +2135,39 @@
                             },
                             'Import',
                         ),
+                        React.createElement(
+                            'button',
+                            {
+                                type: 'button',
+                                className: 'ml-1 px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded disabled:opacity-60',
+                                disabled: !props.projectId,
+                                onClick: function () {
+                                    let rootAgent = (window.visualBuilder && typeof window.visualBuilder.getSelectedNode === 'function') ? window.visualBuilder.getSelectedNode() : null;
+
+                                    if (!rootAgent) {
+                                        let rootAgents = (Array.from(agentsByName.values()) || []).filter(a => !a.parent_agents || (Array.isArray(a.parent_agents) && a.parent_agents.length === 0));
+                                        if (rootAgents.length === 1) {
+                                            rootAgent = rootAgents[0].name;
+                                        } else {
+                                            if (typeof window.showNotification === 'function') window.showNotification('Please select a root agent node in the graph first.', 'warning');
+                                            return;
+                                        }
+                                    }
+                                    
+                                    window.chatRequestedFullscreen = true;
+                                    if (typeof window.openAgentChat === 'function') {
+                                        window.openAgentChat(rootAgent);
+                                    } else if (typeof window.presentChatUserSelectionModal === 'function') {
+                                        window.pendingChatAgentName = rootAgent;
+                                        window.presentChatUserSelectionModal();
+                                    } else {
+                                        if (typeof window.showNotification === 'function') window.showNotification('Chat initialization failed. Please refresh.', 'error');
+                                    }
+                                },
+                            },
+                            React.createElement('i', { className: 'fas fa-comments mr-1' }),
+                            'Chat',
+                        ),
                     ),
                 ),
                 React.createElement(

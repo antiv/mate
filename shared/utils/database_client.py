@@ -228,6 +228,11 @@ class DatabaseClient:
         if not self._session_factory:
             return
         
+        # Allow skipping seed data (e.g. during standalone builds)
+        if os.getenv("DB_SKIP_SEED", "").lower() in ("true", "1", "yes"):
+            logger.info("Skipping initial data population (DB_SKIP_SEED=true)")
+            return
+        
         session = self._session_factory()
         try:
             from .models import AgentConfig

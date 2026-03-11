@@ -551,7 +551,7 @@ function syncChatHeaderUserSelector(selectedUserId) {
     chatHeaderAutocompleteState.activeIndex = -1;
 }
 
-function showAgentChatPanel(agentName, chatUrl) {
+function showAgentChatPanel(agentName, chatUrl, fullscreen = false) {
     const panel = document.getElementById('agentChatPanel');
     const iframe = document.getElementById('agentChatIframe');
     const title = document.getElementById('agentChatTitle');
@@ -560,6 +560,18 @@ function showAgentChatPanel(agentName, chatUrl) {
     if (!panel || !iframe) {
         window.open(chatUrl, '_blank', 'noopener,noreferrer');
         return;
+    }
+
+    // Toggle fullscreen classes if panel container exists
+    const panelContainer = panel.querySelector('.relative.w-full.max-w-3xl');
+    if (panelContainer) {
+        if (fullscreen) {
+            panelContainer.classList.remove('max-w-3xl');
+            panelContainer.classList.add('max-w-none');
+        } else {
+            panelContainer.classList.add('max-w-3xl');
+            panelContainer.classList.remove('max-w-none');
+        }
     }
 
     attachChatIframeHandlers(iframe);
@@ -580,9 +592,26 @@ function hideAgentChatPanel() {
 
     if (panel) {
         panel.classList.add('hidden');
+        
+        // Reset fullscreen classes
+        const panelContainer = panel.querySelector('.relative.w-full.max-none');
+        if (!panelContainer) {
+            // Might already be back to max-w-3xl
+        } else {
+            panelContainer.classList.add('max-w-3xl');
+            panelContainer.classList.remove('max-w-none');
+        }
+        
+        // Alternative: just find the container and ensure it has correct classes
+        const container = panel.querySelector('.relative.w-full');
+        if (container) {
+            container.classList.add('max-w-3xl');
+            container.classList.remove('max-w-none');
+        }
     }
 
     document.body.classList.remove('chat-panel-open');
+    window.chatRequestedFullscreen = false;
 
     if (iframe) {
         if (iframe._chatSidebarObserver) {
@@ -749,9 +778,16 @@ function launchAgentChat(agentName, userId) {
     setStoredChatUserId(resolvedUserId);
 
     const chatUrl = buildChatUrl(agentName, resolvedUserId);
-    showAgentChatPanel(agentName, chatUrl);
+    const fullscreen = !!window.chatRequestedFullscreen;
+    
+    if (fullscreen) {
+        window.open(chatUrl, '_blank');
+        window.chatRequestedFullscreen = false;
+    } else {
+        showAgentChatPanel(agentName, chatUrl, fullscreen);
+    }
+    
     syncChatHeaderUserSelector(resolvedUserId);
-
 }
 
 function confirmChatUserSelection() {
@@ -1956,4 +1992,15 @@ function toggleMaxIterationsField(selectElement, fieldId) {
         field.style.display = 'none';
     }
 }
+
+// Export functions to window
+window.openAgentChat = openAgentChat;
+window.presentChatUserSelectionModal = presentChatUserSelectionModal;
+window.hideAgentChatPanel = hideAgentChatPanel;
+window.hideChatUserModal = hideChatUserModal;
+window.confirmChatUserSelection = confirmChatUserSelection;
+window.cancelChatUserSelection = cancelChatUserSelection;
+window.initializeChatUserSelectionHandlers = initializeChatUserSelectionHandlers;
+window.launchAgentChat = launchAgentChat;
+window.showAgentChatPanel = showAgentChatPanel;
 

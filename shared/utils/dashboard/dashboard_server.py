@@ -6,6 +6,7 @@ Basic dashboard endpoints without complex service dependencies
 import json
 import logging
 import os
+import sys
 import shutil
 from pathlib import Path
 from typing import Dict, Any, List, Optional
@@ -2264,6 +2265,236 @@ class DashboardServer:
                 raise HTTPException(status_code=500, detail=export_data["error"])
             
             return export_data
+
+        # ---- Async Binary Build System ----
+        # Stores build state in memory: { build_id: { status, progress, error, build_dir, binary_path, filename } }
+        _active_builds: Dict[str, Dict[str, Any]] = {}
+
+        def _run_build_worker(build_id: str, export_data: dict, root_agent: str, app_name: str):
+            """Background worker that runs the build process."""
+            import tempfile
+            import subprocess
+            import platform
+
+            build_entry = _active_builds[build_id]
+            build_dir = build_entry["build_dir"]
+            json_path = os.path.join(build_dir, "agent_export.json")
+            output_dir = os.path.join(build_dir, "output")
+
+            try:
+                build_entry["progress"] = "Writing agent export..."
+
+                import json as json_mod
+                with open(json_path, "w", encoding="utf-8") as f:
+                    json_mod.dump(export_data, f)
+
+                project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+                build_script = os.path.join(project_root, "build_standalone_agent.py")
+
+                if not os.path.exists(build_script):
+                    build_entry["status"] = "failed"
+                    build_entry["error"] = "Build script not found"
+                    return
+
+                cmd = [
+                    sys.executable, build_script, json_path,
+                    "--output-dir", output_dir,
+                    "--agent-name", root_agent,
+                    "--app-name", app_name,
+                    "--build",
+                ]
+
+                build_entry["progress"] = "Running PyInstaller build (this may take several minutes)..."
+                logger.info(f"[Build {build_id}] Starting binary build for '{root_agent}'")
+
+                result = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=600,
+                    cwd=project_root,
+                )
+
+                if result.returncode != 0:
+                    error_msg = result.stderr[-2000:] if result.stderr else result.stdout[-2000:]
+                    logger.error(f"[Build {build_id}] Build failed: {error_msg}")
+                    build_entry["status"] = "failed"
+                    build_entry["error"] = error_msg
+                    return
+
+                # Find the built binary
+                build_entry["progress"] = "Locating and zipping built bundle..."
+                dist_dir = os.path.join(output_dir, "dist")
+                if not os.path.isdir(dist_dir):
+                    build_entry["status"] = "failed"
+                    build_entry["error"] = "Build completed but dist/ directory not found"
+                    return
+
+                binary_path = None
+                system = platform.system().lower()
+
+                import shutil
+                import zipfile
+
+                if system == "darwin":
+                    # macOS: One-File build ensures Gatekeeper only prompts once
+                    app_file_mac = os.path.join(dist_dir, app_name)
+                    if os.path.isfile(app_file_mac):
+                        zip_path = os.path.join(build_dir, f"{app_name}_mac.zip")
+                        with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                            # Preserve executable permissions
+                            info = zipfile.ZipInfo(app_name)
+                            info.external_attr = 0o755 << 16  # -rwxr-xr-x
+                            with open(app_file_mac, 'rb') as f:
+                                zipf.writestr(info, f.read())
+                        binary_path = zip_path
+                else:
+                    # Windows/Linux: Fast One-Dir builds (dist/AppName folder)
+                    app_folder = os.path.join(dist_dir, app_name)
+                    if os.path.isdir(app_folder):
+                        zip_suffix = "win" if system == "windows" else "linux"
+                        zip_path = os.path.join(build_dir, f"{app_name}_{zip_suffix}.zip")
+                        shutil.make_archive(
+                            os.path.join(build_dir, f"{app_name}_{zip_suffix}"), "zip",
+                            dist_dir, app_name
+                        )
+                        binary_path = zip_path
+
+                if not binary_path or not os.path.exists(binary_path):
+                    dist_files = os.listdir(dist_dir)
+                    if dist_files:
+                        candidate = os.path.join(dist_dir, dist_files[0])
+                        # If the only output is a directory, zip it
+                        if os.path.isdir(candidate):
+                            zip_path = os.path.join(build_dir, f"{app_name}.zip")
+                            shutil.make_archive(os.path.join(build_dir, app_name), "zip", dist_dir, dist_files[0])
+                            binary_path = zip_path
+                        elif os.path.isfile(candidate):
+                            binary_path = candidate
+
+                if not binary_path or not os.path.exists(binary_path):
+                    build_entry["status"] = "failed"
+                    build_entry["error"] = "Build completed but binary not found in dist/"
+                    return
+
+                filename = os.path.basename(binary_path)
+                file_size = os.path.getsize(binary_path)
+                logger.info(f"[Build {build_id}] Success: {filename} ({file_size} bytes)")
+
+                build_entry["status"] = "completed"
+                build_entry["binary_path"] = binary_path
+                build_entry["filename"] = filename
+                build_entry["file_size"] = file_size
+                build_entry["progress"] = "Build completed successfully!"
+
+            except subprocess.TimeoutExpired:
+                build_entry["status"] = "failed"
+                build_entry["error"] = "Build timed out (10-minute limit)"
+            except Exception as e:
+                logger.error(f"[Build {build_id}] Error: {e}")
+                build_entry["status"] = "failed"
+                build_entry["error"] = str(e)
+
+        @self.app.post("/dashboard/api/agents/build-binary", tags=["Dashboard - Agents"])
+        async def start_build_binary(
+            request: Request,
+            username: str = Depends(self._get_auth_user_dependency),
+        ):
+            """Start a standalone binary build in the background. Returns a build_id for polling."""
+            import tempfile
+            import threading
+            import uuid
+
+            body = await request.json()
+            root_agent = body.get("root_agent")
+            project_id = body.get("project_id")
+            app_name = body.get("app_name", "MATEAgent")
+
+            if not project_id:
+                raise HTTPException(status_code=400, detail="project_id is required")
+
+            export_data = self._export_agent_configs(root_agent=root_agent, project_id=project_id)
+            if "error" in export_data:
+                raise HTTPException(status_code=500, detail=export_data["error"])
+            if not export_data.get("agents"):
+                raise HTTPException(status_code=400, detail="No agents found to build")
+
+            if not root_agent:
+                roots = [a for a in export_data["agents"]
+                         if not a.get("parent_agents") or a["parent_agents"] == []]
+                root_agent = roots[0]["name"] if roots else export_data["agents"][0]["name"]
+
+            build_id = str(uuid.uuid4())[:8]
+            build_dir = tempfile.mkdtemp(prefix=f"mate_build_{build_id}_")
+
+            _active_builds[build_id] = {
+                "status": "building",
+                "progress": "Starting build...",
+                "error": None,
+                "build_dir": build_dir,
+                "binary_path": None,
+                "filename": None,
+                "file_size": None,
+                "root_agent": root_agent,
+                "app_name": app_name,
+            }
+
+            thread = threading.Thread(
+                target=_run_build_worker,
+                args=(build_id, export_data, root_agent, app_name),
+                daemon=True,
+            )
+            thread.start()
+
+            logger.info(f"[Build {build_id}] Started background build for '{root_agent}'")
+            return {"build_id": build_id, "status": "building", "message": f"Build started for agent '{root_agent}'"}
+
+        @self.app.get("/dashboard/api/agents/build-binary/{build_id}/status", tags=["Dashboard - Agents"])
+        async def get_build_status(
+            build_id: str,
+            request: Request,
+            username: str = Depends(self._get_auth_user_dependency),
+        ):
+            """Poll the status of a background binary build."""
+            entry = _active_builds.get(build_id)
+            if not entry:
+                raise HTTPException(status_code=404, detail="Build not found")
+
+            return {
+                "build_id": build_id,
+                "status": entry["status"],
+                "progress": entry["progress"],
+                "error": entry["error"],
+                "filename": entry["filename"],
+                "file_size": entry["file_size"],
+            }
+
+        @self.app.get("/dashboard/api/agents/build-binary/{build_id}/download", tags=["Dashboard - Agents"])
+        async def download_build(
+            build_id: str,
+            request: Request,
+            username: str = Depends(self._get_auth_user_dependency),
+        ):
+            """Download the completed binary."""
+            from fastapi.responses import FileResponse
+
+            entry = _active_builds.get(build_id)
+            if not entry:
+                raise HTTPException(status_code=404, detail="Build not found")
+            if entry["status"] != "completed":
+                raise HTTPException(status_code=400, detail=f"Build is not complete (status: {entry['status']})")
+            if not entry["binary_path"] or not os.path.exists(entry["binary_path"]):
+                raise HTTPException(status_code=500, detail="Binary file not found")
+
+            filename = entry["filename"]
+            media_type = "application/zip" if filename.endswith(".zip") else "application/octet-stream"
+
+            return FileResponse(
+                path=entry["binary_path"],
+                filename=filename,
+                media_type=media_type,
+                headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+            )
 
         @self.app.post("/dashboard/api/agents/import", tags=["Dashboard - Agents"])
         async def import_agents(

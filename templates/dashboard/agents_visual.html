@@ -58,6 +58,11 @@
                         class="bg-purple-600 hover:bg-purple-700 text-white px-3 py-2 text-xs rounded-lg flex items-center transition-colors shadow-sm ml-2">
                         <i class="fas fa-save mr-1.5"></i> Save as Template
                     </button>
+                    <button onclick="downloadBinary()"
+                        class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 text-xs rounded-lg flex items-center transition-colors shadow-sm ml-2"
+                        title="Build & download standalone executable">
+                        <i class="fas fa-box mr-1.5"></i> Download Binary
+                    </button>
                     {% endif %}
                 </div>
             </div>
@@ -96,6 +101,7 @@ projects_list=projects
 {% include 'dashboard/modals/widget_keys_modal.html' %}
 {% include 'dashboard/modals/template_sync_modal.html' %}
 {% include 'dashboard/modals/save_template_modal.html' %}
+{% include 'dashboard/modals/chat_modals.html' %}
 {% endblock %}
 
 {% block scripts %}
@@ -170,5 +176,10 @@ projects_list=projects
         document.getElementById('saveTemplateCategory').value = 'custom';
         document.getElementById('saveTemplateModal').classList.remove('hidden');
     };
+
+    // Initialize chat user selection handlers
+    if (typeof initializeChatUserSelectionHandlers === 'function') {
+        initializeChatUserSelectionHandlers();
+    }
 </script>
 {% endblock %}
