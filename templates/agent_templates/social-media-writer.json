@@ -1,0 +1,50 @@
+{
+  "template_meta": {
+    "id": "social-media-writer",
+    "name": "Social Media Writer",
+    "description": "Agent to rewrite prompts for various social networks, generate images using image tools, and deploy posts.",
+    "category": "social",
+    "version": "1.0.1+1",
+    "compatibility_tags": [
+      "mcp",
+      "image_tools"
+    ],
+    "root_agent": "social_media_root",
+    "agent_prefix": "social"
+  },
+  "project": {
+    "name": "Social Media Auto Poster",
+    "description": "Pre-built agent to manage content creation and publishing to X, Reddit, Instagram, and Facebook."
+  },
+  "agents": [
+    {
+      "name": "social_media_root",
+      "type": "llm",
+      "model_name": "openrouter/anthropic/claude-3.5-sonnet",
+      "description": "Root orchestration for social media posting.",
+      "instruction": "You are the Social Media Manager. Route requests to social_media_writer to generate content, create images, and post.",
+      "parent_agents": [],
+      "allowed_for_roles": "[\"admin\", \"user\"]",
+      "tool_config": "{}",
+      "mcp_servers_config": null,
+      "disabled": false,
+      "hardcoded": false
+    },
+    {
+      "name": "social_media_writer",
+      "type": "llm",
+      "model_name": "openrouter/anthropic/claude-3.5-sonnet",
+      "description": "Writes posts, generates images, and publishes to social media via Ayrshare MCP.",
+      "instruction": "You are the Social Media Writer and Publisher. When given a prompt:\n1. Rewrite the description into a compelling post for the requested platforms (X/Twitter, Reddit, Instagram, or Facebook).\n2. Use the image generation tool to create a relevant image for the post if requested or appropriate.\n3. Use the social media posting MCP tool (like Ayrshare) to publish the final text and image to the selected social networks.\n\nTailor the tone, length, and hashtags to be appropriate for each specific platform.",
+      "parent_agents": [
+        "social_media_root"
+      ],
+      "allowed_for_roles": "[\"admin\", \"user\"]",
+      "tool_config": "{\"image_tools\": {\"model\": \"openrouter/google/gemini-2.5-flash-image\"}}",
+      "mcp_servers_config": "{\"mcpServers\": {\"ayrshare\": {\"command\": \"npx\", \"args\": [\"-y\", \"@ayrshare/mcp-server\"], \"env\": {\"AYRSHARE_API_KEY\": \"\"}, \"timeout\": 60}}}",
+      "disabled": false,
+      "hardcoded": false
+    }
+  ],
+  "memory_blocks": []
+}
