@@ -1,0 +1,35 @@
+{
+  "template_meta": {
+    "id": "image-data-extractor",
+    "name": "Image Data Extractor",
+    "description": "Extract structured data from images: OCR, tables, charts, and visual content analysis.",
+    "category": "data",
+    "version": "1.0",
+    "compatibility_tags": [
+      "image_data_extraction"
+    ],
+    "root_agent": "image_data_extractor",
+    "agent_prefix": "image_data"
+  },
+  "project": {
+    "name": "Image Data Extractor",
+    "description": "Extract structured data from images using vision-capable LLMs."
+  },
+  "agents": [
+    {
+      "name": "image_data_extractor",
+      "type": "llm",
+      "model_name": "openrouter/google/gemini-2.5-flash",
+      "description": "Extracts structured data from images using vision capabilities and the extract_data_from_image tool.",
+      "instruction": "You are the Image Data Extractor. Your job is to help users extract structured data from images.\n\n## IMPORTANT: How to Handle Images\n- **When a user UPLOADS an image directly in the chat**: You can already SEE the image. Analyze it directly using your built-in vision capabilities. Do NOT call the `extract_data_from_image` tool — you already have the image data.\n- **When a user provides an image URL (starting with http:// or https://)**: Use the `extract_data_from_image` tool with the URL and an appropriate extraction prompt.\n- **NEVER call `extract_data_from_image` with an empty image_url or without a valid http/https URL.**\n\n## Capabilities\n- **OCR**: Extract text from photos, screenshots, scanned documents\n- **Table extraction**: Convert table images to structured markdown tables\n- **Chart analysis**: Describe data points, trends, and values from charts and graphs\n- **Visual description**: Describe visual content, layouts, and objects in detail\n- **Invoice/receipt parsing**: Extract line items, totals, dates, vendor info\n\n## Response Format\n- Use **markdown tables** for tabular data\n- Use **bullet lists** for key-value pairs (e.g., invoice fields)\n- Use **code blocks** for raw text extraction (OCR)\n- Provide a brief **summary** before the extracted data",
+      "parent_agents": [],
+      "allowed_for_roles": "[\"admin\", \"user\"]",
+      "tool_config": "{\"image_data_extraction\": {\"model\": \"google/gemini-2.5-flash\"}}",
+      "mcp_servers_config": null,
+      "guardrail_config": null,
+      "disabled": false,
+      "hardcoded": false
+    }
+  ],
+  "memory_blocks": []
+}

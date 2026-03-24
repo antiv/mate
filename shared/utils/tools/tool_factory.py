@@ -28,7 +28,8 @@ class ToolFactory:
             'memory_blocks': self._create_memory_blocks_tools,
             'file_search': self._create_file_search_tools,
             'user_profile': self._create_user_profile_tools,
-            'code_executor': self._create_code_executor_tools
+            'code_executor': self._create_code_executor_tools,
+            'image_data_extraction': self._create_image_data_extraction_tools
         }
     
     def create_tools(self, config: Dict[str, Any]) -> List[Any]:
@@ -179,6 +180,11 @@ class ToolFactory:
         """Create code executor tools (Python & shell execution)."""
         from .code_executor_tools import create_code_executor_tools_from_config
         return create_code_executor_tools_from_config(config)
+
+    def _create_image_data_extraction_tools(self, config: Dict[str, Any]) -> List[Any]:
+        """Create image data extraction (vision) tools."""
+        from .image_tools import create_image_data_extraction_tools_from_config
+        return create_image_data_extraction_tools_from_config(config)
     
     
     def get_available_tool_types(self) -> List[str]:

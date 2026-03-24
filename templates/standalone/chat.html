@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -17,6 +18,7 @@
     }
   </style>
 </head>
+
 <body>
   <div class="widget-container">
     <div class="widget-header">
@@ -35,13 +37,17 @@
       </div>
     </div>
 
+    <div class="widget-image-preview" id="widgetImagePreview"></div>
+
     <div class="widget-input-area">
+      <input type="file" id="widgetFileInput" accept="image/*" style="display:none" multiple>
+      <button class="widget-attach-btn" id="widgetAttachBtn" title="Attach image">&#x1F4CE;</button>
       <textarea class="widget-input" id="widgetInput" placeholder="Type a message…" rows="1"></textarea>
       <button class="widget-send-btn" id="widgetSendBtn">Send</button>
     </div>
 
     <div class="widget-footer">
-      <a href="https://github.com/BjornMelin/adk-mate" target="_blank" rel="noopener">Powered by MATE</a>
+      <a href="https://github.com/antiv/mate" target="_blank" rel="noopener">Powered by MATE</a>
     </div>
   </div>
 
@@ -51,4 +57,5 @@
   </script>
   <script src="/static/js/standalone/chat.js"></script>
 </body>
+
 </html>

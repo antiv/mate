@@ -135,6 +135,13 @@ function updateToolConfigSummary(prefix) {
     if (parsed.code_executor) {
         tools.push('code_executor');
     }
+    if (parsed.image_data_extraction) {
+        if (typeof parsed.image_data_extraction === 'object' && parsed.image_data_extraction.model) {
+            tools.push(`image_data_extraction(${parsed.image_data_extraction.model})`);
+        } else {
+            tools.push('image_data_extraction');
+        }
+    }
 
     let preview = '';
     if (tools.length) {
@@ -477,7 +484,7 @@ function clearJsonField(prefix, fieldSuffix) {
 }
 
 function resetToolConfig(prefix) {
-    const ids = ['GoogleDrive', 'CvTools', 'ImageTools', 'MemoryBlocks', 'CreateAgent', 'CodeExecutor'];
+    const ids = ['GoogleDrive', 'CvTools', 'ImageTools', 'MemoryBlocks', 'CreateAgent', 'CodeExecutor', 'ImageDataExtraction'];
     ids.forEach(id => {
         const checkbox = document.getElementById(prefix + id);
         if (checkbox) {
