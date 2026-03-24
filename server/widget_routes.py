@@ -145,6 +145,8 @@ async def widget_chat(request: Request, wk: WidgetApiKey = Depends(verify_widget
     user_id = body.get("user_id", "anonymous")
     session_id = body.get("session_id", "")
     new_session = body.get("new_session", False)
+    # Accept pre-built parts array (with inline_data for images)
+    raw_parts = body.get("parts")
 
     scoped_user = f"widget_{wk.id}_{user_id}"
     app_name = wk.agent_name
@@ -153,13 +155,19 @@ async def widget_chat(request: Request, wk: WidgetApiKey = Depends(verify_widget
     if not session_id or new_session:
         session_id = await _create_adk_session(app_name, scoped_user)
 
+    # Build message parts: use raw_parts if provided, else fall back to text-only
+    if raw_parts and isinstance(raw_parts, list):
+        message_parts = raw_parts
+    else:
+        message_parts = [{"text": message_text}]
+
     adk_payload = {
         "app_name": app_name,
         "user_id": scoped_user,
         "session_id": session_id,
         "new_message": {
             "role": "user",
-            "parts": [{"text": message_text}],
+            "parts": message_parts,
         },
         "streaming": True,
     }

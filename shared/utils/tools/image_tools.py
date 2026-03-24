@@ -924,3 +924,344 @@ async def generate_image_nano_banana(prompt: str, tool_context: ToolContext = No
             "model": model_name,
             "success": False
         }
+
+
+# ---------------------------------------------------------------------------
+# Image Data Extraction (Vision)
+# ---------------------------------------------------------------------------
+
+async def extract_data_from_image(
+    image_url: str,
+    extraction_prompt: str = "Extract all data from this image. If there is text, perform OCR. If there are tables, return them in markdown table format. If there are charts, describe the data points. Return the extracted information in a well-structured format.",
+    tool_context: ToolContext = None,
+) -> dict:
+    """
+    Extract structured data from an image using a vision-capable LLM.
+
+    Args:
+        image_url: Public URL of the image to analyze.
+        extraction_prompt: Instructions on what to extract from the image.
+        tool_context: Optional tool context (unused but required by ADK).
+
+    Returns:
+        A dictionary containing the extracted data or an error message.
+    """
+    return await _extract_data_from_image_internal(
+        image_url, extraction_prompt, tool_context, "google/gemini-2.5-flash"
+    )
+
+
+def _extract_inline_image_from_context(tool_context) -> str | None:
+    """Try to extract a base64 data URI from the user message in the tool context.
+
+    When the LLM can't see the image (e.g. Ollama) and hallucinates a URL,
+    this function grabs the actual inline image data from the conversation.
+
+    Returns:
+        A ``data:<mime>;base64,...`` string, or None if not found.
+    """
+    try:
+        invocation_ctx = getattr(tool_context, "_invocation_context", None)
+        if invocation_ctx is None:
+            return None
+        user_content = getattr(invocation_ctx, "user_content", None)
+        if user_content is None or not user_content.parts:
+            return None
+
+        import base64 as _b64
+
+        for part in user_content.parts:
+            inline = getattr(part, "inline_data", None)
+            if inline is None:
+                continue
+            mime = getattr(inline, "mime_type", None) or ""
+            data = getattr(inline, "data", None)
+            if data and mime.startswith("image/"):
+                if isinstance(data, bytes):
+                    b64_str = _b64.b64encode(data).decode("utf-8")
+                elif isinstance(data, str):
+                    b64_str = data
+                else:
+                    continue
+                logger.info(
+                    f"Extracted inline image from user context ({mime}, "
+                    f"{len(b64_str)} chars base64)"
+                )
+                return f"data:{mime};base64,{b64_str}"
+    except Exception as exc:
+        logger.debug(f"Could not extract inline image from context: {exc}")
+    return None
+
+
+async def _extract_data_from_image_internal(
+    image_url: str,
+    extraction_prompt: str,
+    tool_context: ToolContext = None,
+    model: str = "google/gemini-2.5-flash",
+) -> dict:
+    """
+    Internal implementation for image data extraction using a vision model.
+
+    Supports multiple providers via model name prefix:
+    - ``ollama_chat/model`` or ``ollama/model`` → local Ollama (http://localhost:11434/v1)
+    - ``openrouter/model`` → OpenRouter API (needs OPENROUTER_API_KEY)
+    - ``openai/model`` → OpenAI API (needs OPENAI_API_KEY)
+    - No prefix (e.g. ``google/gemini-2.5-flash``) → OpenRouter or OpenAI fallback
+
+    If the image_url is empty or invalid and a tool_context is available,
+    the function will attempt to extract the image from the user's uploaded
+    inline data in the conversation context.
+
+    Args:
+        image_url: Public URL of the image to analyze.
+        extraction_prompt: Instructions on what to extract.
+        tool_context: Optional tool context.
+        model: The vision model to use. Prefix determines routing.
+
+    Returns:
+        A dictionary containing the extracted data or an error message.
+    """
+    try:
+        if OpenAI is None:
+            return {
+                "error": "OpenAI package not installed. Please install it with: pip install openai",
+                "image_url": image_url,
+                "error_type": "missing_dependency",
+                "success": False,
+            }
+
+        # Fallback: if image_url is empty/invalid, try to get it from context
+        is_valid_url = image_url and (
+            image_url.startswith("http://")
+            or image_url.startswith("https://")
+            or image_url.startswith("data:")
+        )
+        if not is_valid_url and tool_context:
+            context_image = _extract_inline_image_from_context(tool_context)
+            if context_image:
+                logger.info("Using inline image from user context (model could not see the image directly)")
+                image_url = context_image
+            else:
+                return {
+                    "error": "No valid image URL provided and no image found in conversation context. "
+                             "Please upload an image or provide a valid http/https URL.",
+                    "image_url": image_url or "",
+                    "error_type": "missing_image",
+                    "success": False,
+                }
+
+        # Detect provider from model name prefix
+        provider = ""
+        api_model = model  # model name sent to the API
+        if "/" in model:
+            provider = model.split("/")[0]
+
+        if provider in ("ollama_chat", "ollama"):
+            # Ollama: local API, no key needed, strip prefix for API call
+            api_key = "ollama"  # Ollama doesn't check this but OpenAI client requires it
+            ollama_host = os.getenv("OLLAMA_HOST", "http://localhost:11434")
+            base_url = f"{ollama_host}/v1"
+            # Strip the provider prefix: ollama_chat/llava → llava
+            api_model = model.split("/", 1)[1]
+            logger.info(f"Image extraction using Ollama model '{api_model}' at {base_url}")
+
+        elif provider == "openrouter":
+            api_key = os.getenv("OPENROUTER_API_KEY")
+            if not api_key:
+                return {
+                    "error": "OPENROUTER_API_KEY not configured.",
+                    "image_url": image_url,
+                    "error_type": "missing_api_key",
+                    "success": False,
+                }
+            base_url = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
+            # Strip 'openrouter/' prefix: openrouter/google/gemini-2.5-flash → google/gemini-2.5-flash
+            api_model = model.split("/", 1)[1]
+
+        elif provider == "openai":
+            api_key = os.getenv("OPENAI_API_KEY")
+            if not api_key:
+                return {
+                    "error": "OPENAI_API_KEY not configured.",
+                    "image_url": image_url,
+                    "error_type": "missing_api_key",
+                    "success": False,
+                }
+            base_url = None  # use default OpenAI URL
+            api_model = model.split("/", 1)[1]
+
+        else:
+            # No recognized prefix → try OpenRouter first, fall back to OpenAI
+            openrouter_api_key = os.getenv("OPENROUTER_API_KEY")
+            openai_api_key = os.getenv("OPENAI_API_KEY")
+            api_key = openrouter_api_key or openai_api_key
+            if not api_key:
+                return {
+                    "error": "API key not configured. Please set OPENROUTER_API_KEY or OPENAI_API_KEY.",
+                    "image_url": image_url,
+                    "error_type": "missing_api_key",
+                    "success": False,
+                }
+            base_url = "https://openrouter.ai/api/v1" if openrouter_api_key else None
+
+        client = OpenAI(api_key=api_key, base_url=base_url)
+
+        # For Ollama, convert image URL to base64 data URI (Ollama doesn't support URLs)
+        effective_image_url = image_url
+        if provider in ("ollama_chat", "ollama") and not image_url.startswith("data:"):
+            try:
+                import base64
+                import time
+                import httpx
+                dl_headers = {
+                    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+                }
+                logger.info(f"Downloading image for Ollama base64 encoding: {image_url[:100]}...")
+                resp = httpx.get(image_url, timeout=30, follow_redirects=True, headers=dl_headers)
+                # Retry once on 429 rate limit
+                if resp.status_code == 429:
+                    retry_after = int(resp.headers.get("Retry-After", "2"))
+                    logger.warning(f"Rate limited (429), retrying after {retry_after}s...")
+                    time.sleep(min(retry_after, 5))
+                    resp = httpx.get(image_url, timeout=30, follow_redirects=True, headers=dl_headers)
+                resp.raise_for_status()
+                content_type = resp.headers.get("content-type", "image/png").split(";")[0].strip()
+                b64_data = base64.b64encode(resp.content).decode("utf-8")
+                effective_image_url = f"data:{content_type};base64,{b64_data}"
+                logger.info(f"Image converted to base64 ({len(resp.content)} bytes, {content_type})")
+            except Exception as dl_err:
+                return {
+                    "error": f"Failed to download image for Ollama base64 encoding: {str(dl_err)}",
+                    "image_url": image_url,
+                    "error_type": "image_download_error",
+                    "model": model,
+                    "success": False,
+                }
+
+        # Build message content with image + text
+        content_parts = [
+            {"type": "image_url", "image_url": {"url": effective_image_url}},
+            {"type": "text", "text": extraction_prompt},
+        ]
+
+        response = client.chat.completions.create(
+            model=api_model,
+            messages=[
+                {
+                    "role": "user",
+                    "content": content_parts,
+                }
+            ],
+            max_tokens=4096,
+        )
+
+        extracted_text = response.choices[0].message.content or ""
+
+        # Token usage info
+        usage_info = None
+        if hasattr(response, "usage") and response.usage:
+            usage_info = {
+                "prompt_tokens": getattr(response.usage, "prompt_tokens", 0),
+                "completion_tokens": getattr(response.usage, "completion_tokens", 0),
+                "total_tokens": getattr(response.usage, "total_tokens", 0),
+            }
+
+        return {
+            "extracted_data": extracted_text,
+            "image_url": image_url,
+            "extraction_prompt": extraction_prompt,
+            "model": model,
+            "provider": provider or "auto",
+            "usage": usage_info,
+            "success": True,
+        }
+
+    except Exception as e:
+        error_msg = f"Image data extraction failed: {str(e)}"
+        logger.error(f"Image data extraction error for model {model}: {error_msg}")
+
+        error_type = "unknown_error"
+        error_str = str(e).lower()
+        if "authentication" in error_str or "unauthorized" in error_str:
+            error_type = "authentication_error"
+        elif "rate" in error_str or "limit" in error_str or "quota" in error_str:
+            error_type = "rate_limit_error"
+        elif "invalid" in error_str or "bad" in error_str:
+            error_type = "invalid_request_error"
+        elif "not found" in error_str:
+            error_type = "model_not_found_error"
+        elif "connection" in error_str or "refused" in error_str:
+            error_type = "connection_error"
+
+        return {
+            "error": error_msg,
+            "image_url": image_url,
+            "error_type": error_type,
+            "model": model,
+            "success": False,
+        }
+
+
+def create_image_data_extraction_tools_from_config(config: Dict[str, Any]) -> list:
+    """
+    Create image data extraction tools based on agent configuration.
+
+    Reads ``tool_config.image_data_extraction`` which can be:
+    - ``true``  → use default model (google/gemini-2.5-flash)
+    - ``{"model": "..."}`` → use specified model
+
+    Args:
+        config: Agent configuration dictionary.
+
+    Returns:
+        List of image data extraction tools.
+    """
+    tools = []
+
+    tool_config = config.get("tool_config")
+    if not tool_config:
+        return tools
+
+    try:
+        import json as _json
+        tool_config_dict = _json.loads(tool_config)
+
+        ide_config = tool_config_dict.get("image_data_extraction")
+        if not ide_config:
+            return tools
+
+        if isinstance(ide_config, bool) and ide_config:
+            tools.append(extract_data_from_image)
+            logger.info(
+                f"Created image data extraction tool with default model for agent "
+                f"{config.get('name', 'unknown')}"
+            )
+        elif isinstance(ide_config, dict):
+            model = ide_config.get("model", "google/gemini-2.5-flash")
+
+            def create_configured_tool(model_name: str):
+                async def configured_extract_data_from_image(
+                    image_url: str,
+                    extraction_prompt: str = "Extract all data from this image. If there is text, perform OCR. If there are tables, return them in markdown table format. If there are charts, describe the data points. Return the extracted information in a well-structured format.",
+                    tool_context: ToolContext = None,
+                ) -> dict:
+                    return await _extract_data_from_image_internal(
+                        image_url, extraction_prompt, tool_context, model_name
+                    )
+                return configured_extract_data_from_image
+
+            tool = create_configured_tool(model)
+            tool.__name__ = "extract_data_from_image"
+            tools.append(tool)
+            logger.info(
+                f"Created image data extraction tool with model='{model}' for agent "
+                f"{config.get('name', 'unknown')}"
+            )
+
+    except Exception:
+        logger.warning(
+            f"Invalid tool_config for image data extraction in agent "
+            f"{config.get('name', 'unknown')}"
+        )
+
+    return tools

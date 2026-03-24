@@ -21,6 +21,7 @@
   localStorage.setItem(STORAGE_PREFIX + "_uid", userId);
 
   var sending = false;
+  var pendingImages = []; // [{dataUrl, mimeType, base64}]
 
   // --- DOM refs --------------------------------------------------------
   var messagesEl = document.getElementById("widgetMessages");
@@ -29,6 +30,9 @@
   var typingEl = document.getElementById("widgetTyping");
   var newChatBtn = document.getElementById("widgetNewChat");
   var greetingEl = document.getElementById("widgetGreeting");
+  var attachBtn = document.getElementById("widgetAttachBtn");
+  var fileInput = document.getElementById("widgetFileInput");
+  var imagePreview = document.getElementById("widgetImagePreview");
   var headerTitle = document.getElementById("widgetHeaderTitle");
 
   // --- Init ------------------------------------------------------------
@@ -53,6 +57,8 @@
       if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); _send(); }
     });
     newChatBtn.addEventListener("click", _newChat);
+    attachBtn.addEventListener("click", function () { fileInput.click(); });
+    fileInput.addEventListener("change", _handleFileSelect);
 
     // Auto-resize textarea
     inputEl.addEventListener("input", function () {
@@ -82,15 +88,24 @@
   // --- Send message ----------------------------------------------------
   function _send() {
     var text = inputEl.value.trim();
-    if (!text || sending) return;
+    var images = pendingImages.slice();
+    if ((!text && !images.length) || sending) return;
 
     if (greetingEl) greetingEl.style.display = "none";
-    _appendMessage("user", text);
+    _appendMessage("user", text, false, images);
     inputEl.value = "";
     inputEl.style.height = "auto";
+    _clearPendingImages();
     sending = true;
     sendBtn.disabled = true;
     _showTyping(true);
+
+    // Build parts array
+    var parts = [];
+    images.forEach(function (img) {
+      parts.push({ inline_data: { mime_type: img.mimeType, data: img.base64 } });
+    });
+    if (text) parts.push({ text: text });
 
     var doSend = sessionId
       ? Promise.resolve(sessionId)
@@ -104,7 +119,7 @@
           session_id: sid,
           new_message: {
             role: "user",
-            parts: [{ text: text }],
+            parts: parts,
           },
           streaming: true,
         };
@@ -128,7 +143,7 @@
               session_id: newSid,
               new_message: {
                 role: "user",
-                parts: [{ text: text }],
+                parts: parts,
               },
               streaming: true,
             };
@@ -272,14 +287,104 @@
     });
   }
 
+  // --- Image upload helpers --------------------------------------------
+  var MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10 MB
+  var MAX_DIMENSION = 2048;
+
+  function _handleFileSelect(e) {
+    var files = e.target.files;
+    if (!files || !files.length) return;
+    for (var i = 0; i < files.length; i++) {
+      (function (file) {
+        if (!file.type.startsWith("image/")) return;
+        if (file.size > MAX_IMAGE_SIZE) {
+          alert("Image too large (max 10 MB): " + file.name);
+          return;
+        }
+        _readAndResizeImage(file, function (result) {
+          pendingImages.push(result);
+          _renderPreviews();
+        });
+      })(files[i]);
+    }
+    fileInput.value = "";
+  }
+
+  function _readAndResizeImage(file, cb) {
+    var reader = new FileReader();
+    reader.onload = function (e) {
+      var img = new Image();
+      img.onload = function () {
+        var w = img.width, h = img.height;
+        if (w > MAX_DIMENSION || h > MAX_DIMENSION) {
+          var scale = MAX_DIMENSION / Math.max(w, h);
+          w = Math.round(w * scale);
+          h = Math.round(h * scale);
+        }
+        var canvas = document.createElement("canvas");
+        canvas.width = w;
+        canvas.height = h;
+        var ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0, w, h);
+        var mimeType = file.type === "image/png" ? "image/png" : "image/jpeg";
+        var quality = mimeType === "image/jpeg" ? 0.85 : undefined;
+        var dataUrl = canvas.toDataURL(mimeType, quality);
+        var base64 = dataUrl.split(",")[1];
+        cb({ dataUrl: dataUrl, mimeType: mimeType, base64: base64 });
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function _renderPreviews() {
+    imagePreview.innerHTML = "";
+    pendingImages.forEach(function (img, idx) {
+      var item = document.createElement("div");
+      item.className = "widget-preview-item";
+      var imgEl = document.createElement("img");
+      imgEl.src = img.dataUrl;
+      item.appendChild(imgEl);
+      var removeBtn = document.createElement("button");
+      removeBtn.className = "widget-preview-remove";
+      removeBtn.textContent = "\u00D7";
+      removeBtn.onclick = function () {
+        pendingImages.splice(idx, 1);
+        _renderPreviews();
+      };
+      item.appendChild(removeBtn);
+      imagePreview.appendChild(item);
+    });
+    imagePreview.classList.toggle("active", pendingImages.length > 0);
+  }
+
+  function _clearPendingImages() {
+    pendingImages = [];
+    imagePreview.innerHTML = "";
+    imagePreview.classList.remove("active");
+  }
+
   // --- DOM helpers -----------------------------------------------------
-  function _appendMessage(role, text, skipSave) {
+  function _appendMessage(role, text, skipSave, images) {
     var el = document.createElement("div");
     el.className = "widget-message " + role;
     if (role === "agent") {
       el.innerHTML = _renderMarkdown(text);
     } else {
-      el.textContent = text;
+      // Show attached images as thumbnails in user bubble
+      if (images && images.length) {
+        images.forEach(function (img) {
+          var imgEl = document.createElement("img");
+          imgEl.src = img.dataUrl;
+          imgEl.className = "widget-msg-image";
+          el.appendChild(imgEl);
+        });
+      }
+      if (text) {
+        var textNode = document.createElement("span");
+        textNode.textContent = text;
+        el.appendChild(textNode);
+      }
     }
     messagesEl.appendChild(el);
     _scrollToBottom();

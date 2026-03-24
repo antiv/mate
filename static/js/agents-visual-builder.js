@@ -938,6 +938,7 @@
         { key: 'memory_blocks', label: 'Memory Blocks' },
         { key: 'create_agent', label: 'Create Agent' },
         { key: 'code_executor', label: 'Code Executor' },
+        { key: 'image_data_extraction', label: 'Image Data Extraction' },
     ];
 
     function ConfigPanel(props) {

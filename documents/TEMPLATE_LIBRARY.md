@@ -95,3 +95,4 @@ Set `TEMPLATES_REMOTE_URL` to a URL that returns a JSON array of template object
 | code-reviewer | code | Reviewer and suggester (python_code_interpreter) |
 | content-writer | content | Researcher, writer, editor (Tavily MCP) |
 | chess-mate | demo | Chess opening book, engine analyst, historian |
+| image-data-extractor | data | Extract structured data from images (OCR, tables, charts) |

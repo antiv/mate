@@ -17,6 +17,8 @@ function syncToolConfigToJson(prefix = '') {
     const memoryBlocks = document.getElementById(prefix + 'MemoryBlocks');
     const createAgent = document.getElementById(prefix + 'CreateAgent');
     const codeExecutor = document.getElementById(prefix + 'CodeExecutor');
+    const imageDataExtraction = document.getElementById(prefix + 'ImageDataExtraction');
+    const imageDataExtractionModel = document.getElementById(prefix + 'ImageDataExtractionModel');
     
     if (googleDrive && googleDrive.checked) {
         config.google_drive = true;
@@ -40,6 +42,13 @@ function syncToolConfigToJson(prefix = '') {
     }
     if (codeExecutor && codeExecutor.checked) {
         config.code_executor = true;
+    }
+    if (imageDataExtraction && imageDataExtraction.checked) {
+        if (imageDataExtractionModel && imageDataExtractionModel.value) {
+            config.image_data_extraction = { model: imageDataExtractionModel.value };
+        } else {
+            config.image_data_extraction = true;
+        }
     }
     
     const textarea = document.getElementById(prefix + 'ToolConfig');
@@ -100,6 +109,9 @@ function syncJsonToToolConfig(prefix = '') {
         const memoryBlocks = document.getElementById(prefix + 'MemoryBlocks');
         const createAgent = document.getElementById(prefix + 'CreateAgent');
         const codeExecutor = document.getElementById(prefix + 'CodeExecutor');
+        const imageDataExtraction = document.getElementById(prefix + 'ImageDataExtraction');
+        const imageDataExtractionModel = document.getElementById(prefix + 'ImageDataExtractionModel');
+        const imageDataExtractionModelContainer = document.getElementById(prefix + 'ImageDataExtractionModelContainer');
         
         if (googleDrive) googleDrive.checked = !!config.google_drive;
         if (cvTools) cvTools.checked = !!config.cv_tools;
@@ -125,6 +137,23 @@ function syncJsonToToolConfig(prefix = '') {
                     }
                 } else {
                     imageModelContainer.style.display = 'none';
+                }
+            }
+        }
+        
+        // Handle image data extraction
+        if (imageDataExtraction) {
+            imageDataExtraction.checked = !!config.image_data_extraction;
+            
+            if (imageDataExtractionModelContainer) {
+                if (config.image_data_extraction) {
+                    imageDataExtractionModelContainer.style.display = 'block';
+                    
+                    if (imageDataExtractionModel && typeof config.image_data_extraction === 'object' && config.image_data_extraction.model) {
+                        imageDataExtractionModel.value = config.image_data_extraction.model;
+                    }
+                } else {
+                    imageDataExtractionModelContainer.style.display = 'none';
                 }
             }
         }
@@ -175,12 +204,15 @@ function setupToolListeners(prefix) {
                     prefix + 'MemoryBlocks',
                     prefix + 'ImageTools',
                     prefix + 'CreateAgent',
-                    prefix + 'CodeExecutor'
+                    prefix + 'CodeExecutor',
+                    prefix + 'ImageDataExtraction'
                 ];
                 
                 if (toolCheckboxIds.includes(checkboxId)) {
                     if (checkboxId === prefix + 'ImageTools') {
                         handleImageToolsChange(prefix);
+                    } else if (checkboxId === prefix + 'ImageDataExtraction') {
+                        handleImageDataExtractionChange(prefix);
                     } else if (checkboxId === prefix + 'MemoryBlocks') {
                         handleMemoryBlocksChange(prefix);
                     } else {
@@ -197,7 +229,8 @@ function setupToolListeners(prefix) {
             prefix + 'CvTools',
             prefix + 'MemoryBlocks',
             prefix + 'CreateAgent',
-            prefix + 'CodeExecutor'
+            prefix + 'CodeExecutor',
+            prefix + 'ImageDataExtraction'
         ];
         
         toolCheckboxes.forEach(checkboxId => {
@@ -220,6 +253,13 @@ function setupToolListeners(prefix) {
             syncToolConfigToJson(prefix);
         });
     }
+    
+    const ideModelInput = document.getElementById(prefix + 'ImageDataExtractionModel');
+    if (ideModelInput) {
+        ideModelInput.addEventListener('input', function() {
+            syncToolConfigToJson(prefix);
+        });
+    }
 
     // JSON textarea sync
     const toolTextarea = document.getElementById(prefix + 'ToolConfig');
@@ -230,3 +270,20 @@ function setupToolListeners(prefix) {
     }
 }
 
+/**
+ * Handle image data extraction checkbox change
+ */
+function handleImageDataExtractionChange(prefix) {
+    const checkbox = document.getElementById(prefix + 'ImageDataExtraction');
+    const modelContainer = document.getElementById(prefix + 'ImageDataExtractionModelContainer');
+    
+    if (checkbox && modelContainer) {
+        if (checkbox.checked) {
+            modelContainer.style.display = 'block';
+        } else {
+            modelContainer.style.display = 'none';
+        }
+    }
+    
+    syncToolConfigToJson(prefix);
+}
