@@ -54,8 +54,8 @@ class DashboardServer:
             from shared.utils.database_client import get_database_client
             from shared.utils.user_service import UserService
             from shared.utils.token_usage_service import TokenUsageService
-            from shared.utils.models import AgentConfig, AgentConfigVersion, Project, User, TokenUsageLog, GuardrailLog, AuditLog
-            
+            from shared.utils.models import AgentConfig, AgentConfigVersion, Project, User, TokenUsageLog, GuardrailLog, AuditLog, TestCase, EvalResult
+
             self.db_client = get_database_client()
             self.user_service = UserService()
             self.token_service = TokenUsageService()
@@ -66,6 +66,8 @@ class DashboardServer:
             self.TokenUsageLog = TokenUsageLog
             self.GuardrailLog = GuardrailLog
             self.AuditLog = AuditLog
+            self.TestCase = TestCase
+            self.EvalResult = EvalResult
             
             print("✅ Dashboard database services initialized successfully")
         except Exception as e:
@@ -75,6 +77,98 @@ class DashboardServer:
             self.user_service = None
             self.token_service = None
     
+    async def _invoke_agent_for_eval(self, agent_name: str, input_text: str, timeout: float = 120.0) -> str:
+        """
+        Create a fresh ADK session, send input_text to the agent, and collect
+        the full text response by reading the /run_sse SSE stream.
+        Uses the same partial/complete de-duplication logic as the frontend widget.
+        """
+        import httpx
+        from shared.utils.utils import get_adk_config
+
+        adk = get_adk_config()
+        host, port = adk["adk_host"], adk["adk_port"]
+        user_id = "eval_runner"
+
+        # 1. Create a fresh session
+        session_url = f"http://{host}:{port}/apps/{agent_name}/users/{user_id}/sessions"
+        async with httpx.AsyncClient(timeout=30.0) as c:
+            resp = await c.post(session_url, json={})
+            if resp.status_code != 200:
+                raise RuntimeError(f"ADK session creation failed: {resp.status_code} {resp.text[:200]}")
+            session_id = resp.json().get("id", "")
+
+        # 2. Stream /run_sse and collect text
+        run_url = f"http://{host}:{port}/run_sse"
+        payload = {
+            "app_name": agent_name,
+            "user_id": user_id,
+            "session_id": session_id,
+            "new_message": {"role": "user", "parts": [{"text": input_text}]},
+            "streaming": True,
+        }
+        headers = {"Content-Type": "application/json", "Accept": "text/event-stream"}
+
+        # Track the final text response: reset per author, skip tool call parts.
+        # At stream end, last_text holds the final reply to the user.
+        last_author = ""
+        last_text = ""
+        buffer = ""
+
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            async with client.stream("POST", run_url, json=payload, headers=headers) as r:
+                if r.status_code != 200:
+                    raise RuntimeError(f"ADK /run_sse returned {r.status_code}")
+                async for chunk in r.aiter_bytes():
+                    buffer += chunk.decode("utf-8", errors="replace")
+                    while "\n" in buffer:
+                        line, buffer = buffer.split("\n", 1)
+                        line = line.rstrip("\r")
+                        if not line.startswith("data: "):
+                            continue
+                        raw = line[6:]
+                        if raw == "[DONE]":
+                            break
+                        try:
+                            evt = json.loads(raw)
+                        except json.JSONDecodeError:
+                            continue
+
+                        # Skip transfer/routing actions
+                        actions = evt.get("actions") or {}
+                        if actions.get("transfer_to_agent") or actions.get("escalate"):
+                            continue
+
+                        author = evt.get("author", "")
+                        if author != last_author:
+                            last_author = author
+                            last_text = ""
+
+                        parts = (evt.get("content") or {}).get("parts") or []
+                        has_tool = any(
+                            p.get("functionCall") or p.get("functionResponse")
+                            or p.get("function_call") or p.get("function_response")
+                            for p in parts
+                        )
+                        if has_tool:
+                            # Tool interaction — reset text for this author turn
+                            last_text = ""
+                            continue
+
+                        for part in parts:
+                            t = part.get("text")
+                            if not t:
+                                continue
+                            # De-duplicate partial vs complete events
+                            if last_text and t.startswith(last_text):
+                                last_text = t
+                            elif last_text and last_text.startswith(t):
+                                pass
+                            else:
+                                last_text += t
+
+        return last_text.strip()
+
     def _get_usage_stats(self, days: int = 7) -> Dict[str, Any]:
         """Get usage statistics from database."""
         if not self.db_client:
@@ -3775,4 +3869,480 @@ class DashboardServer:
                 return {"retention_days": get_retention_days()}
             except Exception as e:
                 raise HTTPException(status_code=500, detail=str(e))
+
+        # ── Eval Framework ────────────────────────────────────────────────────
+
+        @self.app.get("/dashboard/evals", response_class=HTMLResponse, tags=["Dashboard - Pages"])
+        async def dashboard_evals(request: Request, username: str = Depends(self._get_auth_user_dependency)):
+            return self.templates.TemplateResponse("dashboard/evals.html", {
+                "request": request,
+                "page_title": "Evals",
+                "username": username,
+            })
+
+        @self.app.get("/dashboard/api/evals/agent/{agent_name}/versions-list", tags=["Dashboard - Evals"])
+        async def list_agent_versions_for_eval(agent_name: str, request: Request, username: str = Depends(self._get_auth_user_dependency)):
+            """Return available config versions for an agent — used to populate the run modal dropdown."""
+            if not self.db_client:
+                return {"versions": []}
+            session = self.db_client.get_session()
+            if not session:
+                return {"versions": []}
+            try:
+                ac = session.query(self.AgentConfig).filter(self.AgentConfig.name == agent_name).first()
+                if not ac:
+                    return {"versions": []}
+                versions = (
+                    session.query(self.AgentConfigVersion)
+                    .filter(self.AgentConfigVersion.agent_config_id == ac.id)
+                    .order_by(self.AgentConfigVersion.version_number.desc())
+                    .all()
+                )
+                return {
+                    "versions": [
+                        {
+                            "id": v.id,
+                            "version_number": v.version_number,
+                            "tag": v.tag,
+                            "change_type": v.change_type,
+                            "created_at": v.created_at.isoformat() if v.created_at else None,
+                        }
+                        for v in versions
+                    ]
+                }
+            except Exception as e:
+                logger.error("Error listing versions for %s: %s", agent_name, e)
+                return {"versions": [], "error": str(e)}
+            finally:
+                session.close()
+
+        @self.app.get("/dashboard/api/evals", tags=["Dashboard - Evals"])
+        async def list_eval_suites(request: Request, username: str = Depends(self._get_auth_user_dependency)):
+            """List test suites grouped by agent with latest avg score and last run time."""
+            if not self.db_client:
+                return {"suites": []}
+            session = self.db_client.get_session()
+            if not session:
+                return {"suites": []}
+            try:
+                from sqlalchemy import func
+                rows = (
+                    session.query(
+                        self.TestCase.agent_name,
+                        func.count(self.TestCase.id).label("test_case_count"),
+                    )
+                    .filter(self.TestCase.is_active.is_(True))
+                    .group_by(self.TestCase.agent_name)
+                    .all()
+                )
+                suites = []
+                for row in rows:
+                    latest = (
+                        session.query(
+                            func.max(self.EvalResult.run_at).label("last_run"),
+                            func.avg(self.EvalResult.score).label("avg_score"),
+                        )
+                        .join(self.TestCase, self.EvalResult.test_case_id == self.TestCase.id)
+                        .filter(self.TestCase.agent_name == row.agent_name)
+                        .first()
+                    )
+                    suites.append({
+                        "agent_name": row.agent_name,
+                        "test_case_count": row.test_case_count,
+                        "last_run": latest.last_run.isoformat() if latest and latest.last_run else None,
+                        "avg_score": round(float(latest.avg_score), 3) if latest and latest.avg_score is not None else None,
+                    })
+                return {"suites": suites}
+            except Exception as e:
+                logger.error("Error listing eval suites: %s", e)
+                return {"suites": [], "error": str(e)}
+            finally:
+                session.close()
+
+        @self.app.get("/dashboard/api/evals/agent/{agent_name}/history", tags=["Dashboard - Evals"])
+        async def get_eval_history(agent_name: str, request: Request, username: str = Depends(self._get_auth_user_dependency)):
+            """Score history per version for Chart.js: [{version_number, version_id, avg_score, pass_rate, run_at}]"""
+            if not self.db_client:
+                return {"history": []}
+            session = self.db_client.get_session()
+            if not session:
+                return {"history": []}
+            try:
+                from sqlalchemy import func, case
+                rows = (
+                    session.query(
+                        self.AgentConfigVersion.id.label("version_id"),
+                        self.AgentConfigVersion.version_number,
+                        func.avg(self.EvalResult.score).label("avg_score"),
+                        func.avg(
+                            case((self.EvalResult.passed == True, 1), else_=0)
+                        ).label("pass_rate"),
+                        func.max(self.EvalResult.run_at).label("run_at"),
+                    )
+                    .join(self.EvalResult, self.AgentConfigVersion.id == self.EvalResult.version_id)
+                    .join(self.TestCase, self.EvalResult.test_case_id == self.TestCase.id)
+                    .filter(self.TestCase.agent_name == agent_name)
+                    .group_by(self.AgentConfigVersion.id, self.AgentConfigVersion.version_number)
+                    .order_by(self.AgentConfigVersion.version_number.asc())
+                    .all()
+                )
+                history = [
+                    {
+                        "version_id": r.version_id,
+                        "version_number": r.version_number,
+                        "avg_score": round(float(r.avg_score), 3) if r.avg_score is not None else None,
+                        "pass_rate": round(float(r.pass_rate), 3) if r.pass_rate is not None else None,
+                        "run_at": r.run_at.isoformat() if r.run_at else None,
+                    }
+                    for r in rows
+                ]
+                return {"history": history}
+            except Exception as e:
+                logger.error("Error fetching eval history for %s: %s", agent_name, e)
+                return {"history": [], "error": str(e)}
+            finally:
+                session.close()
+
+        @self.app.get("/dashboard/api/evals/agent/{agent_name}", tags=["Dashboard - Evals"])
+        async def get_agent_test_cases(agent_name: str, request: Request, username: str = Depends(self._get_auth_user_dependency)):
+            """Return all active test cases for an agent with each case's latest eval result."""
+            if not self.db_client:
+                return {"test_cases": []}
+            session = self.db_client.get_session()
+            if not session:
+                return {"test_cases": []}
+            try:
+                tcs = (
+                    session.query(self.TestCase)
+                    .filter(
+                        self.TestCase.agent_name == agent_name,
+                        self.TestCase.is_active.is_(True),
+                    )
+                    .order_by(self.TestCase.id.asc())
+                    .all()
+                )
+                result = []
+                for tc in tcs:
+                    latest_result = (
+                        session.query(self.EvalResult)
+                        .filter(self.EvalResult.test_case_id == tc.id)
+                        .order_by(self.EvalResult.run_at.desc())
+                        .first()
+                    )
+                    d = tc.to_dict()
+                    d["latest_result"] = latest_result.to_dict() if latest_result else None
+                    result.append(d)
+                return {"test_cases": result}
+            except Exception as e:
+                logger.error("Error fetching test cases for %s: %s", agent_name, e)
+                return {"test_cases": [], "error": str(e)}
+            finally:
+                session.close()
+
+        @self.app.post("/dashboard/api/evals", tags=["Dashboard - Evals"])
+        async def create_test_case(request: Request, username: str = Depends(self._get_auth_user_dependency)):
+            """Create a new test case."""
+            body = await request.json()
+            agent_name = body.get("agent_name", "").strip()
+            input_text = body.get("input", "").strip()
+            expected = body.get("expected_output", "").strip()
+            eval_method = body.get("eval_method", "exact_match").strip()
+
+            if not agent_name or not input_text or not expected:
+                raise HTTPException(status_code=400, detail="agent_name, input, and expected_output are required")
+            if eval_method not in ("exact_match", "semantic", "llm_judge"):
+                raise HTTPException(status_code=400, detail="eval_method must be exact_match, semantic, or llm_judge")
+
+            if not self.db_client:
+                raise HTTPException(status_code=503, detail="Database not available")
+            session = self.db_client.get_session()
+            if not session:
+                raise HTTPException(status_code=503, detail="Database session not available")
+            try:
+                tc = self.TestCase(
+                    agent_name=agent_name,
+                    version_id=body.get("version_id"),
+                    input=input_text,
+                    expected_output=expected,
+                    eval_method=eval_method,
+                    judge_model=body.get("judge_model"),
+                    threshold=float(body.get("threshold", 0.7)),
+                    created_by=username,
+                )
+                session.add(tc)
+                session.commit()
+                session.refresh(tc)
+                return {"test_case": tc.to_dict()}
+            except Exception as e:
+                session.rollback()
+                logger.error("Error creating test case: %s", e)
+                raise HTTPException(status_code=500, detail=str(e))
+            finally:
+                session.close()
+
+        @self.app.put("/dashboard/api/evals/{test_case_id}", tags=["Dashboard - Evals"])
+        async def update_test_case(test_case_id: int, request: Request, username: str = Depends(self._get_auth_user_dependency)):
+            """Update a test case's fields."""
+            body = await request.json()
+            if not self.db_client:
+                raise HTTPException(status_code=503, detail="Database not available")
+            session = self.db_client.get_session()
+            if not session:
+                raise HTTPException(status_code=503, detail="Database session not available")
+            try:
+                tc = session.query(self.TestCase).filter(self.TestCase.id == test_case_id).first()
+                if not tc:
+                    raise HTTPException(status_code=404, detail="Test case not found")
+                updatable = ("input", "expected_output", "eval_method", "judge_model", "threshold", "version_id")
+                for field in updatable:
+                    if field in body:
+                        setattr(tc, field, body[field])
+                if "eval_method" in body and body["eval_method"] not in ("exact_match", "semantic", "llm_judge"):
+                    raise HTTPException(status_code=400, detail="Invalid eval_method")
+                session.commit()
+                session.refresh(tc)
+                return {"test_case": tc.to_dict()}
+            except HTTPException:
+                raise
+            except Exception as e:
+                session.rollback()
+                logger.error("Error updating test case %s: %s", test_case_id, e)
+                raise HTTPException(status_code=500, detail=str(e))
+            finally:
+                session.close()
+
+        @self.app.delete("/dashboard/api/evals/{test_case_id}", tags=["Dashboard - Evals"])
+        async def delete_test_case(test_case_id: int, request: Request, username: str = Depends(self._get_auth_user_dependency)):
+            """Soft-delete a test case (sets is_active=False)."""
+            if not self.db_client:
+                raise HTTPException(status_code=503, detail="Database not available")
+            session = self.db_client.get_session()
+            if not session:
+                raise HTTPException(status_code=503, detail="Database session not available")
+            try:
+                tc = session.query(self.TestCase).filter(self.TestCase.id == test_case_id).first()
+                if not tc:
+                    raise HTTPException(status_code=404, detail="Test case not found")
+                tc.is_active = False
+                session.commit()
+                return {"success": True}
+            except HTTPException:
+                raise
+            except Exception as e:
+                session.rollback()
+                logger.error("Error deleting test case %s: %s", test_case_id, e)
+                raise HTTPException(status_code=500, detail=str(e))
+            finally:
+                session.close()
+
+        @self.app.post("/dashboard/api/evals/version/{version_id}/run", tags=["Dashboard - Evals"])
+        async def run_version_eval_suite(version_id: int, request: Request, username: str = Depends(self._get_auth_user_dependency)):
+            """
+            Run the eval suite for all active test cases linked to the agent of this version.
+
+            Body: {"results": [{"test_case_id": int, "actual_output": str}]}
+
+            If results is empty, returns a dry-run response with the list of inputs
+            that need to be evaluated (for the version history modal "Run Evals" flow).
+            """
+            body = await request.json()
+            # submitted is optional — if absent or empty, agent is invoked automatically
+            submitted = body.get("results", [])
+
+            if not self.db_client:
+                raise HTTPException(status_code=503, detail="Database not available")
+            session = self.db_client.get_session()
+            if not session:
+                raise HTTPException(status_code=503, detail="Database session not available")
+            try:
+                version = session.query(self.AgentConfigVersion).filter(self.AgentConfigVersion.id == version_id).first()
+                if not version:
+                    raise HTTPException(status_code=404, detail="Version not found")
+
+                # Derive agent name from the version's config snapshot
+                snapshot = version.get_snapshot() if hasattr(version, "get_snapshot") else {}
+                agent_name = snapshot.get("name") if snapshot else None
+                if not agent_name:
+                    ac = session.query(self.AgentConfig).filter(self.AgentConfig.id == version.agent_config_id).first()
+                    agent_name = ac.name if ac else None
+                if not agent_name:
+                    raise HTTPException(status_code=400, detail="Could not determine agent name for this version")
+
+                # Fetch active test cases for this agent
+                test_cases = (
+                    session.query(self.TestCase)
+                    .filter(self.TestCase.agent_name == agent_name, self.TestCase.is_active.is_(True))
+                    .all()
+                )
+
+                if not test_cases:
+                    return {"passed": 0, "failed": 0, "avg_score": None, "pass_rate": None, "results": []}
+
+                # Build lookup from any manually supplied actual_outputs
+                output_map = {r["test_case_id"]: r["actual_output"] for r in submitted if r.get("actual_output")}
+
+                from shared.utils.eval_runner import EvalRunner
+                runner = EvalRunner()
+
+                persisted = []
+                for tc in test_cases:
+                    actual_output = output_map.get(tc.id)
+                    if not actual_output:
+                        # Auto-invoke the agent for this test case
+                        actual_output = await self._invoke_agent_for_eval(agent_name, tc.input)
+                    run_result = runner.score_output(tc, actual_output, version_id)
+                    er = self.EvalResult(
+                        test_case_id=run_result.test_case_id,
+                        version_id=run_result.version_id,
+                        actual_output=run_result.actual_output,
+                        score=run_result.score,
+                        passed=run_result.passed,
+                        eval_method=run_result.eval_method,
+                        details=run_result.details,
+                        error=run_result.error,
+                    )
+                    session.add(er)
+                    persisted.append(run_result)
+
+                session.commit()
+
+                if not persisted:
+                    return {"passed": 0, "failed": 0, "avg_score": None, "pass_rate": None, "results": []}
+
+                scored = [r for r in persisted if r.score is not None]
+                passed_count = sum(1 for r in persisted if r.passed)
+                failed_count = sum(1 for r in persisted if r.passed is False)
+                avg_score = round(sum(r.score for r in scored) / len(scored), 3) if scored else None
+                pass_rate = round(passed_count / len(persisted), 3) if persisted else None
+
+                # Regression alert: compare against previous version's avg score
+                regression_alert = False
+                try:
+                    prev_version = (
+                        session.query(self.AgentConfigVersion)
+                        .filter(
+                            self.AgentConfigVersion.agent_config_id == version.agent_config_id,
+                            self.AgentConfigVersion.version_number < version.version_number,
+                        )
+                        .order_by(self.AgentConfigVersion.version_number.desc())
+                        .first()
+                    )
+                    if prev_version and avg_score is not None:
+                        from sqlalchemy import func
+                        prev_avg_row = (
+                            session.query(func.avg(self.EvalResult.score))
+                            .join(self.TestCase, self.EvalResult.test_case_id == self.TestCase.id)
+                            .filter(
+                                self.EvalResult.version_id == prev_version.id,
+                                self.TestCase.agent_name == agent_name,
+                            )
+                            .scalar()
+                        )
+                        if prev_avg_row is not None:
+                            prev_avg = float(prev_avg_row)
+                            regression = prev_avg - avg_score
+                            if regression > 0.05:
+                                regression_alert = True
+                                webhook_url = os.getenv("EVAL_REGRESSION_WEBHOOK_URL")
+                                if webhook_url:
+                                    try:
+                                        import httpx
+                                        from datetime import datetime, timezone
+                                        payload = {
+                                            "type": "eval_regression_alert",
+                                            "timestamp": datetime.now(timezone.utc).isoformat(),
+                                            "agent_name": agent_name,
+                                            "version_id": version_id,
+                                            "new_avg_score": avg_score,
+                                            "prev_avg_score": round(prev_avg, 3),
+                                            "regression": round(regression, 4),
+                                        }
+                                        import asyncio
+                                        async with httpx.AsyncClient() as client:
+                                            await client.post(webhook_url, json=payload, timeout=10.0)
+                                    except Exception as wh_err:
+                                        logger.warning("Regression webhook failed: %s", wh_err)
+                except Exception as reg_err:
+                    logger.warning("Regression check failed: %s", reg_err)
+
+                return {
+                    "passed": passed_count,
+                    "failed": failed_count,
+                    "avg_score": avg_score,
+                    "pass_rate": pass_rate,
+                    "regression_alert": regression_alert,
+                    "results": [
+                        {
+                            "test_case_id": r.test_case_id,
+                            "score": r.score,
+                            "passed": r.passed,
+                            "eval_method": r.eval_method,
+                            "details": r.details,
+                            "error": r.error,
+                        }
+                        for r in persisted
+                    ],
+                }
+            except HTTPException:
+                raise
+            except Exception as e:
+                session.rollback()
+                logger.error("Error running eval suite for version %s: %s", version_id, e)
+                raise HTTPException(status_code=500, detail=str(e))
+            finally:
+                session.close()
+
+        @self.app.post("/dashboard/api/evals/{test_case_id}/run", tags=["Dashboard - Evals"])
+        async def run_single_eval(test_case_id: int, request: Request, username: str = Depends(self._get_auth_user_dependency)):
+            """
+            Score a single test case.
+            Body: {"version_id": int, "actual_output"?: str}
+            If actual_output is omitted the agent is invoked automatically.
+            """
+            body = await request.json()
+            actual_output = (body.get("actual_output") or "").strip()
+            version_id = body.get("version_id")
+
+            if not version_id:
+                raise HTTPException(status_code=400, detail="version_id is required")
+
+            if not self.db_client:
+                raise HTTPException(status_code=503, detail="Database not available")
+            session = self.db_client.get_session()
+            if not session:
+                raise HTTPException(status_code=503, detail="Database session not available")
+            try:
+                tc = session.query(self.TestCase).filter(self.TestCase.id == test_case_id).first()
+                if not tc:
+                    raise HTTPException(status_code=404, detail="Test case not found")
+
+                if not actual_output:
+                    actual_output = await self._invoke_agent_for_eval(tc.agent_name, tc.input)
+
+                from shared.utils.eval_runner import EvalRunner
+                runner = EvalRunner()
+                run_result = runner.score_output(tc, actual_output, version_id)
+
+                er = self.EvalResult(
+                    test_case_id=run_result.test_case_id,
+                    version_id=run_result.version_id,
+                    actual_output=run_result.actual_output,
+                    score=run_result.score,
+                    passed=run_result.passed,
+                    eval_method=run_result.eval_method,
+                    details=run_result.details,
+                    error=run_result.error,
+                )
+                session.add(er)
+                session.commit()
+                session.refresh(er)
+                return {"result": er.to_dict()}
+            except HTTPException:
+                raise
+            except Exception as e:
+                session.rollback()
+                logger.error("Error running eval for test case %s: %s", test_case_id, e)
+                raise HTTPException(status_code=500, detail=str(e))
+            finally:
+                session.close()
 

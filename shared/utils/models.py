@@ -2,7 +2,7 @@
 SQLAlchemy models for the application.
 """
 
-from sqlalchemy import Column, Integer, String, DateTime, create_engine, UUID, Text, ForeignKey, Boolean, Date, JSON
+from sqlalchemy import Column, Integer, String, DateTime, create_engine, UUID, Text, ForeignKey, Boolean, Date, JSON, Float
 from sqlalchemy.orm import sessionmaker, relationship, declarative_base
 from datetime import datetime, timezone
 from typing import Optional
@@ -699,4 +699,74 @@ class FileSearchDocument(Base):
             'uploaded_by_agent': self.uploaded_by_agent,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+
+
+class TestCase(Base):
+    """Eval test case: an input/expected-output pair used to score an agent version."""
+
+    __tablename__ = 'test_cases'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    agent_name = Column(String(255), nullable=False)
+    version_id = Column(Integer, ForeignKey('agent_config_versions.id', ondelete='SET NULL'), nullable=True)
+    input = Column(Text, nullable=False)
+    expected_output = Column(Text, nullable=False)
+    eval_method = Column(String(50), nullable=False, default='exact_match')
+    judge_model = Column(String(255), nullable=True)
+    threshold = Column(Float, nullable=False, default=0.7)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    created_by = Column(String(255), nullable=True)
+    is_active = Column(Boolean, nullable=False, default=True)
+
+    version = relationship("AgentConfigVersion")
+    results = relationship("EvalResult", back_populates="test_case", cascade="all, delete-orphan")
+
+    def to_dict(self) -> dict:
+        return {
+            'id': self.id,
+            'agent_name': self.agent_name,
+            'version_id': self.version_id,
+            'input': self.input,
+            'expected_output': self.expected_output,
+            'eval_method': self.eval_method,
+            'judge_model': self.judge_model,
+            'threshold': self.threshold,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'created_by': self.created_by,
+            'is_active': self.is_active,
+        }
+
+
+class EvalResult(Base):
+    """Result of running a single test case against a specific agent version."""
+
+    __tablename__ = 'eval_results'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    test_case_id = Column(Integer, ForeignKey('test_cases.id', ondelete='CASCADE'), nullable=False)
+    version_id = Column(Integer, ForeignKey('agent_config_versions.id', ondelete='CASCADE'), nullable=False)
+    actual_output = Column(Text, nullable=True)
+    score = Column(Float, nullable=True)
+    passed = Column(Boolean, nullable=True)
+    eval_method = Column(String(50), nullable=False)
+    details = Column(Text, nullable=True)
+    error = Column(Text, nullable=True)
+    run_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+
+    test_case = relationship("TestCase", back_populates="results")
+    version = relationship("AgentConfigVersion")
+
+    def to_dict(self) -> dict:
+        return {
+            'id': self.id,
+            'test_case_id': self.test_case_id,
+            'version_id': self.version_id,
+            'actual_output': self.actual_output,
+            'score': self.score,
+            'passed': self.passed,
+            'eval_method': self.eval_method,
+            'details': self.details,
+            'error': self.error,
+            'run_at': self.run_at.isoformat() if self.run_at else None,
         }

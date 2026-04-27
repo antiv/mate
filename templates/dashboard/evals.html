@@ -1,0 +1,615 @@
+{% extends "base.html" %}
+
+{% block title %}Evals - MATE{% endblock %}
+
+{% block content %}
+<div class="space-y-4">
+
+    <!-- Header -->
+    <div class="flex flex-col gap-4 md:flex-row md:justify-between md:items-center">
+        <div>
+            <h2 class="text-xl font-bold text-gray-900 dark:text-white">Eval Framework</h2>
+            <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">Test suites and score history for agent quality measurement</p>
+        </div>
+        <button onclick="showAddModal()" class="px-3 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center space-x-1">
+            <i class="fas fa-plus mr-1"></i>Add Test Case
+        </button>
+    </div>
+
+    <!-- Two-column layout: suites + test cases -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+        <!-- Agent Suites -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
+            <div class="px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+                <h3 class="text-sm font-semibold text-gray-900 dark:text-white">Agent Test Suites</h3>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-xs">
+                    <thead>
+                        <tr class="text-left text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
+                            <th class="px-4 py-2 font-medium">Agent</th>
+                            <th class="px-4 py-2 font-medium text-center">Cases</th>
+                            <th class="px-4 py-2 font-medium text-center">Avg Score</th>
+                            <th class="px-4 py-2 font-medium">Last Run</th>
+                        </tr>
+                    </thead>
+                    <tbody id="suitesTableBody">
+                        <tr>
+                            <td colspan="4" class="px-4 py-6 text-center text-gray-400 dark:text-gray-500">
+                                <i class="fas fa-spinner fa-spin mr-1"></i>Loading…
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Test Cases for selected agent -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
+            <div class="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                <h3 class="text-sm font-semibold text-gray-900 dark:text-white">
+                    Test Cases <span id="tcAgentLabel" class="text-gray-400 dark:text-gray-500 font-normal"></span>
+                </h3>
+                <button id="runSuiteBtn" onclick="runSuite()" class="hidden px-2 py-1 text-xs bg-green-600 hover:bg-green-700 text-white rounded flex items-center">
+                    <i class="fas fa-play mr-1"></i>Run Suite
+                </button>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-xs">
+                    <thead>
+                        <tr class="text-left text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
+                            <th class="px-3 py-2 font-medium">Input</th>
+                            <th class="px-3 py-2 font-medium">Expected</th>
+                            <th class="px-3 py-2 font-medium text-center">Method</th>
+                            <th class="px-3 py-2 font-medium text-center">Score</th>
+                            <th class="px-3 py-2 font-medium text-center">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tcTableBody">
+                        <tr>
+                            <td colspan="5" class="px-4 py-6 text-center text-gray-400 dark:text-gray-500">
+                                Select an agent suite to view test cases
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Score History Chart -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
+        <div class="px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+            <h3 class="text-sm font-semibold text-gray-900 dark:text-white">
+                Score History <span id="chartAgentLabel" class="text-gray-400 dark:text-gray-500 font-normal"></span>
+            </h3>
+        </div>
+        <div class="p-4" id="chartContainer" style="display:none;">
+            <canvas id="scoreHistoryChart" height="80"></canvas>
+        </div>
+        <div id="chartPlaceholder" class="p-8 text-center text-gray-400 dark:text-gray-500 text-sm">
+            Select an agent suite to view score history
+        </div>
+    </div>
+</div>
+
+<!-- Add / Edit Test Case Modal -->
+<div id="testCaseModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-lg mx-4">
+        <div class="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+            <h3 id="modalTitle" class="text-sm font-semibold text-gray-900 dark:text-white">Add Test Case</h3>
+            <button onclick="closeAddModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="p-4 space-y-3">
+            <input type="hidden" id="tcModalId" value="">
+            <div>
+                <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Agent Name</label>
+                <input id="tcModalAgent" type="text" placeholder="agent_name"
+                    class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500">
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Input</label>
+                <textarea id="tcModalInput" rows="3" placeholder="User input / prompt"
+                    class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none"></textarea>
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Expected Output</label>
+                <textarea id="tcModalExpected" rows="3" placeholder="Expected agent response"
+                    class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none"></textarea>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Eval Method</label>
+                    <select id="tcModalMethod"
+                        class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500">
+                        <option value="exact_match">Exact Match</option>
+                        <option value="semantic">Semantic Similarity</option>
+                        <option value="llm_judge">LLM Judge</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Threshold</label>
+                    <input id="tcModalThreshold" type="number" min="0" max="1" step="0.05" value="0.7"
+                        class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500">
+                </div>
+            </div>
+            <div id="judgeModelRow">
+                <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Judge Model <span class="text-gray-400">(llm_judge only)</span></label>
+                <input id="tcModalJudgeModel" type="text" placeholder="gemini/gemini-2.0-flash"
+                    class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500">
+            </div>
+        </div>
+        <div class="px-4 py-3 border-t border-gray-200 dark:border-gray-700 flex justify-end space-x-2">
+            <button onclick="closeAddModal()" class="px-3 py-1.5 text-xs text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700">Cancel</button>
+            <button onclick="saveTestCase()" class="px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded">Save</button>
+        </div>
+    </div>
+</div>
+
+<!-- Run Single Test Case Modal -->
+<div id="runSingleModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-lg mx-4">
+        <div class="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+            <h3 class="text-sm font-semibold text-gray-900 dark:text-white">Run Eval</h3>
+            <button onclick="closeRunModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="p-4 space-y-3">
+            <input type="hidden" id="runTcId" value="">
+            <input type="hidden" id="runTcAgent" value="">
+            <p class="text-xs text-gray-500 dark:text-gray-400">The agent will be called automatically with the test input and its response will be scored.</p>
+            <div>
+                <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Score against version</label>
+                <select id="runVersionSelect"
+                    class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500">
+                    <option value="">Loading versions…</option>
+                </select>
+            </div>
+            <div id="runResultArea" class="hidden p-3 rounded bg-gray-50 dark:bg-gray-700 text-xs space-y-1"></div>
+        </div>
+        <div class="px-4 py-3 border-t border-gray-200 dark:border-gray-700 flex justify-end space-x-2">
+            <button onclick="closeRunModal()" class="px-3 py-1.5 text-xs text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700">Cancel</button>
+            <button onclick="submitRunEval()" id="runSingleSubmitBtn" class="px-3 py-1.5 text-xs bg-green-600 hover:bg-green-700 text-white rounded flex items-center gap-1">
+                <i class="fas fa-play"></i>Run
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Run Suite Modal -->
+<div id="runSuiteModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-lg mx-4">
+        <div class="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+            <h3 class="text-sm font-semibold text-gray-900 dark:text-white">Run Suite — <span id="rsSuiteAgent"></span></h3>
+            <button onclick="closeRunSuiteModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="p-4 space-y-3">
+            <p class="text-xs text-gray-500 dark:text-gray-400">Each test case will be sent to the agent automatically. Results are scored and saved.</p>
+            <div class="flex items-center gap-3">
+                <label class="text-xs font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap">Score against version:</label>
+                <select id="rsSuiteVersion" class="flex-1 px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500">
+                    <option value="">Loading…</option>
+                </select>
+            </div>
+            <div id="rsCasesContainer" class="text-xs text-gray-500 dark:text-gray-400"></div>
+            <div id="rsSuiteResultBar" class="hidden p-2 rounded bg-gray-50 dark:bg-gray-700 text-xs"></div>
+        </div>
+        <div class="px-4 py-3 border-t border-gray-200 dark:border-gray-700 flex justify-end space-x-2">
+            <button onclick="closeRunSuiteModal()" class="px-3 py-1.5 text-xs text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700">Cancel</button>
+            <button onclick="submitRunSuite()" id="rsSuiteSubmitBtn" class="px-3 py-1.5 text-xs bg-green-600 hover:bg-green-700 text-white rounded flex items-center gap-1">
+                <i class="fas fa-play"></i>Run All
+            </button>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+let _selectedAgent = null;
+let _scoreChart = null;
+let _testCases = [];
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+function scoreBadge(score) {
+    if (score === null || score === undefined) return '<span class="text-gray-400">—</span>';
+    const pct = (score * 100).toFixed(0);
+    const colour = score >= 0.8 ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                 : score >= 0.5 ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
+                 :                'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200';
+    return `<span class="px-1.5 py-0.5 rounded text-xs font-medium ${colour}">${pct}%</span>`;
+}
+
+function methodBadge(method) {
+    const colours = {
+        exact_match: 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300',
+        semantic:    'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300',
+        llm_judge:   'bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300',
+    };
+    return `<span class="px-1.5 py-0.5 rounded text-xs ${colours[method] || ''}">${method}</span>`;
+}
+
+function truncate(str, n) {
+    if (!str) return '—';
+    return str.length > n ? str.slice(0, n) + '…' : str;
+}
+
+// ── Suites table ─────────────────────────────────────────────────────────────
+
+async function loadSuites() {
+    try {
+        const data = await apiCall('/dashboard/api/evals');
+        const suites = data.suites || [];
+        const tbody = document.getElementById('suitesTableBody');
+        if (!suites.length) {
+            tbody.innerHTML = '<tr><td colspan="4" class="px-4 py-6 text-center text-gray-400 dark:text-gray-500">No test suites yet. Add test cases to get started.</td></tr>';
+            return;
+        }
+        tbody.innerHTML = suites.map(s => `
+            <tr onclick="selectAgent('${s.agent_name}')"
+                class="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 border-b border-gray-100 dark:border-gray-700 transition-colors ${_selectedAgent === s.agent_name ? 'bg-blue-50 dark:bg-blue-900/20' : ''}">
+                <td class="px-4 py-2 font-medium text-gray-900 dark:text-white">${s.agent_name}</td>
+                <td class="px-4 py-2 text-center text-gray-600 dark:text-gray-400">${s.test_case_count}</td>
+                <td class="px-4 py-2 text-center">${scoreBadge(s.avg_score)}</td>
+                <td class="px-4 py-2 text-gray-500 dark:text-gray-400">${s.last_run ? new Date(s.last_run).toLocaleDateString() : '—'}</td>
+            </tr>
+        `).join('');
+    } catch (e) {
+        console.error('loadSuites error', e);
+    }
+}
+
+// ── Agent selection ───────────────────────────────────────────────────────────
+
+async function selectAgent(agentName) {
+    _selectedAgent = agentName;
+    document.getElementById('tcAgentLabel').textContent = `— ${agentName}`;
+    document.getElementById('chartAgentLabel').textContent = `— ${agentName}`;
+    document.getElementById('runSuiteBtn').classList.remove('hidden');
+    await Promise.all([loadTestCases(agentName), loadHistory(agentName)]);
+    // Re-render suites to highlight selected row
+    loadSuites();
+}
+
+// ── Test cases table ──────────────────────────────────────────────────────────
+
+async function loadTestCases(agentName) {
+    try {
+        const data = await apiCall(`/dashboard/api/evals/agent/${encodeURIComponent(agentName)}`);
+        _testCases = data.test_cases || [];
+        renderTestCases();
+    } catch (e) {
+        console.error('loadTestCases error', e);
+    }
+}
+
+function renderTestCases() {
+    const tbody = document.getElementById('tcTableBody');
+    if (!_testCases.length) {
+        tbody.innerHTML = '<tr><td colspan="5" class="px-4 py-6 text-center text-gray-400 dark:text-gray-500">No test cases for this agent yet.</td></tr>';
+        return;
+    }
+    tbody.innerHTML = _testCases.map(tc => {
+        const lr = tc.latest_result;
+        return `
+            <tr class="border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700">
+                <td class="px-3 py-2 text-gray-700 dark:text-gray-300" title="${tc.input}">${truncate(tc.input, 50)}</td>
+                <td class="px-3 py-2 text-gray-700 dark:text-gray-300" title="${tc.expected_output}">${truncate(tc.expected_output, 50)}</td>
+                <td class="px-3 py-2 text-center">${methodBadge(tc.eval_method)}</td>
+                <td class="px-3 py-2 text-center">${lr ? scoreBadge(lr.score) : '<span class="text-gray-400">—</span>'}</td>
+                <td class="px-3 py-2 text-center whitespace-nowrap">
+                    <button onclick="editTestCase(${tc.id})" class="px-1.5 py-0.5 text-xs text-blue-600 hover:underline" title="Edit"><i class="fas fa-edit"></i></button>
+                    <button onclick="openRunModal(${tc.id})" class="px-1.5 py-0.5 text-xs text-green-600 hover:underline" title="Run"><i class="fas fa-play"></i></button>
+                    <button onclick="deleteTestCase(${tc.id})" class="px-1.5 py-0.5 text-xs text-red-500 hover:underline" title="Delete"><i class="fas fa-trash"></i></button>
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+
+// ── Score history chart ───────────────────────────────────────────────────────
+
+async function loadHistory(agentName) {
+    try {
+        const data = await apiCall(`/dashboard/api/evals/agent/${encodeURIComponent(agentName)}/history`);
+        const history = data.history || [];
+        renderChart(history);
+    } catch (e) {
+        console.error('loadHistory error', e);
+    }
+}
+
+function renderChart(history) {
+    const container = document.getElementById('chartContainer');
+    const placeholder = document.getElementById('chartPlaceholder');
+
+    if (!history.length) {
+        container.style.display = 'none';
+        placeholder.style.display = 'block';
+        placeholder.textContent = 'No eval results yet for this agent.';
+        return;
+    }
+
+    container.style.display = 'block';
+    placeholder.style.display = 'none';
+
+    const colors = typeof getChartColors === 'function' ? getChartColors() : { primary: '#3b82f6', text: '#6b7280' };
+    const labels = history.map(h => `v${h.version_number}`);
+    const scores = history.map(h => h.avg_score);
+    const passRates = history.map(h => h.pass_rate);
+
+    if (_scoreChart) {
+        _scoreChart.destroy();
+        _scoreChart = null;
+    }
+
+    const ctx = document.getElementById('scoreHistoryChart').getContext('2d');
+    _scoreChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels,
+            datasets: [
+                {
+                    label: 'Avg Score',
+                    data: scores,
+                    borderColor: colors.primary || '#3b82f6',
+                    backgroundColor: (colors.primary || '#3b82f6') + '33',
+                    tension: 0.3,
+                    fill: true,
+                    pointRadius: 4,
+                },
+                {
+                    label: 'Pass Rate',
+                    data: passRates,
+                    borderColor: '#10b981',
+                    backgroundColor: '#10b98133',
+                    tension: 0.3,
+                    fill: false,
+                    pointRadius: 4,
+                    borderDash: [4, 4],
+                },
+            ],
+        },
+        options: {
+            responsive: true,
+            scales: {
+                y: {
+                    min: 0,
+                    max: 1.0,
+                    ticks: {
+                        color: colors.text || '#6b7280',
+                        callback: v => (v * 100).toFixed(0) + '%',
+                    },
+                    grid: { color: colors.grid || '#e5e7eb' },
+                },
+                x: {
+                    ticks: { color: colors.text || '#6b7280' },
+                    grid: { color: colors.grid || '#e5e7eb' },
+                },
+            },
+            plugins: {
+                legend: { labels: { color: colors.text || '#6b7280', font: { size: 11 } } },
+                tooltip: {
+                    callbacks: {
+                        label: ctx => `${ctx.dataset.label}: ${(ctx.parsed.y * 100).toFixed(1)}%`,
+                    },
+                },
+            },
+        },
+    });
+}
+
+// ── Add / Edit modal ──────────────────────────────────────────────────────────
+
+function showAddModal() {
+    document.getElementById('tcModalId').value = '';
+    document.getElementById('modalTitle').textContent = 'Add Test Case';
+    document.getElementById('tcModalAgent').value = _selectedAgent || '';
+    document.getElementById('tcModalInput').value = '';
+    document.getElementById('tcModalExpected').value = '';
+    document.getElementById('tcModalMethod').value = 'exact_match';
+    document.getElementById('tcModalThreshold').value = '0.7';
+    document.getElementById('tcModalJudgeModel').value = '';
+    document.getElementById('testCaseModal').classList.remove('hidden');
+}
+
+function editTestCase(id) {
+    const tc = _testCases.find(t => t.id === id);
+    if (!tc) return;
+    document.getElementById('tcModalId').value = tc.id;
+    document.getElementById('modalTitle').textContent = 'Edit Test Case';
+    document.getElementById('tcModalAgent').value = tc.agent_name;
+    document.getElementById('tcModalInput').value = tc.input;
+    document.getElementById('tcModalExpected').value = tc.expected_output;
+    document.getElementById('tcModalMethod').value = tc.eval_method;
+    document.getElementById('tcModalThreshold').value = tc.threshold;
+    document.getElementById('tcModalJudgeModel').value = tc.judge_model || '';
+    document.getElementById('testCaseModal').classList.remove('hidden');
+}
+
+function closeAddModal() {
+    document.getElementById('testCaseModal').classList.add('hidden');
+}
+
+async function saveTestCase() {
+    const id = document.getElementById('tcModalId').value;
+    const payload = {
+        agent_name:       document.getElementById('tcModalAgent').value.trim(),
+        input:            document.getElementById('tcModalInput').value.trim(),
+        expected_output:  document.getElementById('tcModalExpected').value.trim(),
+        eval_method:      document.getElementById('tcModalMethod').value,
+        threshold:        parseFloat(document.getElementById('tcModalThreshold').value) || 0.7,
+        judge_model:      document.getElementById('tcModalJudgeModel').value.trim() || null,
+    };
+    if (!payload.agent_name || !payload.input || !payload.expected_output) {
+        showNotification('Agent name, input, and expected output are required', 'error');
+        return;
+    }
+    try {
+        let data;
+        if (id) {
+            data = await apiCall(`/dashboard/api/evals/${id}`, 'PUT', payload);
+        } else {
+            data = await apiCall('/dashboard/api/evals', 'POST', payload);
+        }
+        if (data.error) { showNotification(data.error, 'error'); return; }
+        showNotification(id ? 'Test case updated' : 'Test case created', 'success');
+        closeAddModal();
+        loadSuites();
+        if (_selectedAgent === payload.agent_name) loadTestCases(_selectedAgent);
+    } catch (e) {
+        showNotification('Save failed: ' + e.message, 'error');
+    }
+}
+
+// ── Delete ────────────────────────────────────────────────────────────────────
+
+async function deleteTestCase(id) {
+    if (!confirm('Delete this test case?')) return;
+    try {
+        const data = await apiCall(`/dashboard/api/evals/${id}`, 'DELETE');
+        if (data.error) { showNotification(data.error, 'error'); return; }
+        showNotification('Test case deleted', 'success');
+        loadSuites();
+        if (_selectedAgent) loadTestCases(_selectedAgent);
+    } catch (e) {
+        showNotification('Delete failed: ' + e.message, 'error');
+    }
+}
+
+// ── Run single eval ───────────────────────────────────────────────────────────
+
+async function openRunModal(testCaseId) {
+    const tc = _testCases.find(t => t.id === testCaseId);
+    document.getElementById('runTcId').value = testCaseId;
+    document.getElementById('runTcAgent').value = tc ? tc.agent_name : (_selectedAgent || '');
+    document.getElementById('runResultArea').classList.add('hidden');
+    document.getElementById('runSingleSubmitBtn').disabled = false;
+    document.getElementById('runSingleSubmitBtn').innerHTML = '<i class="fas fa-play"></i>Run';
+
+    const sel = document.getElementById('runVersionSelect');
+    sel.innerHTML = '<option value="">Loading versions…</option>';
+    document.getElementById('runSingleModal').classList.remove('hidden');
+
+    const agentName = tc ? tc.agent_name : (_selectedAgent || '');
+    if (agentName) {
+        try {
+            const data = await apiCall(`/dashboard/api/evals/agent/${encodeURIComponent(agentName)}/versions-list`);
+            const versions = data.versions || [];
+            sel.innerHTML = versions.length
+                ? versions.map(v => `<option value="${v.id}">v${v.version_number}${v.tag ? ' — ' + v.tag : ''} (${new Date(v.created_at).toLocaleDateString()})</option>`).join('')
+                : '<option value="">No versions found</option>';
+        } catch (e) {
+            sel.innerHTML = '<option value="">Error loading versions</option>';
+        }
+    }
+}
+
+function closeRunModal() {
+    document.getElementById('runSingleModal').classList.add('hidden');
+}
+
+async function submitRunEval() {
+    const tcId = document.getElementById('runTcId').value;
+    const versionId = parseInt(document.getElementById('runVersionSelect').value, 10);
+    if (!versionId) { showNotification('Select a version', 'error'); return; }
+
+    const btn = document.getElementById('runSingleSubmitBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Running…';
+
+    try {
+        const data = await apiCall(`/dashboard/api/evals/${tcId}/run`, 'POST', { version_id: versionId });
+        if (data.detail || data.error) { showNotification(data.detail || data.error, 'error'); return; }
+        const r = data.result;
+        const resultArea = document.getElementById('runResultArea');
+        const passLabel = r.passed ? '<span class="text-green-600 font-semibold">PASS</span>' : '<span class="text-red-500 font-semibold">FAIL</span>';
+        const score = r.score !== null ? (r.score * 100).toFixed(1) + '%' : '—';
+        resultArea.innerHTML = `
+            ${passLabel} &nbsp;Score: <strong>${score}</strong>
+            ${r.actual_output ? `<div class="mt-1 text-gray-500">Agent said: <em>${escHtml(r.actual_output.slice(0, 200))}${r.actual_output.length > 200 ? '…' : ''}</em></div>` : ''}
+            ${r.details ? `<div class="text-gray-400">${r.details}</div>` : ''}`;
+        resultArea.classList.remove('hidden');
+        if (_selectedAgent) { loadTestCases(_selectedAgent); loadHistory(_selectedAgent); }
+    } catch (e) {
+        showNotification('Run failed: ' + e.message, 'error');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-play"></i>Run';
+    }
+}
+
+// ── Run Suite ─────────────────────────────────────────────────────────────────
+
+async function runSuite() {
+    if (!_selectedAgent) return;
+    document.getElementById('rsSuiteAgent').textContent = _selectedAgent;
+    document.getElementById('rsSuiteResultBar').classList.add('hidden');
+    document.getElementById('rsSuiteSubmitBtn').disabled = false;
+    document.getElementById('rsSuiteSubmitBtn').innerHTML = '<i class="fas fa-play"></i>Run All';
+    document.getElementById('runSuiteModal').classList.remove('hidden');
+
+    const [versionsData, casesData] = await Promise.all([
+        apiCall(`/dashboard/api/evals/agent/${encodeURIComponent(_selectedAgent)}/versions-list`),
+        apiCall(`/dashboard/api/evals/agent/${encodeURIComponent(_selectedAgent)}`),
+    ]);
+
+    const versions = versionsData.versions || [];
+    const versionSel = document.getElementById('rsSuiteVersion');
+    versionSel.innerHTML = versions.length
+        ? versions.map(v => `<option value="${v.id}">v${v.version_number}${v.tag ? ' — ' + v.tag : ''} (${new Date(v.created_at).toLocaleDateString()})</option>`).join('')
+        : '<option value="">No versions found</option>';
+
+    const cases = casesData.test_cases || [];
+    document.getElementById('rsCasesContainer').innerHTML = cases.length
+        ? `<span>${cases.length} test case${cases.length !== 1 ? 's' : ''} will be run against the selected version.</span>`
+        : '<span class="text-gray-400">No active test cases for this agent.</span>';
+}
+
+function closeRunSuiteModal() {
+    document.getElementById('runSuiteModal').classList.add('hidden');
+}
+
+function escHtml(str) {
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+async function submitRunSuite() {
+    const versionId = parseInt(document.getElementById('rsSuiteVersion').value, 10);
+    if (!versionId) { showNotification('Select a version', 'error'); return; }
+
+    const btn = document.getElementById('rsSuiteSubmitBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Running…';
+
+    try {
+        // Pass empty results — backend will invoke the agent automatically for each test case
+        const data = await apiCall(`/dashboard/api/evals/version/${versionId}/run`, 'POST', { results: [] });
+        if (data.detail || data.error) { showNotification(data.detail || data.error, 'error'); return; }
+
+        const avg = data.avg_score !== null && data.avg_score !== undefined ? (data.avg_score * 100).toFixed(1) + '%' : '—';
+        const passRate = data.pass_rate !== null && data.pass_rate !== undefined ? (data.pass_rate * 100).toFixed(0) + '%' : '—';
+        const regression = data.regression_alert ? ' &nbsp;<span class="text-red-600 font-semibold"><i class="fas fa-exclamation-triangle mr-1"></i>Regression detected</span>' : '';
+        const bar = document.getElementById('rsSuiteResultBar');
+        bar.innerHTML = `<span class="text-gray-500">Done:</span> &nbsp;<span class="text-green-600 font-semibold">${data.passed || 0} passed</span> &nbsp;<span class="text-red-500">${data.failed || 0} failed</span> &nbsp;avg <strong>${avg}</strong> &nbsp;pass rate <strong>${passRate}</strong>${regression}`;
+        bar.classList.remove('hidden');
+
+        showNotification('Suite complete', 'success');
+        if (_selectedAgent) { loadTestCases(_selectedAgent); loadHistory(_selectedAgent); loadSuites(); }
+    } catch (e) {
+        showNotification('Suite run failed: ' + e.message, 'error');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-play"></i>Run All';
+    }
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+
+document.addEventListener('DOMContentLoaded', loadSuites);
+</script>
+{% endblock %}
