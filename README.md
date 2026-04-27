@@ -106,6 +106,8 @@ Built-in Swagger UI and ReDoc for both the Admin API and ADK API, accessible fro
 - **Dynamic Memory**: Database-backed memory blocks for agent context and bootstrap instructions
 - **HTTP Basic Authentication**: Secure access to web interface
 - **Embeddable Chat Widget**: Drop a `<script>` tag on any website to add AI chat connected to your agents
+- **Eval Framework**: Test suites with exact match, semantic similarity, and LLM-as-judge evaluation; auto-invokes agents, tracks score history, and fires regression alerts
+- **Hallucination Guardrail**: LLM-scored factual consistency check per agent response; configurable threshold, fail-open on errors
 - **Prometheus Metrics**: Automatic HTTP metrics via `/metrics` endpoint
 
 ## 🏗️ System Architecture
@@ -533,7 +535,7 @@ open htmlcov/index.html
 
 ### Test Coverage
 
-The test suite includes **134 tests** covering:
+The test suite includes **134+ tests** covering:
 
 - **AgentManager**: Session management, agent retrieval, caching, hardcoded integration, hierarchy initialization
 - **ToolFactory**: Tool creation, configuration, error handling, method validation
@@ -638,6 +640,13 @@ MATE includes a comprehensive web-based dashboard for system management, monitor
 - **Schema Status**: Monitor database schema health
 - **Data Export**: Export system data for backup
 
+#### 🧪 **Eval Framework**
+- **Test Suites**: Create and manage test cases per agent with exact match, semantic similarity, or LLM-as-judge evaluation
+- **Auto-invocation**: Eval runs call the live agent automatically and extract only the final reply (no copy-paste)
+- **Score History**: Chart.js line chart tracking avg_score and pass_rate across versions
+- **Regression Alerts**: Webhook fires when a new version scores more than 5 points below the previous version
+- **Version History Integration**: "Run Evals" button inside the Version History modal runs the full suite for the selected version
+
 #### 📚 **Documentation**
 - **API Documentation**: Interactive API documentation
 - **System Documentation**: Comprehensive system guides
@@ -660,6 +669,8 @@ python auth_server.py
 - `/dashboard/agents` - Agent configuration management
 - `/dashboard/usage` - Usage analytics and monitoring
 - `/dashboard/migrations` - Database migration management
+- `/dashboard/evals` - Eval Framework — test suites, score history, regression tracking
+- `/dashboard/audit-logs` - Audit trail viewer
 - `/dashboard/docs` - System documentation
 
 ### Dashboard API Endpoints
@@ -1307,6 +1318,7 @@ For more detailed information, see:
 - **[documents/END_USER_GUIDE.md](documents/END_USER_GUIDE.md)**: End user guide—chatting with agents, dashboard usage, MCP client setup (Claude Desktop, Cursor)
 - **[documents/WIDGET_INTEGRATION.md](documents/WIDGET_INTEGRATION.md)**: Embeddable chat widget—embed code, JS API, admin panel, security, theming
 - **[documents/ARCHITECTURE.pdf](documents/ARCHITECTURE.pdf)**: System architecture documentation (PDF)—server layers, data flows, agent initialization, MCP integration
+- **[documents/EVALS.md](documents/EVALS.md)**: Eval Framework—test case management, eval methods, regression alerts, API reference, hallucination guardrail
 - **[MCP_SERVERS.md](documents/MCP_SERVERS.md)**: Complete MCP server documentation
   - Built-in MCP servers (Image Generation, Google Drive)
   - Agent MCP servers configuration and usage

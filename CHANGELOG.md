@@ -5,6 +5,26 @@ All notable changes to MATE (Multi-Agent Tree Engine) will be documented in this
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.9] - 2026-04-27
+
+### Added
+
+- **Eval Framework** - end-to-end quality measurement system for agent configs with three evaluation methods: exact match, semantic similarity (sentence-transformers with difflib fallback), and LLM-as-judge (litellm)
+- **Eval Dashboard** - full CRUD UI at `/dashboard/evals`: manage test suites per agent, run individual tests, view score history as a Chart.js line chart, and compare avg_score + pass_rate across versions
+- **Agent auto-invocation** - eval runs call the live agent automatically (no copy-paste of outputs required); uses a fresh ADK session per run and extracts only the final user-facing reply, skipping tool calls and sub-agent intermediate steps
+- **Version-scoped eval runs** - "Run Evals" button in the Version History modal runs the full suite against the selected version and displays pass/fail counts, avg score, and pass rate inline
+- **Regression alerts** - after each version suite run, if `new_avg < prev_avg − 0.05` and `EVAL_REGRESSION_WEBHOOK_URL` is set, a webhook fires with `type="eval_regression_alert"` payload; the UI also shows an inline regression warning
+- **DB schema** - two new tables: `test_cases` (agent_name, version_id FK nullable, input, expected_output, eval_method, judge_model, threshold, is_active) and `eval_results` (test_case_id FK, version_id FK, actual_output, score, passed, eval_method, details, error, run_at)
+- **`EvalRunner`** - pure Python class (`shared/utils/eval_runner.py`) with `exact_match_eval`, `semantic_similarity_eval`, `llm_judge_eval`, and `score_output` dispatcher
+- **Hallucination guardrail** - replaced the unconditional stub in `shared/utils/guardrails/hallucination.py` with a real litellm LLM-as-judge call; fail-open on any exception; threshold configurable per agent
+- **Versions dropdown in evals** - version selector in the Add/Edit test case form populates from real `agent_config_versions` records, eliminating FK violations from free-text input
+- **Eval API** - 9 new REST endpoints under `/dashboard/api/evals/…` (list suites, get agent test cases, score history, create, update, soft-delete, run single, run version suite, list agent versions)
+- **`V011__eval_framework.sql`** - migration files for SQLite, PostgreSQL, and MySQL
+
+### Fixed
+
+- **Hallucination guardrail** - was returning `triggered=False` unconditionally (stub); now uses LLM scoring with configurable threshold
+
 ## [1.0.8] - 2026-03-09
 
 ### Added

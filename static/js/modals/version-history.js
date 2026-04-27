@@ -155,6 +155,61 @@
         }
     };
 
+    window._vhRunEvals = async function () {
+        if (!_selectedVersionId) return;
+        const btn = document.getElementById('vhRunEvalsBtn');
+        const resultEl = document.getElementById('vhEvalsResult');
+        if (!btn || !resultEl) return;
+
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>Running…';
+        resultEl.classList.add('hidden');
+
+        try {
+            const resp = await fetch(`/dashboard/api/evals/version/${_selectedVersionId}/run`, {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ results: [] }),
+            });
+            const data = await resp.json();
+
+            if (!data.results && !data.passed && !data.failed) {
+                resultEl.innerHTML = '<span class="text-gray-500">No active test cases for this agent. Add test cases on the <a href="/dashboard/evals" class="text-blue-500 underline">Evals page</a>.</span>';
+                resultEl.classList.remove('hidden');
+                return;
+            }
+
+            if (data.detail || data.error) {
+                showNotification(data.detail || data.error, 'error');
+                return;
+            }
+
+            const avg = data.avg_score !== null && data.avg_score !== undefined ? (data.avg_score * 100).toFixed(1) + '%' : '—';
+            const passRate = data.pass_rate !== null && data.pass_rate !== undefined ? (data.pass_rate * 100).toFixed(0) + '%' : '—';
+            const regressionHtml = data.regression_alert
+                ? '<span class="ml-2 text-red-600 font-semibold"><i class="fas fa-exclamation-triangle mr-1"></i>Regression detected</span>'
+                : '';
+
+            resultEl.innerHTML = `
+                <div class="flex flex-wrap items-center gap-3">
+                    <span class="text-gray-500">Evals:</span>
+                    <span class="text-green-600 dark:text-green-400 font-semibold">${data.passed || 0} passed</span>
+                    <span class="text-red-500">${data.failed || 0} failed</span>
+                    <span class="text-gray-500">avg <strong>${avg}</strong></span>
+                    <span class="text-gray-500">pass rate <strong>${passRate}</strong></span>
+                    ${regressionHtml}
+                </div>`;
+            resultEl.classList.remove('hidden');
+            showNotification('Evals complete', 'success');
+        } catch (err) {
+            showNotification('Eval run error: ' + err.message, 'error');
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-flask mr-1"></i>Run Evals';
+        }
+    };
+
     function _showDiff(versionId) {
         const ver = _versions.find(v => v.id === versionId);
         if (!ver) return;
