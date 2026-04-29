@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+
+{% block title %}Triggers - MATE{% endblock %}
+
+{% block content %}
+<div class="space-y-4">
+
+    <!-- Header -->
+    <div class="flex flex-col gap-4 md:flex-row md:justify-between md:items-center">
+        <div>
+            <h2 class="text-xl font-bold text-gray-900 dark:text-white">Triggers</h2>
+            <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">Activate agents autonomously via cron schedules, webhooks, or external events</p>
+        </div>
+        <button onclick="TriggerPage.openCreateModal()" class="px-3 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center space-x-1">
+            <i class="fas fa-plus mr-1"></i>New Trigger
+        </button>
+    </div>
+
+    <!-- Filters -->
+    <div class="flex flex-wrap gap-2 items-center">
+        <select id="filterProject" onchange="TriggerPage.loadTriggers()" class="text-xs border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500">
+            <option value="">All Projects</option>
+            {% for project in projects %}
+            <option value="{{ project.id }}">{{ project.name }}</option>
+            {% endfor %}
+        </select>
+        <select id="filterType" onchange="TriggerPage.loadTriggers()" class="text-xs border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500">
+            <option value="">All Types</option>
+            <option value="cron">Cron</option>
+            <option value="webhook">Webhook</option>
+            <option value="file_watch">File Watch</option>
+            <option value="event_bus">Event Bus</option>
+        </select>
+    </div>
+
+    <!-- Trigger table -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-x-auto">
+        <table class="w-full text-xs">
+            <thead>
+                <tr class="text-left text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
+                    <th class="px-4 py-2 font-medium">Name</th>
+                    <th class="px-4 py-2 font-medium">Type</th>
+                    <th class="px-4 py-2 font-medium">Agent</th>
+                    <th class="px-4 py-2 font-medium">Schedule / Path</th>
+                    <th class="px-4 py-2 font-medium">Output</th>
+                    <th class="px-4 py-2 font-medium text-center">Enabled</th>
+                    <th class="px-4 py-2 font-medium">Last Run</th>
+                    <th class="px-4 py-2 font-medium text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody id="triggerTableBody">
+                <tr>
+                    <td colspan="8" class="px-4 py-6 text-center text-gray-400 dark:text-gray-500">
+                        <i class="fas fa-spinner fa-spin mr-1"></i>Loading…
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+</div>
+
+<!-- Fire Key Banner (shown once after creating a webhook trigger) -->
+<div id="fireKeyBanner" class="hidden fixed bottom-4 left-1/2 -translate-x-1/2 z-[100] w-full max-w-lg">
+    <div class="bg-yellow-50 dark:bg-yellow-900 border border-yellow-300 dark:border-yellow-600 rounded-lg px-4 py-3 shadow-lg">
+        <div class="flex items-start gap-3">
+            <i class="fas fa-key text-yellow-600 dark:text-yellow-300 mt-0.5"></i>
+            <div class="flex-1">
+                <p class="text-xs font-semibold text-yellow-800 dark:text-yellow-200">Save your trigger fire key — it won't be shown again</p>
+                <code id="fireKeyValue" class="text-xs font-mono text-yellow-900 dark:text-yellow-100 break-all block mt-1"></code>
+                <p class="text-xs text-yellow-700 dark:text-yellow-300 mt-1">Use this key with the <code>X-MATE-Trigger-Key</code> header or <code>?key=</code> query param to fire the webhook.</p>
+            </div>
+            <button onclick="document.getElementById('fireKeyBanner').classList.add('hidden')" class="text-yellow-600 dark:text-yellow-300 hover:text-yellow-900">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Trigger Modal -->
+{% include "dashboard/modals/trigger_modal.html" %}
+
+<script src="/static/js/triggers-page.js"></script>
+<script>
+    window._triggerPageData = {
+        projects: {{ projects | tojson }},
+        agents: {{ agents | tojson }},
+    };
+    document.addEventListener('DOMContentLoaded', function() {
+        TriggerPage.init();
+    });
+</script>
+{% endblock %}

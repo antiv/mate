@@ -48,3 +48,5 @@ opentelemetry-exporter-otlp-proto-http
 opentelemetry-semantic-conventions
 # Standalone agent packaging
 pyinstaller
+# Trigger Engine scheduler
+apscheduler>=3.10

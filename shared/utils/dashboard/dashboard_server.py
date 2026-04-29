@@ -54,7 +54,7 @@ class DashboardServer:
             from shared.utils.database_client import get_database_client
             from shared.utils.user_service import UserService
             from shared.utils.token_usage_service import TokenUsageService
-            from shared.utils.models import AgentConfig, AgentConfigVersion, Project, User, TokenUsageLog, GuardrailLog, AuditLog, TestCase, EvalResult
+            from shared.utils.models import AgentConfig, AgentConfigVersion, Project, User, TokenUsageLog, GuardrailLog, AuditLog, TestCase, EvalResult, AgentTrigger
 
             self.db_client = get_database_client()
             self.user_service = UserService()
@@ -68,6 +68,7 @@ class DashboardServer:
             self.AuditLog = AuditLog
             self.TestCase = TestCase
             self.EvalResult = EvalResult
+            self.AgentTrigger = AgentTrigger
             
             print("✅ Dashboard database services initialized successfully")
         except Exception as e:
@@ -1159,7 +1160,19 @@ class DashboardServer:
                         all_blocks.append(block)
                 if all_blocks:
                     export_data["memory_blocks"] = all_blocks
-            
+
+            # Export triggers for each exported project
+            trigger_project_ids = {c.project_id for c in filtered_configs if c.project_id}
+            if trigger_project_ids:
+                all_triggers = []
+                for pid in trigger_project_ids:
+                    rows = session.query(self.AgentTrigger).filter(
+                        self.AgentTrigger.project_id == pid
+                    ).all()
+                    all_triggers.extend(r.to_dict() for r in rows)
+                if all_triggers:
+                    export_data["triggers"] = all_triggers
+
             return export_data
         except Exception as e:
             print(f"Error exporting agent configs: {e}")
@@ -1390,7 +1403,36 @@ class DashboardServer:
                 except Exception as e:
                     session.rollback()
                     errors.append(f"Error importing memory blocks: {str(e)}")
-            
+
+            # Import triggers — start disabled, clear webhook path and fire key (security)
+            triggers_imported = 0
+            if "triggers" in import_data and import_data["triggers"]:
+                try:
+                    for tdata in import_data["triggers"]:
+                        try:
+                            trigger = self.AgentTrigger(
+                                name=tdata.get("name", "imported_trigger"),
+                                description=tdata.get("description"),
+                                trigger_type=tdata.get("trigger_type", "cron"),
+                                agent_name=tdata.get("agent_name", ""),
+                                project_id=1,  # will be overridden below if project mapping exists
+                                prompt=tdata.get("prompt", ""),
+                                cron_expression=tdata.get("cron_expression"),
+                                webhook_path=None,    # regenerate — never carry over old path
+                                fire_key_hash=None,   # regenerate when user enables the trigger
+                                output_type=tdata.get("output_type", "memory_block"),
+                                is_enabled=False,     # imported triggers start disabled
+                            )
+                            trigger.set_output_config(tdata.get("output_config") or {})
+                            session.add(trigger)
+                            triggers_imported += 1
+                        except Exception as e:
+                            errors.append(f"Error importing trigger '{tdata.get('name', 'Unknown')}': {str(e)}")
+                    session.commit()
+                except Exception as e:
+                    session.rollback()
+                    errors.append(f"Error importing triggers: {str(e)}")
+
             result = {
                 "success": True,
                 "imported_count": imported_count,
@@ -1400,6 +1442,8 @@ class DashboardServer:
             if memory_blocks_imported or memory_blocks_skipped:
                 result["memory_blocks_imported"] = memory_blocks_imported
                 result["memory_blocks_skipped"] = memory_blocks_skipped
+            if triggers_imported:
+                result["triggers_imported"] = triggers_imported
             return result
             
         except Exception as e:
@@ -4345,4 +4389,288 @@ class DashboardServer:
                 raise HTTPException(status_code=500, detail=str(e))
             finally:
                 session.close()
+
+        # ── Trigger Engine ────────────────────────────────────────────────────
+
+        @self.app.get("/dashboard/triggers", response_class=HTMLResponse, tags=["Dashboard - Pages"])
+        async def dashboard_triggers(request: Request, username: str = Depends(self._get_auth_user_dependency)):
+            projects = self._get_all_projects()
+            agents = self._get_all_agent_configs()
+            return self.templates.TemplateResponse("dashboard/triggers.html", {
+                "request": request,
+                "page_title": "Triggers",
+                "username": username,
+                "projects": projects,
+                "agents": [{"name": a.get("name", ""), "type": a.get("type", ""), "project_id": a.get("project_id"), "parent_agents": a.get("parent_agents") or []} for a in agents],
+            })
+
+        @self.app.get("/dashboard/api/triggers", tags=["Dashboard - Triggers"])
+        async def list_triggers(
+            request: Request,
+            username: str = Depends(self._get_auth_user_dependency),
+            project_id: Optional[int] = None,
+            agent_name: Optional[str] = None,
+        ):
+            """List all triggers with optional filters."""
+            if not self.db_client:
+                return {"triggers": []}
+            session = self.db_client.get_session()
+            if not session:
+                return {"triggers": []}
+            try:
+                q = session.query(self.AgentTrigger)
+                if project_id is not None:
+                    q = q.filter(self.AgentTrigger.project_id == project_id)
+                if agent_name:
+                    q = q.filter(self.AgentTrigger.agent_name == agent_name)
+                rows = q.order_by(self.AgentTrigger.created_at.desc()).all()
+                return {"triggers": [r.to_dict() for r in rows]}
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=str(e))
+            finally:
+                session.close()
+
+        @self.app.post("/dashboard/api/triggers", tags=["Dashboard - Triggers"])
+        async def create_trigger(
+            request: Request,
+            username: str = Depends(self._get_auth_user_dependency),
+        ):
+            """Create a new trigger. Returns trigger + fire_key (webhook triggers only, shown once)."""
+            import re as _re
+            import secrets as _secrets
+            from shared.utils.trigger_runner import get_trigger_runner, generate_webhook_path
+
+            if not self.db_client:
+                raise HTTPException(status_code=500, detail="Database unavailable")
+            body = await request.json()
+            trigger_type = body.get("trigger_type", "cron")
+            session = self.db_client.get_session()
+            if not session:
+                raise HTTPException(status_code=500, detail="Database unavailable")
+            try:
+                raw_fire_key = None
+                fire_key_hash = None
+                webhook_path = None
+
+                if trigger_type == "webhook":
+                    name = body.get("name", "trigger")
+                    webhook_path = generate_webhook_path(name)
+                    # Ensure uniqueness (collision is astronomically unlikely but safe to check)
+                    for _ in range(5):
+                        exists = session.query(self.AgentTrigger).filter(
+                            self.AgentTrigger.webhook_path == webhook_path
+                        ).first()
+                        if not exists:
+                            break
+                        webhook_path = generate_webhook_path(name)
+                    raw_fire_key, fire_key_hash = get_trigger_runner().generate_fire_key()
+
+                trigger = self.AgentTrigger(
+                    name=body.get("name", "").strip(),
+                    description=body.get("description", ""),
+                    trigger_type=trigger_type,
+                    agent_name=body.get("agent_name", ""),
+                    project_id=int(body.get("project_id", 0)),
+                    prompt=body.get("prompt", ""),
+                    cron_expression=body.get("cron_expression"),
+                    webhook_path=webhook_path,
+                    fire_key_hash=fire_key_hash,
+                    output_type=body.get("output_type", "memory_block"),
+                    is_enabled=body.get("is_enabled", True),
+                    created_by=username,
+                )
+                trigger.set_output_config(body.get("output_config") or {})
+                session.add(trigger)
+                session.commit()
+                session.refresh(trigger)
+                get_trigger_runner().sync_cron_jobs()
+                result = {"trigger": trigger.to_dict()}
+                if raw_fire_key:
+                    result["fire_key"] = raw_fire_key
+                return result
+            except Exception as e:
+                session.rollback()
+                logger.error("create_trigger error: %s", e)
+                raise HTTPException(status_code=500, detail=str(e))
+            finally:
+                session.close()
+
+        @self.app.put("/dashboard/api/triggers/{trigger_id}", tags=["Dashboard - Triggers"])
+        async def update_trigger(
+            trigger_id: int,
+            request: Request,
+            username: str = Depends(self._get_auth_user_dependency),
+        ):
+            """Update a trigger. Pass regenerate_fire_key=true to rotate the webhook key."""
+            from shared.utils.trigger_runner import get_trigger_runner
+
+            if not self.db_client:
+                raise HTTPException(status_code=500, detail="Database unavailable")
+            body = await request.json()
+            session = self.db_client.get_session()
+            if not session:
+                raise HTTPException(status_code=500, detail="Database unavailable")
+            try:
+                trigger = session.query(self.AgentTrigger).filter(
+                    self.AgentTrigger.id == trigger_id
+                ).first()
+                if not trigger:
+                    raise HTTPException(status_code=404, detail="Trigger not found")
+
+                for field in ("name", "description", "trigger_type", "agent_name", "prompt",
+                              "cron_expression", "output_type"):
+                    if field in body:
+                        setattr(trigger, field, body[field])
+                if "project_id" in body:
+                    trigger.project_id = int(body["project_id"])
+                if "is_enabled" in body:
+                    trigger.is_enabled = bool(body["is_enabled"])
+                if "output_config" in body:
+                    trigger.set_output_config(body["output_config"] or {})
+
+                raw_fire_key = None
+                if body.get("regenerate_fire_key") and trigger.trigger_type == "webhook":
+                    raw_fire_key, trigger.fire_key_hash = get_trigger_runner().generate_fire_key()
+
+                session.commit()
+                session.refresh(trigger)
+                get_trigger_runner().sync_cron_jobs()
+                result = {"trigger": trigger.to_dict()}
+                if raw_fire_key:
+                    result["fire_key"] = raw_fire_key
+                return result
+            except HTTPException:
+                raise
+            except Exception as e:
+                session.rollback()
+                logger.error("update_trigger %s error: %s", trigger_id, e)
+                raise HTTPException(status_code=500, detail=str(e))
+            finally:
+                session.close()
+
+        @self.app.delete("/dashboard/api/triggers/{trigger_id}", tags=["Dashboard - Triggers"])
+        async def delete_trigger(
+            trigger_id: int,
+            request: Request,
+            username: str = Depends(self._get_auth_user_dependency),
+        ):
+            """Delete a trigger."""
+            from shared.utils.trigger_runner import get_trigger_runner
+
+            if not self.db_client:
+                raise HTTPException(status_code=500, detail="Database unavailable")
+            session = self.db_client.get_session()
+            if not session:
+                raise HTTPException(status_code=500, detail="Database unavailable")
+            try:
+                trigger = session.query(self.AgentTrigger).filter(
+                    self.AgentTrigger.id == trigger_id
+                ).first()
+                if not trigger:
+                    raise HTTPException(status_code=404, detail="Trigger not found")
+                session.delete(trigger)
+                session.commit()
+                get_trigger_runner().sync_cron_jobs()
+                return {"success": True}
+            except HTTPException:
+                raise
+            except Exception as e:
+                session.rollback()
+                raise HTTPException(status_code=500, detail=str(e))
+            finally:
+                session.close()
+
+        @self.app.post("/dashboard/api/triggers/{trigger_id}/toggle", tags=["Dashboard - Triggers"])
+        async def toggle_trigger(
+            trigger_id: int,
+            request: Request,
+            username: str = Depends(self._get_auth_user_dependency),
+        ):
+            """Toggle a trigger's is_enabled state."""
+            from shared.utils.trigger_runner import get_trigger_runner
+
+            if not self.db_client:
+                raise HTTPException(status_code=500, detail="Database unavailable")
+            session = self.db_client.get_session()
+            if not session:
+                raise HTTPException(status_code=500, detail="Database unavailable")
+            try:
+                trigger = session.query(self.AgentTrigger).filter(
+                    self.AgentTrigger.id == trigger_id
+                ).first()
+                if not trigger:
+                    raise HTTPException(status_code=404, detail="Trigger not found")
+                trigger.is_enabled = not trigger.is_enabled
+                session.commit()
+                session.refresh(trigger)
+                get_trigger_runner().sync_cron_jobs()
+                return {"trigger": trigger.to_dict()}
+            except HTTPException:
+                raise
+            except Exception as e:
+                session.rollback()
+                raise HTTPException(status_code=500, detail=str(e))
+            finally:
+                session.close()
+
+        @self.app.post("/dashboard/api/triggers/{trigger_id}/test-fire", tags=["Dashboard - Triggers"])
+        async def test_fire_trigger(
+            trigger_id: int,
+            request: Request,
+            username: str = Depends(self._get_auth_user_dependency),
+        ):
+            """Immediately execute a trigger and return the result."""
+            from shared.utils.trigger_runner import get_trigger_runner
+            result = get_trigger_runner().execute_trigger(trigger_id)
+            if result.get("status") == "error":
+                raise HTTPException(status_code=500, detail=result.get("message", "Trigger execution failed"))
+            return {"result": result}
+
+        @self.app.post("/triggers/{trigger_id}/fire", tags=["Dashboard - Triggers"])
+        async def fire_trigger_webhook(trigger_id: int, request: Request):
+            """
+            Webhook fire endpoint — authenticate with X-MATE-Trigger-Key header,
+            ?key= query param, or standard dashboard bearer/basic auth.
+            """
+            from shared.utils.trigger_runner import get_trigger_runner, TriggerRunner
+
+            if not self.db_client:
+                raise HTTPException(status_code=500, detail="Database unavailable")
+
+            # 1. Try fire key auth first (for external callers)
+            raw_key = (
+                request.headers.get("X-MATE-Trigger-Key")
+                or request.query_params.get("key")
+            )
+            authed = False
+            if raw_key:
+                session = self.db_client.get_session()
+                if not session:
+                    raise HTTPException(status_code=500, detail="Database unavailable")
+                try:
+                    trigger_row = session.query(self.AgentTrigger).filter(
+                        self.AgentTrigger.id == trigger_id
+                    ).first()
+                    if trigger_row and trigger_row.fire_key_hash:
+                        authed = TriggerRunner.verify_fire_key(raw_key, trigger_row.fire_key_hash)
+                finally:
+                    session.close()
+                if not authed:
+                    raise HTTPException(status_code=403, detail="Invalid trigger key")
+            else:
+                # 2. Fall back to standard dashboard auth (bearer/basic/cookie)
+                try:
+                    from server.auth import require_dashboard_auth
+                    require_dashboard_auth(request)
+                    authed = True
+                except Exception:
+                    raise HTTPException(
+                        status_code=403,
+                        detail="Authentication required: provide X-MATE-Trigger-Key header or dashboard credentials",
+                    )
+
+            result = get_trigger_runner().execute_trigger(trigger_id)
+            if result.get("status") == "error":
+                raise HTTPException(status_code=500, detail=result.get("message", "Trigger execution failed"))
+            return result
 

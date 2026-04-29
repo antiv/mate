@@ -167,7 +167,7 @@ def print_mcp_dependency_report(deps: List[Dict[str, str]]):
             print(f"   • '{cmd}': {hint}")
 
 
-def create_database(output_dir: Path, agents: List[Dict], memory_blocks: List[Dict] = None) -> Path:
+def create_database(output_dir: Path, agents: List[Dict], memory_blocks: List[Dict] = None, triggers: List[Dict] = None) -> Path:
     """Create a fresh SQLite database and import agents.
     
     Uses direct SQLAlchemy table creation (not DatabaseClient) to avoid
@@ -247,10 +247,34 @@ def create_database(output_dir: Path, agents: List[Dict], memory_blocks: List[Di
                 session.add(block)
                 memory_imported += 1
 
+        # Import triggers if present
+        triggers_imported = 0
+        if triggers:
+            from shared.utils.models import AgentTrigger
+            for tdata in triggers:
+                trigger = AgentTrigger(
+                    name=tdata.get("name", ""),
+                    description=tdata.get("description"),
+                    trigger_type=tdata.get("trigger_type", "cron"),
+                    agent_name=tdata.get("agent_name", ""),
+                    project_id=project_id,
+                    prompt=tdata.get("prompt", ""),
+                    cron_expression=tdata.get("cron_expression"),
+                    webhook_path=None,   # webhook paths are regenerated per deployment
+                    fire_key_hash=None,
+                    output_type=tdata.get("output_type", "memory_block"),
+                    is_enabled=tdata.get("is_enabled", True),
+                )
+                trigger.set_output_config(tdata.get("output_config") or {})
+                session.add(trigger)
+                triggers_imported += 1
+
         session.commit()
         print(f"   ✅ Imported {imported} agent(s) into database")
         if memory_imported:
             print(f"   ✅ Imported {memory_imported} memory block(s)")
+        if triggers_imported:
+            print(f"   ✅ Imported {triggers_imported} trigger(s)")
 
     except Exception as e:
         session.rollback()
@@ -649,9 +673,12 @@ Examples:
     export_data = parse_agent_json(args.json_file)
     agents = export_data["agents"]
     memory_blocks = export_data.get("memory_blocks", [])
+    triggers = export_data.get("triggers", [])
     print(f"   Found {len(agents)} agent(s)")
     if memory_blocks:
         print(f"   Found {len(memory_blocks)} memory block(s)")
+    if triggers:
+        print(f"   Found {len(triggers)} trigger(s)")
 
     # Step 2: Detect root agent
     print("\n🔍 Step 2: Detecting root agent...")
@@ -670,7 +697,7 @@ Examples:
 
     # Step 5: Create database
     print(f"\n🗄️  Step 5: Creating SQLite database...")
-    db_path = create_database(output_dir, agents, memory_blocks)
+    db_path = create_database(output_dir, agents, memory_blocks, triggers)
     print(f"   Database: {db_path}")
 
     # Step 5b: Scan MCP dependencies
