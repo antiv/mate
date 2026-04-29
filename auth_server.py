@@ -6,6 +6,7 @@ Wraps the ADK web interface with basic HTTP authentication
 
 import os
 import logging
+import secrets
 import threading
 import time
 from pathlib import Path
@@ -42,6 +43,14 @@ ADK_PORT = adk_config["adk_port"]
 AUTH_USERNAME = os.getenv("AUTH_USERNAME", "admin")
 AUTH_PASSWORD = os.getenv("AUTH_PASSWORD", "mate")
 SESSION_SERVICE_URI = adk_config["session_service_uri"]
+
+_SECRET_KEY = os.getenv("SECRET_KEY")
+if not _SECRET_KEY:
+    _SECRET_KEY = secrets.token_urlsafe(32)
+    logger.warning(
+        "SECRET_KEY not set — using a random key. Sessions will not survive restarts. "
+        "Set SECRET_KEY in .env for persistent OAuth sessions."
+    )
 
 if AUTH_PASSWORD == "mate":
     logger.warning("Using default AUTH_PASSWORD. Set AUTH_PASSWORD env var for production use.")
@@ -166,6 +175,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Encrypted session cookie required by both OAuth PKCE state and the session-based
+# auth check in server/auth.py.  https_only defaults to False so local HTTP dev works;
+# set SESSION_SECURE_COOKIE=true behind TLS in production.
+from starlette.middleware.sessions import SessionMiddleware
+_session_secure = os.getenv("SESSION_SECURE_COOKIE", "false").lower() in ("true", "1", "yes")
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=_SECRET_KEY,
+    https_only=_session_secure,
+    same_site="lax",
+)
+
 # Rate limit middleware (optional, enable with RATE_LIMIT_ENABLED=true)
 if os.getenv("RATE_LIMIT_ENABLED", "false").lower() in ("true", "1", "yes"):
     from server.rate_limit_middleware import RateLimitMiddleware
@@ -264,6 +285,7 @@ async def service_worker():
 
 # ---------- Include routers ----------
 from server.auth_routes import router as auth_router
+from server.oauth_routes import router as oauth_router
 from server.proxy_routes import router as proxy_router
 from server.widget_routes import (
     router as widget_router,
@@ -275,6 +297,7 @@ from server.widget_routes import (
 configure_widget_proxy(ADK_HOST, ADK_PORT)
 
 app.include_router(auth_router)
+app.include_router(oauth_router)
 app.include_router(widget_router)
 app.include_router(widget_admin_api_router)
 app.include_router(dashboard_widget_router)

@@ -18,10 +18,13 @@ class User(Base):
     
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(String(255), nullable=False, unique=True)  # Primary user identifier
+    email = Column(String(255), nullable=True)  # Email address (populated for OAuth users)
+    display_name = Column(String(255), nullable=True)  # Human-readable name from OAuth provider
+    oauth_provider = Column(String(50), nullable=True)  # 'google', 'github', or None for basic auth
     roles = Column(Text, nullable=False, default='["user"]')  # JSON array of roles
     profile_data = Column(Text, nullable=True)  # User profile data for agent personalization (text format)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), 
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc),
                        onupdate=lambda: datetime.now(timezone.utc), nullable=False)
     
     def get_roles(self) -> list:
@@ -66,6 +69,9 @@ class User(Base):
         return {
             'id': self.id,
             'user_id': self.user_id,
+            'email': self.email,
+            'display_name': self.display_name,
+            'oauth_provider': self.oauth_provider,
             'roles': self.get_roles(),
             'profile_data': self.get_profile_data(),
             'created_at': self.created_at.isoformat() if self.created_at else None,

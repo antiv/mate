@@ -50,3 +50,6 @@ opentelemetry-semantic-conventions
 pyinstaller
 # Trigger Engine scheduler
 apscheduler>=3.10
+# OAuth 2.0 / OIDC authentication (Google, GitHub, etc.)
+authlib>=1.3.0
+itsdangerous>=2.1.2

@@ -5,6 +5,7 @@ Handles token generation, revocation, login/logout, and the login page.
 """
 
 import logging
+import os
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, Request
@@ -31,16 +32,45 @@ project_root = Path(__file__).parent.parent
 @router.get("/login", tags=["Dashboard - Pages"])
 async def login_page(request: Request):
     """Login page for dashboard (no auth required)."""
+    from server.oauth_routes import google_enabled, github_enabled
     templates_dir = project_root / "templates"
     templates = Jinja2Templates(directory=str(templates_dir))
-    return templates.TemplateResponse("login.html", {"request": request})
+    error_map = {
+        "auth_failed": "OAuth authentication failed. Please try again.",
+        "profile_fetch_failed": "Could not retrieve your profile from the provider.",
+        "provider_not_configured": "That sign-in provider is not configured.",
+        "unknown_provider": "Unknown OAuth provider.",
+    }
+    error_key = request.query_params.get("error", "")
+    return templates.TemplateResponse("login.html", {
+        "request": request,
+        "google_enabled": google_enabled(),
+        "github_enabled": github_enabled(),
+        "oauth_error": error_map.get(error_key, ""),
+    })
 
 
 @router.post("/auth/token", tags=["Authentication"])
-async def generate_auth_token(credentials: HTTPBasicCredentials = Depends(verify_credentials)):
+async def generate_auth_token(
+    request: Request,
+    credentials: HTTPBasicCredentials = Depends(verify_credentials),
+):
     """Generate a Bearer token for authenticated users."""
     clear_logged_out_status(credentials.username, credentials.password)
     token = generate_token()
+
+    # Populate the encrypted session so the dashboard auth check succeeds
+    # whether the client uses the cookie or the Bearer token.
+    try:
+        request.session["user"] = {
+            "user_id": credentials.username,
+            "display_name": credentials.username,
+            "email": None,
+            "provider": "basic",
+        }
+    except Exception:
+        pass  # SessionMiddleware may not be present in all test setups
+
     try:
         from shared.utils.audit_service import log, ACTION_LOGIN, RESOURCE_AUTH
         log(credentials.username, ACTION_LOGIN, RESOURCE_AUTH, details={"method": "token"}, request=None)
@@ -70,11 +100,19 @@ async def revoke_auth_token_delete(request: Request, username: str = Depends(get
 
 @router.post("/auth/logout", tags=["Authentication"])
 async def logout(request: Request):
-    """Logout endpoint - revokes token and invalidates basic auth (no auth required)."""
+    """Logout endpoint - clears session, revokes token, invalidates basic auth."""
     import base64
 
     username = None
     password = None
+
+    # Clear encrypted session (covers both OAuth and basic-auth sessions)
+    try:
+        session_user = request.session.get("user", {})
+        username = username or session_user.get("user_id")
+        request.session.clear()
+    except Exception:
+        pass
 
     auth_header = request.headers.get("Authorization", "")
     if auth_header.startswith("Bearer "):
@@ -85,10 +123,12 @@ async def logout(request: Request):
         try:
             encoded_credentials = auth_header[6:]
             decoded_credentials = base64.b64decode(encoded_credentials).decode("utf-8")
-            username, password = decoded_credentials.split(":", 1)
-            if username == AUTH_USERNAME and password == AUTH_PASSWORD:
-                logger.debug("Logout: logging out basic auth for %s", username)
-                logout_basic_auth(username, password)
+            u, p = decoded_credentials.split(":", 1)
+            if u == AUTH_USERNAME and p == AUTH_PASSWORD:
+                logger.debug("Logout: logging out basic auth for %s", u)
+                logout_basic_auth(u, p)
+                username = username or u
+                password = p
         except Exception as e:
             logger.debug("Logout: error parsing basic auth: %s", e)
 
@@ -101,11 +141,12 @@ async def logout(request: Request):
     try:
         body = await request.json()
         if not username and "username" in body and "password" in body:
-            username = body["username"]
-            password = body["password"]
-            if username == AUTH_USERNAME and password == AUTH_PASSWORD:
-                logger.debug("Logout: logging out basic auth from body for %s", username)
-                logout_basic_auth(username, password)
+            u = body["username"]
+            p = body["password"]
+            if u == AUTH_USERNAME and p == AUTH_PASSWORD:
+                logger.debug("Logout: logging out basic auth from body for %s", u)
+                logout_basic_auth(u, p)
+                username = username or u
     except Exception:
         pass
 

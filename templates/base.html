@@ -231,7 +231,12 @@
                         <div id="userMenuDropdown" class="hidden absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-md shadow-lg py-1 z-50 border border-gray-200 dark:border-gray-700">
                             <div class="px-4 py-2 text-sm text-gray-700 dark:text-gray-300 border-b border-gray-200 dark:border-gray-700">
                                 <div class="font-medium">{{ username }}</div>
-                                <div class="text-xs text-gray-500 dark:text-gray-400">Dashboard User</div>
+                                {% set _provider = request.session.get('user', {}).get('provider', '') if request.session is defined else '' %}
+                                <div class="text-xs text-gray-500 dark:text-gray-400">
+                                    {% if _provider == 'google' %}via Google
+                                    {% elif _provider == 'github' %}via GitHub
+                                    {% else %}Dashboard User{% endif %}
+                                </div>
                             </div>
                             <a href="#" onclick="handleLogout(event)" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">
                                 <i class="fas fa-sign-out-alt mr-2"></i>Logout
