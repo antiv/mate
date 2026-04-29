@@ -770,3 +770,70 @@ class EvalResult(Base):
             'error': self.error,
             'run_at': self.run_at.isoformat() if self.run_at else None,
         }
+
+
+class AgentTrigger(Base):
+    """Autonomous trigger for an agent: cron, webhook, file_watch, or event_bus."""
+
+    __tablename__ = 'agent_triggers'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    trigger_type = Column(String(50), nullable=False, default='cron')
+    agent_name = Column(String(255), nullable=False)
+    project_id = Column(Integer, ForeignKey('projects.id', ondelete='CASCADE'), nullable=False)
+    prompt = Column(Text, nullable=False, default='')
+    cron_expression = Column(String(100), nullable=True)
+    webhook_path = Column(String(255), nullable=True, unique=True)
+    fire_key_hash = Column(String(255), nullable=True)
+    output_type = Column(String(50), nullable=False, default='memory_block')
+    output_config = Column(Text, nullable=True)
+    is_enabled = Column(Boolean, nullable=False, default=True)
+    last_fired_at = Column(DateTime, nullable=True)
+    last_result = Column(Text, nullable=True)
+    created_by = Column(String(255), nullable=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc),
+                        onupdate=lambda: datetime.now(timezone.utc), nullable=False)
+
+    project = relationship("Project")
+
+    def get_output_config(self) -> dict:
+        try:
+            return json.loads(self.output_config) if self.output_config else {}
+        except json.JSONDecodeError:
+            return {}
+
+    def set_output_config(self, config: dict) -> None:
+        self.output_config = json.dumps(config) if config else None
+
+    def get_last_result(self) -> Optional[dict]:
+        try:
+            return json.loads(self.last_result) if self.last_result else None
+        except json.JSONDecodeError:
+            return None
+
+    def set_last_result(self, result: Optional[dict]) -> None:
+        self.last_result = json.dumps(result) if result else None
+
+    def to_dict(self) -> dict:
+        return {
+            'id': self.id,
+            'name': self.name,
+            'description': self.description,
+            'trigger_type': self.trigger_type,
+            'agent_name': self.agent_name,
+            'project_id': self.project_id,
+            'prompt': self.prompt,
+            'cron_expression': self.cron_expression,
+            'webhook_path': self.webhook_path,
+            'output_type': self.output_type,
+            'output_config': self.get_output_config(),
+            'is_enabled': self.is_enabled,
+            'last_fired_at': self.last_fired_at.isoformat() if self.last_fired_at else None,
+            'last_result': self.get_last_result(),
+            'created_by': self.created_by,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+        }

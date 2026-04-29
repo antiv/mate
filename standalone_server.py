@@ -353,6 +353,15 @@ def main():
 
         threading.Thread(target=_open_browser, daemon=True).start()
 
+    # Start trigger runner for cron-based autonomous execution
+    try:
+        from shared.utils.trigger_runner import get_trigger_runner
+        get_trigger_runner().start()
+        import atexit as _atexit
+        _atexit.register(lambda: get_trigger_runner().shutdown())
+    except Exception as _e:
+        print(f"⚠️  TriggerRunner not started: {_e}")
+
     print(f"🚀 Starting server on {args.host}:{args.port}")
     print(f"   Chat UI: http://localhost:{args.port}/")
 

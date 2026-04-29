@@ -82,6 +82,7 @@ tags_metadata = [
     {"name": "Widget", "description": "Embeddable chat widget endpoints (public, authenticated via widget API key)"},
     {"name": "Widget - Admin API", "description": "Widget admin API for agent, memory blocks, and file management"},
     {"name": "Dashboard - Widget Keys", "description": "Widget API key management endpoints"},
+    {"name": "Dashboard - Triggers", "description": "Trigger management API endpoints (cron, webhook, output routing)"},
     {"name": "Examples", "description": "Example endpoints demonstrating authentication patterns"},
 ]
 
@@ -133,6 +134,15 @@ def initialize_dashboard_server():
         logger.warning("Dashboard server initialization error: %s", e)
 
 
+def initialize_trigger_runner():
+    try:
+        from shared.utils.trigger_runner import get_trigger_runner
+        get_trigger_runner().start()
+        logger.info("TriggerRunner initialized successfully")
+    except Exception as e:
+        logger.warning("TriggerRunner initialization error: %s", e)
+
+
 def initialize_agent_folders():
     try:
         server_control = ServerControlService(
@@ -166,6 +176,12 @@ from shared.utils.server_control_service import ServerControlService
 # Initialize servers after app setup
 initialize_mcp_servers()
 initialize_dashboard_server()
+initialize_trigger_runner()
+
+import atexit as _atexit
+_atexit.register(lambda: __import__(
+    'shared.utils.trigger_runner', fromlist=['get_trigger_runner']
+).get_trigger_runner().shutdown())
 
 
 # ---------- Custom exception handler ----------

@@ -1,0 +1,171 @@
+<div id="triggerModal" class="fixed inset-0 bg-gray-600 bg-opacity-60 hidden z-[80] dashboard-modal">
+    <div class="flex items-center justify-center min-h-screen p-4">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+
+            <!-- Modal header -->
+            <div class="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                <h3 id="triggerModalTitle" class="text-sm font-semibold text-gray-900 dark:text-white">Create Trigger</h3>
+                <button onclick="TriggerPage.closeModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+                    <i class="fas fa-times text-sm"></i>
+                </button>
+            </div>
+
+            <div class="px-4 py-4 space-y-4">
+                <input type="hidden" id="triggerFormId">
+
+                <!-- Row 1: Name + Type -->
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label for="triggerName" class="block text-xs font-medium text-gray-700 dark:text-gray-300">Name *</label>
+                        <input type="text" id="triggerName" placeholder="Daily report"
+                            class="mt-1 block w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500">
+                    </div>
+                    <div>
+                        <label for="triggerType" class="block text-xs font-medium text-gray-700 dark:text-gray-300">Type *</label>
+                        <select id="triggerType" onchange="TriggerPage.updateTypeVisibility()"
+                            class="mt-1 block w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500">
+                            <option value="cron">Cron (schedule)</option>
+                            <option value="webhook">Webhook (HTTP POST)</option>
+                            <option value="file_watch">File Watch ⚠ stub</option>
+                            <option value="event_bus">Event Bus ⚠ stub</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Row 2: Project + Agent -->
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label for="triggerProject" class="block text-xs font-medium text-gray-700 dark:text-gray-300">Project *</label>
+                        <select id="triggerProject"
+                            class="mt-1 block w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500">
+                            <option value="">— select project —</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="triggerAgent" class="block text-xs font-medium text-gray-700 dark:text-gray-300">Agent *</label>
+                        <select id="triggerAgent"
+                            class="mt-1 block w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500">
+                            <option value="">— select project first —</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Description -->
+                <div>
+                    <label for="triggerDescription" class="block text-xs font-medium text-gray-700 dark:text-gray-300">Description</label>
+                    <input type="text" id="triggerDescription" placeholder="Optional description"
+                        class="mt-1 block w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500">
+                </div>
+
+                <!-- Prompt -->
+                <div>
+                    <label for="triggerPrompt" class="block text-xs font-medium text-gray-700 dark:text-gray-300">Prompt *</label>
+                    <textarea id="triggerPrompt" rows="3" placeholder="Message to send the agent when triggered…"
+                        class="mt-1 block w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 resize-y"></textarea>
+                </div>
+
+                <!-- Cron section -->
+                <div id="triggerCronSection" class="space-y-2">
+                    <div>
+                        <label for="triggerCronExpr" class="block text-xs font-medium text-gray-700 dark:text-gray-300">Cron Expression (UTC) *</label>
+                        <input type="text" id="triggerCronExpr" placeholder="0 9 * * 1-5  (weekdays at 09:00 UTC)"
+                            class="mt-1 block w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-blue-500">
+                        <p class="mt-0.5 text-xs text-gray-400">5-field standard cron: minute hour day month weekday</p>
+                    </div>
+                </div>
+
+                <!-- Webhook section (shown in edit mode when type=webhook) -->
+                <div id="triggerWebhookSection" class="hidden space-y-2">
+                    <div>
+                        <label class="block text-xs font-medium text-gray-700 dark:text-gray-300">Webhook URL</label>
+                        <input type="text" id="triggerWebhookUrl" readonly placeholder="Generated after save"
+                            class="mt-1 block w-full border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-500 dark:text-gray-400 rounded px-2 py-1.5 text-xs font-mono cursor-default">
+                    </div>
+                    <p class="text-xs text-gray-500 dark:text-gray-400">
+                        Fire with: <code class="bg-gray-100 dark:bg-gray-700 px-1 rounded">POST {url}</code> and <code class="bg-gray-100 dark:bg-gray-700 px-1 rounded">X-MATE-Trigger-Key: &lt;key&gt;</code> header
+                    </p>
+                    <div class="flex items-center gap-2">
+                        <button type="button" id="regenerateKeyBtn" onclick="TriggerPage.regenerateKey()"
+                            class="px-2 py-1 text-xs bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200 rounded hover:bg-yellow-200 dark:hover:bg-yellow-800">
+                            <i class="fas fa-sync-alt mr-1"></i>Regenerate Key
+                        </button>
+                        <span class="text-xs text-gray-400">New key is shown once after regeneration</span>
+                    </div>
+                </div>
+
+                <!-- Stub warning -->
+                <div id="triggerStubWarning" class="hidden">
+                    <div class="bg-yellow-50 dark:bg-yellow-900 border border-yellow-200 dark:border-yellow-700 rounded px-3 py-2">
+                        <p class="text-xs text-yellow-800 dark:text-yellow-200">
+                            <i class="fas fa-exclamation-triangle mr-1"></i>
+                            This trigger type is not yet implemented. The trigger will be saved but will return a "not yet implemented" status when fired.
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Output section -->
+                <div class="border-t border-gray-200 dark:border-gray-700 pt-3 space-y-3">
+                    <div>
+                        <label for="triggerOutputType" class="block text-xs font-medium text-gray-700 dark:text-gray-300">Output Destination</label>
+                        <select id="triggerOutputType" onchange="TriggerPage.updateOutputVisibility()"
+                            class="mt-1 block w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500">
+                            <option value="memory_block">Memory Block</option>
+                            <option value="http_callback">HTTP Callback</option>
+                            <option value="email">Email</option>
+                        </select>
+                    </div>
+
+                    <!-- Memory block config -->
+                    <div id="outputMemoryConfig">
+                        <label for="outputMemoryLabel" class="block text-xs font-medium text-gray-700 dark:text-gray-300">Memory Block Label</label>
+                        <input type="text" id="outputMemoryLabel" placeholder="e.g. daily_report_output"
+                            class="mt-1 block w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500">
+                        <p class="mt-0.5 text-xs text-gray-400">Block will be created if it doesn't exist</p>
+                    </div>
+
+                    <!-- HTTP callback config -->
+                    <div id="outputHttpConfig" class="hidden space-y-2">
+                        <div>
+                            <label for="outputHttpUrl" class="block text-xs font-medium text-gray-700 dark:text-gray-300">Callback URL *</label>
+                            <input type="url" id="outputHttpUrl" placeholder="https://your-service.example.com/webhook"
+                                class="mt-1 block w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500">
+                        </div>
+                        <div>
+                            <label for="outputHttpHeaders" class="block text-xs font-medium text-gray-700 dark:text-gray-300">Headers (JSON, optional)</label>
+                            <textarea id="outputHttpHeaders" rows="2" placeholder='{"Authorization": "Bearer token"}'
+                                class="mt-1 block w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none"></textarea>
+                        </div>
+                    </div>
+
+                    <!-- Email config -->
+                    <div id="outputEmailConfig" class="hidden space-y-2">
+                        <div>
+                            <label for="outputEmailTo" class="block text-xs font-medium text-gray-700 dark:text-gray-300">To *</label>
+                            <input type="email" id="outputEmailTo" placeholder="recipient@example.com"
+                                class="mt-1 block w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500">
+                        </div>
+                        <div>
+                            <label for="outputEmailSubject" class="block text-xs font-medium text-gray-700 dark:text-gray-300">Subject</label>
+                            <input type="text" id="outputEmailSubject" placeholder="MATE Trigger Result"
+                                class="mt-1 block w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500">
+                        </div>
+                        <p class="text-xs text-gray-400">Requires <code>SMTP_HOST</code>, <code>SMTP_USER</code>, <code>SMTP_PASS</code> env vars</p>
+                    </div>
+                </div>
+
+                <!-- Footer buttons -->
+                <div class="flex justify-end gap-2 pt-2 border-t border-gray-200 dark:border-gray-700">
+                    <button type="button" onclick="TriggerPage.closeModal()"
+                        class="px-3 py-1.5 text-xs text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700">
+                        Cancel
+                    </button>
+                    <button type="button" id="triggerSubmitBtn" onclick="TriggerPage.submitForm()"
+                        class="px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded flex items-center gap-1">
+                        <i id="triggerSubmitLoader" class="fas fa-spinner fa-spin hidden"></i>
+                        <span id="triggerSubmitText">Create Trigger</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
