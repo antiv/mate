@@ -32,6 +32,7 @@ python auth_server.py
 | Adding/modifying agents | Edit Python code, redeploy | Web dashboard or database, no redeploy |
 | Switching LLM providers | Code changes per agent | Change `model_name` in config (e.g. `ollama_chat/llama3.2`) |
 | Multi-team isolation | Manual | Project-scoped agent hierarchies |
+| Authentication | Basic only | Google / GitHub SSO + Basic Auth fallback |
 | Access control | Build your own | Built-in RBAC per agent |
 | Memory persistence | In-memory only | DB-backed conversation history + persistent memory blocks |
 | Token cost tracking | DIY | 4-type token tracking with analytics dashboard |
@@ -104,7 +105,8 @@ Built-in Swagger UI and ReDoc for both the Admin API and ADK API, accessible fro
 - **Token Usage Tracking**: Comprehensive token monitoring across all agents
 - **Model Flexibility**: Support for multiple AI models via OpenRouter and Gemini
 - **Dynamic Memory**: Database-backed memory blocks for agent context and bootstrap instructions
-- **HTTP Basic Authentication**: Secure access to web interface
+- **OAuth 2.0 / OIDC Single Sign-On**: Native Google (OIDC) and GitHub login with automatic user provisioning and RBAC role assignment; Basic Auth remains available as a fallback
+- **Encrypted Session Cookies**: httponly, SameSite=Lax signed sessions replace credential storage in the browser; Secure flag available for TLS deployments
 - **Embeddable Chat Widget**: Drop a `<script>` tag on any website to add AI chat connected to your agents
 - **Eval Framework**: Test suites with exact match, semantic similarity, and LLM-as-judge evaluation; auto-invokes agents, tracks score history, and fires regression alerts
 - **Hallucination Guardrail**: LLM-scored factual consistency check per agent response; configurable threshold, fail-open on errors
@@ -1218,9 +1220,49 @@ See [documents/MCP_SERVERS.md](documents/MCP_SERVERS.md) for detailed MCP client
 
 ## 🔐 Authentication and Security
 
+MATE supports two authentication modes that can be used side-by-side:
+
+| Mode | Best for | How to enable |
+|---|---|---|
+| **OAuth / SSO** | Teams, enterprise, multi-user | Set `GOOGLE_CLIENT_ID` / `GITHUB_CLIENT_ID` |
+| **HTTP Basic Auth** | Local dev, Docker, single-user | Always available; set `AUTH_USERNAME` / `AUTH_PASSWORD` |
+
+### OAuth 2.0 / OIDC Single Sign-On
+
+Add Google and/or GitHub login by setting the relevant env vars. The login page automatically shows the configured provider buttons.
+
+**Google (OIDC)**
+```bash
+GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=your-client-secret
+# Authorized redirect URI in Google Console: https://your-domain/auth/callback/google
+```
+
+**GitHub (OAuth 2.0)**
+```bash
+GITHUB_CLIENT_ID=your-github-client-id
+GITHUB_CLIENT_SECRET=your-github-client-secret
+# Authorization callback URL in GitHub Settings: https://your-domain/auth/callback/github
+```
+
+**Required for production sessions**
+```bash
+SECRET_KEY=<random-32-byte-hex>   # Signs the encrypted session cookie
+SESSION_SECURE_COOKIE=true        # Adds the Secure flag (requires HTTPS)
+OAUTH_DEFAULT_ROLE=user           # Role assigned to new SSO users (user | admin)
+```
+
+**OAuth flows**
+- `GET /auth/login/{provider}` — redirects the browser to Google or GitHub
+- `GET /auth/callback/{provider}` — exchanges the code, upserts the user in the `users` table, sets an encrypted session cookie, and redirects to `/dashboard`
+
+New users are automatically created with the role defined in `OAUTH_DEFAULT_ROLE`. Roles can be updated afterwards in the Users dashboard.
+
+> Full setup guide (console walkthrough, enterprise domain/org restrictions): **[documents/SSO_OAUTH.md](documents/SSO_OAUTH.md)**
+
 ### HTTP Basic Authentication
 
-The system includes built-in HTTP Basic Authentication:
+Always available, even when OAuth is configured. Useful for API access, CI pipelines, and local development.
 
 ```bash
 # Test authenticated endpoint
@@ -1230,8 +1272,6 @@ curl -u admin:mate http://localhost:8000/list-apps
 CREDENTIALS=$(echo -n "admin:mate" | base64)
 curl -H "Authorization: Basic $CREDENTIALS" http://localhost:8000/list-apps
 ```
-
-### Environment-Based Credentials
 
 ```bash
 # Custom credentials via environment variables
@@ -1315,6 +1355,7 @@ This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENS
 
 For more detailed information, see:
 
+- **[documents/SSO_OAUTH.md](documents/SSO_OAUTH.md)**: OAuth 2.0 / OIDC SSO—Google and GitHub setup, enterprise domain/org restrictions, session security, env var reference
 - **[documents/END_USER_GUIDE.md](documents/END_USER_GUIDE.md)**: End user guide—chatting with agents, dashboard usage, MCP client setup (Claude Desktop, Cursor)
 - **[documents/WIDGET_INTEGRATION.md](documents/WIDGET_INTEGRATION.md)**: Embeddable chat widget—embed code, JS API, admin panel, security, theming
 - **[documents/ARCHITECTURE.pdf](documents/ARCHITECTURE.pdf)**: System architecture documentation (PDF)—server layers, data flows, agent initialization, MCP integration

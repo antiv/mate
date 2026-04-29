@@ -16,57 +16,77 @@
         </button>
     </div>
 
+    <!-- Filters -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+        <h3 class="text-sm font-semibold text-gray-900 dark:text-white mb-3">Filters</h3>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <div>
+                <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Search</label>
+                <input type="text" id="filterSearch" placeholder="User ID, name or email…"
+                    class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-sm">
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Provider</label>
+                <select id="filterProvider" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-sm">
+                    <option value="">All providers</option>
+                    <option value="google">Google</option>
+                    <option value="github">GitHub</option>
+                    <option value="local">Local</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Role</label>
+                <input type="text" id="filterRole" placeholder="e.g. admin"
+                    class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-sm">
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="button" onclick="applyFilters()" class="flex-1 px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded min-h-[34px]">Apply</button>
+                <button type="button" onclick="clearFilters()" class="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded min-h-[34px]">Clear</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Users Table -->
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
-        <div class="px-4 py-2 border-b border-gray-200 dark:border-gray-700">
-            <h3 class="text-sm font-semibold text-gray-900 dark:text-white">Users</h3>
-        </div>
-        <div class="overflow-auto max-h-[calc(100vh-200px)] table-responsive">
+        <div class="overflow-auto max-h-[calc(100vh-340px)] table-responsive">
             <table id="usersTable" class="w-full divide-y divide-gray-200 dark:divide-gray-700 table-fixed table-cards-mobile">
                 <thead class="bg-gray-50 dark:bg-gray-700">
                     <tr>
-                        <th class="px-3 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-1/6">User ID</th>
-                        <th class="px-3 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-1/6">Roles</th>
-                        <th class="px-3 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-1/6">Profile</th>
-                        <th class="px-3 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-1/6">Created</th>
-                        <th class="px-3 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-1/6">Last Updated</th>
-                        <th class="px-3 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-1/6">Actions</th>
+                        <th class="px-3 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[18%]">User ID</th>
+                        <th class="px-3 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[18%]">Name / Email</th>
+                        <th class="px-3 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[10%]">Provider</th>
+                        <th class="px-3 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[16%]">Roles</th>
+                        <th class="px-3 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[10%]">Profile</th>
+                        <th class="px-3 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[13%]">Created</th>
+                        <th class="px-3 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[15%]">Actions</th>
                     </tr>
                 </thead>
-                <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700" id="usersTableBody">
-                    {% for user in users %}
-                    <tr class="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700" onclick="event.stopPropagation(); editUser('{{ user.user_id }}')">
-                        <td class="px-3 py-1.5 text-xs font-medium text-gray-900 dark:text-white truncate" data-label="User ID">{{ user.user_id }}</td>
-                        <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate" data-label="Roles">
-                            {% for role in user.roles %}
-                                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 mr-1">{{ role }}</span>
-                            {% endfor %}
-                        </td>
-                        <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate" data-label="Profile">
-                            {% if user.profile_data %}
-                                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200">
-                                    <i class="fas fa-check mr-1"></i>Has Profile
-                                </span>
-                            {% else %}
-                                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400">
-                                    <i class="fas fa-times mr-1"></i>No Profile
-                                </span>
-                            {% endif %}
-                        </td>
-                        <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate" data-label="Created">{{ user.created_at[:16].replace('T', ' ') if user.created_at else 'N/A' }}</td>
-                        <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate" data-label="Last Updated">{{ user.updated_at[:16].replace('T', ' ') if user.updated_at else 'N/A' }}</td>
-                        <td class="px-3 py-1.5 text-xs font-medium space-x-1" data-label="Actions">
-                            <button onclick="event.stopPropagation(); editUser('{{ user.user_id }}')" class="text-blue-600 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300 min-h-[44px] min-w-[44px] touch-target px-2">
-                                <i class="fas fa-edit"></i> Edit
-                            </button>
-                            <button onclick="event.stopPropagation(); deleteUser('{{ user.user_id }}')" class="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300 min-h-[44px] min-w-[44px] touch-target px-2">
-                                <i class="fas fa-trash"></i> Delete
-                            </button>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
+                <tbody id="usersTableBody" class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700"></tbody>
             </table>
+        </div>
+
+        <!-- Pagination footer -->
+        <div class="px-4 py-2 bg-gray-50 dark:bg-gray-700/50 border-t border-gray-200 dark:border-gray-700 flex flex-wrap items-center justify-between gap-2 text-xs text-gray-600 dark:text-gray-400">
+            <div id="paginationInfo">Showing 0 of 0 users</div>
+            <div class="flex items-center gap-3">
+                <div class="flex items-center gap-1.5">
+                    <label for="pageSizeSelect">Per page:</label>
+                    <select id="pageSizeSelect" onchange="changePageSize()" class="border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-1.5 py-0.5 text-xs">
+                        <option value="10">10</option>
+                        <option value="25" selected>25</option>
+                        <option value="50">50</option>
+                        <option value="100">100</option>
+                        <option value="0">All</option>
+                    </select>
+                </div>
+                <div class="flex items-center gap-1" id="pageButtons">
+                    <button id="btnFirst" onclick="goToPage(1)" class="px-2 py-0.5 rounded hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-40 disabled:cursor-not-allowed" title="First page">&laquo;</button>
+                    <button id="btnPrev"  onclick="prevPage()"  class="px-2 py-0.5 rounded hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-40 disabled:cursor-not-allowed">Prev</button>
+                    <span id="pageIndicator" class="px-2">1 / 1</span>
+                    <button id="btnNext"  onclick="nextPage()"  class="px-2 py-0.5 rounded hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-40 disabled:cursor-not-allowed">Next</button>
+                    <button id="btnLast"  onclick="goToPage(totalPages())" class="px-2 py-0.5 rounded hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-40 disabled:cursor-not-allowed" title="Last page">&raquo;</button>
+                </div>
+            </div>
         </div>
     </div>
 </div>
@@ -111,10 +131,25 @@
             <form id="editUserForm" class="px-6 py-4">
                 <input type="hidden" id="editUserId" name="editUserId">
                 <div class="space-y-4">
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">User ID</label>
-                        <input type="text" id="editUserIdDisplay" disabled class="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 bg-gray-100 dark:bg-gray-600 dark:text-gray-400">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">User ID</label>
+                            <input type="text" id="editUserIdDisplay" disabled class="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 bg-gray-100 dark:bg-gray-600 dark:text-gray-400 text-sm">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Provider</label>
+                            <div id="editUserProviderBadge" class="mt-1 flex items-center h-[42px]"></div>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Display Name</label>
+                            <input type="text" id="editUserDisplayName" disabled class="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 bg-gray-100 dark:bg-gray-600 dark:text-gray-400 text-sm">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Email</label>
+                            <input type="text" id="editUserEmail" disabled class="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 bg-gray-100 dark:bg-gray-600 dark:text-gray-400 text-sm">
+                        </div>
                     </div>
+                    <hr class="border-gray-200 dark:border-gray-700">
                     <div>
                         <label for="editUserRoles" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Roles (comma-separated)</label>
                         <input type="text" id="editUserRoles" name="editUserRoles" class="mt-1 block w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
@@ -139,174 +174,266 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="/static/js/table-sorting.js"></script>
 <script>
-    function showCreateUserModal() {
-        document.getElementById('createUserModal').classList.remove('hidden');
+(function () {
+    // ── Data ─────────────────────────────────────────────────────────────────
+    const ALL_USERS = {{ users | tojson | safe }};
+
+    // ── State ─────────────────────────────────────────────────────────────────
+    let filtered  = [...ALL_USERS];
+    let page      = 1;
+    let pageSize  = 25;   // matches the <select> default
+
+    // ── Provider badge HTML ───────────────────────────────────────────────────
+    const BADGE = {
+        google: `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300">
+                    <svg class="w-3 h-3" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+                    Google</span>`,
+        github: `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300">
+                    <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path fill-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" clip-rule="evenodd"/></svg>
+                    GitHub</span>`,
+        local:  `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300">
+                    <i class="fas fa-key" style="font-size:10px"></i>
+                    Local</span>`,
+    };
+
+    function providerBadge(p) { return BADGE[p] || BADGE.local; }
+
+    // ── Filter logic ──────────────────────────────────────────────────────────
+    function matchesFilters(u) {
+        const q        = document.getElementById('filterSearch').value.trim().toLowerCase();
+        const provider = document.getElementById('filterProvider').value;
+        const role     = document.getElementById('filterRole').value.trim().toLowerCase();
+
+        if (q) {
+            const haystack = [u.user_id, u.display_name, u.email]
+                .filter(Boolean).join(' ').toLowerCase();
+            if (!haystack.includes(q)) return false;
+        }
+        if (provider) {
+            const p = u.oauth_provider || 'local';
+            if (p !== provider) return false;
+        }
+        if (role) {
+            if (!u.roles.some(r => r.toLowerCase().includes(role))) return false;
+        }
+        return true;
     }
 
-    function hideCreateUserModal() {
+    window.applyFilters = function () {
+        filtered = ALL_USERS.filter(matchesFilters);
+        page = 1;
+        render();
+    };
+
+    window.clearFilters = function () {
+        document.getElementById('filterSearch').value   = '';
+        document.getElementById('filterProvider').value = '';
+        document.getElementById('filterRole').value     = '';
+        applyFilters();
+    };
+
+    // ── Pagination helpers ────────────────────────────────────────────────────
+    window.totalPages = function () {
+        if (pageSize === 0) return 1;
+        return Math.max(1, Math.ceil(filtered.length / pageSize));
+    };
+
+    window.changePageSize = function () {
+        pageSize = parseInt(document.getElementById('pageSizeSelect').value, 10);
+        page = 1;
+        render();
+    };
+
+    window.goToPage = function (p) {
+        page = Math.max(1, Math.min(p, totalPages()));
+        render();
+    };
+
+    window.prevPage = function () { goToPage(page - 1); };
+    window.nextPage = function () { goToPage(page + 1); };
+
+    // ── Render ────────────────────────────────────────────────────────────────
+    function formatDate(iso) {
+        return iso ? iso.slice(0, 16).replace('T', ' ') : 'N/A';
+    }
+
+    function esc(s) {
+        return String(s ?? '')
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function render() {
+        const tp    = totalPages();
+        const start = pageSize === 0 ? 0 : (page - 1) * pageSize;
+        const slice = pageSize === 0 ? filtered : filtered.slice(start, start + pageSize);
+        const end   = start + slice.length;
+
+        // Info text
+        const infoEl = document.getElementById('paginationInfo');
+        if (filtered.length === ALL_USERS.length) {
+            infoEl.textContent = `Showing ${slice.length ? start + 1 : 0}–${end} of ${filtered.length} users`;
+        } else {
+            infoEl.textContent = `Showing ${slice.length ? start + 1 : 0}–${end} of ${filtered.length} filtered (${ALL_USERS.length} total)`;
+        }
+
+        // Page indicator + button states
+        document.getElementById('pageIndicator').textContent = `${page} / ${tp}`;
+        document.getElementById('btnFirst').disabled = page <= 1;
+        document.getElementById('btnPrev').disabled  = page <= 1;
+        document.getElementById('btnNext').disabled  = page >= tp;
+        document.getElementById('btnLast').disabled  = page >= tp;
+        document.getElementById('pageButtons').style.display = (pageSize === 0 || filtered.length === 0) ? 'none' : '';
+
+        // Table rows
+        const tbody = document.getElementById('usersTableBody');
+        if (slice.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="7" class="px-3 py-6 text-sm text-center text-gray-500 dark:text-gray-400">No users match the current filters.</td></tr>`;
+            return;
+        }
+
+        tbody.innerHTML = slice.map(u => {
+            const provider  = u.oauth_provider || 'local';
+            const createdAt = formatDate(u.created_at);
+            const hasProfile = u.profile_data ? 'Set' : '';
+            const rolesHtml = u.roles.map(r =>
+                `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 mr-1">${esc(r)}</span>`
+            ).join('');
+
+            let nameEmail = '<span class="text-gray-400 dark:text-gray-500">—</span>';
+            if (u.display_name || u.email) {
+                nameEmail = '';
+                if (u.display_name) nameEmail += `<div class="font-medium truncate">${esc(u.display_name)}</div>`;
+                if (u.email && u.email !== u.user_id)
+                    nameEmail += `<div class="text-gray-400 dark:text-gray-500 truncate">${esc(u.email)}</div>`;
+            }
+
+            return `<tr class="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700" onclick="event.stopPropagation(); editUser('${esc(u.user_id)}')">
+                <td class="px-3 py-1.5 text-xs font-medium text-gray-900 dark:text-white truncate" data-label="User ID">${esc(u.user_id)}</td>
+                <td class="px-3 py-1.5 text-xs text-gray-700 dark:text-gray-300" data-label="Name / Email">${nameEmail}</td>
+                <td class="px-3 py-1.5 text-xs" data-label="Provider">${providerBadge(provider)}</td>
+                <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400" data-label="Roles">${rolesHtml}</td>
+                <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400" data-label="Profile">
+                    ${hasProfile
+                        ? `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200"><i class="fas fa-check mr-1"></i>Set</span>`
+                        : `<span class="text-gray-400 dark:text-gray-500">—</span>`}
+                </td>
+                <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate" data-label="Created">${createdAt}</td>
+                <td class="px-3 py-1.5 text-xs font-medium space-x-1" data-label="Actions">
+                    <button onclick="event.stopPropagation(); editUser('${esc(u.user_id)}')" class="text-blue-600 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300 min-h-[44px] min-w-[44px] touch-target px-2">
+                        <i class="fas fa-edit"></i> Edit
+                    </button>
+                    <button onclick="event.stopPropagation(); deleteUser('${esc(u.user_id)}')" class="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300 min-h-[44px] min-w-[44px] touch-target px-2">
+                        <i class="fas fa-trash"></i> Delete
+                    </button>
+                </td>
+            </tr>`;
+        }).join('');
+    }
+
+    // ── Modal helpers ─────────────────────────────────────────────────────────
+    window.showCreateUserModal = function () {
+        document.getElementById('createUserModal').classList.remove('hidden');
+    };
+    window.hideCreateUserModal = function () {
         document.getElementById('createUserModal').classList.add('hidden');
         document.getElementById('createUserForm').reset();
-    }
-
-    function showEditUserModal() {
+    };
+    window.showEditUserModal = function () {
         document.getElementById('editUserModal').classList.remove('hidden');
-    }
-
-    function hideEditUserModal() {
+    };
+    window.hideEditUserModal = function () {
         document.getElementById('editUserModal').classList.add('hidden');
         document.getElementById('editUserForm').reset();
-    }
+    };
 
-    function editUser(userId) {
-        // Find the user from the users array
-        const users = {{ users | tojson | safe }};
-        const user = users.find(u => u.user_id === userId);
-        
-        if (!user) {
-            showNotification('User not found', 'error');
-            return;
-        }
+    window.editUser = function (userId) {
+        const user = ALL_USERS.find(u => u.user_id === userId);
+        if (!user) { showNotification('User not found', 'error'); return; }
 
-        document.getElementById('editUserId').value = userId;
-        document.getElementById('editUserIdDisplay').value = userId;
-        document.getElementById('editUserRoles').value = user.roles.join(', ');
-        document.getElementById('editUserProfile').value = user.profile_data || '';
+        document.getElementById('editUserId').value         = userId;
+        document.getElementById('editUserIdDisplay').value  = userId;
+        document.getElementById('editUserDisplayName').value = user.display_name || '';
+        document.getElementById('editUserEmail').value      = user.email || '';
+        document.getElementById('editUserRoles').value      = user.roles.join(', ');
+        document.getElementById('editUserProfile').value    = user.profile_data || '';
+        document.getElementById('editUserProviderBadge').innerHTML =
+            providerBadge(user.oauth_provider || 'local');
+
         showEditUserModal();
-    }
+    };
 
-    async function deleteUser(userId) {
-        if (!confirm(`Are you sure you want to delete user "${userId}"?`)) {
-            return;
-        }
-
+    window.deleteUser = async function (userId) {
+        if (!confirm(`Are you sure you want to delete user "${userId}"?`)) return;
         try {
-            const response = await fetch(`/dashboard/api/users/${userId}`, {
-                method: 'DELETE',
-                credentials: 'same-origin'  // Use same-origin credentials
+            const r = await fetch(`/dashboard/api/users/${userId}`, {
+                method: 'DELETE', credentials: 'same-origin'
             });
-            
-            const result = await response.json();
-            
-            if (result.success) {
-                showNotification('User deleted successfully');
-                location.reload();
-            } else {
-                showNotification(result.message || 'Failed to delete user', 'error');
-            }
-        } catch (error) {
-            showNotification('Error deleting user', 'error');
-        }
-    }
+            const res = await r.json();
+            if (res.success) { showNotification('User deleted successfully'); location.reload(); }
+            else showNotification(res.message || 'Failed to delete user', 'error');
+        } catch { showNotification('Error deleting user', 'error'); }
+    };
 
-    // Handle create user form submission
-    document.getElementById('createUserForm').addEventListener('submit', async function(e) {
+    // ── Form submissions ──────────────────────────────────────────────────────
+    document.getElementById('createUserForm').addEventListener('submit', async function (e) {
         e.preventDefault();
-        
-        // Show loader
-        const submitBtn = document.getElementById('createUserSubmitBtn');
-        const loader = document.getElementById('createUserLoader');
-        const btnText = document.getElementById('createUserBtnText');
-        
-        submitBtn.disabled = true;
-        loader.classList.remove('hidden');
-        btnText.textContent = 'Creating...';
-        
-        const formData = new FormData();
-        formData.append('user_id', document.getElementById('userId').value);
-        
-        const rolesInput = document.getElementById('userRoles').value;
-        const rolesArray = rolesInput ? rolesInput.split(',').map(r => r.trim()) : ['user'];
-        formData.append('roles', JSON.stringify(rolesArray));
+        const btn = document.getElementById('createUserSubmitBtn');
+        const ldr = document.getElementById('createUserLoader');
+        const txt = document.getElementById('createUserBtnText');
+        btn.disabled = true; ldr.classList.remove('hidden'); txt.textContent = 'Creating…';
+
+        const fd = new FormData();
+        fd.append('user_id', document.getElementById('userId').value);
+        const ri = document.getElementById('userRoles').value;
+        fd.append('roles', JSON.stringify(ri ? ri.split(',').map(r => r.trim()) : ['user']));
 
         try {
-            const response = await fetch('/dashboard/api/users', {
-                method: 'POST',
-                credentials: 'same-origin',  // Use same-origin credentials
-                body: formData
+            const r = await fetch('/dashboard/api/users', {
+                method: 'POST', credentials: 'same-origin', body: fd
             });
-            
-            const result = await response.json();
-            
-            if (result.success) {
-                showNotification('User created successfully');
-                hideCreateUserModal();
-                location.reload();
-            } else {
-                showNotification(result.message || 'Failed to create user', 'error');
-            }
-        } catch (error) {
-            showNotification('Error creating user', 'error');
-        } finally {
-            // Hide loader
-            submitBtn.disabled = false;
-            loader.classList.add('hidden');
-            btnText.textContent = 'Create User';
-        }
+            const res = await r.json();
+            if (res.success) { showNotification('User created successfully'); hideCreateUserModal(); location.reload(); }
+            else showNotification(res.message || 'Failed to create user', 'error');
+        } catch { showNotification('Error creating user', 'error'); }
+        finally { btn.disabled = false; ldr.classList.add('hidden'); txt.textContent = 'Create User'; }
     });
 
-    // Handle edit user form submission
-    document.getElementById('editUserForm').addEventListener('submit', async function(e) {
+    document.getElementById('editUserForm').addEventListener('submit', async function (e) {
         e.preventDefault();
-        
-        // Show loader
-        const submitBtn = document.getElementById('editUserSubmitBtn');
-        const loader = document.getElementById('editUserLoader');
-        const btnText = document.getElementById('editUserBtnText');
-        
-        submitBtn.disabled = true;
-        loader.classList.remove('hidden');
-        btnText.textContent = 'Updating...';
-        
+        const btn = document.getElementById('editUserSubmitBtn');
+        const ldr = document.getElementById('editUserLoader');
+        const txt = document.getElementById('editUserBtnText');
+        btn.disabled = true; ldr.classList.remove('hidden'); txt.textContent = 'Updating…';
+
         const userId = document.getElementById('editUserId').value;
-        const formData = new FormData();
-        
-        const rolesInput = document.getElementById('editUserRoles').value;
-        const rolesArray = rolesInput ? rolesInput.split(',').map(r => r.trim()) : ['user'];
-        formData.append('roles', JSON.stringify(rolesArray));
-        
-        const profileData = document.getElementById('editUserProfile').value;
-        if (profileData) {
-            formData.append('profile_data', profileData);
-        }
+        const fd = new FormData();
+        const ri = document.getElementById('editUserRoles').value;
+        fd.append('roles', JSON.stringify(ri ? ri.split(',').map(r => r.trim()) : ['user']));
+        const pd = document.getElementById('editUserProfile').value;
+        if (pd) fd.append('profile_data', pd);
 
         try {
-            const response = await fetch(`/dashboard/api/users/${userId}`, {
-                method: 'PUT',
-                credentials: 'same-origin',  // Use same-origin credentials
-                body: formData
+            const r = await fetch(`/dashboard/api/users/${userId}`, {
+                method: 'PUT', credentials: 'same-origin', body: fd
             });
-            
-            const result = await response.json();
-            
-            if (result.success) {
-                showNotification('User updated successfully');
-                hideEditUserModal();
-                location.reload();
-            } else {
-                showNotification(result.message || 'Failed to update user', 'error');
-            }
-        } catch (error) {
-            showNotification('Error updating user', 'error');
-        } finally {
-            // Hide loader
-            submitBtn.disabled = false;
-            loader.classList.add('hidden');
-            btnText.textContent = 'Update User';
-        }
+            const res = await r.json();
+            if (res.success) { showNotification('User updated successfully'); hideEditUserModal(); location.reload(); }
+            else showNotification(res.message || 'Failed to update user', 'error');
+        } catch { showNotification('Error updating user', 'error'); }
+        finally { btn.disabled = false; ldr.classList.add('hidden'); txt.textContent = 'Update User'; }
     });
 
-    // Initialize table sorting
-    document.addEventListener('DOMContentLoaded', function() {
-        initMultiColumnTableSorting('usersTable', {
-            0: { sortable: true, dataType: 'text' }, // User ID
-            1: { sortable: true, dataType: 'text' }, // Roles
-            2: { sortable: true, dataType: 'text' }, // Profile
-            3: { sortable: true, dataType: 'date' }, // Created
-            4: { sortable: true, dataType: 'date' }, // Last Updated
-            5: { sortable: false } // Actions
+    // Enter key on filter inputs triggers apply
+    ['filterSearch', 'filterRole'].forEach(id => {
+        document.getElementById(id).addEventListener('keydown', e => {
+            if (e.key === 'Enter') applyFilters();
         });
     });
+
+    // ── Init ──────────────────────────────────────────────────────────────────
+    render();
+})();
 </script>
 {% endblock %}
