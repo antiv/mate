@@ -395,7 +395,9 @@ async def _generate_image_internal(prompt: str, tool_context: ToolContext = None
             "prompt": prompt,
             "artifact": artifact_info,
             "model": model,
-            "success": True
+            "success": True,
+            "status": "COMPLETE",
+            "note": "Image generation is DONE. Do NOT call this tool again for the same request. Present the result to the user."
         }
         
         # Add appropriate image data based on what's available
@@ -735,9 +737,10 @@ async def generate_image_nano_banana(prompt: str, tool_context: ToolContext = No
                         except Exception as url_err:
                             logger.warning(f"Could not generate artifact URLs: {url_err}")
 
-                        # Store artifact filename in session state for future reference
-                        tool_context.state["last_generated_image"] = filename
-                        tool_context.state["current_asset_name"] = asset_name
+                        # NOTE: Do NOT modify tool_context.state here.
+                        # Setting state inside a tool causes a session save race condition
+                        # with ADK's own session update, triggering 'stale session' errors
+                        # and infinite retry loops.
 
                         artifact_info = {
                             "filename": filename,
@@ -754,6 +757,8 @@ async def generate_image_nano_banana(prompt: str, tool_context: ToolContext = No
                             "artifact": artifact_info,
                             "model": model_name,
                             "success": True,
+                            "status": "COMPLETE",
+                            "note": "Image generation is DONE. Do NOT call this tool again for the same request. Present the result to the user.",
                             "image_access": f"Image generated successfully! Saved as artifact: {filename} (version {saved_version} of {asset_name})"
                         }
                 except Exception as artifact_err:
@@ -764,7 +769,9 @@ async def generate_image_nano_banana(prompt: str, tool_context: ToolContext = No
                     "prompt": prompt,
                     "artifact": artifact_info,
                     "model": model_name,
-                    "success": True
+                    "success": True,
+                    "status": "COMPLETE",
+                    "note": "Image generation is DONE. Do NOT call this tool again for the same request. Present the result to the user."
                 }
                 
                 # NEVER include inline_data - it breaks context length
@@ -851,9 +858,10 @@ async def generate_image_nano_banana(prompt: str, tool_context: ToolContext = No
                             except Exception as url_err:
                                 logger.warning(f"Could not generate artifact URLs: {url_err}")
                             
-                            # Store artifact filename in session state for future reference
-                            tool_context.state["last_generated_image"] = artifact_filename
-                            tool_context.state["current_asset_name"] = asset_name
+                            # NOTE: Do NOT modify tool_context.state here.
+                            # Setting state inside a tool causes a session save race condition
+                            # with ADK's own session update, triggering 'stale session' errors
+                            # and infinite retry loops.
                             
                             logger.info(f"Saved generated image as artifact '{artifact_filename}' (version {version})")
                             
@@ -868,6 +876,8 @@ async def generate_image_nano_banana(prompt: str, tool_context: ToolContext = No
                                 },
                                 "model": model_name,
                                 "success": True,
+                                "status": "COMPLETE",
+                                "note": "Image generation is DONE. Do NOT call this tool again for the same request. Present the result to the user.",
                                 "image_access": f"Image generated successfully! Saved as artifact: {artifact_filename} (version {version} of {asset_name})"
                             }
                         else:

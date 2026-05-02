@@ -38,19 +38,23 @@ python auth_server.py
 | Token cost tracking | DIY | 4-type token tracking with analytics dashboard |
 | MCP interop | Not included | Agents as MCP servers + MCP tool consumption |
 | Self-building agents | Not included | Agents create/update/delete other agents at runtime |
+| Reusing architectures | Copy-paste code | Template Library with versioning and sync |
+| Debugging thought process | Console logs | Visual event tracing (OpenTelemetry) |
+| Autonomous execution | External cron jobs | Built-in scheduled tasks and event-based triggers |
+| Testing agent quality | Manual testing | Built-in Eval framework with regression alerts |
 | Deployment | Scripts | Docker Compose, auto-migrations, health checks |
 
 ## Screenshots
 
-### Dashboard Overview
+### Control Room
 Monitor usage, active agents, system health, and request trends at a glance.
 
-![Dashboard Overview](documents/images/overview.png)
+![Control Room](documents/images/overview.png)
 
-### Agent Management
+### Studio
 View and manage your full agent hierarchy — models, parent relationships, and status per project.
 
-![Agent Management](documents/images/agents_tree.png)
+![Studio](documents/images/agents_tree.png)
 
 ### Agent Configuration
 Edit every aspect of an agent: model, instruction, RBAC roles, memory blocks, tools, MCP servers, planner, content config, and schemas.
@@ -67,10 +71,10 @@ Toggle built-in tools or provide custom JSON — Google Drive, Search, CV, Image
 
 ![Tool Configuration](documents/images/tools_agent_modal.png)
 
-### Chat Interface
-Multi-agent chat with event tracing, tool calls, and persistent memory — here a chess team delegates to specialized sub-agents.
+### Workroom
+Multi-agent chat with event tracing, tool calls, and persistent memory — interact with your agents in real-time.
 
-![Chat Interface](documents/images/caht_chess_exsample.png)
+![Workroom](documents/images/workroom.png)
 
 ### Image Generation
 Agents can generate images via MCP tools (DALL-E 3, GPT Image, Nano Banana) and return artifacts directly in chat.

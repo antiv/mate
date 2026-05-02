@@ -144,6 +144,12 @@
                                 title="Open agent chat">
                                 <i class="fas fa-comments"></i>
                             </button>
+                            <button id="rootAgentWidgetKeysBtn" type="button" {% if not selected_project_id %}disabled{% endif
+                                %}
+                                class="hidden px-2 py-1 text-xs text-white bg-teal-600 hover:bg-teal-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 disabled:bg-gray-400 disabled:text-gray-200 disabled:cursor-not-allowed"
+                                title="Widget Keys">
+                                <i class="fas fa-code"></i>
+                            </button>
                             <div class="relative">
                                 <input type="text" id="agentSearch" placeholder="Search agents..." {% if not
                                     selected_project_id %}disabled{% endif %}
