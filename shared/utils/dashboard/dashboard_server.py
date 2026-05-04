@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Dict, Any, List, Optional
 from sqlalchemy.exc import IntegrityError
 from fastapi import FastAPI, Request, HTTPException, Depends, Form, File, UploadFile
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 
@@ -2040,7 +2040,12 @@ class DashboardServer:
         # Import here to avoid circular imports
         from server.auth import require_dashboard_auth
         return require_dashboard_auth(request)
-    
+
+    def _get_is_admin(self, request: Request) -> bool:
+        """Return True if the current request comes from an admin user."""
+        from server.auth import is_admin_user
+        return is_admin_user(request)
+
     def _has_memory_blocks(self, tool_config_dict):
         """Return True if agent has memory_blocks tool enabled."""
         memory_blocks = tool_config_dict.get('memory_blocks')
@@ -2056,39 +2061,50 @@ class DashboardServer:
         """Register all dashboard endpoints"""
         
         # Dashboard page endpoints
-        @self.app.get("/dashboard", response_class=HTMLResponse, tags=["Dashboard - Pages"])
+        @self.app.get("/dashboard", tags=["Dashboard - Pages"], include_in_schema=False)
         async def dashboard_index(request: Request, username: str = Depends(self._get_auth_user_dependency)):
-            """Dashboard main page"""
-            # Get real stats from database
+            """Redirect to Work Room (default space)."""
+            return RedirectResponse(url="/dashboard/workroom", status_code=302)
+
+        @self.app.get("/dashboard/overview", response_class=HTMLResponse, tags=["Dashboard - Pages"])
+        async def dashboard_overview(request: Request, username: str = Depends(self._get_auth_user_dependency)):
+            """Platform Overview — Control Room landing page."""
+            if not self._get_is_admin(request):
+                return RedirectResponse(url="/dashboard/workroom", status_code=302)
             stats = self._get_usage_stats(7)
-            
             return self.templates.TemplateResponse("dashboard/index.html", {
                 "request": request,
-                "page_title": "Dashboard",
+                "page_title": "Platform Overview",
                 "username": username,
-                "stats": stats
+                "stats": stats,
+                "is_admin": True,
             })
 
         @self.app.get("/dashboard/users", response_class=HTMLResponse, tags=["Dashboard - Pages"])
         async def dashboard_users(request: Request, username: str = Depends(self._get_auth_user_dependency)):
             """Dashboard users page"""
+            if not self._get_is_admin(request):
+                return RedirectResponse(url="/dashboard/workroom", status_code=302)
             users = self._get_all_users()
             return self.templates.TemplateResponse("dashboard/users.html", {
                 "request": request,
                 "page_title": "User Management",
                 "username": username,
-                "users": users
+                "users": users,
+                "is_admin": True,
             })
 
         @self.app.get("/dashboard/agents", response_class=HTMLResponse, tags=["Dashboard - Pages"])
         async def dashboard_agents(request: Request, username: str = Depends(self._get_auth_user_dependency)):
             """Dashboard agents page"""
+            if not self._get_is_admin(request):
+                return RedirectResponse(url="/dashboard/workroom", status_code=302)
             project_param = request.query_params.get("project_id")
             try:
                 selected_project_id = int(project_param) if project_param else None
             except (TypeError, ValueError):
                 selected_project_id = None
-            
+
             projects = self._get_all_projects()
             configs = self._get_all_agent_configs(selected_project_id) if selected_project_id else []
             return self.templates.TemplateResponse("dashboard/agents.html", {
@@ -2097,12 +2113,15 @@ class DashboardServer:
                 "username": username,
                 "configs": configs,
                 "projects": projects,
-                "selected_project_id": selected_project_id
+                "selected_project_id": selected_project_id,
+                "is_admin": True,
             })
 
         @self.app.get("/dashboard/agents/visual", response_class=HTMLResponse, tags=["Dashboard - Pages"])
         async def dashboard_agents_visual(request: Request, username: str = Depends(self._get_auth_user_dependency)):
             """Dashboard visual agent builder page"""
+            if not self._get_is_admin(request):
+                return RedirectResponse(url="/dashboard/workroom", status_code=302)
             project_param = request.query_params.get("project_id")
             try:
                 selected_project_id = int(project_param) if project_param else None
@@ -2118,33 +2137,43 @@ class DashboardServer:
                 "configs": configs,
                 "projects": projects,
                 "selected_project_id": selected_project_id,
+                "is_admin": True,
             })
 
         @self.app.get("/dashboard/templates", response_class=HTMLResponse, tags=["Dashboard - Pages"])
         async def dashboard_templates(request: Request, username: str = Depends(self._get_auth_user_dependency)):
             """Dashboard templates gallery page"""
+            if not self._get_is_admin(request):
+                return RedirectResponse(url="/dashboard/workroom", status_code=302)
             return self.templates.TemplateResponse("dashboard/templates.html", {
                 "request": request,
                 "page_title": "Template Library",
                 "username": username,
+                "is_admin": True,
             })
 
         @self.app.get("/dashboard/migrations", response_class=HTMLResponse, tags=["Dashboard - Pages"])
         async def dashboard_migrations(request: Request, username: str = Depends(self._get_auth_user_dependency)):
             """Dashboard migrations page"""
+            if not self._get_is_admin(request):
+                return RedirectResponse(url="/dashboard/workroom", status_code=302)
             migrations = self._get_schema_migrations()
             return self.templates.TemplateResponse("dashboard/migrations.html", {
                 "request": request,
                 "page_title": "Database Migrations",
                 "username": username,
-                "migrations": migrations
+                "migrations": migrations,
+                "is_admin": True,
             })
 
         @self.app.get("/dashboard/usage", response_class=HTMLResponse, tags=["Dashboard - Pages"])
         async def dashboard_usage(request: Request, days: int = 30, view: str = "analytics", username: str = Depends(self._get_auth_user_dependency)):
             """Dashboard usage page"""
+            is_admin = self._get_is_admin(request)
             stats = self._get_usage_stats(days)
             logs = self._get_token_usage_logs(24, limit=1000) if view == "logs" else {"logs": []}
+            # Non-admin users see only their own usage
+            current_user_id = username
             return self.templates.TemplateResponse("dashboard/usage.html", {
                 "request": request,
                 "page_title": "Usage Analytics",
@@ -2152,30 +2181,40 @@ class DashboardServer:
                 "stats": stats,
                 "logs": logs.get("logs", []) if isinstance(logs, dict) else [],
                 "days": days,
-                "view": view
+                "view": view,
+                "is_admin": is_admin,
+                "current_user_id": current_user_id,
             })
 
         @self.app.get("/dashboard/rate-limits", response_class=HTMLResponse, tags=["Dashboard - Pages"])
         async def dashboard_rate_limits(request: Request, username: str = Depends(self._get_auth_user_dependency)):
             """Dashboard rate limits and budgets page"""
+            if not self._get_is_admin(request):
+                return RedirectResponse(url="/dashboard/workroom", status_code=302)
             return self.templates.TemplateResponse("dashboard/rate_limits.html", {
                 "request": request,
                 "page_title": "Rate Limits & Budgets",
                 "username": username,
+                "is_admin": True,
             })
 
         @self.app.get("/dashboard/traces", response_class=HTMLResponse, tags=["Dashboard - Pages"])
         async def dashboard_traces(request: Request, username: str = Depends(self._get_auth_user_dependency)):
             """Dashboard traces page - OpenTelemetry distributed tracing viewer"""
+            if not self._get_is_admin(request):
+                return RedirectResponse(url="/dashboard/workroom", status_code=302)
             return self.templates.TemplateResponse("dashboard/traces.html", {
                 "request": request,
                 "page_title": "Traces",
                 "username": username,
+                "is_admin": True,
             })
 
         @self.app.get("/dashboard/docs", response_class=HTMLResponse, tags=["Dashboard - Pages"])
         async def dashboard_docs(request: Request, username: str = Depends(self._get_auth_user_dependency)):
             """Dashboard docs page"""
+            if not self._get_is_admin(request):
+                return RedirectResponse(url="/dashboard/workroom", status_code=302)
             # Extract hostname from request
             host = request.headers.get("host", "localhost").split(":")[0]
             return self.templates.TemplateResponse("dashboard/docs.html", {
@@ -2183,16 +2222,20 @@ class DashboardServer:
                 "page_title": "Documentation",
                 "username": username,
                 "adk_host": host,
-                "adk_port": 8000
+                "adk_port": 8000,
+                "is_admin": True,
             })
 
         @self.app.get("/dashboard/audit-logs", response_class=HTMLResponse, tags=["Dashboard - Pages"])
         async def dashboard_audit_logs(request: Request, username: str = Depends(self._get_auth_user_dependency)):
             """Dashboard audit log viewer (EU AI Act compliance)."""
+            if not self._get_is_admin(request):
+                return RedirectResponse(url="/dashboard/workroom", status_code=302)
             return self.templates.TemplateResponse("dashboard/audit_logs.html", {
                 "request": request,
                 "page_title": "Audit Logs",
                 "username": username,
+                "is_admin": True,
             })
 
         # API Endpoints for Dashboard
@@ -3918,10 +3961,13 @@ class DashboardServer:
 
         @self.app.get("/dashboard/evals", response_class=HTMLResponse, tags=["Dashboard - Pages"])
         async def dashboard_evals(request: Request, username: str = Depends(self._get_auth_user_dependency)):
+            if not self._get_is_admin(request):
+                return RedirectResponse(url="/dashboard/workroom", status_code=302)
             return self.templates.TemplateResponse("dashboard/evals.html", {
                 "request": request,
                 "page_title": "Evals",
                 "username": username,
+                "is_admin": True,
             })
 
         @self.app.get("/dashboard/api/evals/agent/{agent_name}/versions-list", tags=["Dashboard - Evals"])
@@ -4394,6 +4440,8 @@ class DashboardServer:
 
         @self.app.get("/dashboard/triggers", response_class=HTMLResponse, tags=["Dashboard - Pages"])
         async def dashboard_triggers(request: Request, username: str = Depends(self._get_auth_user_dependency)):
+            if not self._get_is_admin(request):
+                return RedirectResponse(url="/dashboard/workroom", status_code=302)
             projects = self._get_all_projects()
             agents = self._get_all_agent_configs()
             return self.templates.TemplateResponse("dashboard/triggers.html", {
@@ -4402,7 +4450,111 @@ class DashboardServer:
                 "username": username,
                 "projects": projects,
                 "agents": [{"name": a.get("name", ""), "type": a.get("type", ""), "project_id": a.get("project_id"), "parent_agents": a.get("parent_agents") or []} for a in agents],
+                "is_admin": True,
             })
+
+        @self.app.get("/dashboard/workroom", response_class=HTMLResponse, tags=["Dashboard - Pages"])
+        async def dashboard_workroom(request: Request, agent: Optional[str] = None, session: Optional[str] = None, username: str = Depends(self._get_auth_user_dependency)):
+            is_admin = self._get_is_admin(request)
+            all_agents = self._get_all_agent_configs()
+            # Only expose root agents (no parent_agents) in the Work Room
+            agent_list = []
+            for a in all_agents:
+                if not a.get("name"):
+                    continue
+                parents = a.get("parent_agents") or []
+                if parents:
+                    continue
+                desc = a.get("description") or ""
+                if not desc:
+                    instr = a.get("instruction") or ""
+                    desc = instr[:120] + ("…" if len(instr) > 120 else "")
+                agent_list.append({
+                    "name": a.get("name", ""),
+                    "display_name": a.get("display_name") or a.get("name", ""),
+                    "description": desc,
+                    "type": a.get("type", "llm"),
+                })
+            return self.templates.TemplateResponse("dashboard/workroom.html", {
+                "request": request,
+                "page_title": "Work Room",
+                "username": username,
+                "agents": agent_list,
+                "selected_agent": agent or "",
+                "selected_session": session or "",
+                "is_admin": is_admin,
+            })
+
+        @self.app.post("/dashboard/api/workroom/title", tags=["Dashboard - WorkRoom"])
+        async def generate_session_title(request: Request, username: str = Depends(self._get_auth_user_dependency)):
+            """Generate and persist a descriptive title for a Work Room session."""
+            import httpx
+            body = await request.json()
+            agent = body.get("agent", "").strip()
+            user_id = body.get("user_id", "").strip()
+            session_id = body.get("session_id", "").strip()
+            if not agent or not user_id or not session_id:
+                raise HTTPException(status_code=400, detail="agent, user_id, session_id required")
+
+            adk_session_url = f"http://{self.adk_host}:{self.adk_port}/apps/{agent}/users/{user_id}/sessions/{session_id}"
+            try:
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    resp = await client.get(adk_session_url)
+                if not resp.is_success:
+                    raise HTTPException(status_code=502, detail="Failed to fetch session from ADK")
+                data = resp.json()
+            except httpx.RequestError as exc:
+                raise HTTPException(status_code=502, detail=f"ADK unreachable: {exc}")
+
+            # Return existing title without regenerating
+            existing_title = (data.get("state") or {}).get("_title", "")
+            if existing_title:
+                return {"title": existing_title}
+
+            # Extract first user message
+            first_user_text = ""
+            for ev in (data.get("events") or []):
+                if ev.get("author") == "user":
+                    parts = (ev.get("content") or {}).get("parts") or []
+                    for p in parts:
+                        if p.get("text"):
+                            first_user_text = p["text"]
+                            break
+                if first_user_text:
+                    break
+
+            if not first_user_text:
+                return {"title": ""}
+
+            # Generate a short title via LiteLLM
+            title = ""
+            try:
+                import litellm  # type: ignore
+                model = os.environ.get("TITLE_GEN_MODEL", "gemini/gemini-2.0-flash")
+                gen_resp = litellm.completion(
+                    model=model,
+                    messages=[{"role": "user", "content": (
+                        "Generate a concise 4-6 word title for this conversation. "
+                        "Reply with ONLY the title, no quotes or trailing punctuation.\n\n"
+                        f"First message: {first_user_text[:400]}"
+                    )}],
+                    temperature=0.3,
+                    max_tokens=30,
+                )
+                title = gen_resp.choices[0].message.content.strip().strip('"').strip("'").rstrip(".")
+            except Exception as exc:
+                logger.warning("Session title generation failed: %s", exc)
+                title = first_user_text[:50] + ("…" if len(first_user_text) > 50 else "")
+
+            # Persist to ADK session state
+            if title:
+                try:
+                    async with httpx.AsyncClient(timeout=10.0) as client:
+                        await client.patch(adk_session_url, json={"stateDelta": {"_title": title}})
+                except Exception as exc:
+                    logger.warning("Session title PATCH failed: %s", exc)
+
+            return {"title": title}
 
         @self.app.get("/dashboard/api/triggers", tags=["Dashboard - Triggers"])
         async def list_triggers(

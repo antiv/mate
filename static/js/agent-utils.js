@@ -592,7 +592,7 @@ function hideAgentChatPanel() {
 
     if (panel) {
         panel.classList.add('hidden');
-        
+
         // Reset fullscreen classes
         const panelContainer = panel.querySelector('.relative.w-full.max-none');
         if (!panelContainer) {
@@ -601,7 +601,7 @@ function hideAgentChatPanel() {
             panelContainer.classList.add('max-w-3xl');
             panelContainer.classList.remove('max-w-none');
         }
-        
+
         // Alternative: just find the container and ensure it has correct classes
         const container = panel.querySelector('.relative.w-full');
         if (container) {
@@ -779,14 +779,14 @@ function launchAgentChat(agentName, userId) {
 
     const chatUrl = buildChatUrl(agentName, resolvedUserId);
     const fullscreen = !!window.chatRequestedFullscreen;
-    
+
     if (fullscreen) {
         window.open(chatUrl, '_blank');
         window.chatRequestedFullscreen = false;
     } else {
         showAgentChatPanel(agentName, chatUrl, fullscreen);
     }
-    
+
     syncChatHeaderUserSelector(resolvedUserId);
 }
 
@@ -1510,9 +1510,9 @@ function createAgentRow(config, depth, parentName, hasChildren, isHighlighted, r
 
     const actionsCell = document.createElement('td');
     actionsCell.setAttribute('data-label', 'Actions');
-    actionsCell.className = 'px-3 py-1.5 text-xs font-medium space-x-1';
+    actionsCell.className = 'px-3 py-1.5 text-xs font-medium space-x-1 whitespace-nowrap';
     const actionsWrap = document.createElement('div');
-    actionsWrap.className = 'table-card-actions flex flex-wrap gap-1';
+    actionsWrap.className = 'table-card-actions flex flex-nowrap gap-1';
 
     actionsWrap.appendChild(createActionButton({
         title: 'Edit',
@@ -1554,29 +1554,7 @@ function createAgentRow(config, depth, parentName, hasChildren, isHighlighted, r
         }
     }));
 
-    if (isRootAgent) {
-        actionsWrap.appendChild(createActionButton({
-            title: 'Chat',
-            icon: 'fas fa-comments',
-            className: 'text-green-600 dark:text-green-400 hover:text-green-900 dark:hover:text-green-300',
-            onClick: (event) => {
-                event.stopPropagation();
-                openAgentChat(config.name);
-            }
-        }));
-
-        actionsWrap.appendChild(createActionButton({
-            title: 'Widget Keys',
-            icon: 'fas fa-code',
-            className: 'text-teal-600 dark:text-teal-400 hover:text-teal-900 dark:hover:text-teal-300',
-            onClick: (event) => {
-                event.stopPropagation();
-                if (typeof showWidgetKeysModal === 'function') {
-                    showWidgetKeysModal(config.name, config.project_id);
-                }
-            }
-        }));
-    }
+    // Chat and Widget Keys buttons are now in the table header (next to root agent filter)
 
     // Check if agent has memory tools configured
     const toolConfig = config.tool_config;
@@ -1834,8 +1812,8 @@ function openAgentChat(agentName) {
     if (!agentName) {
         return;
     }
-    pendingChatAgentName = agentName;
-    presentChatUserSelectionModal();
+    // Navigate to the Work Room with this agent selected
+    window.location.href = '/dashboard/workroom?agent=' + encodeURIComponent(agentName);
 }
 
 function openRootAgentChat() {
@@ -1851,22 +1829,36 @@ function openRootAgentChat() {
 function updateRootAgentChatButton() {
     const rootSelect = document.getElementById('rootAgentFilter');
     const chatButton = document.getElementById('rootAgentChatBtn');
-
-    if (!chatButton) {
-        return;
-    }
+    const widgetKeysButton = document.getElementById('rootAgentWidgetKeysBtn');
 
     const isEnabled = rootSelect && !rootSelect.disabled && rootSelect.value;
-    if (isEnabled) {
-        chatButton.classList.remove('hidden');
-        chatButton.disabled = false;
-        chatButton.title = `Open ${rootSelect.value} chat`;
-    } else {
-        if (!chatButton.classList.contains('hidden')) {
-            chatButton.classList.add('hidden');
+
+    if (chatButton) {
+        if (isEnabled) {
+            chatButton.classList.remove('hidden');
+            chatButton.disabled = false;
+            chatButton.title = `Open ${rootSelect.value} chat`;
+        } else {
+            if (!chatButton.classList.contains('hidden')) {
+                chatButton.classList.add('hidden');
+            }
+            chatButton.disabled = true;
+            chatButton.removeAttribute('title');
         }
-        chatButton.disabled = true;
-        chatButton.removeAttribute('title');
+    }
+
+    if (widgetKeysButton) {
+        if (isEnabled) {
+            widgetKeysButton.classList.remove('hidden');
+            widgetKeysButton.disabled = false;
+            widgetKeysButton.title = `Widget Keys · ${rootSelect.value}`;
+        } else {
+            if (!widgetKeysButton.classList.contains('hidden')) {
+                widgetKeysButton.classList.add('hidden');
+            }
+            widgetKeysButton.disabled = true;
+            widgetKeysButton.removeAttribute('title');
+        }
     }
 }
 
@@ -1899,6 +1891,7 @@ function initializeSearchAndFilter(configs) {
     const searchInput = document.getElementById('agentSearch');
     const chatButton = document.getElementById('rootAgentChatBtn');
     const chatBackdrop = document.getElementById('agentChatBackdrop');
+    const widgetKeysButton = document.getElementById('rootAgentWidgetKeysBtn');
 
     if (chatButton && !chatButton.dataset.chatListenerAttached) {
         chatButton.addEventListener('click', (event) => {
@@ -1906,6 +1899,17 @@ function initializeSearchAndFilter(configs) {
             openRootAgentChat();
         });
         chatButton.dataset.chatListenerAttached = 'true';
+    }
+
+    if (widgetKeysButton && !widgetKeysButton.dataset.listenerAttached) {
+        widgetKeysButton.addEventListener('click', (event) => {
+            event.preventDefault();
+            const rootSelect = document.getElementById('rootAgentFilter');
+            if (rootSelect && rootSelect.value && typeof showWidgetKeysModal === 'function') {
+                showWidgetKeysModal(rootSelect.value, window.selectedProjectId);
+            }
+        });
+        widgetKeysButton.dataset.listenerAttached = 'true';
     }
 
     if (chatBackdrop && !chatBackdrop.dataset.listenerAttached) {

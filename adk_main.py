@@ -35,13 +35,48 @@ HOST = args.host
 ENABLE_A2A = args.a2a
 
 class CompactionFixDatabaseSessionService(DatabaseSessionService):
-    """Wrapper that fixes ADK bug #3633: EventCompaction dict deserialization."""
+    """Wrapper that fixes ADK bug #3633: EventCompaction dict deserialization
+    and stale session timestamps caused by save_artifact race conditions."""
 
     async def get_session(self, **kwargs):
         session = await super().get_session(**kwargs)
         if session:
             fix_session_events_compaction(session)
         return session
+
+    async def append_event(self, session, event):
+        """Override to handle stale session timestamps.
+        
+        When save_artifact is called during tool execution, it updates the
+        session's update_time in the DB. This makes the in-memory session's
+        last_update_time stale, causing a ValueError on the next append_event.
+        
+        This override catches that error, refreshes the session timestamp
+        from the DB, and retries the append.
+        """
+        try:
+            return await super().append_event(session, event)
+        except ValueError as e:
+            if "stale session" in str(e).lower() or "last_update_time" in str(e):
+                import logging
+                logger = logging.getLogger("google_adk." + __name__)
+                logger.warning(
+                    f"Stale session detected for session {session.id}, "
+                    f"refreshing timestamp and retrying append_event"
+                )
+                # Refresh the session's last_update_time from the database
+                refreshed = await self.get_session(
+                    app_name=session.app_name,
+                    user_id=session.user_id,
+                    session_id=session.id,
+                )
+                if refreshed:
+                    session.last_update_time = refreshed.last_update_time
+                    return await super().append_event(session, event)
+                else:
+                    raise
+            else:
+                raise
 
 
 # Service Registry Setup

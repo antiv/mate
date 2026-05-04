@@ -68,9 +68,39 @@
             </div>
 
             <!-- React Flow Visual Builder Root -->
+            {% if selected_project_id %}
             <div class="h-[calc(100vh-160px)]">
                 <div id="agentVisualRoot" class="w-full h-full"></div>
             </div>
+            {% else %}
+            <!-- No project selected — show selection prompt -->
+            <div class="h-[calc(100vh-160px)] flex items-center justify-center">
+                <div class="text-center max-w-md mx-auto">
+                    <div class="w-16 h-16 mx-auto mb-5 rounded-2xl bg-gradient-to-br from-indigo-100 to-blue-100 dark:from-indigo-900/40 dark:to-blue-900/40 flex items-center justify-center">
+                        <i class="fas fa-project-diagram text-2xl text-indigo-500 dark:text-indigo-400"></i>
+                    </div>
+                    <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">Select a Project</h3>
+                    <p class="text-sm text-gray-500 dark:text-gray-400 mb-6">Choose a project to load agents in the Visual Builder.</p>
+                    {% if projects %}
+                    <div class="flex items-center justify-center gap-3">
+                        <select id="vbProjectSelect"
+                            class="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent min-w-[200px]">
+                            <option value="">— Select project —</option>
+                            {% for project in projects %}
+                            <option value="{{ project.id }}">{{ project.name }}</option>
+                            {% endfor %}
+                        </select>
+                        <button onclick="loadVisualBuilderProject()"
+                            class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            <i class="fas fa-arrow-right mr-1.5"></i>Load
+                        </button>
+                    </div>
+                    {% else %}
+                    <p class="text-sm text-gray-400 dark:text-gray-500">No projects found. Create one first on the <a href="/dashboard/agents" class="text-indigo-500 hover:underline">Agents page</a>.</p>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
         </div>
     </div>
 </div>
@@ -180,6 +210,16 @@ projects_list=projects
     // Initialize chat user selection handlers
     if (typeof initializeChatUserSelectionHandlers === 'function') {
         initializeChatUserSelectionHandlers();
+    }
+
+    function loadVisualBuilderProject() {
+        var sel = document.getElementById('vbProjectSelect');
+        if (!sel || !sel.value) {
+            if (typeof showNotification === 'function') showNotification('Please select a project', 'warning');
+            return;
+        }
+        try { localStorage.setItem('agentDashboardSelectedProjectId', sel.value); } catch(e) {}
+        window.location.href = '/dashboard/agents/visual?project_id=' + encodeURIComponent(sel.value);
     }
 </script>
 {% endblock %}

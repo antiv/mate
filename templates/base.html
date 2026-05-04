@@ -125,14 +125,67 @@
         #sidebar.sidebar-minimized #sidebarToggleIcon {
             transform: rotate(180deg);
         }
+
+        /* Hide session list when sidebar is minimized */
+        #sidebar.sidebar-minimized #workroomSessionList,
+        #sidebar.sidebar-minimized .wr-recent-label {
+            display: none !important;
+        }
         
         /* Smooth transitions */
         .sidebar-collapsible {
             transition: width 0.3s ease !important;
         }
-        
+
         .sidebar-text {
             transition: opacity 0.2s ease, display 0.2s ease;
+        }
+
+        /* Section headers in grouped sidebar */
+        .sidebar-section-header {
+            font-size: 0.65rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: #9ca3af;
+            padding: 0.75rem 0.75rem 0.25rem;
+        }
+        .dark .sidebar-section-header {
+            color: #6b7280;
+        }
+        #sidebar.sidebar-minimized .sidebar-section-header {
+            display: none !important;
+        }
+
+        /* Space switcher pills */
+        .space-pill {
+            padding: 0.2rem 0.65rem;
+            border-radius: 9999px;
+            font-size: 0.7rem;
+            font-weight: 500;
+            transition: background-color 0.15s, color 0.15s;
+            white-space: nowrap;
+        }
+        .space-pill-active {
+            background-color: #3b82f6;
+            color: #fff;
+        }
+        .dark .space-pill-active {
+            background-color: #2563eb;
+        }
+        .space-pill-inactive {
+            color: #6b7280;
+        }
+        .space-pill-inactive:hover {
+            background-color: #f3f4f6;
+            color: #374151;
+        }
+        .dark .space-pill-inactive {
+            color: #9ca3af;
+        }
+        .dark .space-pill-inactive:hover {
+            background-color: #374151;
+            color: #d1d5db;
         }
         
         /* Force notifications to be completely opaque */
@@ -194,15 +247,38 @@
     <!-- Navigation -->
     <nav class="dashboard-nav bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700">
         <div class="flex justify-between items-center h-12 px-3 min-h-[48px]">
-            <div class="flex items-center space-x-3">
+            {% set cp = request.url.path %}
+            {% if cp.startswith('/dashboard/agents') or cp in ['/dashboard/triggers', '/dashboard/templates', '/dashboard/evals', '/dashboard/traces'] %}
+              {% set active_space = 'studio' %}
+            {% elif cp == '/dashboard/workroom' %}
+              {% set active_space = 'workroom' %}
+            {% else %}
+              {% set active_space = 'control_room' %}
+            {% endif %}
+            <div class="flex items-center space-x-2">
                 <button id="hamburgerBtn" type="button" class="touch-target p-2 -ml-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white md:hidden" aria-label="Open menu">
                     <i class="fas fa-bars text-lg"></i>
                 </button>
                 <img src="/static/logo.png" alt="MATE Logo" class="h-8 w-8 object-contain">
-                <h1 class="text-xl font-bold text-gray-900 dark:text-white truncate">MATE Dashboard</h1>
+                <h1 class="text-lg font-bold text-gray-900 dark:text-white">MATE</h1>
+                <!-- Space switcher — desktop only — admin only -->
+                {% if is_admin is not defined or is_admin %}
+                <div class="hidden md:flex items-center space-x-1 ml-3 pl-3 border-l border-gray-200 dark:border-gray-700">
+                    <a href="/dashboard/workroom" class="space-pill {% if active_space == 'workroom' %}space-pill-active{% else %}space-pill-inactive{% endif %}">
+                        <i class="fas fa-comments mr-1"></i>Work Room
+                    </a>
+                    <a href="/dashboard/agents" class="space-pill {% if active_space == 'studio' %}space-pill-active{% else %}space-pill-inactive{% endif %}">
+                        <i class="fas fa-robot mr-1"></i>Studio
+                    </a>
+                    <a href="/dashboard/overview" class="space-pill {% if active_space == 'control_room' %}space-pill-active{% else %}space-pill-inactive{% endif %}">
+                        <i class="fas fa-tachometer-alt mr-1"></i>Control Room
+                    </a>
+                </div>
+                {% endif %}
             </div>
             <div class="flex items-center space-x-2 sm:space-x-4 pr-2 sm:pr-4">
-                    <!-- ADK Server Control - compact on mobile -->
+                    <!-- ADK Server Control - admin only -->
+                    {% if is_admin is not defined or is_admin %}
                     <div class="hidden sm:flex items-center space-x-2">
                         <div id="adkStatusIndicator" class="w-2 h-2 bg-gray-400 rounded-full"></div>
                         <span id="adkStatusText" class="text-sm text-gray-600 dark:text-gray-400">Checking...</span>
@@ -218,6 +294,7 @@
                             </button>
                         </div>
                     </div>
+                    {% endif %}
                     <!-- Theme Switcher -->
                     <div class="theme-switcher touch-target flex items-center justify-center" onclick="toggleTheme()" role="button" tabindex="0" aria-label="Toggle theme">
                         <i class="fas fa-sun theme-icon sun"></i>
@@ -256,57 +333,134 @@
                     <i class="fas fa-times"></i>
                 </button>
             </div>
-            <nav class="mt-4 flex-1">
-                <div class="px-2 space-y-1">
-                    <a href="/dashboard" class="flex items-center px-3 py-2 text-sm text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 {% if request.url.path == '/dashboard' %}sidebar-active{% endif %}" title="Overview">
-                        <i class="fas fa-chart-line sidebar-icon mr-2 text-xs"></i>
-                        <span class="sidebar-text">Overview</span>
-                    </a>
-                    <a href="/dashboard/users" class="flex items-center px-3 py-2 text-sm text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 {% if request.url.path == '/dashboard/users' %}sidebar-active{% endif %}" title="Users">
-                        <i class="fas fa-users sidebar-icon mr-2 text-xs"></i>
-                        <span class="sidebar-text">Users</span>
-                    </a>
+            <nav class="mt-2 flex-1 overflow-y-auto">
+                {% if is_admin is not defined or is_admin %}
+                {% if active_space == 'studio' %}
+                <!-- ── Studio ────────────────────────── -->
+                <p class="sidebar-section-header">Build</p>
+                <div class="px-2 space-y-0.5">
                     <a href="/dashboard/agents" class="flex items-center px-3 py-2 text-sm text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 {% if request.url.path == '/dashboard/agents' %}sidebar-active{% endif %}" title="Agents">
-                        <i class="fas fa-robot sidebar-icon mr-2 text-xs"></i>
+                        <i class="fas fa-robot sidebar-icon mr-2 text-xs w-4 text-center"></i>
                         <span class="sidebar-text">Agents</span>
                     </a>
-                    <a href="/dashboard/templates" class="flex items-center px-3 py-2 text-sm text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 {% if request.url.path == '/dashboard/templates' %}sidebar-active{% endif %}" title="Templates">
-                        <i class="fas fa-layer-group sidebar-icon mr-2 text-xs"></i>
-                        <span class="sidebar-text">Templates</span>
-                    </a>
-                    <a href="/dashboard/migrations" class="flex items-center px-3 py-2 text-sm text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 {% if request.url.path == '/dashboard/migrations' %}sidebar-active{% endif %}" title="Migrations">
-                        <i class="fas fa-database sidebar-icon mr-2 text-xs"></i>
-                        <span class="sidebar-text">Migrations</span>
-                    </a>
-                    <a href="/dashboard/usage" class="flex items-center px-3 py-2 text-sm text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 {% if request.url.path == '/dashboard/usage' %}sidebar-active{% endif %}" title="Usage Analytics">
-                        <i class="fas fa-chart-bar sidebar-icon mr-2 text-xs"></i>
-                        <span class="sidebar-text">Usage Analytics</span>
-                    </a>
-                    <a href="/dashboard/rate-limits" class="flex items-center px-3 py-2 text-sm text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 {% if request.url.path == '/dashboard/rate-limits' %}sidebar-active{% endif %}" title="Rate Limits & Budgets">
-                        <i class="fas fa-tachometer-alt sidebar-icon mr-2 text-xs"></i>
-                        <span class="sidebar-text">Rate Limits</span>
-                    </a>
-                    <a href="/dashboard/traces" class="flex items-center px-3 py-2 text-sm text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 {% if request.url.path == '/dashboard/traces' %}sidebar-active{% endif %}" title="Traces">
-                        <i class="fas fa-project-diagram sidebar-icon mr-2 text-xs"></i>
-                        <span class="sidebar-text">Traces</span>
-                    </a>
-                    <a href="/dashboard/audit-logs" class="flex items-center px-3 py-2 text-sm text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 {% if request.url.path == '/dashboard/audit-logs' %}sidebar-active{% endif %}" title="Audit Logs">
-                        <i class="fas fa-clipboard-list sidebar-icon mr-2 text-xs"></i>
-                        <span class="sidebar-text">Audit Logs</span>
-                    </a>
-                    <a href="/dashboard/evals" class="flex items-center px-3 py-2 text-sm text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 {% if request.url.path == '/dashboard/evals' %}sidebar-active{% endif %}" title="Evals">
-                        <i class="fas fa-flask sidebar-icon mr-2 text-xs"></i>
-                        <span class="sidebar-text">Evals</span>
+                    <a href="/dashboard/agents/visual" id="sidebarVisualBuilderLink" class="flex items-center px-3 py-2 text-sm text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 {% if request.url.path == '/dashboard/agents/visual' %}sidebar-active{% endif %}" title="Visual Builder" onclick="return handleVisualBuilderNav(event)">
+                        <i class="fas fa-sitemap sidebar-icon mr-2 text-xs w-4 text-center"></i>
+                        <span class="sidebar-text">Visual Builder</span>
                     </a>
                     <a href="/dashboard/triggers" class="flex items-center px-3 py-2 text-sm text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 {% if request.url.path == '/dashboard/triggers' %}sidebar-active{% endif %}" title="Triggers">
-                        <i class="fas fa-bolt sidebar-icon mr-2 text-xs"></i>
+                        <i class="fas fa-bolt sidebar-icon mr-2 text-xs w-4 text-center"></i>
                         <span class="sidebar-text">Triggers</span>
                     </a>
-                    <a href="/dashboard/docs" class="flex items-center px-3 py-2 text-sm text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 {% if request.url.path == '/dashboard/docs' %}sidebar-active{% endif %}" title="API Documentation">
-                        <i class="fas fa-book sidebar-icon mr-2 text-xs"></i>
-                        <span class="sidebar-text">API Documentation</span>
+                </div>
+                <p class="sidebar-section-header">Templates</p>
+                <div class="px-2 space-y-0.5">
+                    <a href="/dashboard/templates" class="flex items-center px-3 py-2 text-sm text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 {% if request.url.path == '/dashboard/templates' %}sidebar-active{% endif %}" title="Template Library">
+                        <i class="fas fa-layer-group sidebar-icon mr-2 text-xs w-4 text-center"></i>
+                        <span class="sidebar-text">Template Library</span>
                     </a>
                 </div>
+                <p class="sidebar-section-header">Test &amp; Monitor</p>
+                <div class="px-2 space-y-0.5">
+                    <a href="/dashboard/evals" class="flex items-center px-3 py-2 text-sm text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 {% if request.url.path == '/dashboard/evals' %}sidebar-active{% endif %}" title="Evals">
+                        <i class="fas fa-flask sidebar-icon mr-2 text-xs w-4 text-center"></i>
+                        <span class="sidebar-text">Evals</span>
+                    </a>
+                    <a href="/dashboard/traces" class="flex items-center px-3 py-2 text-sm text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 {% if request.url.path == '/dashboard/traces' %}sidebar-active{% endif %}" title="Traces">
+                        <i class="fas fa-project-diagram sidebar-icon mr-2 text-xs w-4 text-center"></i>
+                        <span class="sidebar-text">Traces</span>
+                    </a>
+                </div>
+
+                {% elif active_space == 'workroom' %}
+                <!-- ── Work Room ──────────────────────── -->
+                {% set _wr_agent = request.query_params.get('agent', '') %}
+                {% set _wr_session = request.query_params.get('session', '') %}
+                <p class="sidebar-section-header">Chat</p>
+                <div class="px-2 space-y-0.5">
+                    <a id="newConversationLink"
+                       href="/dashboard/workroom{% if _wr_agent %}?agent={{ _wr_agent }}{% endif %}"
+                       class="flex items-center px-3 py-2 text-sm text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 {% if not _wr_session %}sidebar-active{% endif %}" title="New Conversation">
+                        <i class="fas fa-plus sidebar-icon mr-2 text-xs w-4 text-center"></i>
+                        <span class="sidebar-text">New Conversation</span>
+                    </a>
+                </div>
+                {% if _wr_agent %}
+                <p class="sidebar-section-header wr-recent-label">Recent Sessions</p>
+                <div id="workroomSessionList" class="px-2 space-y-0.5 overflow-hidden">
+                    <div class="px-3 py-1.5 text-xs text-gray-400 dark:text-gray-500">Loading…</div>
+                </div>
+                {% endif %}
+
+                {% else %}
+                <!-- ── Control Room ───────────────────── -->
+                <p class="sidebar-section-header">Overview</p>
+                <div class="px-2 space-y-0.5">
+                    <a href="/dashboard/overview" class="flex items-center px-3 py-2 text-sm text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 {% if request.url.path == '/dashboard/overview' %}sidebar-active{% endif %}" title="Platform Overview">
+                        <i class="fas fa-th-large sidebar-icon mr-2 text-xs w-4 text-center"></i>
+                        <span class="sidebar-text">Platform Overview</span>
+                    </a>
+                </div>
+                <p class="sidebar-section-header">Observability</p>
+                <div class="px-2 space-y-0.5">
+                    <a href="/dashboard/usage" class="flex items-center px-3 py-2 text-sm text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 {% if request.url.path == '/dashboard/usage' %}sidebar-active{% endif %}" title="Usage Analytics">
+                        <i class="fas fa-chart-bar sidebar-icon mr-2 text-xs w-4 text-center"></i>
+                        <span class="sidebar-text">Usage Analytics</span>
+                    </a>
+                    <a href="/dashboard/audit-logs" class="flex items-center px-3 py-2 text-sm text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 {% if request.url.path == '/dashboard/audit-logs' %}sidebar-active{% endif %}" title="Audit Logs">
+                        <i class="fas fa-clipboard-list sidebar-icon mr-2 text-xs w-4 text-center"></i>
+                        <span class="sidebar-text">Audit Logs</span>
+                    </a>
+                </div>
+                <p class="sidebar-section-header">Governance &amp; Access</p>
+                <div class="px-2 space-y-0.5">
+                    <a href="/dashboard/users" class="flex items-center px-3 py-2 text-sm text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 {% if request.url.path == '/dashboard/users' %}sidebar-active{% endif %}" title="Users">
+                        <i class="fas fa-users sidebar-icon mr-2 text-xs w-4 text-center"></i>
+                        <span class="sidebar-text">Users</span>
+                    </a>
+                    <a href="/dashboard/rate-limits" class="flex items-center px-3 py-2 text-sm text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 {% if request.url.path == '/dashboard/rate-limits' %}sidebar-active{% endif %}" title="Rate Limits">
+                        <i class="fas fa-shield-alt sidebar-icon mr-2 text-xs w-4 text-center"></i>
+                        <span class="sidebar-text">Rate Limits</span>
+                    </a>
+                </div>
+                <p class="sidebar-section-header">System</p>
+                <div class="px-2 space-y-0.5">
+                    <a href="/dashboard/migrations" class="flex items-center px-3 py-2 text-sm text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 {% if request.url.path == '/dashboard/migrations' %}sidebar-active{% endif %}" title="Migrations">
+                        <i class="fas fa-database sidebar-icon mr-2 text-xs w-4 text-center"></i>
+                        <span class="sidebar-text">Migrations</span>
+                    </a>
+                    <a href="/dashboard/docs" class="flex items-center px-3 py-2 text-sm text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 {% if request.url.path == '/dashboard/docs' %}sidebar-active{% endif %}" title="API Documentation">
+                        <i class="fas fa-book sidebar-icon mr-2 text-xs w-4 text-center"></i>
+                        <span class="sidebar-text">API Docs</span>
+                    </a>
+                </div>
+                {% endif %}
+                {% else %}
+                {# Regular (SSO) user — show only Workroom sidebar #}
+                {% set _wr_agent = request.query_params.get('agent', '') %}
+                {% set _wr_session = request.query_params.get('session', '') %}
+                <p class="sidebar-section-header">Chat</p>
+                <div class="px-2 space-y-0.5">
+                    <a id="newConversationLink"
+                       href="/dashboard/workroom{% if _wr_agent %}?agent={{ _wr_agent }}{% endif %}"
+                       class="flex items-center px-3 py-2 text-sm text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 {% if not _wr_session %}sidebar-active{% endif %}" title="New Conversation">
+                        <i class="fas fa-plus sidebar-icon mr-2 text-xs w-4 text-center"></i>
+                        <span class="sidebar-text">New Conversation</span>
+                    </a>
+                </div>
+                {% if _wr_agent %}
+                <p class="sidebar-section-header wr-recent-label">Recent Sessions</p>
+                <div id="workroomSessionList" class="px-2 space-y-0.5 overflow-hidden">
+                    <div class="px-3 py-1.5 text-xs text-gray-400 dark:text-gray-500">Loading…</div>
+                </div>
+                {% endif %}
+                <p class="sidebar-section-header">Analytics</p>
+                <div class="px-2 space-y-0.5">
+                    <a href="/dashboard/usage" class="flex items-center px-3 py-2 text-sm text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 {% if request.url.path == '/dashboard/usage' %}sidebar-active{% endif %}" title="My Usage">
+                        <i class="fas fa-chart-bar sidebar-icon mr-2 text-xs w-4 text-center"></i>
+                        <span class="sidebar-text">My Usage</span>
+                    </a>
+                </div>
+                {% endif %}
             </nav>
             
             <!-- Minimize Toggle Button -->
@@ -369,6 +523,21 @@
                 navigator.serviceWorker.register('/sw.js').catch(function() {});
             }
         });
+
+        // Handle Visual Builder navigation — append stored project_id
+        function handleVisualBuilderNav(event) {
+            var storedProjectId = null;
+            try {
+                storedProjectId = localStorage.getItem('agentDashboardSelectedProjectId');
+            } catch (e) {}
+            if (storedProjectId) {
+                event.preventDefault();
+                window.location.href = '/dashboard/agents/visual?project_id=' + encodeURIComponent(storedProjectId);
+                return false;
+            }
+            // No stored project — let default navigation happen (page will show empty)
+            return true;
+        }
         
         // Global JavaScript functions
         function showNotification(message, type = 'success') {

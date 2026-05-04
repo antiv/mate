@@ -14,6 +14,7 @@
   var AGENT_NAME = window.STANDALONE_AGENT_NAME || "agent";
   var BASE = window.location.origin;
   var STORAGE_PREFIX = "mate_standalone_" + AGENT_NAME;
+  var IMAGE_EXTENSIONS = [".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".bmp"];
 
   // --- State -----------------------------------------------------------
   var sessionId = localStorage.getItem(STORAGE_PREFIX + "_sid") || "";
@@ -213,6 +214,61 @@
         var actions = evt.actions || {};
         if (actions.transfer_to_agent || actions.escalate) return;
 
+        // --- Handle artifact delta (image artifacts) ---
+        var artifactDelta = actions.artifactDelta || actions.artifact_delta;
+        if (artifactDelta && typeof artifactDelta === "object") {
+          var filenames = Object.keys(artifactDelta);
+          for (var ai = 0; ai < filenames.length; ai++) {
+            var artFilename = filenames[ai];
+            var artVersion = artifactDelta[artFilename];
+            // Check if this artifact is an image by extension
+            var lowerName = artFilename.toLowerCase();
+            var isImage = IMAGE_EXTENSIONS.some(function (ext) {
+              return lowerName.endsWith(ext);
+            });
+            if (isImage) {
+              _showTyping(false);
+              _ensureBubble();
+              // Build artifact URL
+              var artUrl = BASE + "/apps/" + AGENT_NAME + "/users/" + userId +
+                "/sessions/" + sessionId + "/artifacts/" + artFilename +
+                "/versions/" + artVersion;
+              // Clear thinking dots if present
+              if (agentEl.querySelector(".widget-thinking-inline")) {
+                agentEl.innerHTML = "";
+              }
+              var imgEl = document.createElement("img");
+              imgEl.className = "widget-msg-image widget-generated-image";
+              imgEl.alt = artFilename;
+              imgEl.title = artFilename;
+              imgEl.style.opacity = "0.5";
+              agentEl.appendChild(imgEl);
+              _scrollToBottom();
+              
+              (function(imgElem, url) {
+                fetch(url)
+                  .then(function(r) { return r.json(); })
+                  .then(function(data) {
+                    var inlineData = data.inlineData || data.inline_data;
+                    if (inlineData && inlineData.data) {
+                      var mimeType = inlineData.mimeType || inlineData.mime_type || 'image/png';
+                      var cleanBase64 = inlineData.data.replace(/\s+/g, '').replace(/-/g, '+').replace(/_/g, '/');
+                      imgElem.src = 'data:' + mimeType + ';base64,' + cleanBase64;
+                      imgElem.style.opacity = "1";
+                    } else {
+                      imgElem.style.display = "none";
+                    }
+                    _scrollToBottom();
+                  }).catch(function() {
+                    imgElem.style.display = "none";
+                  });
+              })(imgEl, artUrl);
+            }
+          }
+          // If this event has no content (action-only artifact event), skip rest
+          if (!evt.content || !evt.content.parts || !evt.content.parts.length) return;
+        }
+
         var author = evt.author || "";
         if (author && author !== currentAuthor) {
           currentAuthor = author;
@@ -248,6 +304,26 @@
         }
 
         for (var j = 0; j < parts.length; j++) {
+          // Handle inline image data (generated artifacts)
+          var inlineData = parts[j].inline_data || parts[j].inlineData;
+          if (inlineData && inlineData.mime_type && inlineData.mime_type.indexOf('image/') === 0) {
+            _showTyping(false);
+            _ensureBubble();
+            var cleanBase64 = inlineData.data.replace(/\s+/g, '').replace(/-/g, '+').replace(/_/g, '/');
+            var imgSrc = 'data:' + inlineData.mime_type + ';base64,' + cleanBase64;
+            var imgEl2 = document.createElement('img');
+            imgEl2.src = imgSrc;
+            imgEl2.className = 'widget-msg-image widget-generated-image';
+            imgEl2.alt = 'Generated image';
+            // If bubble had thinking dots, clear them first
+            if (agentEl.querySelector('.widget-thinking-inline')) {
+              agentEl.innerHTML = '';
+            }
+            agentEl.appendChild(imgEl2);
+            _scrollToBottom();
+            continue;
+          }
+
           var t = parts[j].text;
           if (!t) continue;
 
@@ -388,6 +464,7 @@
     }
     messagesEl.appendChild(el);
     _scrollToBottom();
+    _loadLazyArtifacts();
     if (!skipSave) _saveHistory();
     return el;
   }
@@ -395,6 +472,34 @@
   function _updateMessage(el, text) {
     el.innerHTML = _renderMarkdown(text);
     _scrollToBottom();
+    _loadLazyArtifacts();
+  }
+
+  function _loadLazyArtifacts() {
+    document.querySelectorAll("img.art-lazy-load").forEach(function(imgEl) {
+      var url = imgEl.getAttribute("data-art-url");
+      if (url && !imgEl.getAttribute("data-loading")) {
+        imgEl.setAttribute("data-loading", "true");
+        imgEl.style.opacity = "0.5";
+        fetch(url)
+          .then(function(r) { return r.json(); })
+          .then(function(data) {
+             var inlineData = data.inlineData || data.inline_data;
+             if (inlineData && inlineData.data) {
+                 var mimeType = inlineData.mimeType || inlineData.mime_type || 'image/png';
+                 var cleanBase64 = inlineData.data.replace(/\s+/g, '').replace(/-/g, '+').replace(/_/g, '/');
+                 imgEl.src = 'data:' + mimeType + ';base64,' + cleanBase64;
+                 imgEl.style.opacity = "1";
+                 imgEl.classList.remove("art-lazy-load");
+                 _scrollToBottom();
+             } else {
+                 imgEl.style.display = "none";
+             }
+          }).catch(function() { 
+             imgEl.style.display = "none"; 
+          });
+      }
+    });
   }
 
   function _showTyping(show) {
@@ -443,6 +548,7 @@
       .replace(/`([^`]+)`/g, "<code>$1</code>")
       .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
       .replace(/\*(.+?)\*/g, "<em>$1</em>")
+      .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" class="widget-msg-image widget-generated-image">')
       .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
       .replace(/^### (.+)$/gm, "<strong>$1</strong>")
       .replace(/^## (.+)$/gm, "<strong>$1</strong>")

@@ -48,6 +48,80 @@ def _get_session_user(request: Request):
     return None
 
 
+def _get_oauth_session_user_id(request: Request):
+    """Return the user_id from an OAuth session, or None if not an OAuth session."""
+    try:
+        user = request.session.get("user")
+        if user and user.get("provider") in ("google", "github", "microsoft", "gitlab"):
+            return user.get("user_id") or user.get("email") or ""
+    except Exception:
+        pass
+    return None
+
+
+def _oauth_user_has_admin_role(user_id: str) -> bool:
+    """Check if an OAuth user has the 'admin' role in the database."""
+    try:
+        from shared.utils.user_service import get_user_service
+        user_service = get_user_service()
+        roles = user_service.get_user_roles(user_id)
+        return "admin" in roles
+    except Exception:
+        pass
+    return False
+
+
+def _is_session_oauth_user(request: Request) -> bool:
+    """Return True if the current session is an OAuth/SSO user WITHOUT admin role.
+
+    Returns False (i.e. treat as admin) when:
+    - Not an OAuth session at all (basic-auth / bearer token session)
+    - OAuth user whose email/user_id matches AUTH_USERNAME
+    - OAuth user who has the 'admin' role in the database
+    """
+    try:
+        user = request.session.get("user")
+        if user and user.get("provider") in ("google", "github", "microsoft", "gitlab"):
+            user_id = user.get("user_id", "")
+            email = user.get("email", "")
+            display_name = user.get("display_name", "")
+
+            # Allow admin by AUTH_USERNAME match
+            if AUTH_USERNAME and (
+                user_id == AUTH_USERNAME or
+                email == AUTH_USERNAME or
+                display_name == AUTH_USERNAME
+            ):
+                return False  # treat as admin
+
+            # Allow admin by DB role — check using the canonical user_id
+            canonical_id = user_id or email
+            if canonical_id and _oauth_user_has_admin_role(canonical_id):
+                return False  # treat as admin
+
+            return True  # regular SSO user
+    except Exception:
+        pass
+    return False
+
+
+def get_user_role(request: Request) -> str:
+    """Return 'admin' for admin users, 'user' for regular SSO/OAuth users.
+
+    Admin = Basic auth, Bearer token, OAuth with AUTH_USERNAME identity,
+            or OAuth user who has the 'admin' role in the database.
+    User  = OAuth user without admin role.
+    """
+    if _is_session_oauth_user(request):
+        return "user"
+    return "admin"
+
+
+def is_admin_user(request: Request) -> bool:
+    """Convenience wrapper: True if the current user is an admin."""
+    return get_user_role(request) == "admin"
+
+
 def verify_credentials(credentials: HTTPBasicCredentials = Depends(security)):
     """Verify basic auth credentials.
 

@@ -348,3 +348,16 @@ html, body {
   border: 1px solid rgba(255,255,255,0.2);
 }
 
+/* Generated image artifacts — larger display */
+.widget-message img.widget-generated-image {
+  max-height: 400px;
+  border-radius: 12px;
+  margin: 8px 0;
+  cursor: pointer;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+  transition: box-shadow 0.2s ease, transform 0.15s ease;
+}
+.widget-message img.widget-generated-image:hover {
+  box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+  transform: scale(1.01);
+}

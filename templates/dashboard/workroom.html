@@ -1,0 +1,656 @@
+{% extends "base.html" %}
+
+{% block title %}Work Room - MATE{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="/static/css/widget/chat.css">
+<style>
+    /* ── Work Room layout ─────────────────────────────────── */
+    .wr-root {
+        display: flex;
+        flex-direction: column;
+        height: calc(100vh - 5.5rem);
+        min-height: 400px;
+    }
+
+    /* ── Welcome / default state ──────────────────────────── */
+    .wr-welcome {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: flex-start;
+        padding: 3rem 1rem 1rem;
+        overflow-y: auto;
+    }
+    .wr-welcome-icon {
+        width: 4rem;
+        height: 4rem;
+        border-radius: 1rem;
+        background: linear-gradient(135deg, rgba(99,102,241,0.15) 0%, rgba(59,130,246,0.15) 100%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 1.25rem;
+        font-size: 1.5rem;
+    }
+    .dark .wr-welcome-icon {
+        background: linear-gradient(135deg, rgba(99,102,241,0.25) 0%, rgba(59,130,246,0.25) 100%);
+    }
+
+    /* Agent cards grid */
+    .wr-agents-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+        gap: 0.75rem;
+        width: 100%;
+        max-width: 760px;
+        margin-top: 2rem;
+    }
+    .wr-agent-card {
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        border-radius: 1rem;
+        padding: 1.25rem;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        text-decoration: none;
+        display: block;
+        position: relative;
+        overflow: hidden;
+    }
+    .wr-agent-card::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 3px;
+        background: linear-gradient(90deg, #6366f1, #3b82f6);
+        opacity: 0;
+        transition: opacity 0.2s ease;
+    }
+    .wr-agent-card:hover {
+        border-color: #c7d2fe;
+        box-shadow: 0 4px 20px rgba(99,102,241,0.1);
+        transform: translateY(-2px);
+    }
+    .wr-agent-card:hover::before {
+        opacity: 1;
+    }
+    .dark .wr-agent-card {
+        background: #1e293b;
+        border-color: #334155;
+    }
+    .dark .wr-agent-card:hover {
+        border-color: #818cf8;
+        box-shadow: 0 4px 20px rgba(99,102,241,0.15);
+    }
+    .wr-agent-avatar {
+        width: 2.5rem;
+        height: 2.5rem;
+        border-radius: 0.75rem;
+        background: linear-gradient(135deg, #6366f1 0%, #3b82f6 100%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 0.75rem;
+        font-size: 1rem;
+        color: #fff;
+        box-shadow: 0 2px 8px rgba(99,102,241,0.25);
+    }
+    .wr-agent-name {
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: #0f172a;
+        margin-bottom: 0.25rem;
+    }
+    .dark .wr-agent-name { color: #f1f5f9; }
+    .wr-agent-desc {
+        font-size: 0.75rem;
+        color: #64748b;
+        line-height: 1.5;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+    .dark .wr-agent-desc { color: #94a3b8; }
+    .wr-agent-type {
+        font-size: 0.6rem;
+        font-weight: 600;
+        color: #6366f1;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        margin-top: 0.5rem;
+    }
+    .dark .wr-agent-type { color: #818cf8; }
+
+    /* ── Chat state ───────────────────────────────────────── */
+    .wr-chat-root {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        max-width: 56rem;
+        width: 100%;
+        margin: 0 auto;
+    }
+
+    /* Agent bar */
+    .wr-agent-bar {
+        display: flex;
+        align-items: center;
+        gap: 0.625rem;
+        padding: 0.625rem 1rem;
+        background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+        border: 1px solid #e2e8f0;
+        border-radius: 1rem 1rem 0 0;
+        flex-shrink: 0;
+    }
+    .dark .wr-agent-bar {
+        background: linear-gradient(135deg, #1e293b 0%, #1a2332 100%);
+        border-color: #334155;
+    }
+    .wr-agent-bar-avatar {
+        width: 2rem;
+        height: 2rem;
+        border-radius: 0.5rem;
+        background: linear-gradient(135deg, #6366f1 0%, #3b82f6 100%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #fff;
+        font-size: 0.7rem;
+        flex-shrink: 0;
+        box-shadow: 0 2px 6px rgba(99,102,241,0.3);
+    }
+    .wr-agent-bar-name {
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: #0f172a;
+        flex: 1;
+    }
+    .dark .wr-agent-bar-name { color: #f1f5f9; }
+
+    .wr-agent-bar .wr-bar-action {
+        font-size: 0.75rem;
+        color: #94a3b8;
+        padding: 0.375rem 0.625rem;
+        border-radius: 0.5rem;
+        transition: all 0.15s ease;
+        text-decoration: none;
+        border: none;
+        background: none;
+        cursor: pointer;
+    }
+    .wr-agent-bar .wr-bar-action:hover {
+        color: #475569;
+        background: rgba(0,0,0,0.05);
+    }
+    .dark .wr-agent-bar .wr-bar-action:hover {
+        color: #cbd5e1;
+        background: rgba(255,255,255,0.05);
+    }
+
+    /* Override widget-container to fit inside wr-chat-root */
+    .wr-chat-root .widget-container {
+        border-radius: 0 0 1rem 1rem;
+        border: 1px solid #e2e8f0;
+        border-top: none;
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        overflow: hidden;
+        background: #fafbfc;
+    }
+    .dark .wr-chat-root .widget-container {
+        border-color: #334155;
+        background: #0f172a;
+    }
+    .wr-chat-root .widget-header { display: none; } /* we use wr-agent-bar instead */
+    .wr-chat-root .widget-messages {
+        flex: 1;
+        overflow-y: auto;
+        min-height: 0;
+        padding: 1.5rem 1.5rem;
+    }
+    .wr-chat-root .widget-input-area {
+        flex-shrink: 0;
+        border-top: 1px solid #e2e8f0;
+        padding: 0.875rem 1rem;
+        background: #fff;
+        border-radius: 0 0 1rem 1rem;
+    }
+    .dark .wr-chat-root .widget-input-area {
+        border-top-color: #334155;
+        background: #1e293b;
+    }
+
+    /* Override message bubble styles for modern look inside workroom */
+    .wr-chat-root .widget-message {
+        max-width: 80%;
+        border-radius: 1.25rem;
+        padding: 0.75rem 1rem;
+        font-size: 0.875rem;
+        line-height: 1.6;
+    }
+    .wr-chat-root .widget-message.user {
+        background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+        color: #fff;
+        border-bottom-right-radius: 0.375rem;
+        box-shadow: 0 2px 8px rgba(99,102,241,0.2);
+    }
+    .wr-chat-root .widget-message.agent {
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        color: #1e293b;
+        border-bottom-left-radius: 0.375rem;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.03);
+    }
+    .dark .wr-chat-root .widget-message.agent {
+        background: #1e293b;
+        border-color: #334155;
+        color: #e2e8f0;
+    }
+
+    /* Override greeting */
+    .wr-chat-root .widget-greeting {
+        color: #94a3b8;
+        font-size: 0.9rem;
+        padding: 3rem 1rem;
+    }
+
+    /* Override input styling */
+    .wr-chat-root .widget-input {
+        border-radius: 0.75rem;
+        border: 1px solid #e2e8f0;
+        padding: 0.625rem 0.875rem;
+        font-size: 0.875rem;
+        background: #f8fafc;
+        transition: all 0.15s ease;
+    }
+    .wr-chat-root .widget-input:focus {
+        border-color: #6366f1;
+        background: #fff;
+        box-shadow: 0 0 0 3px rgba(99,102,241,0.1);
+    }
+    .dark .wr-chat-root .widget-input {
+        background: #0f172a;
+        border-color: #334155;
+        color: #e2e8f0;
+    }
+    .dark .wr-chat-root .widget-input:focus {
+        border-color: #818cf8;
+        background: #1e293b;
+        box-shadow: 0 0 0 3px rgba(129,140,248,0.1);
+    }
+
+    /* Override send button */
+    .wr-chat-root .widget-send-btn {
+        background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+        border-radius: 0.75rem;
+        padding: 0.5rem 1.25rem;
+        font-weight: 600;
+        font-size: 0.8rem;
+        box-shadow: 0 2px 6px rgba(99,102,241,0.25);
+        transition: all 0.15s ease;
+    }
+    .wr-chat-root .widget-send-btn:hover {
+        box-shadow: 0 4px 12px rgba(99,102,241,0.35);
+        transform: translateY(-1px);
+    }
+    .wr-chat-root .widget-send-btn:disabled {
+        opacity: 0.4;
+        transform: none;
+        box-shadow: none;
+    }
+
+    /* Override attach button */
+    .wr-chat-root .widget-attach-btn {
+        border-radius: 0.75rem;
+        border-color: #e2e8f0;
+    }
+    .dark .wr-chat-root .widget-attach-btn {
+        border-color: #334155;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="wr-root">
+
+{% if not selected_agent %}
+    <!-- ── DEFAULT: Welcome screen ───────────────────────── -->
+    <div class="wr-welcome">
+        <div class="wr-welcome-icon">
+            <i class="fas fa-comments text-blue-500 dark:text-blue-400 text-xl"></i>
+        </div>
+        <h2 class="text-xl font-bold text-gray-900 dark:text-white">Work Room</h2>
+        <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Select an agent to start chatting</p>
+
+        {% if agents %}
+        <div style="width:100%;max-width:760px;margin-top:1.5rem;">
+            <p class="text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2">Featured Agents</p>
+            <div class="wr-agents-grid">
+                {% for agent in agents %}
+                <a href="/dashboard/workroom?agent={{ agent.name | urlencode }}" class="wr-agent-card">
+                    <div class="wr-agent-avatar">
+                        {% if agent.type == 'sequential' %}<i class="fas fa-layer-group"></i>
+                        {% elif agent.type == 'parallel' %}<i class="fas fa-sitemap"></i>
+                        {% elif agent.type == 'loop' %}<i class="fas fa-redo"></i>
+                        {% else %}<i class="fas fa-robot"></i>{% endif %}
+                    </div>
+                    <div class="wr-agent-name">{{ agent.display_name or agent.name }}</div>
+                    {% if agent.description %}
+                    <div class="wr-agent-desc">{{ agent.description }}</div>
+                    {% endif %}
+                    <div class="wr-agent-type">{{ agent.type or 'llm' }}</div>
+                </a>
+                {% endfor %}
+            </div>
+        </div>
+        {% else %}
+        <div class="mt-8 text-center">
+            <p class="text-sm text-gray-500 dark:text-gray-400">No agents configured yet.</p>
+            <a href="/dashboard/agents" class="mt-3 inline-flex items-center gap-1.5 text-xs text-blue-600 dark:text-blue-400 hover:underline">
+                <i class="fas fa-plus"></i>Create your first agent
+            </a>
+        </div>
+        {% endif %}
+    </div>
+
+{% else %}
+    <!-- ── CHAT: Agent selected ──────────────────────────── -->
+    <div class="wr-chat-root">
+        <!-- Agent bar -->
+        <div class="wr-agent-bar">
+            <div class="wr-agent-bar-avatar"><i class="fas fa-robot"></i></div>
+            <span class="wr-agent-bar-name">{{ selected_agent }}</span>
+            <a href="/dashboard/workroom" class="wr-bar-action">
+                <i class="fas fa-exchange-alt mr-1"></i>Change
+            </a>
+            <!-- New chat reloads the same URL, chat.js will start fresh -->
+            <button id="widgetNewChat" type="button" class="wr-bar-action">
+                <i class="fas fa-plus mr-1"></i>New
+            </button>
+        </div>
+
+        <!-- Chat widget (header hidden via CSS — we use the bar above) -->
+        <div class="widget-container">
+            <div class="widget-header">
+                <span class="widget-header-title" id="widgetHeaderTitle">{{ selected_agent }}</span>
+            </div>
+            <div class="widget-messages" id="widgetMessages">
+                <div class="widget-greeting" id="widgetGreeting">How can I help you today?</div>
+                <div class="widget-typing" id="widgetTyping">
+                    <span class="widget-typing-dot"></span>
+                    <span class="widget-typing-dot"></span>
+                    <span class="widget-typing-dot"></span>
+                </div>
+            </div>
+            <div class="widget-image-preview" id="widgetImagePreview"></div>
+            <div class="widget-input-area">
+                <input type="file" id="widgetFileInput" accept="image/*" style="display:none" multiple>
+                <button class="widget-attach-btn" id="widgetAttachBtn" title="Attach image">&#x1F4CE;</button>
+                <textarea class="widget-input" id="widgetInput" placeholder="Type a message…" rows="1"></textarea>
+                <button class="widget-send-btn" id="widgetSendBtn">Send</button>
+            </div>
+        </div>
+    </div>
+{% endif %}
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% if selected_agent %}
+<script>
+(function () {
+    "use strict";
+
+    var AGENT   = {{ selected_agent | tojson }};
+    var SESSION = {{ selected_session | tojson }};
+    var PREFIX  = "mate_standalone_" + AGENT;
+
+    // Pin the user ID to the authenticated dashboard user so ADK sessions are
+    // owned by the real user, not a browser-generated random ID.
+    localStorage.setItem(PREFIX + "_uid", {{ username | tojson }});
+
+    // ── Helper ──────────────────────────────────────────────────
+    function relTime(ts) {
+        // ts is a Unix float (seconds)
+        var diff = Math.floor((Date.now() / 1000 - ts) / 60);
+        if (diff < 1)    return "just now";
+        if (diff < 60)   return diff + "m ago";
+        if (diff < 1440) return Math.floor(diff / 60) + "h ago";
+        if (diff < 10080) return Math.floor(diff / 1440) + "d ago";
+        return new Date(ts * 1000).toLocaleDateString();
+    }
+
+    function eventsToMsgs(events) {
+        var msgs = [];
+        var IMAGE_EXTENSIONS = [".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".bmp"];
+        
+        (events || []).forEach(function (e) {
+            // Check for artifacts
+            var artifactHtml = "";
+            var actions = e.actions || {};
+            var artifactDelta = actions.artifactDelta || actions.artifact_delta;
+            if (artifactDelta && typeof artifactDelta === "object") {
+                var filenames = Object.keys(artifactDelta);
+                for (var ai = 0; ai < filenames.length; ai++) {
+                    var artFilename = filenames[ai];
+                    var artVersion = artifactDelta[artFilename];
+                    var lowerName = artFilename.toLowerCase();
+                    var isImage = IMAGE_EXTENSIONS.some(function (ext) {
+                        return lowerName.endsWith(ext);
+                    });
+                    if (isImage) {
+                        var artUrl = window.location.origin + "/apps/" + AGENT + "/users/" + 
+                            localStorage.getItem(PREFIX + "_uid") + "/sessions/" + SESSION + 
+                            "/artifacts/" + artFilename + "/versions/" + artVersion;
+                        artifactHtml += '<img data-art-url="' + artUrl + '" alt="' + artFilename + '" class="widget-msg-image widget-generated-image art-lazy-load" style="opacity: 0.5;">';
+                    }
+                }
+            }
+
+            var hasContent = e.content && e.content.parts && e.author;
+            var text = "";
+            
+            if (hasContent) {
+                text = (e.content.parts || [])
+                    .filter(function (p) { return p.text; })
+                    .map(function (p) { return p.text; })
+                    .join("");
+            }
+            
+            text += artifactHtml;
+            
+            if (text && e.author) {
+                // If it's a model event with no author, default to agent
+                var role = e.author === "user" ? "user" : "agent";
+                
+                // Try to append to the last message if it's the same role
+                if (msgs.length > 0 && msgs[msgs.length - 1].role === role) {
+                    msgs[msgs.length - 1].text += text;
+                } else {
+                    msgs.push({ role: role, text: text });
+                }
+            }
+        });
+        
+        return msgs;
+    }
+
+    // ── "New Conversation" link: clear session before navigating ─
+    var newLink = document.getElementById("newConversationLink");
+    if (newLink) {
+        newLink.addEventListener("click", function () {
+            localStorage.removeItem(PREFIX + "_sid");
+            sessionStorage.removeItem(PREFIX + "_msgs");
+        });
+    }
+
+    // ── Load chat.js dynamically (so we can pre-populate storage first) ─
+    function loadChatJS() {
+        window.STANDALONE_AGENT_NAME = AGENT;
+        var s = document.createElement("script");
+        s.src = "/static/js/standalone/chat.js";
+        document.body.appendChild(s);
+    }
+
+    // ── Render session list in sidebar ──────────────────────────
+    function renderSessions(sessions) {
+        var listEl = document.getElementById("workroomSessionList");
+        if (!listEl) return;
+
+        if (!sessions || sessions.length === 0) {
+            listEl.innerHTML =
+                '<div class="px-3 py-1.5 text-xs text-gray-400 dark:text-gray-500">No sessions yet</div>';
+            return;
+        }
+
+        // Sort newest first
+        sessions.sort(function (a, b) {
+            return (b.lastUpdateTime || 0) - (a.lastUpdateTime || 0);
+        });
+
+        listEl.innerHTML = sessions.slice(0, 20).map(function (s) {
+            // Prefer LLM-generated title stored in session state, fall back to first user message
+            var label = (s.state && s.state._title) || "";
+            if (!label) {
+                var events = s.events || [];
+                var firstUser = events.find(function (e) {
+                    return e.author === "user" && e.content && e.content.parts;
+                });
+                if (firstUser) {
+                    var part = (firstUser.content.parts || []).find(function (p) { return p.text; });
+                    if (part && part.text) {
+                        label = part.text.length > 38
+                            ? part.text.slice(0, 38) + "…"
+                            : part.text;
+                    }
+                }
+            }
+            if (!label) label = "Session";
+            var ts   = s.lastUpdateTime ? relTime(s.lastUpdateTime) : "";
+            var href = "/dashboard/workroom?agent=" + encodeURIComponent(AGENT)
+                     + "&session=" + encodeURIComponent(s.id);
+            var active = s.id === SESSION;
+            var cls = active
+                ? "sidebar-active"
+                : "hover:bg-gray-100 dark:hover:bg-gray-700";
+
+            return '<a href="' + href + '" '
+                + 'class="flex flex-col px-3 py-1.5 rounded-lg text-gray-700 dark:text-gray-300 ' + cls + '" '
+                + 'title="' + label + '">'
+                + '<span class="text-xs font-medium truncate leading-tight">' + label + '</span>'
+                + (ts ? '<span class="text-xs text-gray-400 dark:text-gray-500">' + ts + '</span>' : '')
+                + '</a>';
+        }).join("");
+    }
+
+    function loadSessions(userId) {
+        fetch("/apps/" + AGENT + "/users/" + userId + "/sessions", {
+            credentials: "same-origin"
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+            // ADK may return array directly or wrapped
+            var sessions = Array.isArray(data) ? data : (data.sessions || []);
+            renderSessions(sessions);
+        })
+        .catch(function () {
+            var el = document.getElementById("workroomSessionList");
+            if (el) el.innerHTML =
+                '<div class="px-3 py-1.5 text-xs text-gray-400 dark:text-gray-500">—</div>';
+        });
+    }
+
+    // ── Auto-title: generate a descriptive title after first AI reply ──
+    var _titleGenDone = !!SESSION; // skip for restored sessions (already titled)
+    function _startTitleObserver() {
+        if (_titleGenDone) return;
+        var msgEl = document.getElementById("widgetMessages");
+        if (!msgEl) return;
+        var observer = new MutationObserver(function (mutations) {
+            if (_titleGenDone) { observer.disconnect(); return; }
+            for (var i = 0; i < mutations.length; i++) {
+                var added = mutations[i].addedNodes;
+                for (var j = 0; j < added.length; j++) {
+                    var node = added[j];
+                    if (node.nodeType === 1 && node.classList &&
+                        node.classList.contains("widget-message") &&
+                        !node.classList.contains("user")) {
+                        _titleGenDone = true;
+                        observer.disconnect();
+                        // Wait a tick so chat.js has stored the session id
+                        setTimeout(function () {
+                            var sid = localStorage.getItem(PREFIX + "_sid");
+                            var uid = localStorage.getItem(PREFIX + "_uid");
+                            if (!sid || !uid) return;
+                            fetch("/dashboard/api/workroom/title", {
+                                method: "POST",
+                                credentials: "same-origin",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ agent: AGENT, user_id: uid, session_id: sid })
+                            })
+                            .then(function (r) { return r.ok ? r.json() : null; })
+                            .then(function (data) {
+                                if (data && data.title) loadSessions(uid);
+                            })
+                            .catch(function () {});
+                        }, 800);
+                        return;
+                    }
+                }
+            }
+        });
+        observer.observe(msgEl, { childList: true, subtree: false });
+    }
+
+    // ── Main flow ────────────────────────────────────────────────
+    var userId = localStorage.getItem(PREFIX + "_uid");
+
+    if (SESSION) {
+        // ── Restore a specific previous session ─────────────────
+        localStorage.setItem(PREFIX + "_sid", SESSION);
+
+        if (userId) {
+            // Fetch events, populate sessionStorage, then boot chat.js
+            fetch("/apps/" + AGENT + "/users/" + userId + "/sessions/" + SESSION, {
+                credentials: "same-origin"
+            })
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (data) {
+                if (data) {
+                    var msgs = eventsToMsgs(data.events);
+                    if (msgs.length) {
+                        sessionStorage.setItem(PREFIX + "_msgs", JSON.stringify(msgs));
+                    }
+                }
+            })
+            .catch(function () {})
+            .finally(function () {
+                loadChatJS();
+                loadSessions(userId);
+            });
+        } else {
+            loadChatJS();
+        }
+    } else {
+        // ── New conversation ────────────────────────────────────
+        // Always start fresh: clear any stored session ID
+        localStorage.removeItem(PREFIX + "_sid");
+        sessionStorage.removeItem(PREFIX + "_msgs");
+        loadChatJS();
+        if (userId) loadSessions(userId);
+        // Attach observer to auto-generate title after first AI reply
+        _startTitleObserver();
+    }
+})();
+</script>
+{% endif %}
+{% endblock %}
