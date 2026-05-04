@@ -47,6 +47,21 @@
 
   var isOpen = false;
   var container, iframe, button, badge;
+  var _currentLang = "";
+
+  // --- Language helpers ------------------------------------------------
+  function _detectLang() {
+    var raw = document.documentElement.lang
+      || (document.querySelector('meta[http-equiv="content-language"]') || {}).content
+      || navigator.language
+      || "en";
+    return raw.split("-")[0].toLowerCase(); // "en-US" → "en"
+  }
+
+  function _sendLang(lang) {
+    if (!iframe || !iframe.contentWindow) return;
+    try { iframe.contentWindow.postMessage({ type: "mate-lang", lang: lang }, "*"); } catch (_) {}
+  }
 
   // --- Styles ----------------------------------------------------------
   function injectStyles() {
@@ -152,6 +167,7 @@
       if (t === "auto") {
         t = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
       }
+      _currentLang = _detectLang();
       setTimeout(function () {
         try { iframe.contentWindow.postMessage({ type: "mate-theme", theme: t }, "*"); } catch (_) {}
         try {
@@ -161,8 +177,10 @@
             url: window.location.href,
             title: document.title,
             description: metaDesc ? (metaDesc.getAttribute("content") || "") : "",
+            lang: _currentLang,
           }, "*");
         } catch (_) {}
+        _sendLang(_currentLang);
       }, 300);
     }
   }
@@ -183,10 +201,30 @@
     return d.innerHTML;
   }
 
+  // --- Listen for config pushed back from the iframe -------------------
+  window.addEventListener("message", function (e) {
+    if (!e.data || e.data.type !== "mate-config") return;
+    if (e.data.button_color && button) {
+      button.style.background = e.data.button_color;
+    }
+  });
+
   // --- Init ------------------------------------------------------------
   function init() {
     injectStyles();
     buildWidget();
+
+    // Watch <html lang="..."> for changes — catches all i18n libraries
+    // (i18next, vue-i18n, WordPress WPML, Django i18n, etc.)
+    if (typeof MutationObserver !== "undefined") {
+      new MutationObserver(function () {
+        var lang = _detectLang();
+        if (lang !== _currentLang) {
+          _currentLang = lang;
+          _sendLang(lang);
+        }
+      }).observe(document.documentElement, { attributes: true, attributeFilter: ["lang"] });
+    }
   }
 
   if (document.readyState === "loading") {

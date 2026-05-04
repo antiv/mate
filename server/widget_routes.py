@@ -37,6 +37,17 @@ templates = Jinja2Templates(directory=str(project_root / "templates"))
 ADK_HOST: str = "localhost"
 ADK_PORT: int = 8001
 
+# BCP-47 short code → display name used in context injection prefix
+_LANG_NAMES: dict = {
+    "en": "English", "sr": "Serbian", "hr": "Croatian", "bs": "Bosnian",
+    "de": "German", "fr": "French", "es": "Spanish", "it": "Italian",
+    "pt": "Portuguese", "nl": "Dutch", "pl": "Polish", "ru": "Russian",
+    "zh": "Chinese", "ja": "Japanese", "ko": "Korean", "ar": "Arabic",
+    "he": "Hebrew", "fa": "Persian", "tr": "Turkish", "sv": "Swedish",
+    "no": "Norwegian", "da": "Danish", "fi": "Finnish", "cs": "Czech",
+    "sk": "Slovak", "hu": "Hungarian", "ro": "Romanian", "uk": "Ukrainian",
+}
+
 
 def configure_widget_proxy(adk_host: str, adk_port: int):
     global ADK_HOST, ADK_PORT
@@ -151,7 +162,8 @@ async def widget_chat(request: Request, wk: WidgetApiKey = Depends(verify_widget
     new_session = body.get("new_session", False)
     # Accept pre-built parts array (with inline_data for images)
     raw_parts = body.get("parts")
-    page_context = body.get("page_context")  # Optional dict: {url, title, description}
+    page_context = body.get("page_context")  # Optional dict: {url, title, description, lang}
+    lang = body.get("lang", "") or (page_context or {}).get("lang", "")  # BCP-47 short code e.g. "de"
 
     scoped_user = f"widget_{wk.id}_{user_id}"
     app_name = wk.agent_name
@@ -166,13 +178,20 @@ async def widget_chat(request: Request, wk: WidgetApiKey = Depends(verify_widget
     else:
         message_parts = [{"text": message_text}]
 
-    # Inject page context as a prefix when enabled in widget config
+    # Inject page context and language as a prefix when enabled in widget config
     cfg = wk.get_widget_config()
-    if cfg.get("context_injection") and page_context and isinstance(page_context, dict):
-        ctx_url = str(page_context.get("url", ""))[:500]
-        ctx_title = str(page_context.get("title", ""))[:200]
-        if ctx_url or ctx_title:
-            prefix = f'[Page context: user is visiting "{ctx_title}" at {ctx_url}]\n\n'
+    if cfg.get("context_injection"):
+        prefix_lines = []
+        if page_context and isinstance(page_context, dict):
+            ctx_url = str(page_context.get("url", ""))[:500]
+            ctx_title = str(page_context.get("title", ""))[:200]
+            if ctx_url or ctx_title:
+                prefix_lines.append(f'[Page context: user is visiting "{ctx_title}" at {ctx_url}]')
+        if lang:
+            lang_name = _LANG_NAMES.get(lang[:5].lower(), lang)
+            prefix_lines.append(f'[User language: {lang_name} ({lang})]')
+        if prefix_lines:
+            prefix = "\n".join(prefix_lines) + "\n\n"
             injected = False
             for part in message_parts:
                 if "text" in part:

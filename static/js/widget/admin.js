@@ -56,12 +56,24 @@
   var chatUrl = BASE + "/widget/chat?key=" + API_KEY;
   var previewOpen = false;
 
+  function _freshUrl() { return chatUrl + "&_t=" + Date.now(); }
+
+  function _applyColorToPreview(color) {
+    try {
+      var doc = previewIframe.contentDocument || (previewIframe.contentWindow && previewIframe.contentWindow.document);
+      if (!doc || !doc.documentElement) return;
+      doc.documentElement.style.setProperty("--w-primary", color);
+      doc.documentElement.style.setProperty("--w-primary-hover", color);
+      doc.documentElement.style.setProperty("--w-user-bubble", color);
+    } catch (_) {}
+  }
+
   function openPreview() {
     previewPanel.style.display = "flex";
     previewToggle.textContent = "Hide Preview";
     previewOpen = true;
     if (!previewIframe.src || previewIframe.src === "about:blank") {
-      previewIframe.src = chatUrl;
+      previewIframe.src = _freshUrl();
     }
   }
 
@@ -76,7 +88,7 @@
   });
   previewClose.addEventListener("click", closePreview);
   previewReload.addEventListener("click", function () {
-    previewIframe.src = chatUrl;
+    previewIframe.src = _freshUrl();
   });
 
   // --- Appearance refs -------------------------------------------------
@@ -302,6 +314,11 @@
     });
   }
 
+  // Real-time color preview — fires while the native color picker is open
+  cfgButtonColor.addEventListener("input", function () {
+    if (previewOpen) _applyColorToPreview(cfgButtonColor.value);
+  });
+
   appearanceForm.addEventListener("submit", function (e) {
     e.preventDefault();
     api("PUT", "/widget-config", {
@@ -315,7 +332,7 @@
     }).then(function (res) {
       toast(res.success ? "Appearance saved" : (res.detail || "Failed"), res.success ? "success" : "error");
       if (res.success && previewOpen) {
-        previewIframe.src = chatUrl; // reflect new config immediately
+        previewIframe.src = _freshUrl(); // cache-busted reload with new config
       }
     });
   });

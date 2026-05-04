@@ -8,6 +8,8 @@
 [![LiteLLM](https://img.shields.io/badge/LiteLLM-50%2B%20providers-purple.svg)](https://github.com/BerriAI/litellm)
 [![MCP](https://img.shields.io/badge/MCP-compatible-brightgreen.svg)](https://modelcontextprotocol.io/)
 
+Created by [Ivan Antonijević](https://antonijevic.rs)
+
 You built an agent. Now you need to tune the prompt. Swap the model. Restrict access for specific users. Figure out what it's actually costing you. And make sure yesterday's behavior still works after today's changes.
 
 Without a control layer, every one of those is a code change, a commit, and a redeploy.
@@ -90,6 +92,11 @@ Drag-and-drop canvas for building agent hierarchies. See tool and MCP nodes atta
 
 ![Agent Visual Builder](documents/images/visual_builder.png)
 
+### Work Room
+A built-in chat interface inside the dashboard. Pick any root agent from the card grid and start a conversation — no embed code, no browser tab switching. Sessions are auto-titled and persist across page reloads. The default landing page after login.
+
+![Work Room](documents/images/workroom.png)
+
 ### Agent Configuration
 Edit every aspect of an agent: model, instruction, RBAC roles, memory blocks, tools, MCP servers, planner, and schemas.
 
@@ -133,6 +140,12 @@ Drill into individual request logs — prompt / response / thought / tool-use to
 ---
 
 ## Features
+
+**Work Room**
+- Built-in chat interface in the dashboard — pick a root agent from the card grid and start talking, no embed code required
+- Sessions are automatically titled (LLM-generated) and persist across page reloads
+- Supports the same streaming SSE, tool-use indicators, and markdown rendering as the embeddable widget
+- The default landing page after login — useful for internal teams who live in the dashboard
 
 **The Studio**
 - Database-driven agent management — every field editable from the dashboard, zero redeploy
@@ -244,11 +257,12 @@ coverage report --include="shared/utils/*,server/*,auth_server.py"
 
 ---
 
-## Embeddable Chat Widget
+## Embeddable Chat Widget — One Backend, Many Sites
 
-Add AI chat to any website:
+A single MATE instance can power AI chat across multiple websites simultaneously. Each site gets its own widget key scoped to a specific agent, with independent appearance, memory, and access rules.
 
 ```html
+<!-- Drop this before </body> on any website -->
 <script
   src="https://your-mate-instance.com/widget/mate-widget.js"
   data-key="wk_abc123..."
@@ -256,9 +270,37 @@ Add AI chat to any website:
 ></script>
 ```
 
-Generate a widget key from the dashboard (Agent Management → select agent → `</>` icon). Each key is scoped to one agent and one project. Set allowed origins to lock a key to specific domains.
+A floating chat button appears instantly. No build step, no framework dependency.
 
-The widget admin panel (`/widget/admin?key=...`) lets non-technical teams manage the agent instruction, memory blocks, uploaded files, and visual appearance — without access to the main dashboard.
+### Multi-site example
+
+```
+MATE instance
+├── key: wk_aaa  →  support_agent    →  company-support.com   (English, light theme)
+├── key: wk_bbb  →  sales_agent      →  company-sales.com     (dark theme, no attachments)
+└── key: wk_ccc  →  docs_agent       →  docs.company.com      (RAG over product docs)
+```
+
+Each key is independent: different agent, different greeting, different allowed origins, different color scheme.
+
+### Page context awareness
+
+When a user opens the widget on a product page, the widget automatically reads the page URL, title, and meta description and passes them to the agent as conversation context. The agent knows which page the user is viewing without any custom integration — just enable "Inject page context" in the widget admin panel.
+
+### Widget admin panel
+
+Each key has a standalone admin panel at `/widget/admin?key=...`. Non-technical teams can manage appearance, greeting, memory blocks, and uploaded files without touching the main dashboard.
+
+| Setting | Admin panel |
+|---|---|
+| Widget title and greeting | ✓ |
+| Light / dark / auto theme | ✓ |
+| Button and accent color | ✓ |
+| Show / hide file attachments | ✓ |
+| Page context injection toggle | ✓ |
+| Agent instruction and model | ✓ |
+| Memory blocks (company info, FAQs…) | ✓ |
+| RAG file upload | ✓ |
 
 > Full documentation: [documents/WIDGET_INTEGRATION.md](documents/WIDGET_INTEGRATION.md)
 
@@ -283,6 +325,7 @@ Each exposed agent gets endpoints at `/agents/{name}/mcp/*`. Built-in MCP server
 
 | Route | Purpose |
 |---|---|
+| `/dashboard/workroom` | **Work Room** — chat with any agent directly in the dashboard (default after login) |
 | `/dashboard` | Overview — usage stats, system health |
 | `/dashboard/agents` | Agent hierarchy, configuration, Visual Builder |
 | `/dashboard/users` | User management and role assignment |

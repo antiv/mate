@@ -23,7 +23,49 @@
   let sending = false;
   let forceNewSession = false;
   let pendingImages = []; // [{dataUrl, mimeType, base64}]
-  let pageContext = null; // {url, title, description} from parent page via postMessage
+  let pageContext = null; // {url, title, description, lang} from parent page via postMessage
+  let currentLang = "en";
+
+  // UI string translations — placeholder, send button, new-chat button
+  const UI_STRINGS = {
+    en: { placeholder: "Type a message…", send: "Send", newChat: "New Chat" },
+    sr: { placeholder: "Unesite poruku…", send: "Pošalji", newChat: "Nov razgovor" },
+    hr: { placeholder: "Unesite poruku…", send: "Pošalji", newChat: "Novi razgovor" },
+    bs: { placeholder: "Unesite poruku…", send: "Pošalji", newChat: "Novi razgovor" },
+    de: { placeholder: "Nachricht eingeben…", send: "Senden", newChat: "Neuer Chat" },
+    fr: { placeholder: "Écrivez un message…", send: "Envoyer", newChat: "Nouveau chat" },
+    es: { placeholder: "Escribe un mensaje…", send: "Enviar", newChat: "Nueva conversación" },
+    it: { placeholder: "Scrivi un messaggio…", send: "Invia", newChat: "Nuova chat" },
+    pt: { placeholder: "Escreva uma mensagem…", send: "Enviar", newChat: "Nova conversa" },
+    nl: { placeholder: "Typ een bericht…", send: "Versturen", newChat: "Nieuw gesprek" },
+    pl: { placeholder: "Wpisz wiadomość…", send: "Wyślij", newChat: "Nowy czat" },
+    ru: { placeholder: "Введите сообщение…", send: "Отправить", newChat: "Новый чат" },
+    zh: { placeholder: "输入消息…", send: "发送", newChat: "新对话" },
+    ja: { placeholder: "メッセージを入力…", send: "送信", newChat: "新しいチャット" },
+    ar: { placeholder: "اكتب رسالة…", send: "إرسال", newChat: "محادثة جديدة" },
+    he: { placeholder: "כתוב הודעה…", send: "שלח", newChat: "שיחה חדשה" },
+    tr: { placeholder: "Mesaj yazın…", send: "Gönder", newChat: "Yeni Sohbet" },
+  };
+  const RTL_LANGS = ["ar", "he", "fa", "ur"];
+
+  function _darkenHex(hex, amount) {
+    var c = hex.replace("#", "");
+    if (c.length === 3) c = c[0]+c[0]+c[1]+c[1]+c[2]+c[2];
+    var r = Math.max(0, Math.round(parseInt(c.slice(0,2),16) * (1-amount)));
+    var g = Math.max(0, Math.round(parseInt(c.slice(2,4),16) * (1-amount)));
+    var b = Math.max(0, Math.round(parseInt(c.slice(4,6),16) * (1-amount)));
+    return "#" + [r,g,b].map(function(v){ return v.toString(16).padStart(2,"0"); }).join("");
+  }
+
+  function _applyLang(lang) {
+    var s = UI_STRINGS[lang] || UI_STRINGS["en"];
+    if (inputEl) inputEl.placeholder = s.placeholder;
+    if (sendBtn && !sending) sendBtn.textContent = s.send;
+    if (newChatBtn) newChatBtn.textContent = s.newChat;
+    // RTL support
+    var dir = RTL_LANGS.indexOf(lang) !== -1 ? "rtl" : "ltr";
+    document.documentElement.setAttribute("dir", dir);
+  }
 
   // --- DOM refs --------------------------------------------------------
   const messagesEl = document.getElementById("widgetMessages");
@@ -84,17 +126,43 @@
       if (attachBtn) attachBtn.style.display = "none";
     }
 
-    // Listen for messages from parent page (theme + page context)
+    // Apply button/accent color from widget config
+    if (CFG.button_color && /^#[0-9a-f]{3,6}$/i.test(CFG.button_color)) {
+      var color = CFG.button_color;
+      var colorDark = _darkenHex(color, 0.12);
+      document.documentElement.style.setProperty("--w-primary", color);
+      document.documentElement.style.setProperty("--w-primary-hover", colorDark);
+      document.documentElement.style.setProperty("--w-user-bubble", color);
+      // Notify parent so it can update the floating button color
+      try { window.parent.postMessage({ type: "mate-config", button_color: color }, "*"); } catch (_) {}
+    }
+
+    // Listen for messages from parent page (theme, page context, language)
     window.addEventListener("message", function (e) {
-      if (e.data && e.data.type === "mate-theme") {
+      if (!e.data) return;
+      if (e.data.type === "mate-theme") {
         document.documentElement.setAttribute("data-theme", e.data.theme === "dark" ? "dark" : "");
       }
-      if (e.data && e.data.type === "mate-context") {
+      if (e.data.type === "mate-context") {
+        var lang = (e.data.lang || "en").split("-")[0].toLowerCase();
         pageContext = {
           url: e.data.url || "",
           title: e.data.title || "",
           description: e.data.description || "",
+          lang: lang,
         };
+        if (lang && lang !== currentLang) {
+          currentLang = lang;
+          _applyLang(lang);
+        }
+      }
+      if (e.data.type === "mate-lang") {
+        var lang = (e.data.lang || "en").split("-")[0].toLowerCase();
+        if (lang !== currentLang) {
+          currentLang = lang;
+          if (pageContext) pageContext.lang = lang;
+          _applyLang(lang);
+        }
       }
     });
   }
@@ -123,6 +191,7 @@
 
     const payload = { message: text, parts: parts, user_id: userId, session_id: sessionId, new_session: forceNewSession };
     if (pageContext) payload.page_context = pageContext;
+    if (currentLang) payload.lang = currentLang;
     forceNewSession = false;
 
     fetch(`${BASE}/widget/api/chat`, {
