@@ -95,6 +95,8 @@ Drag-and-drop canvas for building agent hierarchies. See tool and MCP nodes atta
 ### Work Room
 A built-in chat interface inside the dashboard. Pick any root agent from the card grid and start a conversation — no embed code, no browser tab switching. Sessions are auto-titled and persist across page reloads. The default landing page after login.
 
+When the agent responds with code, the canvas panel opens automatically to the right of the chat. Code never clutters the conversation — it goes straight into a full-featured editor. HTML, JavaScript, CSS, and SVG can be executed in a sandboxed iframe with one click. Python runs via Pyodide (WebAssembly) directly in the browser. The panel is resizable by dragging the divider. Any edits made in the canvas are automatically included in the next prompt, so you can ask the agent to modify its own output without copy-pasting.
+
 ![Work Room](documents/images/workroom.png)
 
 ### Agent Configuration
@@ -146,6 +148,10 @@ Drill into individual request logs — prompt / response / thought / tool-use to
 - Sessions are automatically titled (LLM-generated) and persist across page reloads
 - Supports the same streaming SSE, tool-use indicators, and markdown rendering as the embeddable widget
 - The default landing page after login — useful for internal teams who live in the dashboard
+- **Canvas panel**: code blocks auto-open in a side panel with Ace Editor instead of rendering in chat
+- Execute HTML, JavaScript, CSS, and SVG in a sandboxed iframe; run Python via Pyodide (WebAssembly) in-browser
+- Canvas edits are automatically attached to the next prompt — iterate on code without copy-pasting
+- Drag the chat/canvas divider to resize; canvas closes and resets when a new session starts
 
 **The Studio**
 - Database-driven agent management — every field editable from the dashboard, zero redeploy

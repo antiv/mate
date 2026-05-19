@@ -11,14 +11,50 @@ The MATE Dashboard is a web-based management interface for the agent system.
 
 ## Main Features
 
-### 1. Dashboard Home (`/dashboard`)
+### 1. Work Room (`/dashboard/workroom`)
+
+The default landing page after login. A full chat interface for talking to any root agent directly inside the dashboard — no embed code, no browser tab switching.
+
+**Chat**
+- Pick a root agent from the card grid to start a session
+- Sessions are auto-titled (LLM-generated) and persist across page reloads
+- Streaming SSE responses, tool-use indicators, and markdown rendering
+
+**Canvas panel**
+
+When the agent returns a code block the canvas panel opens automatically to the right of the chat. Code is removed from the chat message and replaced with a small pill badge — the conversation stays clean.
+
+- **Ace Editor** — syntax-highlighted, fully editable code
+- **Execute** — HTML, JavaScript, CSS, and SVG run in a sandboxed iframe (▶ Run); Python runs via Pyodide (WebAssembly, no server required)
+- **Back to Code** — switch from the running preview back to the editor
+- **Refresh** — re-run the current preview
+- **Copy** — copy code to clipboard
+- **Download** — save the file locally (`.html`, `.js`, `.py`, etc.)
+- **Open in New Tab** — opens HTML/JS/CSS/SVG previews in a new browser tab (not available for Python)
+- **Close (✕)** — closes the canvas; chat expands back to full width
+
+**Canvas-to-prompt injection**
+
+Any edits made in the canvas editor are automatically included in the next message sent. A `⌨ lang · canvas` badge in the input area confirms the attachment. This lets you ask the agent to continue, fix, or extend its own code without copy-pasting.
+
+**Resizable layout**
+
+Drag the divider between the chat and canvas panels to adjust their widths. The split is set freely by dragging — minimum widths prevent either panel from collapsing entirely.
+
+**Session reset**
+
+Opening a new session (New Chat button) closes and fully resets the canvas — no leftover code is carried into the new conversation.
+
+---
+
+### 2. Dashboard Home (`/dashboard`)
 - **Usage Statistics**: View token usage metrics for the last 7/30 days
 - **Top Agents**: See most frequently used agents
 - **Daily Usage Charts**: Visualize token consumption trends
 - **Hourly Usage Patterns**: Analyze peak usage hours
 - **Database Info**: View current database connection details
 
-### 2. Agent Management (`/dashboard/agents`)
+### 3. Agent Management (`/dashboard/agents`)
 - **Agent Listing**: View all configured agents with search/filtering
   - Filter by root agent: Select a root agent to view its entire hierarchy (root + all sub-agents)
   - Search across name, type, model, parents, and description
@@ -49,7 +85,7 @@ The MATE Dashboard is a web-based management interface for the agent system.
 - **Save as Template**: Create a reusable template from the selected project and root agent hierarchy (saved to `templates/agent_templates/`)
 - **Monaco JSON Editor**: Advanced JSON editing with syntax highlighting and validation
 
-### 3. Template Library (`/dashboard/templates`)
+### 4. Template Library (`/dashboard/templates`)
 - **Template Gallery**: Pre-built agent configurations with search and category filters
 - **One-Click Import**: Creates project, agents, and memory blocks; redirects to agents page
 - **Categories**: support, research, code, content, demo
@@ -57,21 +93,21 @@ The MATE Dashboard is a web-based management interface for the agent system.
 - **Save as Template**: From Agents page, select project + root agent, click "Save as Template" to create a new template from existing hierarchy
 - See `documents/TEMPLATE_LIBRARY.md` for schema and community contribution
 
-### 4. User Management (`/dashboard/users`)
+### 5. User Management (`/dashboard/users`)
 - **User Listing**: View all registered users
 - **Create Users**: Add new users with role assignments
 - **Edit Users**: Modify user roles
 - **Delete Users**: Remove users from the system
 - **Role Management**: Assign/remove roles (admin, user, custom roles)
 
-### 5. Database Migrations (`/dashboard/migrations`)
+### 6. Database Migrations (`/dashboard/migrations`)
 - **Migration History**: View all applied database migrations
 - **Migration Details**: See version, name, timestamp, and checksum
 - **Delete Migration**: Remove a migration record (admin operation)
 - **Re-run Migration**: Delete and re-apply a specific migration
 - **Run All Pending**: Apply all pending migrations
 
-### 6. Usage Analytics (`/dashboard/usage`)
+### 7. Usage Analytics (`/dashboard/usage`)
 - **Analytics View**: 
   - Total requests and tokens (prompt + response)
   - Unique users and agents
@@ -88,7 +124,7 @@ The MATE Dashboard is a web-based management interface for the agent system.
   - Request tracking with session IDs
   - Error status tracking
 
-### 7. API Documentation (`/dashboard/docs`)
+### 8. API Documentation (`/dashboard/docs`)
 - **Interactive API Docs**: Links to agent API documentation
 - **Server Control**: Start/Stop/Restart ADK server
 - **Server Status**: Real-time ADK server health check

@@ -90,10 +90,18 @@
   function _send() {
     var text = inputEl.value.trim();
     var images = pendingImages.slice();
-    if ((!text && !images.length) || sending) return;
+    var canvasCtx = window.mateGetCanvasCode && window.mateGetCanvasCode();
+    if ((!text && !images.length && !canvasCtx) || sending) return;
 
     if (greetingEl) greetingEl.style.display = "none";
-    _appendMessage("user", text, false, images);
+    var userEl = _appendMessage("user", text, false, images);
+    // Show a small badge on the user bubble when canvas code is attached
+    if (canvasCtx && userEl) {
+      var badge = document.createElement("span");
+      badge.className = "mate-canvas-attach-badge";
+      badge.textContent = "⌨ " + canvasCtx.lang + " · canvas";
+      userEl.appendChild(badge);
+    }
     inputEl.value = "";
     inputEl.style.height = "auto";
     _clearPendingImages();
@@ -101,12 +109,18 @@
     sendBtn.disabled = true;
     _showTyping(true);
 
-    // Build parts array
+    // Build parts array — append canvas code to the text part
     var parts = [];
     images.forEach(function (img) {
       parts.push({ inline_data: { mime_type: img.mimeType, data: img.base64 } });
     });
-    if (text) parts.push({ text: text });
+    var sendText = text;
+    if (canvasCtx) {
+      sendText += (text ? "\n\n" : "") +
+        "[Canvas code – " + canvasCtx.lang + "]\n```" + canvasCtx.lang + "\n" +
+        canvasCtx.code + "\n```";
+    }
+    if (sendText) parts.push({ text: sendText });
 
     var doSend = sessionId
       ? Promise.resolve(sessionId)
@@ -353,6 +367,7 @@
           _appendMessage("agent", "(no response)");
         }
         _saveHistory();
+        if (agentEl && window.mateOnAgentDone) window.mateOnAgentDone(agentEl);
         return;
       }
       buffer += decoder.decode(result.value, { stream: true });
@@ -543,7 +558,19 @@
     if (!text) return "";
     var html = text
       .replace(/```(\w*)\n([\s\S]*?)```/g, function (_, lang, code) {
-        return "<pre><code>" + _escapeHtml(code.trim()) + "</code></pre>";
+        var raw = code.trim();
+        var escaped = _escapeHtml(raw);
+        var l = lang || "code";
+        // Store raw code URI-encoded so newlines survive the final \n→<br> pass
+        var dataRaw = encodeURIComponent(raw);
+        return '<div class="mate-code-block" data-lang="' + l + '" data-rawcode="' + dataRaw + '">'
+          + '<div class="mate-code-header">'
+          + '<span class="mate-code-lang">' + l + '</span>'
+          + '<span class="mate-canvas-indicator">open in canvas</span>'
+          + '<button class="mate-canvas-btn" onclick="if(window.mateOpenCanvas)window.mateOpenCanvas(this.closest(\'.mate-code-block\'))">Open in Canvas</button>'
+          + '</div>'
+          + '<pre><code>' + escaped + '</code></pre>'
+          + '</div>';
       })
       .replace(/`([^`]+)`/g, "<code>$1</code>")
       .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")

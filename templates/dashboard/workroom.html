@@ -4,6 +4,7 @@
 
 {% block extra_head %}
 <link rel="stylesheet" href="/static/css/widget/chat.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.6/ace.min.js" defer></script>
 <style>
     /* ── Work Room layout ─────────────────────────────────── */
     .wr-root {
@@ -315,6 +316,289 @@
     .dark .wr-chat-root .widget-attach-btn {
         border-color: #334155;
     }
+
+    /* ── Chat + Canvas row ─────────────────────────────────── */
+    .wr-body-row {
+        display: flex;
+        flex: 1;
+        min-height: 0;
+        gap: 0;
+    }
+    .wr-chat-side {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        min-height: 0;
+        min-width: 0;
+    }
+    .wr-body-row.canvas-open .wr-chat-side {
+        flex: 0 0 420px;
+    }
+    .wr-chat-root.canvas-open {
+        max-width: none;
+    }
+
+    /* ── Drag resizer ──────────────────────────────────────── */
+    .wr-resizer {
+        flex-shrink: 0;
+        width: 8px;
+        cursor: col-resize;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: transparent;
+        position: relative;
+        z-index: 10;
+    }
+    .wr-resizer::after {
+        content: '';
+        width: 2px;
+        height: 36px;
+        border-radius: 2px;
+        background: #e2e8f0;
+        transition: background 0.15s, height 0.15s;
+    }
+    .wr-resizer:hover::after,
+    .wr-resizer.is-dragging::after {
+        background: #6366f1;
+        height: 56px;
+    }
+    .dark .wr-resizer::after { background: #334155; }
+    .dark .wr-resizer:hover::after,
+    .dark .wr-resizer.is-dragging::after { background: #818cf8; }
+
+    /* ── Canvas panel ──────────────────────────────────────── */
+    .wr-canvas-panel {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-radius: 0 0 1rem 0;
+        overflow: hidden;
+        font-size: 0.8125rem;
+    }
+    .dark .wr-canvas-panel {
+        background: #0f172a;
+        border-color: #334155;
+    }
+    .wr-canvas-header {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem 0.875rem;
+        border-bottom: 1px solid #e2e8f0;
+        flex-shrink: 0;
+        background: #f8fafc;
+    }
+    .dark .wr-canvas-header {
+        background: #1e293b;
+        border-bottom-color: #334155;
+    }
+    .wr-canvas-lang-badge {
+        font-size: 0.65rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: #6366f1;
+        background: rgba(99,102,241,0.08);
+        padding: 0.15rem 0.45rem;
+        border-radius: 0.375rem;
+    }
+    .dark .wr-canvas-lang-badge { color: #818cf8; background: rgba(129,140,248,0.12); }
+    .wr-canvas-action-btn {
+        font-size: 0.7rem;
+        font-weight: 500;
+        color: #64748b;
+        background: none;
+        border: 1px solid #e2e8f0;
+        border-radius: 0.375rem;
+        padding: 0.25rem 0.625rem;
+        cursor: pointer;
+        transition: all 0.15s;
+    }
+    .wr-canvas-action-btn:hover {
+        background: #f1f5f9;
+        color: #0f172a;
+        border-color: #cbd5e1;
+    }
+    .dark .wr-canvas-action-btn {
+        color: #94a3b8;
+        border-color: #334155;
+    }
+    .dark .wr-canvas-action-btn:hover {
+        background: #1e293b;
+        color: #e2e8f0;
+        border-color: #475569;
+    }
+    .wr-canvas-run-btn {
+        color: #16a34a;
+        border-color: #bbf7d0;
+        background: rgba(22,163,74,0.05);
+    }
+    .wr-canvas-run-btn:hover {
+        background: rgba(22,163,74,0.1);
+        border-color: #86efac;
+        color: #15803d;
+    }
+    .dark .wr-canvas-run-btn { color: #4ade80; border-color: rgba(74,222,128,0.2); }
+    .wr-canvas-body {
+        flex: 1;
+        position: relative;
+        overflow: hidden;
+    }
+    .wr-canvas-body iframe {
+        position: absolute;
+        top: 0; left: 0; right: 0; bottom: 0;
+        width: 100%;
+        height: 100%;
+        border: none;
+        background: #fff;
+    }
+    /* Ace editor container */
+    #wrAceEditor {
+        position: absolute;
+        top: 0; left: 0; right: 0; bottom: 0;
+        font-size: 13px !important;
+        line-height: 1.6 !important;
+    }
+    /* Ace gutter border fix */
+    .ace_gutter { border-right: 1px solid rgba(0,0,0,0.08) !important; }
+    .dark .ace_gutter { border-right-color: rgba(255,255,255,0.06) !important; }
+
+    /* ── Code blocks inside chat messages ─────────────────── */
+    .mate-code-block {
+        margin: 0.5rem 0;
+        border-radius: 0.375rem;
+        overflow: hidden;
+        /* No outer border — message bubble is already a container */
+        background: rgba(0,0,0,0.03);
+    }
+    .dark .mate-code-block { background: rgba(0,0,0,0.25); }
+    .mate-code-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0.25rem 0.75rem;
+        background: rgba(0,0,0,0.04);
+        border-bottom: 1px solid rgba(0,0,0,0.06);
+    }
+    .dark .mate-code-header {
+        background: rgba(255,255,255,0.04);
+        border-bottom-color: rgba(255,255,255,0.06);
+    }
+    .mate-code-lang {
+        font-size: 0.62rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: #64748b;
+    }
+    .dark .mate-code-lang { color: #94a3b8; }
+    .mate-canvas-btn {
+        font-size: 0.65rem;
+        font-weight: 500;
+        color: #6366f1;
+        background: none;
+        border: none;
+        cursor: pointer;
+        padding: 0.1rem 0.375rem;
+        border-radius: 0.25rem;
+        transition: background 0.15s;
+    }
+    .mate-canvas-btn:hover { background: rgba(99,102,241,0.1); }
+    .dark .mate-canvas-btn { color: #818cf8; }
+    .mate-code-block pre {
+        margin: 0;
+        padding: 0.625rem 0.875rem;
+        background: transparent;
+        overflow-x: auto;
+        transition: max-height 0.2s ease, opacity 0.2s ease;
+        max-height: 400px;
+    }
+    .dark .mate-code-block pre { background: transparent; }
+    /* Collapsed state — code shown in canvas */
+    .mate-code-block.canvas-active pre {
+        max-height: 0;
+        opacity: 0;
+        padding-top: 0;
+        padding-bottom: 0;
+        overflow: hidden;
+    }
+    .mate-canvas-indicator {
+        display: none;
+        font-size: 0.62rem;
+        color: #6366f1;
+        font-style: italic;
+    }
+    .dark .mate-canvas-indicator { color: #818cf8; }
+    .mate-code-block.canvas-active .mate-canvas-indicator { display: inline; }
+
+    /* Back-to-code button variant */
+    .wr-canvas-back-btn {
+        color: #64748b;
+    }
+
+    /* ── Python output pane ───────────────────────────────────── */
+    .wr-py-output {
+        padding: 1rem 1.25rem;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 0.8rem;
+        line-height: 1.6;
+        height: 100%;
+        box-sizing: border-box;
+        overflow: auto;
+    }
+    .wr-py-stdout { margin: 0; white-space: pre-wrap; color: #1e293b; }
+    .dark .wr-py-stdout { color: #e2e8f0; }
+    .wr-py-stderr { margin: 0; white-space: pre-wrap; color: #dc2626; }
+    .dark .wr-py-stderr { color: #f87171; }
+    .wr-py-loading { color: #94a3b8; animation: wr-blink 1.2s steps(1) infinite; }
+    .wr-py-empty   { color: #22c55e; }
+    @keyframes wr-blink { 50% { opacity: 0.4; } }
+
+    /* ── Code-in-canvas pill (replaces code block in chat) ─── */
+    .mate-code-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.375rem;
+        margin: 0.375rem 0;
+        padding: 0.25rem 0.625rem 0.25rem 0.5rem;
+        background: rgba(99,102,241,0.07);
+        border: 1px solid rgba(99,102,241,0.18);
+        border-radius: 99px;
+        font-size: 0.7rem;
+        color: #6366f1;
+        cursor: default;
+    }
+    .dark .mate-code-pill {
+        background: rgba(129,140,248,0.1);
+        border-color: rgba(129,140,248,0.2);
+        color: #818cf8;
+    }
+    .mate-code-pill i { font-size: 0.65rem; }
+    .mate-pill-btn {
+        background: none;
+        border: none;
+        cursor: pointer;
+        font-size: 0.68rem;
+        color: inherit;
+        opacity: 0.75;
+        padding: 0;
+        text-decoration: underline;
+        text-underline-offset: 2px;
+    }
+    .mate-pill-btn:hover { opacity: 1; }
+
+    /* Badge shown on user message when canvas code is attached */
+    .mate-canvas-attach-badge {
+        display: block;
+        margin-top: 0.35rem;
+        font-size: 0.65rem;
+        opacity: 0.75;
+        font-style: italic;
+    }
 </style>
 {% endblock %}
 
@@ -377,25 +661,47 @@
             </button>
         </div>
 
-        <!-- Chat widget (header hidden via CSS — we use the bar above) -->
-        <div class="widget-container">
-            <div class="widget-header">
-                <span class="widget-header-title" id="widgetHeaderTitle">{{ selected_agent }}</span>
-            </div>
-            <div class="widget-messages" id="widgetMessages">
-                <div class="widget-greeting" id="widgetGreeting">How can I help you today?</div>
-                <div class="widget-typing" id="widgetTyping">
-                    <span class="widget-typing-dot"></span>
-                    <span class="widget-typing-dot"></span>
-                    <span class="widget-typing-dot"></span>
+        <!-- Body: chat + canvas side by side -->
+        <div class="wr-body-row" id="wrBodyRow">
+            <div class="wr-chat-side" id="wrChatSide">
+                <!-- Chat widget (header hidden via CSS — we use the bar above) -->
+                <div class="widget-container">
+                    <div class="widget-header">
+                        <span class="widget-header-title" id="widgetHeaderTitle">{{ selected_agent }}</span>
+                    </div>
+                    <div class="widget-messages" id="widgetMessages">
+                        <div class="widget-greeting" id="widgetGreeting">How can I help you today?</div>
+                        <div class="widget-typing" id="widgetTyping">
+                            <span class="widget-typing-dot"></span>
+                            <span class="widget-typing-dot"></span>
+                            <span class="widget-typing-dot"></span>
+                        </div>
+                    </div>
+                    <div class="widget-image-preview" id="widgetImagePreview"></div>
+                    <div class="widget-input-area">
+                        <input type="file" id="widgetFileInput" accept="image/*" style="display:none" multiple>
+                        <button class="widget-attach-btn" id="widgetAttachBtn" title="Attach image">&#x1F4CE;</button>
+                        <textarea class="widget-input" id="widgetInput" placeholder="Type a message…" rows="1"></textarea>
+                        <button class="widget-send-btn" id="widgetSendBtn">Send</button>
+                    </div>
                 </div>
             </div>
-            <div class="widget-image-preview" id="widgetImagePreview"></div>
-            <div class="widget-input-area">
-                <input type="file" id="widgetFileInput" accept="image/*" style="display:none" multiple>
-                <button class="widget-attach-btn" id="widgetAttachBtn" title="Attach image">&#x1F4CE;</button>
-                <textarea class="widget-input" id="widgetInput" placeholder="Type a message…" rows="1"></textarea>
-                <button class="widget-send-btn" id="widgetSendBtn">Send</button>
+            <!-- Drag resizer (shown when canvas is open) -->
+            <div class="wr-resizer" id="wrResizer" hidden></div>
+            <!-- Canvas panel (hidden until AI returns code) -->
+            <div class="wr-canvas-panel" id="wrCanvasPanel" hidden>
+                <div class="wr-canvas-header">
+                    <span class="wr-canvas-lang-badge" id="wrCanvasLang">code</span>
+                    <div style="flex:1"></div>
+                    <button class="wr-canvas-action-btn" id="wrCanvasCopyBtn">Copy</button>
+                    <button class="wr-canvas-action-btn" id="wrCanvasDownloadBtn" title="Download">&#8595; Download</button>
+                    <button class="wr-canvas-action-btn" id="wrCanvasNewTabBtn" title="Open in new tab">&#8599; New Tab</button>
+                    <button class="wr-canvas-action-btn wr-canvas-run-btn" id="wrCanvasRunBtn" hidden>&#9654; Run</button>
+                    <button class="wr-canvas-action-btn wr-canvas-back-btn" id="wrCanvasBackBtn" hidden>&#8592; Code</button>
+                    <button class="wr-canvas-action-btn" id="wrCanvasRefreshBtn" hidden>&#8635;</button>
+                    <button class="wr-canvas-action-btn" id="wrCanvasCloseBtn" title="Close">&#x2715;</button>
+                </div>
+                <div class="wr-canvas-body" id="wrCanvasBody"></div>
             </div>
         </div>
     </div>
@@ -497,7 +803,7 @@
     function loadChatJS() {
         window.STANDALONE_AGENT_NAME = AGENT;
         var s = document.createElement("script");
-        s.src = "/static/js/standalone/chat.js";
+        s.src = "/static/js/standalone/chat.js?v=" + Date.now();
         document.body.appendChild(s);
     }
 
@@ -650,6 +956,360 @@
         // Attach observer to auto-generate title after first AI reply
         _startTitleObserver();
     }
+
+    // ── Canvas ───────────────────────────────────────────────────
+    function _escapeHtmlCanvas(text) {
+        var d = document.createElement("div");
+        d.textContent = text;
+        return d.innerHTML;
+    }
+
+    var _canvasCode        = "";
+    var _canvasLang        = "";
+    var _canvasMode        = "code"; // "code" | "run"
+    var _canvasSourceBlock = null;
+    var _aceEditor         = null;
+    var ACE_BASE = "https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.6/";
+    var ACE_MODES = {
+        html:"html", javascript:"javascript", js:"javascript", css:"css",
+        typescript:"typescript", python:"python", java:"java", go:"golang",
+        rust:"rust", sql:"sql", json:"json", yaml:"yaml", xml:"xml",
+        svg:"xml", bash:"sh", shell:"sh", cpp:"c_cpp", c:"c_cpp", php:"php",
+        ruby:"ruby", kotlin:"kotlin", swift:"swift", markdown:"markdown"
+    };
+    var RUNNABLE_LANGS = ["html", "javascript", "js", "svg", "css", "python", "py"];
+    var TAB_LANGS      = ["html", "javascript", "js", "svg", "css"]; // only these produce a renderable page
+    var LANG_EXT = {
+        html:".html", javascript:".js", js:".js", css:".css", svg:".svg",
+        python:".py", typescript:".ts", java:".java", go:".go", rust:".rs",
+        sql:".sql", json:".json", yaml:".yml", xml:".xml", bash:".sh", shell:".sh",
+        cpp:".cpp", c:".c", php:".php", ruby:".rb", kotlin:".kt"
+    };
+
+    function _isRunnable()   { return RUNNABLE_LANGS.indexOf(_canvasLang.toLowerCase()) > -1; }
+    function _isTabRunnable(){ return TAB_LANGS.indexOf(_canvasLang.toLowerCase()) > -1; }
+    function _isPython()     { var l = _canvasLang.toLowerCase(); return l === "python" || l === "py"; }
+
+    function _isDark() {
+        return document.documentElement.classList.contains("dark") ||
+               document.documentElement.getAttribute("data-theme") === "dark";
+    }
+
+    function _updateCanvasButtons() {
+        var isRun = _canvasMode === "run";
+        document.getElementById("wrCanvasRunBtn").hidden     = isRun || !_isRunnable();
+        document.getElementById("wrCanvasBackBtn").hidden    = !isRun;
+        document.getElementById("wrCanvasRefreshBtn").hidden = !isRun;
+        document.getElementById("wrCanvasNewTabBtn").hidden  = !_isTabRunnable();
+    }
+
+    function _destroyAce() {
+        if (_aceEditor) {
+            try { _aceEditor.destroy(); } catch(e) {}
+            _aceEditor = null;
+        }
+        var old = document.getElementById("wrAceEditor");
+        if (old) old.remove();
+    }
+
+    function _buildSrcdoc() {
+        var lang = _canvasLang.toLowerCase();
+        if (lang === "html" || lang === "svg") return _canvasCode;
+        if (lang === "css") return "<html><body><style>" + _canvasCode + "</style></body></html>";
+        return "<html><body><script>" + _canvasCode + "<\/script></body></html>";
+    }
+
+    function _showCodeEditor(code) {
+        var body = document.getElementById("wrCanvasBody");
+        _destroyAce();
+        body.innerHTML = "";
+
+        var editorDiv = document.createElement("div");
+        editorDiv.id = "wrAceEditor";
+        body.appendChild(editorDiv);
+
+        function _initAce() {
+            if (typeof ace === "undefined") {
+                // Script not yet loaded (defer); retry shortly
+                setTimeout(_initAce, 80);
+                return;
+            }
+            ace.config.set("basePath", ACE_BASE);
+            _aceEditor = ace.edit("wrAceEditor");
+            _aceEditor.setTheme(_isDark() ? "ace/theme/tomorrow_night" : "ace/theme/chrome");
+            _aceEditor.session.setMode("ace/mode/" + (ACE_MODES[_canvasLang.toLowerCase()] || "text"));
+            _aceEditor.setValue(code, -1);
+            _aceEditor.setOptions({
+                showPrintMargin: false,
+                tabSize: 2,
+                useSoftTabs: true,
+                wrap: false,
+                fontSize: "13px"
+            });
+            _aceEditor.on("change", function () { _canvasCode = _aceEditor.getValue(); });
+            _aceEditor.focus();
+        }
+        _initAce();
+
+        _canvasMode = "code";
+        _updateCanvasButtons();
+    }
+
+    function _showCanvas(lang, code, sourceBlockEl) {
+        _canvasCode = code;
+        _canvasLang = lang || "code";
+
+        if (_canvasSourceBlock && _canvasSourceBlock !== sourceBlockEl) {
+            _canvasSourceBlock.classList.remove("canvas-active");
+        }
+        _canvasSourceBlock = sourceBlockEl || null;
+        if (_canvasSourceBlock) _canvasSourceBlock.classList.add("canvas-active");
+
+        document.getElementById("wrCanvasLang").textContent = _canvasLang;
+        _showCodeEditor(code);
+
+        var panel    = document.getElementById("wrCanvasPanel");
+        var resizer  = document.getElementById("wrResizer");
+        var bodyRow  = document.getElementById("wrBodyRow");
+        var root     = document.querySelector(".wr-chat-root");
+        panel.hidden   = false;
+        resizer.hidden = false;
+        bodyRow.classList.add("canvas-open");
+        if (root) root.classList.add("canvas-open");
+    }
+
+    function _hideCanvas() {
+        _destroyAce();
+        _canvasCode = "";
+        _canvasLang = "";
+        document.getElementById("wrCanvasPanel").hidden = true;
+        var resizer = document.getElementById("wrResizer");
+        if (resizer) resizer.hidden = true;
+        var chatSide = document.getElementById("wrChatSide");
+        if (chatSide) chatSide.style.flex = "";
+        var row = document.getElementById("wrBodyRow");
+        if (row) row.classList.remove("canvas-open");
+        var root = document.querySelector(".wr-chat-root");
+        if (root) root.classList.remove("canvas-open");
+        if (_canvasSourceBlock) {
+            _canvasSourceBlock.classList.remove("canvas-active");
+            _canvasSourceBlock = null;
+        }
+    }
+
+    // ── Drag-to-resize ────────────────────────────────────────
+    (function () {
+        var resizer  = document.getElementById("wrResizer");
+        var chatSide = document.getElementById("wrChatSide");
+        var bodyRow  = document.getElementById("wrBodyRow");
+        if (!resizer || !chatSide || !bodyRow) return;
+
+        var startX, startW;
+
+        function onMove(e) {
+            var clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            var dx = clientX - startX;
+            var minW = 240, maxW = bodyRow.offsetWidth - 260;
+            chatSide.style.flex = "0 0 " + Math.max(minW, Math.min(startW + dx, maxW)) + "px";
+        }
+
+        function onUp() {
+            resizer.classList.remove("is-dragging");
+            document.removeEventListener("mousemove", onMove);
+            document.removeEventListener("mouseup",   onUp);
+            document.removeEventListener("touchmove", onMove);
+            document.removeEventListener("touchend",  onUp);
+        }
+
+        resizer.addEventListener("mousedown", function (e) {
+            e.preventDefault();
+            startX = e.clientX;
+            startW = chatSide.offsetWidth;
+            resizer.classList.add("is-dragging");
+            document.addEventListener("mousemove", onMove);
+            document.addEventListener("mouseup",   onUp);
+        });
+
+        resizer.addEventListener("touchstart", function (e) {
+            startX = e.touches[0].clientX;
+            startW = chatSide.offsetWidth;
+            resizer.classList.add("is-dragging");
+            document.addEventListener("touchmove", onMove, { passive: true });
+            document.addEventListener("touchend",  onUp);
+        }, { passive: true });
+    })();
+
+    // Close canvas when user starts a new session
+    var _newChatTrigger = document.getElementById("widgetNewChat");
+    if (_newChatTrigger) _newChatTrigger.addEventListener("click", _hideCanvas);
+
+    // ── Python runner (Pyodide inside iframe) ─────────────────
+    // Running Pyodide in the main page context causes localStorage
+    // SecurityErrors in some browsers. An iframe with allow-same-origin
+    // gives Pyodide the storage access it needs while keeping code sandboxed.
+    function _buildPythonSrcdoc(code) {
+        var escaped = JSON.stringify(code); // safe JS string literal
+        return '<!DOCTYPE html><html><head>' +
+            '<script src="https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js"><\/script>' +
+            '<style>' +
+            'html,body{margin:0;padding:0;height:100%;background:#fff;}' +
+            'body{padding:1rem;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;line-height:1.6;box-sizing:border-box;overflow:auto;}' +
+            'pre{margin:0;white-space:pre-wrap;word-break:break-all;}' +
+            '.err{color:#dc2626}.ok{color:#22c55e}.info{color:#94a3b8}' +
+            '<\/style></head><body>' +
+            '<div id="o"><span class="info">&#9881; Loading Python…<\/span><\/div>' +
+            '<script>(async()=>{' +
+            'function esc(s){var d=document.createElement("div");d.textContent=s;return d.innerHTML;}' +
+            'try{' +
+            'var py=await loadPyodide();' +
+            'py.runPython("import sys,io;_o=io.StringIO();_e=io.StringIO();sys.stdout=_o;sys.stderr=_e");' +
+            'var err=null;' +
+            'try{py.runPython(' + escaped + ');}catch(e){err=String(e);}' +
+            'var so=py.runPython("_o.getvalue()");' +
+            'var se=py.runPython("_e.getvalue()");' +
+            'var el=document.getElementById("o");el.innerHTML="";' +
+            'if(so)el.innerHTML+="<pre>"+esc(so)+"<\/pre>";' +
+            'if(se)el.innerHTML+="<pre class=err>"+esc(se)+"<\/pre>";' +
+            'if(err)el.innerHTML+="<pre class=err>"+esc(err)+"<\/pre>";' +
+            'if(!so&&!se&&!err)el.innerHTML="<span class=ok>&#10003; Ran successfully (no output)<\/span>";' +
+            '}catch(e){document.getElementById("o").innerHTML="<pre class=err>&#10008; "+e+"<\/pre>";}' +
+            '})();<\/script>' +
+            '</body></html>';
+    }
+
+    function _runIframe() {
+        _destroyAce();
+        var body = document.getElementById("wrCanvasBody");
+        body.innerHTML = "";
+        var iframe = document.createElement("iframe");
+        iframe.sandbox = "allow-scripts allow-modals";
+        iframe.srcdoc = _buildSrcdoc();
+        body.appendChild(iframe);
+        _canvasMode = "run";
+        _updateCanvasButtons();
+    }
+
+    function _runPython() {
+        _destroyAce();
+        var body = document.getElementById("wrCanvasBody");
+        body.innerHTML = "";
+        var iframe = document.createElement("iframe");
+        // No sandbox — Pyodide spawns blob: workers internally which inherit null
+        // origin and cannot access localStorage even with allow-same-origin.
+        // Dashboard requires auth and users run their own code, so this is safe.
+        iframe.srcdoc = _buildPythonSrcdoc(_canvasCode);
+        iframe.style.cssText = "width:100%;height:100%;border:none;";
+        body.appendChild(iframe);
+        _canvasMode = "run";
+        _updateCanvasButtons();
+    }
+
+    document.getElementById("wrCanvasRunBtn").addEventListener("click", function () {
+        if (_isPython()) _runPython(); else _runIframe();
+    });
+
+    document.getElementById("wrCanvasBackBtn").addEventListener("click", function () {
+        _showCodeEditor(_canvasCode);
+    });
+
+    document.getElementById("wrCanvasRefreshBtn").addEventListener("click", function () {
+        if (_isPython()) _runPython(); else _runIframe();
+    });
+
+    document.getElementById("wrCanvasCloseBtn").addEventListener("click", _hideCanvas);
+
+    document.getElementById("wrCanvasCopyBtn").addEventListener("click", function () {
+        var btn = this;
+        var text = _canvasCode;
+        var fallback = function () {
+            var ta = document.createElement("textarea");
+            ta.value = text; document.body.appendChild(ta);
+            ta.select(); document.execCommand("copy");
+            document.body.removeChild(ta);
+        };
+        if (navigator.clipboard) navigator.clipboard.writeText(text).catch(fallback);
+        else fallback();
+        btn.textContent = "Copied!";
+        setTimeout(function () { btn.textContent = "Copy"; }, 1500);
+    });
+
+    document.getElementById("wrCanvasDownloadBtn").addEventListener("click", function () {
+        var ext  = LANG_EXT[_canvasLang.toLowerCase()] || ".txt";
+        var blob = new Blob([_canvasCode], { type: "text/plain" });
+        var url  = URL.createObjectURL(blob);
+        var a    = document.createElement("a");
+        a.href = url; a.download = "canvas" + ext; a.click();
+        URL.revokeObjectURL(url);
+    });
+
+    document.getElementById("wrCanvasNewTabBtn").addEventListener("click", function () {
+        var content, mime;
+        if (_isRunnable()) {
+            content = _buildSrcdoc();
+            mime = "text/html";
+        } else {
+            content = _canvasCode;
+            mime = "text/plain";
+        }
+        var blob = new Blob([content], { type: mime });
+        var url  = URL.createObjectURL(blob);
+        var win  = window.open(url, "_blank");
+        // Revoke after the new tab has had time to load
+        if (win) win.addEventListener("load", function () { URL.revokeObjectURL(url); }, { once: true });
+        else setTimeout(function () { URL.revokeObjectURL(url); }, 5000);
+    });
+
+    // Read code from either a .mate-code-block or a .mate-code-pill
+    function _codeFromEl(el) {
+        var encoded = el.getAttribute("data-rawcode");
+        return encoded ? decodeURIComponent(encoded)
+                       : ((el.querySelector("code") || {}).innerText || "");
+    }
+
+    window.mateOpenCanvas = function (el) {
+        var lang = el.getAttribute("data-lang") || "code";
+        var code = _codeFromEl(el);
+        if (!code) return;
+        _showCanvas(lang, code, el);
+    };
+
+    // Called after stream completes — move code blocks to canvas, leave pills in chat
+    window.mateOnAgentDone = function (agentEl) {
+        var blocks = agentEl.querySelectorAll(".mate-code-block");
+        if (!blocks.length) return;
+
+        // Pick the largest block for the canvas
+        var best = blocks[0];
+        for (var i = 1; i < blocks.length; i++) {
+            var enc_i = blocks[i].getAttribute("data-rawcode");
+            var enc_b = best.getAttribute("data-rawcode");
+            var len_i = enc_i ? decodeURIComponent(enc_i).length : 0;
+            var len_b = enc_b ? decodeURIComponent(enc_b).length : 0;
+            if (len_i > len_b) best = blocks[i];
+        }
+        window.mateOpenCanvas(best);
+
+        // Replace every code block in chat with a compact pill
+        blocks.forEach(function (block) {
+            var lang    = block.getAttribute("data-lang") || "code";
+            var encoded = block.getAttribute("data-rawcode") || "";
+            var pill = document.createElement("span");
+            pill.className = "mate-code-pill";
+            pill.setAttribute("data-lang", lang);
+            pill.setAttribute("data-rawcode", encoded);
+            pill.innerHTML = '<i class="fas fa-code"></i>'
+                + '<span>' + lang + '</span>'
+                + '<button class="mate-pill-btn" onclick="if(window.mateOpenCanvas)window.mateOpenCanvas(this.closest(\'.mate-code-pill\'))">open in canvas</button>';
+            block.parentNode.replaceChild(pill, block);
+        });
+    };
+
+    // Exposes current canvas state to standalone/chat.js for prompt injection
+    window.mateGetCanvasCode = function () {
+        return (_canvasCode && _canvasLang)
+            ? { lang: _canvasLang, code: _canvasCode }
+            : null;
+    };
 })();
 </script>
 {% endif %}
