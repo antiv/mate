@@ -22,16 +22,31 @@ The default landing page after login. A full chat interface for talking to any r
 
 **Canvas panel**
 
-When the agent returns a code block the canvas panel opens automatically to the right of the chat. Code is removed from the chat message and replaced with a small pill badge — the conversation stays clean.
+When the agent returns a code block, the canvas panel opens automatically to the right of the chat. Code is removed from the chat message and replaced with a small pill badge — the conversation stays clean.
 
-- **Ace Editor** — syntax-highlighted, fully editable code
-- **Execute** — HTML, JavaScript, CSS, and SVG run in a sandboxed iframe (▶ Run); Python runs via Pyodide (WebAssembly, no server required)
-- **Back to Code** — switch from the running preview back to the editor
-- **Refresh** — re-run the current preview
-- **Copy** — copy code to clipboard
-- **Download** — save the file locally (`.html`, `.js`, `.py`, etc.)
-- **Open in New Tab** — opens HTML/JS/CSS/SVG previews in a new browser tab (not available for Python)
-- **Close (✕)** — closes the canvas; chat expands back to full width
+- **Ace Editor** — syntax-highlighted, fully editable code. Supports standard coding modes (HTML, JS, CSS, Python, SQL, Dart, etc.).
+- **Execute** — runs the code directly in the browser with zero additional packages or backend compilers required:
+  - **HTML, JavaScript, CSS, and SVG**: run in a sandboxed iframe.
+  - **Python**: runs in-browser via Pyodide (WebAssembly, no server execution needed).
+  - **Dart and Flutter**: run directly via an embedded **DartPad** iframe integration.
+- **Direct Preview (Dart & Flutter)** — To optimize the experience, Dart and Flutter code blocks automatically skip the initial editor view and open DartPad immediately in interactive preview mode.
+- **Back to Code** — switch from the running preview back to the editor (allows editing the code and manually re-running).
+- **Refresh** — re-run/refresh the current preview.
+- **Copy** — copy code to clipboard.
+- **Download** — save the file locally (`.html`, `.js`, `.py`, `.dart`, etc.).
+- **Open in New Tab** — opens HTML/JS/CSS/SVG previews in a new browser tab (not available for Python or Dart/Flutter).
+- **Close (✕)** — closes the canvas; chat expands back to full width.
+
+#### Dart & Flutter Integration Details
+
+The Canvas panel includes a highly optimized, fully sandboxed browser runner powered by the official DartPad API.
+
+1. **Zero-Setup & Safe Execution**: Executes entirely inside a sandboxed browser iframe without making any external calls or requiring any server-side Dart/Flutter SDKs or compilers.
+2. **Auto-Detection**: The Canvas parses the generated code block automatically:
+   - If the code contains `package:flutter` or Flutter imports, it targets the **Flutter embed** (`embed-flutter.html`).
+   - Otherwise, it loads the **plain Dart console embed** (`embed-inline.html`).
+3. **Theme & UI Synchronization**: Dynamically synchronizes DartPad's UI color theme (`theme=dark` or `theme=light`) with MATE's active theme. It uses query parameters `run=true&split=0` to hide the inner code editor and run the code immediately, leaving maximum screen space for the rendered widget or output.
+4. **Resilient Handshake Mechanism**: Uses a secure HTML5 `postMessage` protocol to communicate with DartPad. It listens for a `'ready'` event from `https://dartpad.dev` before transferring the source code to avoid race conditions. If the handshake is missed (e.g. from cached fast-load states), a 3-second watchdog timer automatically triggers a fallback injection.
 
 ![Canvas Code Editor](images/canvas_code.png)
 *Figure: The interactive Canvas editor displaying generated code*

@@ -270,6 +270,7 @@
         padding: 0.625rem 0.875rem;
         font-size: 0.875rem;
         background: #f8fafc;
+        color: #0f172a;
         transition: all 0.15s ease;
     }
     .wr-chat-root .widget-input:focus {
@@ -975,20 +976,22 @@
         typescript:"typescript", python:"python", java:"java", go:"golang",
         rust:"rust", sql:"sql", json:"json", yaml:"yaml", xml:"xml",
         svg:"xml", bash:"sh", shell:"sh", cpp:"c_cpp", c:"c_cpp", php:"php",
-        ruby:"ruby", kotlin:"kotlin", swift:"swift", markdown:"markdown"
+        ruby:"ruby", kotlin:"kotlin", swift:"swift", markdown:"markdown",
+        dart:"dart"
     };
-    var RUNNABLE_LANGS = ["html", "javascript", "js", "svg", "css", "python", "py"];
+    var RUNNABLE_LANGS = ["html", "javascript", "js", "svg", "css", "python", "py", "dart"];
     var TAB_LANGS      = ["html", "javascript", "js", "svg", "css"]; // only these produce a renderable page
     var LANG_EXT = {
         html:".html", javascript:".js", js:".js", css:".css", svg:".svg",
         python:".py", typescript:".ts", java:".java", go:".go", rust:".rs",
         sql:".sql", json:".json", yaml:".yml", xml:".xml", bash:".sh", shell:".sh",
-        cpp:".cpp", c:".c", php:".php", ruby:".rb", kotlin:".kt"
+        cpp:".cpp", c:".c", php:".php", ruby:".rb", kotlin:".kt", dart:".dart"
     };
 
     function _isRunnable()   { return RUNNABLE_LANGS.indexOf(_canvasLang.toLowerCase()) > -1; }
     function _isTabRunnable(){ return TAB_LANGS.indexOf(_canvasLang.toLowerCase()) > -1; }
     function _isPython()     { var l = _canvasLang.toLowerCase(); return l === "python" || l === "py"; }
+    function _isDart()       { return _canvasLang.toLowerCase() === "dart"; }
 
     function _isDark() {
         return document.documentElement.classList.contains("dark") ||
@@ -1010,6 +1013,11 @@
         }
         var old = document.getElementById("wrAceEditor");
         if (old) old.remove();
+
+        if (window._dartMessageListener) {
+            window.removeEventListener("message", window._dartMessageListener);
+            window._dartMessageListener = null;
+        }
     }
 
     function _buildSrcdoc() {
@@ -1066,7 +1074,6 @@
         if (_canvasSourceBlock) _canvasSourceBlock.classList.add("canvas-active");
 
         document.getElementById("wrCanvasLang").textContent = _canvasLang;
-        _showCodeEditor(code);
 
         var panel    = document.getElementById("wrCanvasPanel");
         var resizer  = document.getElementById("wrResizer");
@@ -1076,6 +1083,13 @@
         resizer.hidden = false;
         bodyRow.classList.add("canvas-open");
         if (root) root.classList.add("canvas-open");
+
+        // Dart/Flutter: skip code editor, launch DartPad directly
+        if (_isDart()) {
+            _runDart();
+        } else {
+            _showCodeEditor(code);
+        }
     }
 
     function _hideCanvas() {
@@ -1204,8 +1218,105 @@
         _updateCanvasButtons();
     }
 
+    function _runDart() {
+        _destroyAce();
+        var body = document.getElementById("wrCanvasBody");
+        body.innerHTML = "";
+
+        var isFlutter = _canvasCode.indexOf("package:flutter") > -1;
+        var embedPage = isFlutter ? "embed-flutter.html" : "embed-inline.html";
+        var theme = _isDark() ? "dark" : "light";
+        // Use dartpad.dev directly (canonical domain) to avoid 404 errors on CNAME aliases
+        var url = "https://dartpad.dev/" + embedPage + "?theme=" + theme + "&run=true&split=0";
+
+        console.log("[MATE Dart] Loading DartPad iframe:", url);
+
+        var iframe = document.createElement("iframe");
+        iframe.id = "mate-dartpad-iframe";
+        iframe.name = "mate-dartpad-iframe";
+        iframe.allow = "clipboard-write";
+        iframe.style.cssText = "width:100%;height:100%;border:none;";
+
+        var codeSent = false;
+        var iframeOrigin = "https://dartpad.dev"; // Captured dynamically
+
+        function sendCode() {
+            if (codeSent) return;
+            if (!iframe.contentWindow) return;
+
+            codeSent = true;
+            console.log("[MATE Dart] Sending sourceCode to DartPad at origin:", iframeOrigin);
+            
+            // DartPad's embed handler (web.dart) uses a JS interop extension type:
+            //   external String? get sourceCode;
+            //   external String? get type;
+            // So sourceCode must be a flat string, NOT a map of filenames.
+            var payloadObj = {
+                type: 'sourceCode',
+                sourceCode: _canvasCode
+            };
+
+            // Attempt targeting the exact active origin, fallback to '*' only if blocked
+            try {
+                iframe.contentWindow.postMessage(payloadObj, iframeOrigin);
+            } catch(e) {
+                console.warn("[MATE Dart] Exact origin postMessage failed, trying fallback:", e);
+                try {
+                    iframe.contentWindow.postMessage(payloadObj, "*");
+                } catch(err) {}
+            }
+        }
+
+        window._dartMessageListener = function(event) {
+            // Loose match origin to support any subdomain (e.g. html.dartpad.dev) or mirrors securely
+            if (!event.origin || event.origin.indexOf('dartpad') === -1) return;
+            
+            console.log("[MATE Dart] Received message from origin:", event.origin, "Data:", event.data);
+            
+            // Capture origin dynamically to guarantee secure delivery
+            iframeOrigin = event.origin;
+
+            // Parse event data if it is a JSON-encoded string
+            var data = event.data;
+            if (typeof data === 'string') {
+                try {
+                    data = JSON.parse(data);
+                } catch(e) {}
+            }
+
+            var isReady = data === 'ready' || 
+                          (data && data.type === 'ready') ||
+                          (data && data.sender === 'frame' && data.type === 'ready');
+            if (isReady) {
+                console.log("[MATE Dart] DartPad is ready signal received. Injecting code...");
+                sendCode();
+            }
+        };
+        window.addEventListener("message", window._dartMessageListener);
+
+        iframe.onload = function() {
+            console.log("[MATE Dart] Iframe onload triggered. Setting up ready watchdog fallback...");
+            // Staggered ready fallback: wait 3 seconds for the "ready" handshake.
+            // If the handshake never comes (e.g., cached resource race), perform a single fallback injection.
+            setTimeout(function() {
+                if (!codeSent) {
+                    console.log("[MATE Dart] Ready signal watchdog timeout. Executing fallback injection...");
+                    sendCode();
+                }
+            }, 3000);
+        };
+
+        iframe.src = url;
+        body.appendChild(iframe);
+
+        _canvasMode = "run";
+        _updateCanvasButtons();
+    }
+
     document.getElementById("wrCanvasRunBtn").addEventListener("click", function () {
-        if (_isPython()) _runPython(); else _runIframe();
+        if (_isPython()) _runPython();
+        else if (_isDart()) _runDart();
+        else _runIframe();
     });
 
     document.getElementById("wrCanvasBackBtn").addEventListener("click", function () {
@@ -1213,7 +1324,9 @@
     });
 
     document.getElementById("wrCanvasRefreshBtn").addEventListener("click", function () {
-        if (_isPython()) _runPython(); else _runIframe();
+        if (_isPython()) _runPython();
+        else if (_isDart()) _runDart();
+        else _runIframe();
     });
 
     document.getElementById("wrCanvasCloseBtn").addEventListener("click", _hideCanvas);
