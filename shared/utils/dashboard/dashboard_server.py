@@ -4528,23 +4528,26 @@ class DashboardServer:
 
             # Generate a short title via LiteLLM
             title = ""
-            try:
-                import litellm  # type: ignore
-                model = os.environ.get("TITLE_GEN_MODEL", "gemini/gemini-2.0-flash")
-                gen_resp = litellm.completion(
-                    model=model,
-                    messages=[{"role": "user", "content": (
-                        "Generate a concise 4-6 word title for this conversation. "
-                        "Reply with ONLY the title, no quotes or trailing punctuation.\n\n"
-                        f"First message: {first_user_text[:400]}"
-                    )}],
-                    temperature=0.3,
-                    max_tokens=30,
-                )
-                title = gen_resp.choices[0].message.content.strip().strip('"').strip("'").rstrip(".")
-            except Exception as exc:
-                logger.warning("Session title generation failed: %s", exc)
-                title = first_user_text[:50] + ("…" if len(first_user_text) > 50 else "")
+            model = os.environ.get("TITLE_GEN_MODEL")
+            if not model:
+                title = session_id
+            else:
+                try:
+                    import litellm  # type: ignore
+                    gen_resp = litellm.completion(
+                        model=model,
+                        messages=[{"role": "user", "content": (
+                            "Generate a concise 4-6 word title for this conversation. "
+                            "Reply with ONLY the title, no quotes or trailing punctuation.\n\n"
+                            f"First message: {first_user_text[:400]}"
+                        )}],
+                        temperature=0.3,
+                        max_tokens=30,
+                    )
+                    title = gen_resp.choices[0].message.content.strip().strip('"').strip("'").rstrip(".")
+                except Exception as exc:
+                    logger.warning("Session title generation failed: %s", exc)
+                    title = first_user_text[:50] + ("…" if len(first_user_text) > 50 else "")
 
             # Persist to ADK session state
             if title:

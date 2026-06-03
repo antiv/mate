@@ -102,7 +102,18 @@ class EvalRunner:
                 score = self.semantic_similarity_eval(test_case.expected_output, actual_output)
                 details = f"semantic_similarity={score:.3f}"
             elif method == "llm_judge":
-                judge_model = test_case.judge_model or "gemini/gemini-2.0-flash"
+                import os
+                judge_model = test_case.judge_model or os.environ.get("EVAL_JUDGE_MODEL")
+                if not judge_model:
+                    return EvalRunResult(
+                        test_case_id=test_case.id,
+                        version_id=version_id,
+                        actual_output=actual_output,
+                        score=None,
+                        passed=None,
+                        eval_method=method,
+                        details="Skipped: EVAL_JUDGE_MODEL not configured",
+                    )
                 score, reasoning = self.llm_judge_eval(
                     test_case.input, test_case.expected_output, actual_output, judge_model
                 )
