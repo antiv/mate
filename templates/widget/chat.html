@@ -5,7 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Chat</title>
-  <link rel="stylesheet" href="/static/css/widget/chat.css">
+  <link rel="stylesheet" href="/static/css/widget/chat.css?v=2">
 </head>
 
 <body>
@@ -29,7 +29,7 @@
     <div class="widget-image-preview" id="widgetImagePreview"></div>
 
     <div class="widget-input-area">
-      <input type="file" id="widgetFileInput" accept="image/*" style="display:none" multiple>
+      <input type="file" id="widgetFileInput" accept="image/*,application/pdf,text/*,.json,.py,.js,.css,.csv,.yaml,.yml" style="display:none" multiple>
       <button class="widget-attach-btn" id="widgetAttachBtn" title="Attach image">&#x1F4CE;</button>
       <textarea class="widget-input" id="widgetInput" placeholder="Type a message…" rows="1"></textarea>
       <button class="widget-send-btn" id="widgetSendBtn">Send</button>
@@ -45,7 +45,7 @@
     window.WIDGET_AGENT_NAME = "{{ agent_name }}";
     window.WIDGET_CONFIG = {{ widget_config | safe }};
   </script>
-  <script src="/static/js/widget/chat.js"></script>
+  <script src="/static/js/widget/chat.js?v=2"></script>
 </body>
 
 </html>

@@ -96,6 +96,40 @@ html, body {
   gap: 12px;
 }
 
+.widget-message-wrapper {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  max-width: 85%;
+  align-self: flex-start;
+  animation: fadeIn 0.2s ease;
+}
+.widget-message-wrapper.agent-message {
+  align-self: flex-start;
+}
+.widget-message-wrapper .widget-message {
+  max-width: 100%;
+  animation: none;
+}
+
+.widget-agent-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  font-weight: 600;
+  font-size: 11px;
+  flex-shrink: 0;
+  margin-top: 2px;
+  text-shadow: 0 1px 1px rgba(0,0,0,0.15);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  text-transform: uppercase;
+  user-select: none;
+}
+
 .widget-message {
   max-width: 85%;
   padding: 10px 14px;
@@ -361,3 +395,58 @@ html, body {
   box-shadow: 0 4px 20px rgba(0,0,0,0.15);
   transform: scale(1.01);
 }
+
+/* File Attachment Preview and Message Styles */
+.widget-preview-file-badge {
+  width: 100%;
+  height: 100%;
+  background: var(--w-bg-secondary);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  text-align: center;
+  border-radius: 6px;
+  border: 1px dashed var(--w-border);
+}
+.widget-preview-file-badge .file-icon {
+  font-size: 20px;
+  margin-bottom: 2px;
+}
+.widget-preview-file-badge .file-name {
+  font-size: 8px;
+  color: var(--w-text-secondary);
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 500;
+}
+
+.widget-msg-file-attachment {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.15);
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  margin: 4px 0;
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  user-select: none;
+  max-width: 100%;
+}
+.widget-msg-file-attachment .file-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 180px;
+}
+.widget-message.agent .widget-msg-file-attachment {
+  background: var(--w-bg-secondary);
+  color: var(--w-text);
+  border-color: var(--w-border);
+}
+

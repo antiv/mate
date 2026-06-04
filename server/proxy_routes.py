@@ -248,7 +248,89 @@ async def proxy_adk(request: Request, path: str, username: str = Depends(get_aut
 
     target_url = f"http://{ADK_HOST}:{ADK_PORT}/{path}"
     body = await request.body() if request.method in ["POST", "PUT", "PATCH"] else None
-    headers = {key: value for key, value in request.headers.items() if key.lower() != "host"}
+
+    # Intercept run_sse post requests to preprocess attachments and check model capability
+    if path == "run_sse" and request.method == "POST" and body:
+        try:
+            import json
+            payload = json.loads(body.decode("utf-8"))
+            app_name = payload.get("app_name")
+            new_message = payload.get("new_message")
+            if app_name and new_message and isinstance(new_message, dict):
+                message_parts = new_message.get("parts")
+                if message_parts and isinstance(message_parts, list):
+                    # Load model name
+                    model_name = ""
+                    try:
+                        from shared.utils.database_client import get_database_client
+                        from shared.utils.models import AgentConfig
+                        db = get_database_client()
+                        session = db.get_session()
+                        if session:
+                            agent_config = session.query(AgentConfig).filter_by(name=app_name).first()
+                            if agent_config:
+                                model_name = agent_config.model_name
+                            session.close()
+                    except Exception as e:
+                        logger.error("Failed to load agent model name from DB: %s", e)
+                    
+                    if not model_name:
+                        model_name = os.getenv("MODEL_NAME", "")
+                        
+                    from server.widget_routes import (
+                        extract_text_from_pdf_base64,
+                        extract_text_from_text_base64,
+                        model_supports_vision
+                    )
+                    
+                    has_images = False
+                    processed_parts = []
+                    for part in message_parts:
+                        if isinstance(part, dict) and "inline_data" in part:
+                            mime_type = part["inline_data"].get("mime_type", "")
+                            base64_data = part["inline_data"].get("data", "")
+                            filename = part.get("filename", "file")
+                            
+                            if mime_type.startswith("image/"):
+                                has_images = True
+                                processed_parts.append(part)
+                            elif mime_type == "application/pdf":
+                                if model_name and "gemini" in model_name.lower():
+                                    processed_parts.append(part)
+                                else:
+                                    extracted_text = extract_text_from_pdf_base64(base64_data)
+                                    processed_parts.append({
+                                        "text": f"[Attached PDF file '{filename}']:\n{extracted_text}\n"
+                                    })
+                            elif (mime_type.startswith("text/") or 
+                                  mime_type in ["application/json", "application/javascript"] or 
+                                  filename.split(".")[-1].lower() in ["txt", "md", "json", "py", "js", "css", "csv", "html", "xml", "yaml", "yml"]):
+                                extracted_text = extract_text_from_text_base64(base64_data)
+                                processed_parts.append({
+                                    "text": f"[Attached file '{filename}']:\n{extracted_text}\n"
+                                })
+                            else:
+                                raise HTTPException(
+                                    status_code=400,
+                                    detail=f"Unsupported file type: {filename} ({mime_type or 'unknown'}). Only images, PDFs, and text files are supported."
+                                )
+                        else:
+                            processed_parts.append(part)
+                            
+                    if has_images and not model_supports_vision(model_name):
+                        raise HTTPException(
+                            status_code=400,
+                            detail=f"The configured model ({model_name or 'unknown'}) does not support vision/images. Please use a vision-enabled model (e.g. Gemini) or upload text/PDF files instead."
+                        )
+                        
+                    payload["new_message"]["parts"] = processed_parts
+                    body = json.dumps(payload).encode("utf-8")
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error("Error preprocessing run_sse payload: %s", e, exc_info=True)
+
+    headers = {key: value for key, value in request.headers.items() if key.lower() not in ("host", "content-length")}
     headers = _inject_trace_headers(headers)
 
     client = httpx.AsyncClient(timeout=900.0)

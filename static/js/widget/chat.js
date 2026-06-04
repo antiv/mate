@@ -22,7 +22,7 @@
 
   let sending = false;
   let forceNewSession = false;
-  let pendingImages = []; // [{dataUrl, mimeType, base64}]
+  let pendingFiles = []; // [{dataUrl, mimeType, base64, name}]
   let pageContext = null; // {url, title, description, lang} from parent page via postMessage
   let currentLang = "en";
 
@@ -102,7 +102,7 @@
     if (saved) {
       try {
         const msgs = JSON.parse(saved);
-        msgs.forEach(function (m) { _appendMessage(m.role, m.text, true); });
+        msgs.forEach(function (m) { _appendMessage(m.role, m.text, true, null, m.author); });
         if (greetingEl) greetingEl.style.display = "none";
       } catch (_) {}
     }
@@ -181,22 +181,25 @@
   // --- Send message ----------------------------------------------------
   function _send() {
     const text = inputEl.value.trim();
-    const images = pendingImages.slice();
-    if ((!text && !images.length) || sending) return;
+    const files = pendingFiles.slice();
+    if ((!text && !files.length) || sending) return;
 
     if (greetingEl) greetingEl.style.display = "none";
-    _appendMessage("user", text, false, images);
+    _appendMessage("user", text, false, files, "user");
     inputEl.value = "";
     inputEl.style.height = "auto";
-    _clearPendingImages();
+    _clearPendingFiles();
     sending = true;
     sendBtn.disabled = true;
     _showTyping(true);
 
     // Build parts array
     const parts = [];
-    images.forEach(function (img) {
-      parts.push({ inline_data: { mime_type: img.mimeType, data: img.base64 } });
+    files.forEach(function (f) {
+      parts.push({ 
+        inline_data: { mime_type: f.mimeType, data: f.base64 },
+        filename: f.name
+      });
     });
     if (text) parts.push({ text: text });
 
@@ -214,12 +217,20 @@
       body: JSON.stringify(payload),
     })
       .then(function (res) {
-        if (!res.ok) throw new Error("Chat request failed: " + res.status);
+        if (!res.ok) {
+          return res.json()
+            .catch(function () { return {}; })
+            .then(function (errData) {
+              throw new Error(errData.detail || errData.error || "Chat request failed: " + res.status);
+            });
+        }
         return _readSSE(res);
       })
       .catch(function (err) {
         _showTyping(false);
-        _appendMessage("agent", "Sorry, something went wrong. Please try again.");
+        var msg = err.message || "Sorry, something went wrong. Please try again.";
+        msg = msg.replace(/^Error:\s*/i, "");
+        _appendMessage("agent", msg, false, null, "agent");
         console.error("Widget chat error:", err);
       })
       .finally(function () {
@@ -250,7 +261,6 @@
     var agentText = "";
     var agentEl = null;
     var currentAuthor = "";
-    var seenToolUse = false;
 
     var THINKING_HTML = '<span class="widget-thinking-inline">' +
       '<span class="widget-thinking-dot"></span>' +
@@ -260,10 +270,26 @@
 
     function _ensureBubble() {
       if (!agentEl) {
+        var wrapper = document.createElement("div");
+        wrapper.className = "widget-message-wrapper agent-message";
+        
+        var avatarColor = getAgentColor(currentAuthor);
+        var initials = getAgentInitials(currentAuthor);
+        
+        var avatarEl = document.createElement("div");
+        avatarEl.className = "widget-agent-avatar";
+        avatarEl.style.backgroundColor = avatarColor;
+        avatarEl.textContent = initials;
+        avatarEl.title = currentAuthor;
+        
         agentEl = document.createElement("div");
         agentEl.className = "widget-message agent";
+        agentEl.setAttribute("data-author", currentAuthor);
         agentEl.innerHTML = THINKING_HTML;
-        messagesEl.appendChild(agentEl);
+        
+        wrapper.appendChild(avatarEl);
+        wrapper.appendChild(agentEl);
+        messagesEl.appendChild(wrapper);
         _scrollToBottom();
       }
     }
@@ -288,9 +314,8 @@
         if (author && author !== currentAuthor) {
           currentAuthor = author;
           agentText = "";
-          seenToolUse = false;
-          // Keep bubble but reset to thinking state
-          if (agentEl) agentEl.innerHTML = THINKING_HTML;
+          // When author changes, start a new bubble instead of overwriting/resetting the existing one.
+          agentEl = null;
         }
 
         var parts = (evt.content && evt.content.parts) || [];
@@ -306,12 +331,7 @@
         }
 
         if (hasToolPart) {
-          seenToolUse = true;
-          agentText = "";
-          _showTyping(false);
-          _ensureBubble();
-          agentEl.innerHTML = THINKING_HTML;
-          _scrollToBottom();
+          _showTyping(true);
           return;
         }
 
@@ -341,7 +361,7 @@
         if (!agentText && agentEl) {
           agentEl.innerHTML = _renderMarkdown("(no response)");
         } else if (!agentText && !agentEl) {
-          _appendMessage("agent", "(no response)");
+          _appendMessage("agent", "(no response)", false, null, "agent");
         }
         _saveHistory();
         return;
@@ -354,27 +374,96 @@
     });
   }
 
-  // --- Image upload helpers --------------------------------------------
-  const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10 MB
+  // --- File upload helpers --------------------------------------------
+  const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB (images and PDFs)
+  const MAX_TEXT_FILE_SIZE = 5 * 1024 * 1024; // 5 MB (text files)
   const MAX_DIMENSION = 2048;
+  const SUPPORTED_TEXT_EXTS = [
+    "txt", "md", "markdown", "json", "js", "ts", "py", "css", "csv", "html", "xml", "yaml", "yml", "ini", "log", "sql", "sh", "bat"
+  ];
+
+  function isSupportedFile(file) {
+    if (!file) return false;
+    var type = file.type || "";
+    if (type.indexOf("image/") === 0) return true;
+    if (type === "application/pdf") return true;
+    if (type.indexOf("text/") === 0) return true;
+    
+    var ext = file.name.split(".").pop().toLowerCase();
+    if (SUPPORTED_TEXT_EXTS.indexOf(ext) !== -1) return true;
+    
+    return false;
+  }
+
+  function _getMimeFromExtension(filename) {
+    var ext = filename.split(".").pop().toLowerCase();
+    var mimes = {
+      pdf: "application/pdf",
+      json: "application/json",
+      js: "text/javascript",
+      ts: "text/typescript",
+      py: "text/x-python",
+      css: "text/css",
+      csv: "text/csv",
+      html: "text/html",
+      xml: "text/xml",
+      yaml: "text/yaml",
+      yml: "text/yaml",
+      md: "text/markdown",
+      txt: "text/plain"
+    };
+    return mimes[ext] || "application/octet-stream";
+  }
 
   function _handleFileSelect(e) {
     const files = e.target.files;
     if (!files || !files.length) return;
     for (let i = 0; i < files.length; i++) {
       (function (file) {
-        if (!file.type.startsWith("image/")) return;
-        if (file.size > MAX_IMAGE_SIZE) {
-          alert("Image too large (max 10 MB): " + file.name);
+        if (!isSupportedFile(file)) {
+          alert("Unsupported file type: " + file.name + "\nSupported formats: Images, PDFs, and text files (.txt, .md, .json, .py, etc.)");
           return;
         }
-        _readAndResizeImage(file, function (result) {
-          pendingImages.push(result);
-          _renderPreviews();
-        });
+
+        var isImg = file.type.indexOf("image/") === 0;
+        var maxSize = isImg ? MAX_FILE_SIZE : (file.type === "application/pdf" ? MAX_FILE_SIZE : MAX_TEXT_FILE_SIZE);
+        
+        if (file.size > maxSize) {
+          var sizeMB = Math.round(maxSize / (1024 * 1024));
+          alert("File too large (max " + sizeMB + " MB): " + file.name);
+          return;
+        }
+
+        if (isImg) {
+          _readAndResizeImage(file, function (result) {
+            result.name = file.name;
+            pendingFiles.push(result);
+            _renderPreviews();
+          });
+        } else {
+          _readAttachment(file, function (result) {
+            pendingFiles.push(result);
+            _renderPreviews();
+          });
+        }
       })(files[i]);
     }
     fileInput.value = "";
+  }
+
+  function _readAttachment(file, cb) {
+    var reader = new FileReader();
+    reader.onload = function (e) {
+      var dataUrl = e.target.result;
+      var base64 = dataUrl.split(",")[1];
+      cb({
+        dataUrl: dataUrl,
+        mimeType: file.type || _getMimeFromExtension(file.name),
+        base64: base64,
+        name: file.name
+      });
+    };
+    reader.readAsDataURL(file);
   }
 
   function _readAndResizeImage(file, cb) {
@@ -397,7 +486,7 @@
         const quality = mimeType === "image/jpeg" ? 0.85 : undefined;
         const dataUrl = canvas.toDataURL(mimeType, quality);
         const base64 = dataUrl.split(",")[1];
-        cb({ dataUrl: dataUrl, mimeType: mimeType, base64: base64 });
+        cb({ dataUrl: dataUrl, mimeType: mimeType, base64: base64, name: file.name });
       };
       img.src = e.target.result;
     };
@@ -406,45 +495,93 @@
 
   function _renderPreviews() {
     imagePreview.innerHTML = "";
-    pendingImages.forEach(function (img, idx) {
+    pendingFiles.forEach(function (f, idx) {
       const item = document.createElement("div");
       item.className = "widget-preview-item";
-      const imgEl = document.createElement("img");
-      imgEl.src = img.dataUrl;
-      item.appendChild(imgEl);
+      
+      const isImage = f.mimeType && f.mimeType.indexOf("image/") === 0;
+      if (isImage) {
+        const imgEl = document.createElement("img");
+        imgEl.src = f.dataUrl;
+        item.appendChild(imgEl);
+      } else {
+        const badgeEl = document.createElement("div");
+        badgeEl.className = "widget-preview-file-badge";
+        
+        const ext = f.name.split(".").pop().toUpperCase();
+        var icon = "📄";
+        if (ext === "PDF") icon = "📕";
+        else if (["JSON", "PY", "JS", "TS", "HTML", "CSS", "YAML", "YML"].indexOf(ext) !== -1) icon = "💻";
+        
+        badgeEl.innerHTML = '<span class="file-icon">' + icon + '</span><span class="file-name">' + f.name + '</span>';
+        item.appendChild(badgeEl);
+      }
+
       const removeBtn = document.createElement("button");
       removeBtn.className = "widget-preview-remove";
       removeBtn.textContent = "\u00D7";
       removeBtn.onclick = function () {
-        pendingImages.splice(idx, 1);
+        pendingFiles.splice(idx, 1);
         _renderPreviews();
       };
       item.appendChild(removeBtn);
       imagePreview.appendChild(item);
     });
-    imagePreview.classList.toggle("active", pendingImages.length > 0);
+    imagePreview.classList.toggle("active", pendingFiles.length > 0);
   }
 
-  function _clearPendingImages() {
-    pendingImages = [];
+  function _clearPendingFiles() {
+    pendingFiles = [];
     imagePreview.innerHTML = "";
     imagePreview.classList.remove("active");
   }
 
   // --- DOM helpers -----------------------------------------------------
-  function _appendMessage(role, text, skipSave, images) {
+  function _appendMessage(role, text, skipSave, files, author) {
     var el = document.createElement("div");
-    el.className = "widget-message " + role;
     if (role === "agent") {
+      var wrapper = document.createElement("div");
+      wrapper.className = "widget-message-wrapper agent-message";
+      
+      var avatarColor = getAgentColor(author);
+      var initials = getAgentInitials(author);
+      
+      var avatarEl = document.createElement("div");
+      avatarEl.className = "widget-agent-avatar";
+      avatarEl.style.backgroundColor = avatarColor;
+      avatarEl.textContent = initials;
+      avatarEl.title = author || "agent";
+      
+      el.className = "widget-message agent";
+      el.setAttribute("data-author", author || "");
       el.innerHTML = _renderMarkdown(text);
+      
+      wrapper.appendChild(avatarEl);
+      wrapper.appendChild(el);
+      messagesEl.appendChild(wrapper);
     } else {
-      // Show attached images as thumbnails in user bubble
-      if (images && images.length) {
-        images.forEach(function (img) {
-          var imgEl = document.createElement("img");
-          imgEl.src = img.dataUrl;
-          imgEl.className = "widget-msg-image";
-          el.appendChild(imgEl);
+      el.className = "widget-message " + role;
+      el.setAttribute("data-author", author || "");
+      // Show attached files in user bubble
+      if (files && files.length) {
+        files.forEach(function (fileObj) {
+          var isImg = fileObj.mimeType && fileObj.mimeType.indexOf("image/") === 0;
+          if (isImg) {
+            var imgEl = document.createElement("img");
+            imgEl.src = fileObj.dataUrl;
+            imgEl.className = "widget-msg-image";
+            el.appendChild(imgEl);
+          } else {
+            var fileLink = document.createElement("div");
+            fileLink.className = "widget-msg-file-attachment";
+            
+            var ext = fileObj.name.split(".").pop().toUpperCase();
+            var icon = "📄";
+            if (ext === "PDF") icon = "📕";
+            
+            fileLink.innerHTML = '<span class="file-icon">' + icon + '</span><span class="file-name">' + fileObj.name + '</span>';
+            el.appendChild(fileLink);
+          }
         });
       }
       if (text) {
@@ -452,8 +589,8 @@
         textNode.textContent = text;
         el.appendChild(textNode);
       }
+      messagesEl.appendChild(el);
     }
-    messagesEl.appendChild(el);
     _scrollToBottom();
     if (!skipSave) _saveHistory();
     return el;
@@ -465,8 +602,13 @@
   }
 
   function _showTyping(show) {
-    if (typingEl) typingEl.classList.toggle("active", show);
-    if (show) _scrollToBottom();
+    if (typingEl) {
+      typingEl.classList.toggle("active", show);
+      if (show) {
+        messagesEl.appendChild(typingEl);
+        _scrollToBottom();
+      }
+    }
   }
 
   function _scrollToBottom() {
@@ -487,9 +629,41 @@
     var msgs = [];
     messagesEl.querySelectorAll(".widget-message").forEach(function (el) {
       var role = el.classList.contains("user") ? "user" : "agent";
-      msgs.push({ role: role, text: role === "user" ? el.textContent : el.innerHTML });
+      var author = el.getAttribute("data-author") || "";
+      msgs.push({ role: role, text: role === "user" ? el.textContent : el.innerHTML, author: author });
     });
     try { sessionStorage.setItem(`${STORAGE_PREFIX}_msgs`, JSON.stringify(msgs)); } catch (_) {}
+  }
+
+  function getAgentColor(agentName) {
+    if (!agentName) return "#6b7280";
+    var colors = [
+      "#3b82f6", // Blue
+      "#10b981", // Emerald
+      "#8b5cf6", // Violet
+      "#f59e0b", // Amber
+      "#ec4899", // Pink
+      "#14b8a6", // Teal
+      "#f97316", // Orange
+      "#6366f1", // Indigo
+      "#a855f7", // Purple
+    ];
+    var hash = 0;
+    for (var i = 0; i < agentName.length; i++) {
+      hash = agentName.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    var index = Math.abs(hash) % colors.length;
+    return colors[index];
+  }
+
+  function getAgentInitials(agentName) {
+    if (!agentName) return "A";
+    var clean = agentName.replace(/^ant_/, "");
+    var parts = clean.split(/[_-]/);
+    if (parts.length > 1) {
+      return (parts[0].charAt(0) + parts[1].charAt(0)).toUpperCase();
+    }
+    return clean.charAt(0).toUpperCase();
   }
 
   function _generateId() {

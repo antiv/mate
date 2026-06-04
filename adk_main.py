@@ -57,26 +57,32 @@ class CompactionFixDatabaseSessionService(DatabaseSessionService):
         try:
             return await super().append_event(session, event)
         except ValueError as e:
-            if "stale session" in str(e).lower() or "last_update_time" in str(e):
+            err_str = str(e).lower()
+            if "stale session" in err_str or "last_update_time" in err_str or "modified in storage" in err_str:
                 import logging
                 logger = logging.getLogger("google_adk." + __name__)
                 logger.warning(
                     f"Stale session detected for session {session.id}, "
                     f"refreshing timestamp and retrying append_event"
                 )
-                # Refresh the session's last_update_time from the database
+                # Refresh the session's state from the database
                 refreshed = await self.get_session(
                     app_name=session.app_name,
                     user_id=session.user_id,
                     session_id=session.id,
                 )
                 if refreshed:
-                    session.last_update_time = refreshed.last_update_time
-                    return await super().append_event(session, event)
-                else:
-                    raise
+                    session.state = refreshed.state
+                
+                # Force bypass the stale check for the retry by clearing the marker and setting last_update_time to infinity.
+                # Upon successful append, super().append_event will update session._storage_update_marker back to the correct DB marker.
+                session._storage_update_marker = None
+                session.last_update_time = float("inf")
+                return await super().append_event(session, event)
             else:
                 raise
+        except Exception:
+            raise
 
 
 # Service Registry Setup
