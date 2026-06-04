@@ -11,6 +11,7 @@ import json
 import logging
 from typing import Dict, List, Optional, Any, Type
 from google.adk.planners import BuiltInPlanner, PlanReActPlanner
+from google.adk import Workflow
 from google.genai import types
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, create_model
@@ -73,6 +74,11 @@ def _get_pydantic_field_type(field_schema: dict) -> Type:
     else:
         # Default to Any for unknown types
         return Any
+
+
+class GraphWorkflow(Workflow):
+    sub_agents: list = []
+
 
 
 class AgentManager:
@@ -263,7 +269,7 @@ class AgentManager:
             }
             
             # Initialize agent based on type
-            if config.type in ["llm", "sequential", "parallel", "loop"]:
+            if config.type in ["llm", "graph", "loop"]:
                 agent = self._initialize_agent(agent_config, sub_agents, parent_agent_type)
             else:
                 logger.error(f"Unknown agent type: {config.type}")
@@ -328,7 +334,7 @@ class AgentManager:
     def _initialize_agent(self, config: Dict[str, Any], sub_agents: List[Any] = None, parent_agent_type: str = None) -> Any:
         """Initialize an agent of any type."""
         # Import here to avoid circular imports
-        from google.adk.agents import Agent, SequentialAgent, ParallelAgent, LoopAgent
+        from google.adk.agents import Agent, LoopAgent
         from .utils import create_model
         from ..callbacks.token_usage_callback import capture_model_name_callback, log_token_usage_callback
         from ..callbacks.rbac_callback import combined_rbac_and_token_callback
@@ -342,6 +348,52 @@ class AgentManager:
             instruction = config.get('instruction', '')
             sub_agents = sub_agents or []
             
+            # Parse input_schema if present and convert to Pydantic model
+            input_schema = None
+            input_schema_config = config.get('input_schema')
+            if input_schema_config:
+                if isinstance(input_schema_config, str):
+                    try:
+                        schema_dict = json.loads(input_schema_config)
+                    except json.JSONDecodeError:
+                        logger.warning(f"Invalid JSON in input_schema for agent {agent_name}")
+                        schema_dict = None
+                else:
+                    schema_dict = input_schema_config
+                
+                if schema_dict:
+                    try:
+                        # Convert JSON schema to Pydantic model
+                        model_name = f"{agent_name.replace('_', '').title()}InputModel"
+                        input_schema = json_schema_to_pydantic_model(schema_dict, model_name)
+                        logger.debug(f"Converted input_schema to Pydantic model {model_name} for agent {agent_name}")
+                    except Exception as e:
+                        logger.warning(f"Failed to convert input_schema to Pydantic model for agent {agent_name}: {e}")
+                        input_schema = None
+            
+            # Parse output_schema if present and convert to Pydantic model
+            output_schema = None
+            output_schema_config = config.get('output_schema')
+            if output_schema_config:
+                if isinstance(output_schema_config, str):
+                    try:
+                        schema_dict = json.loads(output_schema_config)
+                    except json.JSONDecodeError:
+                        logger.warning(f"Invalid JSON in output_schema for agent {agent_name}")
+                        schema_dict = None
+                else:
+                    schema_dict = output_schema_config
+                
+                if schema_dict:
+                    try:
+                        # Convert JSON schema to Pydantic model
+                        model_name = f"{agent_name.replace('_', '').title()}OutputModel"
+                        output_schema = json_schema_to_pydantic_model(schema_dict, model_name)
+                        logger.debug(f"Converted output_schema to Pydantic model {model_name} for agent {agent_name}")
+                    except Exception as e:
+                        logger.warning(f"Failed to convert output_schema to Pydantic model for agent {agent_name}: {e}")
+                        output_schema = None
+            
             print(f"[AGENT_MANAGER] Initializing agent {agent_name} (type: {agent_type})")
             logger.info(f"Initializing agent {agent_name} (type: {agent_type})")
             logger.debug(f"Original instruction length: {len(instruction)}")
@@ -353,17 +405,76 @@ class AgentManager:
             logger.info(f"Created {len(tools)} tools for agent {agent_name}")
             
             # Create agent based on type
-            if agent_type in ['sequential']:
-                agent = SequentialAgent(
+            if agent_type in ['graph']:
+                from google.adk.workflow import START
+                
+                # Resolve edges from planner_config
+                edges_config = None
+                planner_config = config.get('planner_config', {})
+                if planner_config:
+                    if isinstance(planner_config, str):
+                        try:
+                            planner_config = json.loads(planner_config)
+                        except json.JSONDecodeError:
+                            logger.error(f"Failed to parse planner_config JSON for graph agent {agent_name}: {planner_config}")
+                            planner_config = {}
+                    
+                    if isinstance(planner_config, dict):
+                        edges_config = planner_config.get('edges')
+                
+                # Map subagents by name to their instances
+                subagent_map = {}
+                for sa in sub_agents or []:
+                    if hasattr(sa, 'name'):
+                        subagent_map[sa.name] = sa
+                        parts = sa.name.rsplit('_', 1)
+                        if len(parts) > 1:
+                            subagent_map[parts[0]] = sa
+                
+                def resolve_node(node_name: str):
+                    if node_name == "START":
+                        return START
+                    if node_name in subagent_map:
+                        return subagent_map[node_name]
+                    if node_name in self.initialized_agents:
+                        return self.initialized_agents[node_name]
+                    
+                    is_join = False
+                    if isinstance(planner_config, dict):
+                        join_nodes = planner_config.get('join_nodes', [])
+                        if node_name in join_nodes:
+                            is_join = True
+                    if "join" in node_name.lower():
+                        is_join = True
+                        
+                    if is_join:
+                        from google.adk.workflow import JoinNode
+                        return JoinNode(name=node_name)
+                        
+                    raise ValueError(f"Could not resolve node '{node_name}' in subagents or initialized agents")
+                
+                resolved_edges = []
+                if edges_config:
+                    for edge in edges_config:
+                        if isinstance(edge, (list, tuple)):
+                            resolved_edge = tuple(resolve_node(n) for n in edge)
+                            resolved_edges.append(resolved_edge)
+                        else:
+                            resolved_edges.append(resolve_node(edge))
+                else:
+                    if sub_agents:
+                        resolved_edges = [(START, *sub_agents)]
+                        logger.info(f"No edges configured for graph agent {agent_name}. Defaulting to sequential chain.")
+                    else:
+                        raise ValueError(f"No edges or subagents configured for graph agent {agent_name}")
+                
+                agent = GraphWorkflow(
                     name=agent_name,
+                    edges=resolved_edges,
+                    description=description,
                     sub_agents=sub_agents or [],
-                    description=description
-                )
-            elif agent_type in ['parallel']:
-                agent = ParallelAgent(
-                    name=agent_name,
-                    sub_agents=sub_agents or [],
-                    description=description
+                    input_schema=input_schema,
+                    output_schema=output_schema
                 )
             elif agent_type in ['loop']:
                 max_iterations = config.get('max_iterations')  # Use None as default (Google ADK default)
@@ -375,8 +486,8 @@ class AgentManager:
                 )
             else:
                 # Default to standard Agent for llm type
-                # For sub-agents of parallel agents, use simpler callbacks to avoid TaskGroup issues
-                if parent_agent_type == 'parallel':
+                # For sub-agents of graph agents, use simpler callbacks to avoid TaskGroup issues
+                if parent_agent_type == 'graph':
                     before_callback = capture_model_name_callback
                     after_callback = log_token_usage_callback
                 else:
@@ -426,52 +537,6 @@ class AgentManager:
                     if tools_in_config:
                         logger.warning(f"Removing {len(tools_in_config) if isinstance(tools_in_config, list) else 1} tool(s) from generate_content_config for agent {agent_name} (ADK requires tools via Agent.tools)")
                         generate_config.pop('tools')
-                
-                # Parse input_schema if present and convert to Pydantic model
-                input_schema = None
-                input_schema_config = config.get('input_schema')
-                if input_schema_config:
-                    if isinstance(input_schema_config, str):
-                        try:
-                            schema_dict = json.loads(input_schema_config)
-                        except json.JSONDecodeError:
-                            logger.warning(f"Invalid JSON in input_schema for agent {agent_name}")
-                            schema_dict = None
-                    else:
-                        schema_dict = input_schema_config
-                    
-                    if schema_dict:
-                        try:
-                            # Convert JSON schema to Pydantic model
-                            model_name = f"{agent_name.replace('_', '').title()}InputModel"
-                            input_schema = json_schema_to_pydantic_model(schema_dict, model_name)
-                            logger.debug(f"Converted input_schema to Pydantic model {model_name} for agent {agent_name}")
-                        except Exception as e:
-                            logger.warning(f"Failed to convert input_schema to Pydantic model for agent {agent_name}: {e}")
-                            input_schema = None
-                
-                # Parse output_schema if present and convert to Pydantic model
-                output_schema = None
-                output_schema_config = config.get('output_schema')
-                if output_schema_config:
-                    if isinstance(output_schema_config, str):
-                        try:
-                            schema_dict = json.loads(output_schema_config)
-                        except json.JSONDecodeError:
-                            logger.warning(f"Invalid JSON in output_schema for agent {agent_name}")
-                            schema_dict = None
-                    else:
-                        schema_dict = output_schema_config
-                    
-                    if schema_dict:
-                        try:
-                            # Convert JSON schema to Pydantic model
-                            model_name = f"{agent_name.replace('_', '').title()}OutputModel"
-                            output_schema = json_schema_to_pydantic_model(schema_dict, model_name)
-                            logger.debug(f"Converted output_schema to Pydantic model {model_name} for agent {agent_name}")
-                        except Exception as e:
-                            logger.warning(f"Failed to convert output_schema to Pydantic model for agent {agent_name}: {e}")
-                            output_schema = None
                 
                 # Generate output_key from agent name
                 output_key = f"{agent_name}_output"

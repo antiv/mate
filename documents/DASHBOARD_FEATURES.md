@@ -153,9 +153,8 @@ Opening a new session (New Chat button) closes and fully resets the canvas — n
 ## Agent Types Supported
 
 1. **LLM Agents**: Language model-based agents with tool integration
-2. **Sequential Agents**: Execute sub-agents in sequence
-3. **Parallel Agents**: Execute sub-agents concurrently
-4. **Loop Agents**: Iterate over sub-agents with max iterations control
+2. **Graph Agents**: Arbitrary graph-based execution workflows using the ADK 2.x `Workflow` engine, supporting custom edges, join nodes, and sequential fallback routing
+3. **Loop Agents**: Iterate over sub-agents with max iterations control
 
 ## Advanced Configuration
 

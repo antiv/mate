@@ -622,8 +622,7 @@
                 {% for agent in agents %}
                 <a href="/dashboard/workroom?agent={{ agent.name | urlencode }}" class="wr-agent-card">
                     <div class="wr-agent-avatar">
-                        {% if agent.type == 'sequential' %}<i class="fas fa-layer-group"></i>
-                        {% elif agent.type == 'parallel' %}<i class="fas fa-sitemap"></i>
+                        {% if agent.type == 'graph' %}<i class="fas fa-project-diagram"></i>
                         {% elif agent.type == 'loop' %}<i class="fas fa-redo"></i>
                         {% else %}<i class="fas fa-robot"></i>{% endif %}
                     </div>
