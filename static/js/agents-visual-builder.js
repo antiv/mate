@@ -393,8 +393,7 @@
     /* ── Color palette per agent type ── */
     var NODE_COLORS = {
         llm: { bg: '#1e40af', border: '#3b82f6', glow: 'rgba(59,130,246,0.35)' },
-        sequential: { bg: '#065f46', border: '#10b981', glow: 'rgba(16,185,129,0.35)' },
-        parallel: { bg: '#92400e', border: '#f59e0b', glow: 'rgba(245,158,11,0.35)' },
+        graph: { bg: '#581c87', border: '#a855f7', glow: 'rgba(168,85,247,0.35)' },
         loop: { bg: '#991b1b', border: '#ef4444', glow: 'rgba(239,68,68,0.35)' },
         _default: { bg: '#374151', border: '#6b7280', glow: 'rgba(107,114,128,0.3)' },
     };
@@ -1039,8 +1038,7 @@
                                 onChange: handleInput('type'),
                             },
                             React.createElement('option', { value: 'llm' }, 'LLM'),
-                            React.createElement('option', { value: 'sequential' }, 'Sequential'),
-                            React.createElement('option', { value: 'parallel' }, 'Parallel'),
+                            React.createElement('option', { value: 'graph' }, 'Graph'),
                             React.createElement('option', { value: 'loop' }, 'Loop'),
                         ),
                     ),

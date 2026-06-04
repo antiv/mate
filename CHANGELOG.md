@@ -151,7 +151,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Multi-Agent Tree Engine** - hierarchical agent orchestration with root, sequential, parallel, and loop agent types
+- **Multi-Agent Tree Engine** - hierarchical agent orchestration with root, graph, and loop agent types
 - **Database-driven agent configuration** - create and manage agents via database without code changes
 - **Project-scoped multi-tenancy** - isolated agent hierarchies per project
 - **Universal LLM support** - Gemini (native), OpenAI, Anthropic, DeepSeek, Ollama (local), OpenRouter, and any LiteLLM-supported provider

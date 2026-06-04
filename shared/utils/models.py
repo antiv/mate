@@ -188,7 +188,7 @@ class AgentConfig(Base):
     
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String(255), nullable=False, unique=True)
-    type = Column(String(50), nullable=False)  # llm, sequential, parallel, loop
+    type = Column(String(50), nullable=False)  # llm, graph, loop
     model_name = Column(String(255), nullable=True)
     description = Column(Text, nullable=True)
     instruction = Column(Text, nullable=True)

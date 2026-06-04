@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """
-Unit tests for the new agent types: SequentialAgent, ParallelAgent, and LoopAgent.
+Unit tests for the agent types: GraphWorkflow and LoopAgent.
 """
 
 import unittest
 from unittest.mock import Mock, patch, MagicMock
 import sys
 import os
+import json
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -35,16 +36,16 @@ class TestNewAgentTypes(unittest.TestCase):
     
     @patch('shared.utils.tools.tool_factory.ToolFactory')
     @patch('shared.utils.utils.create_model')
-    def test_initialize_sequential_agent(self, mock_create_model, mock_tool_factory):
-        """Test initialization of SequentialAgent."""
+    def test_initialize_graph_agent_default(self, mock_create_model, mock_tool_factory):
+        """Test initialization of GraphWorkflow with default sequential fallback."""
         # Mock tool factory
         mock_tool_factory.return_value.create_tools.return_value = []
         
-        # Create mock agent config
+        # Create mock agent config without custom edges in planner_config
         config = {
-            'name': 'test_sequential_agent',
-            'type': 'sequential',
-            'description': 'Test sequential agent',
+            'name': 'test_graph_agent',
+            'type': 'graph',
+            'description': 'Test graph agent',
             'instruction': 'Test instruction',
             'model_name': 'test-model',
             'mcp_command': None,
@@ -52,33 +53,46 @@ class TestNewAgentTypes(unittest.TestCase):
             'mcp_env': None,
             'tool_config': None,
             'max_iterations': None,
-            'allowed_for_roles': []
+            'allowed_for_roles': [],
+            'planner_config': None
         }
         
-        # Mock sub-agents - use empty list for now to avoid validation issues
-        mock_sub_agents = []
+        # Mock sub-agents
+        from google.adk.workflow import Node
+        mock_sub_agent_1 = Node(name='sub_agent_1')
+        mock_sub_agent_2 = Node(name='sub_agent_2')
+        mock_sub_agents = [mock_sub_agent_1, mock_sub_agent_2]
         
         # Call the method
         result = self.agent_manager._initialize_agent(config, mock_sub_agents)
         
         # Verify result
         self.assertIsNotNone(result)
-        self.assertEqual(result.name, 'test_sequential_agent')
-        self.assertEqual(result.description, 'Test sequential agent')
-        self.assertEqual(len(result.sub_agents), 0)
+        self.assertEqual(result.name, 'test_graph_agent')
+        self.assertEqual(result.description, 'Test graph agent')
+        self.assertEqual(len(result.sub_agents), 2)
+        self.assertEqual(result.sub_agents[0].name, 'sub_agent_1')
+        self.assertEqual(result.sub_agents[1].name, 'sub_agent_2')
+        self.assertEqual(len(result.edges), 1)  # Default sequential chain
     
     @patch('shared.utils.tools.tool_factory.ToolFactory')
     @patch('shared.utils.utils.create_model')
-    def test_initialize_parallel_agent(self, mock_create_model, mock_tool_factory):
-        """Test initialization of ParallelAgent."""
+    def test_initialize_graph_agent_with_edges(self, mock_create_model, mock_tool_factory):
+        """Test initialization of GraphWorkflow with custom edges configuration."""
         # Mock tool factory
         mock_tool_factory.return_value.create_tools.return_value = []
         
-        # Create mock agent config
+        # Create mock agent config with custom edges in planner_config
+        planner_config = {
+            'edges': [
+                ['START', 'sub_agent_1'],
+                ['sub_agent_1', 'sub_agent_2']
+            ]
+        }
         config = {
-            'name': 'test_parallel_agent',
-            'type': 'parallel',
-            'description': 'Test parallel agent',
+            'name': 'test_graph_agent_custom',
+            'type': 'graph',
+            'description': 'Test graph agent with custom edges',
             'instruction': 'Test instruction',
             'model_name': 'test-model',
             'mcp_command': None,
@@ -86,20 +100,24 @@ class TestNewAgentTypes(unittest.TestCase):
             'mcp_env': None,
             'tool_config': None,
             'max_iterations': None,
-            'allowed_for_roles': []
+            'allowed_for_roles': [],
+            'planner_config': json.dumps(planner_config)
         }
         
-        # Mock sub-agents - use empty list for now to avoid validation issues
-        mock_sub_agents = []
+        # Mock sub-agents
+        from google.adk.workflow import Node
+        mock_sub_agent_1 = Node(name='sub_agent_1')
+        mock_sub_agent_2 = Node(name='sub_agent_2')
+        mock_sub_agents = [mock_sub_agent_1, mock_sub_agent_2]
         
         # Call the method
         result = self.agent_manager._initialize_agent(config, mock_sub_agents)
         
         # Verify result
         self.assertIsNotNone(result)
-        self.assertEqual(result.name, 'test_parallel_agent')
-        self.assertEqual(result.description, 'Test parallel agent')
-        self.assertEqual(len(result.sub_agents), 0)
+        self.assertEqual(result.name, 'test_graph_agent_custom')
+        self.assertEqual(len(result.sub_agents), 2)
+        self.assertEqual(len(result.edges), 2)
     
     @patch('shared.utils.tools.tool_factory.ToolFactory')
     @patch('shared.utils.utils.create_model')
@@ -173,10 +191,10 @@ class TestNewAgentTypes(unittest.TestCase):
         """Test initialize_agent_from_config with new agent types."""
         # Create mock agent config
         mock_config = Mock(spec=AgentConfig)
-        mock_config.name = 'test_sequential_agent'
-        mock_config.type = 'sequential'
+        mock_config.name = 'test_graph_agent'
+        mock_config.type = 'graph'
         mock_config.model_name = 'test-model'
-        mock_config.description = 'Test sequential agent'
+        mock_config.description = 'Test graph agent'
         mock_config.instruction = 'Test instruction'
         mock_config.mcp_command = None
         mock_config.mcp_args = None
@@ -198,8 +216,8 @@ class TestNewAgentTypes(unittest.TestCase):
             call_args = mock_init.call_args[0][0]  # First positional argument (config dict)
             
             # Verify the config dict contains the new fields
-            self.assertEqual(call_args['name'], 'test_sequential_agent')
-            self.assertEqual(call_args['type'], 'sequential')
+            self.assertEqual(call_args['name'], 'test_graph_agent')
+            self.assertEqual(call_args['type'], 'graph')
             self.assertEqual(call_args['max_iterations'], None)
             
             # Verify result
@@ -220,7 +238,7 @@ class TestNewAgentTypes(unittest.TestCase):
     
     def test_supported_agent_types(self):
         """Test that all supported agent types are recognized."""
-        supported_types = ['llm', 'sequential', 'parallel', 'loop']
+        supported_types = ['llm', 'graph', 'loop']
         
         for agent_type in supported_types:
             with self.subTest(agent_type=agent_type):
