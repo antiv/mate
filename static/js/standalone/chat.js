@@ -48,7 +48,7 @@
     if (saved) {
       try {
         var msgs = JSON.parse(saved);
-        msgs.forEach(function (m) { _appendMessage(m.role, m.text, true); });
+        msgs.forEach(function (m) { _appendMessage(m.role, m.text, true, null, m.author); });
         if (greetingEl) greetingEl.style.display = "none";
       } catch (_) {}
     }
@@ -94,7 +94,7 @@
     if ((!text && !images.length && !canvasCtx) || sending) return;
 
     if (greetingEl) greetingEl.style.display = "none";
-    var userEl = _appendMessage("user", text, false, images);
+    var userEl = _appendMessage("user", text, false, images, "user");
     // Show a small badge on the user bubble when canvas code is attached
     if (canvasCtx && userEl) {
       var badge = document.createElement("span");
@@ -180,7 +180,7 @@
       })
       .catch(function (err) {
         _showTyping(false);
-        _appendMessage("agent", "Sorry, something went wrong. Please try again.");
+        _appendMessage("agent", "Sorry, something went wrong. Please try again.", false, null, "agent");
         console.error("Standalone chat error:", err);
       })
       .finally(function () {
@@ -197,7 +197,6 @@
     var agentText = "";
     var agentEl = null;
     var currentAuthor = "";
-    var seenToolUse = false;
 
     var THINKING_HTML =
       '<span class="widget-thinking-inline">' +
@@ -208,10 +207,26 @@
 
     function _ensureBubble() {
       if (!agentEl) {
+        var wrapper = document.createElement("div");
+        wrapper.className = "widget-message-wrapper agent-message";
+        
+        var avatarColor = getAgentColor(currentAuthor);
+        var initials = getAgentInitials(currentAuthor);
+        
+        var avatarEl = document.createElement("div");
+        avatarEl.className = "widget-agent-avatar";
+        avatarEl.style.backgroundColor = avatarColor;
+        avatarEl.textContent = initials;
+        avatarEl.title = currentAuthor;
+        
         agentEl = document.createElement("div");
         agentEl.className = "widget-message agent";
+        agentEl.setAttribute("data-author", currentAuthor);
         agentEl.innerHTML = THINKING_HTML;
-        messagesEl.appendChild(agentEl);
+        
+        wrapper.appendChild(avatarEl);
+        wrapper.appendChild(agentEl);
+        messagesEl.appendChild(wrapper);
         _scrollToBottom();
       }
     }
@@ -287,8 +302,8 @@
         if (author && author !== currentAuthor) {
           currentAuthor = author;
           agentText = "";
-          seenToolUse = false;
-          if (agentEl) agentEl.innerHTML = THINKING_HTML;
+          // When author changes, start a new bubble instead of overwriting/resetting the existing one.
+          agentEl = null;
         }
 
         var parts = (evt.content && evt.content.parts) || [];
@@ -308,12 +323,7 @@
         }
 
         if (hasToolPart) {
-          seenToolUse = true;
-          agentText = "";
-          _showTyping(false);
-          _ensureBubble();
-          agentEl.innerHTML = THINKING_HTML;
-          _scrollToBottom();
+          _showTyping(true);
           return;
         }
 
@@ -364,7 +374,7 @@
         if (!agentText && agentEl) {
           agentEl.innerHTML = _renderMarkdown("(no response)");
         } else if (!agentText && !agentEl) {
-          _appendMessage("agent", "(no response)");
+          _appendMessage("agent", "(no response)", false, null, "agent");
         }
         _saveHistory();
         if (agentEl && window.mateOnAgentDone) window.mateOnAgentDone(agentEl);
@@ -456,12 +466,31 @@
   }
 
   // --- DOM helpers -----------------------------------------------------
-  function _appendMessage(role, text, skipSave, images) {
+  function _appendMessage(role, text, skipSave, images, author) {
     var el = document.createElement("div");
-    el.className = "widget-message " + role;
     if (role === "agent") {
+      var wrapper = document.createElement("div");
+      wrapper.className = "widget-message-wrapper agent-message";
+      
+      var avatarColor = getAgentColor(author);
+      var initials = getAgentInitials(author);
+      
+      var avatarEl = document.createElement("div");
+      avatarEl.className = "widget-agent-avatar";
+      avatarEl.style.backgroundColor = avatarColor;
+      avatarEl.textContent = initials;
+      avatarEl.title = author || "agent";
+      
+      el.className = "widget-message agent";
+      el.setAttribute("data-author", author || "");
       el.innerHTML = _renderMarkdown(text);
+      
+      wrapper.appendChild(avatarEl);
+      wrapper.appendChild(el);
+      messagesEl.appendChild(wrapper);
     } else {
+      el.className = "widget-message " + role;
+      el.setAttribute("data-author", author || "");
       // Show attached images as thumbnails in user bubble
       if (images && images.length) {
         images.forEach(function (img) {
@@ -476,8 +505,8 @@
         textNode.textContent = text;
         el.appendChild(textNode);
       }
+      messagesEl.appendChild(el);
     }
-    messagesEl.appendChild(el);
     _scrollToBottom();
     _loadLazyArtifacts();
     if (!skipSave) _saveHistory();
@@ -518,8 +547,13 @@
   }
 
   function _showTyping(show) {
-    if (typingEl) typingEl.classList.toggle("active", show);
-    if (show) _scrollToBottom();
+    if (typingEl) {
+      typingEl.classList.toggle("active", show);
+      if (show) {
+        messagesEl.appendChild(typingEl);
+        _scrollToBottom();
+      }
+    }
   }
 
   function _scrollToBottom() {
@@ -542,11 +576,43 @@
     var msgs = [];
     messagesEl.querySelectorAll(".widget-message").forEach(function (el) {
       var role = el.classList.contains("user") ? "user" : "agent";
-      msgs.push({ role: role, text: role === "user" ? el.textContent : el.innerHTML });
+      var author = el.getAttribute("data-author") || "";
+      msgs.push({ role: role, text: role === "user" ? el.textContent : el.innerHTML, author: author });
     });
     try {
       sessionStorage.setItem(STORAGE_PREFIX + "_msgs", JSON.stringify(msgs));
     } catch (_) {}
+  }
+
+  function getAgentColor(agentName) {
+    if (!agentName) return "#6b7280";
+    var colors = [
+      "#3b82f6", // Blue
+      "#10b981", // Emerald
+      "#8b5cf6", // Violet
+      "#f59e0b", // Amber
+      "#ec4899", // Pink
+      "#14b8a6", // Teal
+      "#f97316", // Orange
+      "#6366f1", // Indigo
+      "#a855f7", // Purple
+    ];
+    var hash = 0;
+    for (var i = 0; i < agentName.length; i++) {
+      hash = agentName.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    var index = Math.abs(hash) % colors.length;
+    return colors[index];
+  }
+
+  function getAgentInitials(agentName) {
+    if (!agentName) return "A";
+    var clean = agentName.replace(/^ant_/, "");
+    var parts = clean.split(/[_-]/);
+    if (parts.length > 1) {
+      return (parts[0].charAt(0) + parts[1].charAt(0)).toUpperCase();
+    }
+    return clean.charAt(0).toUpperCase();
   }
 
   function _generateId() {

@@ -230,6 +230,35 @@
     }
 
     /* Override message bubble styles for modern look inside workroom */
+    .wr-chat-root .widget-message-wrapper {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.5rem;
+        max-width: 80%;
+        align-self: flex-start;
+        animation: fadeIn 0.2s ease;
+    }
+    .wr-chat-root .widget-message-wrapper .widget-message {
+        max-width: 100%;
+        animation: none;
+    }
+    .wr-chat-root .widget-agent-avatar {
+        width: 1.75rem;
+        height: 1.75rem;
+        border-radius: 9999px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #fff;
+        font-weight: 600;
+        font-size: 0.7rem;
+        flex-shrink: 0;
+        margin-top: 0.125rem;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        text-transform: uppercase;
+        user-select: none;
+    }
+
     .wr-chat-root .widget-message {
         max-width: 80%;
         border-radius: 1.25rem;
@@ -652,6 +681,11 @@
         <div class="wr-agent-bar">
             <div class="wr-agent-bar-avatar"><i class="fas fa-robot"></i></div>
             <span class="wr-agent-bar-name">{{ selected_agent }}</span>
+            <label class="flex items-center gap-1.5 mr-4 text-xs text-gray-600 dark:text-gray-400 cursor-pointer" style="display: inline-flex; align-items: center; gap: 0.375rem; font-size: 0.75rem; margin-right: 1.5rem; color: #94a3b8; font-weight: 500; margin-left: auto;">
+                <input type="checkbox" id="wrCanvasToggle" checked style="cursor: pointer; accent-color: #6366f1;">
+                <span>Show Code Editor</span>
+            </label>
+
             <a href="/dashboard/workroom" class="wr-bar-action">
                 <i class="fas fa-exchange-alt mr-1"></i>Change
             </a>
@@ -777,12 +811,13 @@
             if (text && e.author) {
                 // If it's a model event with no author, default to agent
                 var role = e.author === "user" ? "user" : "agent";
+                var author = e.author;
                 
-                // Try to append to the last message if it's the same role
-                if (msgs.length > 0 && msgs[msgs.length - 1].role === role) {
+                // Try to append to the last message if it's the same role and same author
+                if (msgs.length > 0 && msgs[msgs.length - 1].role === role && msgs[msgs.length - 1].author === author) {
                     msgs[msgs.length - 1].text += text;
                 } else {
-                    msgs.push({ role: role, text: text });
+                    msgs.push({ role: role, author: author, text: text });
                 }
             }
         });
@@ -1385,10 +1420,25 @@
         _showCanvas(lang, code, el);
     };
 
+    // Initialize the canvas toggle checkbox preference
+    var canvasToggle = document.getElementById("wrCanvasToggle");
+    if (canvasToggle) {
+        var savedPref = localStorage.getItem("mate_show_canvas");
+        if (savedPref !== null) {
+            canvasToggle.checked = savedPref === "true";
+        }
+        canvasToggle.addEventListener("change", function () {
+            localStorage.setItem("mate_show_canvas", canvasToggle.checked);
+        });
+    }
+
     // Called after stream completes — move code blocks to canvas, leave pills in chat
     window.mateOnAgentDone = function (agentEl) {
         var blocks = agentEl.querySelectorAll(".mate-code-block");
         if (!blocks.length) return;
+
+        var autoCanvas = canvasToggle ? canvasToggle.checked : true;
+        if (!autoCanvas) return;
 
         // Pick the largest block for the canvas
         var best = blocks[0];

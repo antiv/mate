@@ -96,6 +96,40 @@ html, body {
   gap: 12px;
 }
 
+.widget-message-wrapper {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  max-width: 85%;
+  align-self: flex-start;
+  animation: fadeIn 0.2s ease;
+}
+.widget-message-wrapper.agent-message {
+  align-self: flex-start;
+}
+.widget-message-wrapper .widget-message {
+  max-width: 100%;
+  animation: none;
+}
+
+.widget-agent-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  font-weight: 600;
+  font-size: 11px;
+  flex-shrink: 0;
+  margin-top: 2px;
+  text-shadow: 0 1px 1px rgba(0,0,0,0.15);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  text-transform: uppercase;
+  user-select: none;
+}
+
 .widget-message {
   max-width: 85%;
   padding: 10px 14px;
