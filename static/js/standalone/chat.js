@@ -22,7 +22,7 @@
   localStorage.setItem(STORAGE_PREFIX + "_uid", userId);
 
   var sending = false;
-  var pendingImages = []; // [{dataUrl, mimeType, base64}]
+  var pendingFiles = []; // [{dataUrl, mimeType, base64, name}]
 
   // --- DOM refs --------------------------------------------------------
   var messagesEl = document.getElementById("widgetMessages");
@@ -89,12 +89,12 @@
   // --- Send message ----------------------------------------------------
   function _send() {
     var text = inputEl.value.trim();
-    var images = pendingImages.slice();
+    var files = pendingFiles.slice();
     var canvasCtx = window.mateGetCanvasCode && window.mateGetCanvasCode();
-    if ((!text && !images.length && !canvasCtx) || sending) return;
+    if ((!text && !files.length && !canvasCtx) || sending) return;
 
     if (greetingEl) greetingEl.style.display = "none";
-    var userEl = _appendMessage("user", text, false, images, "user");
+    var userEl = _appendMessage("user", text, false, files, "user");
     // Show a small badge on the user bubble when canvas code is attached
     if (canvasCtx && userEl) {
       var badge = document.createElement("span");
@@ -104,15 +104,18 @@
     }
     inputEl.value = "";
     inputEl.style.height = "auto";
-    _clearPendingImages();
+    _clearPendingFiles();
     sending = true;
     sendBtn.disabled = true;
     _showTyping(true);
 
     // Build parts array — append canvas code to the text part
     var parts = [];
-    images.forEach(function (img) {
-      parts.push({ inline_data: { mime_type: img.mimeType, data: img.base64 } });
+    files.forEach(function (f) {
+      parts.push({ 
+        inline_data: { mime_type: f.mimeType, data: f.base64 },
+        filename: f.name
+      });
     });
     var sendText = text;
     if (canvasCtx) {
@@ -172,7 +175,13 @@
             });
           });
         }
-        if (!res.ok) throw new Error("Chat request failed: " + res.status);
+        if (!res.ok) {
+          return res.json()
+            .catch(function () { return {}; })
+            .then(function (errData) {
+              throw new Error(errData.detail || errData.error || "Chat request failed: " + res.status);
+            });
+        }
         return res;
       })
       .then(function (res) {
@@ -180,7 +189,9 @@
       })
       .catch(function (err) {
         _showTyping(false);
-        _appendMessage("agent", "Sorry, something went wrong. Please try again.", false, null, "agent");
+        var msg = err.message || "Sorry, something went wrong. Please try again.";
+        msg = msg.replace(/^Error:\s*/i, "");
+        _appendMessage("agent", msg, false, null, "agent");
         console.error("Standalone chat error:", err);
       })
       .finally(function () {
@@ -388,27 +399,96 @@
     });
   }
 
-  // --- Image upload helpers --------------------------------------------
-  var MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10 MB
+  // --- File upload helpers --------------------------------------------
+  var MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB (images and PDFs)
+  var MAX_TEXT_FILE_SIZE = 5 * 1024 * 1024; // 5 MB (text files)
   var MAX_DIMENSION = 2048;
+  var SUPPORTED_TEXT_EXTS = [
+    "txt", "md", "markdown", "json", "js", "ts", "py", "css", "csv", "html", "xml", "yaml", "yml", "ini", "log", "sql", "sh", "bat"
+  ];
+
+  function isSupportedFile(file) {
+    if (!file) return false;
+    var type = file.type || "";
+    if (type.indexOf("image/") === 0) return true;
+    if (type === "application/pdf") return true;
+    if (type.indexOf("text/") === 0) return true;
+    
+    var ext = file.name.split(".").pop().toLowerCase();
+    if (SUPPORTED_TEXT_EXTS.indexOf(ext) !== -1) return true;
+    
+    return false;
+  }
+
+  function _getMimeFromExtension(filename) {
+    var ext = filename.split(".").pop().toLowerCase();
+    var mimes = {
+      pdf: "application/pdf",
+      json: "application/json",
+      js: "text/javascript",
+      ts: "text/typescript",
+      py: "text/x-python",
+      css: "text/css",
+      csv: "text/csv",
+      html: "text/html",
+      xml: "text/xml",
+      yaml: "text/yaml",
+      yml: "text/yaml",
+      md: "text/markdown",
+      txt: "text/plain"
+    };
+    return mimes[ext] || "application/octet-stream";
+  }
 
   function _handleFileSelect(e) {
     var files = e.target.files;
     if (!files || !files.length) return;
     for (var i = 0; i < files.length; i++) {
       (function (file) {
-        if (!file.type.startsWith("image/")) return;
-        if (file.size > MAX_IMAGE_SIZE) {
-          alert("Image too large (max 10 MB): " + file.name);
+        if (!isSupportedFile(file)) {
+          alert("Unsupported file type: " + file.name + "\nSupported formats: Images, PDFs, and text files (.txt, .md, .json, .py, etc.)");
           return;
         }
-        _readAndResizeImage(file, function (result) {
-          pendingImages.push(result);
-          _renderPreviews();
-        });
+
+        var isImg = file.type.indexOf("image/") === 0;
+        var maxSize = isImg ? MAX_FILE_SIZE : (file.type === "application/pdf" ? MAX_FILE_SIZE : MAX_TEXT_FILE_SIZE);
+        
+        if (file.size > maxSize) {
+          var sizeMB = Math.round(maxSize / (1024 * 1024));
+          alert("File too large (max " + sizeMB + " MB): " + file.name);
+          return;
+        }
+
+        if (isImg) {
+          _readAndResizeImage(file, function (result) {
+            result.name = file.name;
+            pendingFiles.push(result);
+            _renderPreviews();
+          });
+        } else {
+          _readAttachment(file, function (result) {
+            pendingFiles.push(result);
+            _renderPreviews();
+          });
+        }
       })(files[i]);
     }
     fileInput.value = "";
+  }
+
+  function _readAttachment(file, cb) {
+    var reader = new FileReader();
+    reader.onload = function (e) {
+      var dataUrl = e.target.result;
+      var base64 = dataUrl.split(",")[1];
+      cb({
+        dataUrl: dataUrl,
+        mimeType: file.type || _getMimeFromExtension(file.name),
+        base64: base64,
+        name: file.name
+      });
+    };
+    reader.readAsDataURL(file);
   }
 
   function _readAndResizeImage(file, cb) {
@@ -431,7 +511,7 @@
         var quality = mimeType === "image/jpeg" ? 0.85 : undefined;
         var dataUrl = canvas.toDataURL(mimeType, quality);
         var base64 = dataUrl.split(",")[1];
-        cb({ dataUrl: dataUrl, mimeType: mimeType, base64: base64 });
+        cb({ dataUrl: dataUrl, mimeType: mimeType, base64: base64, name: file.name });
       };
       img.src = e.target.result;
     };
@@ -440,33 +520,49 @@
 
   function _renderPreviews() {
     imagePreview.innerHTML = "";
-    pendingImages.forEach(function (img, idx) {
+    pendingFiles.forEach(function (f, idx) {
       var item = document.createElement("div");
       item.className = "widget-preview-item";
-      var imgEl = document.createElement("img");
-      imgEl.src = img.dataUrl;
-      item.appendChild(imgEl);
+      
+      var isImage = f.mimeType && f.mimeType.indexOf("image/") === 0;
+      if (isImage) {
+        var imgEl = document.createElement("img");
+        imgEl.src = f.dataUrl;
+        item.appendChild(imgEl);
+      } else {
+        var badgeEl = document.createElement("div");
+        badgeEl.className = "widget-preview-file-badge";
+        
+        var ext = f.name.split(".").pop().toUpperCase();
+        var icon = "📄";
+        if (ext === "PDF") icon = "📕";
+        else if (["JSON", "PY", "JS", "TS", "HTML", "CSS", "YAML", "YML"].indexOf(ext) !== -1) icon = "💻";
+        
+        badgeEl.innerHTML = '<span class="file-icon">' + icon + '</span><span class="file-name">' + f.name + '</span>';
+        item.appendChild(badgeEl);
+      }
+
       var removeBtn = document.createElement("button");
       removeBtn.className = "widget-preview-remove";
       removeBtn.textContent = "\u00D7";
       removeBtn.onclick = function () {
-        pendingImages.splice(idx, 1);
+        pendingFiles.splice(idx, 1);
         _renderPreviews();
       };
       item.appendChild(removeBtn);
       imagePreview.appendChild(item);
     });
-    imagePreview.classList.toggle("active", pendingImages.length > 0);
+    imagePreview.classList.toggle("active", pendingFiles.length > 0);
   }
 
-  function _clearPendingImages() {
-    pendingImages = [];
+  function _clearPendingFiles() {
+    pendingFiles = [];
     imagePreview.innerHTML = "";
     imagePreview.classList.remove("active");
   }
 
   // --- DOM helpers -----------------------------------------------------
-  function _appendMessage(role, text, skipSave, images, author) {
+  function _appendMessage(role, text, skipSave, files, author) {
     var el = document.createElement("div");
     if (role === "agent") {
       var wrapper = document.createElement("div");
@@ -491,13 +587,26 @@
     } else {
       el.className = "widget-message " + role;
       el.setAttribute("data-author", author || "");
-      // Show attached images as thumbnails in user bubble
-      if (images && images.length) {
-        images.forEach(function (img) {
-          var imgEl = document.createElement("img");
-          imgEl.src = img.dataUrl;
-          imgEl.className = "widget-msg-image";
-          el.appendChild(imgEl);
+      // Show attached files in user bubble
+      if (files && files.length) {
+        files.forEach(function (fileObj) {
+          var isImg = fileObj.mimeType && fileObj.mimeType.indexOf("image/") === 0;
+          if (isImg) {
+            var imgEl = document.createElement("img");
+            imgEl.src = fileObj.dataUrl;
+            imgEl.className = "widget-msg-image";
+            el.appendChild(imgEl);
+          } else {
+            var fileLink = document.createElement("div");
+            fileLink.className = "widget-msg-file-attachment";
+            
+            var ext = fileObj.name.split(".").pop().toUpperCase();
+            var icon = "📄";
+            if (ext === "PDF") icon = "📕";
+            
+            fileLink.innerHTML = '<span class="file-icon">' + icon + '</span><span class="file-name">' + fileObj.name + '</span>';
+            el.appendChild(fileLink);
+          }
         });
       }
       if (text) {
