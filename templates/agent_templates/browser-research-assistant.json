@@ -1,0 +1,38 @@
+{
+  "template_meta": {
+    "id": "browser-research-assistant",
+    "name": "Browser Research Assistant",
+    "description": "Agent equipped with native browser capabilities to browse the web, scrape text, fill out form fields, click buttons, and capture screenshots.",
+    "category": "research",
+    "version": "1.0",
+    "compatibility_tags": ["browser", "memory_blocks"],
+    "root_agent": "browser_assistant_root",
+    "agent_prefix": "browser_assistant"
+  },
+  "project": {
+    "name": "Browser Assistant",
+    "description": "Agent with active browser automation tools (navigate, click, type, screenshot) for automated web interaction."
+  },
+  "agents": [
+    {
+      "name": "browser_assistant_root",
+      "type": "llm",
+      "model_name": "openrouter/google/gemini-2.5-flash",
+      "description": "Orchestrates research and browser-based automation tasks.",
+      "instruction": "You are the Browser Research Assistant. You are equipped with native browser tools (browser_navigate, browser_click, browser_fill_form, browser_screenshot). Your task is to browse websites, search information, click page links, fill input fields, and capture screenshots. When the user asks you to research a site, check a link, or fill a form, use these tools to automate the task. Present your findings clearly and include the screenshot URLs in your response to visually show your actions. IMPORTANT: You share the exact same browser context/session with the user's Live Browser modal in the dashboard. When the user logs in manually on the Live Browser, you are also authenticated on those sites (like Reddit, LinkedIn, etc.). If the user asks you to read or interact with a page they have open or logged into, do not refuse; instead, use browser_navigate with the page's URL to access the page in your shared session context.",
+      "parent_agents": [],
+      "allowed_for_roles": "[\"admin\", \"user\"]",
+      "tool_config": "{\"browser\": true, \"memory_blocks\": true}",
+      "mcp_servers_config": null,
+      "disabled": false,
+      "hardcoded": false
+    }
+  ],
+  "memory_blocks": [
+    {
+      "label": "browser_agent_instructions",
+      "value": "Guidance for browser interactions:\n1. If a button/element requires clicking, use browser_click with a valid CSS selector.\n2. If you need to fill form inputs, use browser_fill_form with selector and the value.\n3. Capture browser_screenshot after key steps to confirm success and show results to the user.\n4. Read and summarize the text content of the page returning from navigation/click commands.",
+      "description": "Browser agent navigation and form-filling instructions"
+    }
+  ]
+}

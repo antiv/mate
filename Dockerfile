@@ -21,6 +21,9 @@ COPY requirements.txt ./requirements.txt
 # Install Python dependencies
 RUN uv pip install --no-cache-dir --system -r ./requirements.txt
 
+# Install Playwright browser binaries and system dependencies (as root)
+RUN python -m playwright install --with-deps chromium
+
 # Install additional dependencies mentioned in README
 # RUN uv pip install --no-cache-dir --system google-adk litellm
 

@@ -731,6 +731,28 @@
   // --- Lightweight markdown renderer -----------------------------------
   function _renderMarkdown(text) {
     if (!text) return "";
+    
+    // Pre-process any MATE image artifacts to use lazy-loading img tags
+    // 1. Markdown images pointing to artifacts
+    text = text.replace(/!\[([^\]]*)\]\((.*?\/api\/widget\/artifacts\/[^\s)]+)\)/gi, function(_, alt, url) {
+        return '<img class="widget-msg-image widget-generated-image art-lazy-load" data-art-url="' + url + '" alt="' + alt + '">';
+    });
+
+    // 2. Markdown links pointing to image artifacts
+    text = text.replace(/\[([^\]]*)\]\((.*?\/api\/widget\/artifacts\/[^\s)]+)\)/gi, function(_, label, url) {
+        var lowerUrl = url.toLowerCase();
+        var isImage = lowerUrl.indexOf('.png') !== -1 || lowerUrl.indexOf('.jpg') !== -1 || lowerUrl.indexOf('.jpeg') !== -1 || lowerUrl.indexOf('.webp') !== -1;
+        if (isImage) {
+            return '<img class="widget-msg-image widget-generated-image art-lazy-load" data-art-url="' + url + '" alt="' + label + '">';
+        }
+        return '[' + label + '](' + url + ')';
+    });
+
+    // 3. Raw URLs in text pointing to image artifacts (e.g. printed as text by the agent)
+    text = text.replace(/(^|\s)(\/api\/widget\/artifacts\/[^\s"')]+\.(?:png|jpg|jpeg|webp)(?:\/\d+)?)/gi, function(match, space, url) {
+        return space + '<img class="widget-msg-image widget-generated-image art-lazy-load" data-art-url="' + url + '" alt="Screenshot">';
+    });
+
     var html = text
       .replace(/```(\w*)\n([\s\S]*?)```/g, function (_, lang, code) {
         var raw = code.trim();

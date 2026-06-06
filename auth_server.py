@@ -292,6 +292,7 @@ async def service_worker():
 from server.auth_routes import router as auth_router
 from server.oauth_routes import router as oauth_router
 from server.proxy_routes import router as proxy_router
+from server.browser_routes import router as browser_router
 from server.widget_routes import (
     router as widget_router,
     admin_api_router as widget_admin_api_router,
@@ -307,6 +308,7 @@ app.include_router(widget_router)
 app.include_router(widget_admin_api_router)
 app.include_router(dashboard_widget_router)
 app.include_router(proxy_router)
+app.include_router(browser_router)
 
 
 # ---------- Entry point ----------

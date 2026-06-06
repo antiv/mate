@@ -592,6 +592,7 @@
       messagesEl.appendChild(el);
     }
     _scrollToBottom();
+    _loadLazyArtifacts();
     if (!skipSave) _saveHistory();
     return el;
   }
@@ -599,6 +600,34 @@
   function _updateMessage(el, text) {
     el.innerHTML = _renderMarkdown(text);
     _scrollToBottom();
+    _loadLazyArtifacts();
+  }
+
+  function _loadLazyArtifacts() {
+    document.querySelectorAll("img.art-lazy-load").forEach(function(imgEl) {
+      var url = imgEl.getAttribute("data-art-url");
+      if (url && !imgEl.getAttribute("data-loading")) {
+        imgEl.setAttribute("data-loading", "true");
+        imgEl.style.opacity = "0.5";
+        fetch(url)
+          .then(function(r) { return r.json(); })
+          .then(function(data) {
+             var inlineData = data.inlineData || data.inline_data;
+             if (inlineData && inlineData.data) {
+                 var mimeType = inlineData.mimeType || inlineData.mime_type || 'image/png';
+                 var cleanBase64 = inlineData.data.replace(/\s+/g, '').replace(/-/g, '+').replace(/_/g, '/');
+                 imgEl.src = 'data:' + mimeType + ';base64,' + cleanBase64;
+                 imgEl.style.opacity = "1";
+                 imgEl.classList.remove("art-lazy-load");
+                 _scrollToBottom();
+             } else {
+                 imgEl.style.display = "none";
+             }
+          }).catch(function() { 
+             imgEl.style.display = "none"; 
+          });
+      }
+    });
   }
 
   function _showTyping(show) {
@@ -670,9 +699,30 @@
     return "u_" + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
   }
 
-  // --- Lightweight markdown renderer -----------------------------------
   function _renderMarkdown(text) {
     if (!text) return "";
+
+    // Pre-process any MATE image artifacts to use lazy-loading img tags
+    // 1. Markdown images pointing to artifacts
+    text = text.replace(/!\[([^\]]*)\]\((.*?\/api\/widget\/artifacts\/[^\s)]+)\)/gi, function(_, alt, url) {
+        return '<img class="widget-msg-image widget-generated-image art-lazy-load" data-art-url="' + url + '" alt="' + alt + '">';
+    });
+
+    // 2. Markdown links pointing to image artifacts
+    text = text.replace(/\[([^\]]*)\]\((.*?\/api\/widget\/artifacts\/[^\s)]+)\)/gi, function(_, label, url) {
+        var lowerUrl = url.toLowerCase();
+        var isImage = lowerUrl.indexOf('.png') !== -1 || lowerUrl.indexOf('.jpg') !== -1 || lowerUrl.indexOf('.jpeg') !== -1 || lowerUrl.indexOf('.webp') !== -1;
+        if (isImage) {
+            return '<img class="widget-msg-image widget-generated-image art-lazy-load" data-art-url="' + url + '" alt="' + label + '">';
+        }
+        return '[' + label + '](' + url + ')';
+    });
+
+    // 3. Raw URLs in text pointing to image artifacts (e.g. printed as text by the agent)
+    text = text.replace(/(^|\s)(\/api\/widget\/artifacts\/[^\s"')]+\.(?:png|jpg|jpeg|webp)(?:\/\d+)?)/gi, function(match, space, url) {
+        return space + '<img class="widget-msg-image widget-generated-image art-lazy-load" data-art-url="' + url + '" alt="Screenshot">';
+    });
+
     var html = text
       // Code blocks
       .replace(/```(\w*)\n([\s\S]*?)```/g, function (_, lang, code) {
@@ -684,6 +734,8 @@
       .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
       // Italic
       .replace(/\*(.+?)\*/g, '<em>$1</em>')
+      // Inline images
+      .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" class="widget-msg-image widget-generated-image">')
       // Links
       .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
       // Headers (h3 max inside chat)
