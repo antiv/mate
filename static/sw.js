@@ -1,6 +1,6 @@
 /* MATE Dashboard Service Worker - Offline shell */
 
-const CACHE_NAME = 'mate-dashboard-v1';
+const CACHE_NAME = 'mate-dashboard-v3';
 const STATIC_ASSETS = [
   '/static/css/dashboard-responsive.css',
   '/static/css/agents.css',

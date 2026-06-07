@@ -23,6 +23,36 @@
 
   var sending = false;
   var pendingFiles = []; // [{dataUrl, mimeType, base64, name}]
+  var abortController = null;
+  var activeAgentEl = null;
+  var activeAgentText = "";
+  var activeAgentAuthor = "";
+
+  var currentLang = "en";
+  if (document.documentElement.lang) {
+    currentLang = document.documentElement.lang.split("-")[0].toLowerCase();
+  }
+
+  // UI string translations
+  var UI_STRINGS = {
+    en: { placeholder: "Type a message…", send: "Send", newChat: "New Chat", stop: "Stop", interrupted: "Response interrupted" },
+    sr: { placeholder: "Unesite poruku…", send: "Pošalji", newChat: "Nov razgovor", stop: "Prekini", interrupted: "Odgovor je prekinut" },
+    hr: { placeholder: "Unesite poruku…", send: "Pošalji", newChat: "Novi razgovor", stop: "Prekini", interrupted: "Odgovor je prekinut" },
+    bs: { placeholder: "Unesite poruku…", send: "Pošalji", newChat: "Novi razgovor", stop: "Prekini", interrupted: "Odgovor je prekinut" },
+    de: { placeholder: "Nachricht eingeben…", send: "Senden", newChat: "Neuer Chat", stop: "Stoppen", interrupted: "Antwort unterbrochen" },
+    fr: { placeholder: "Écrivez un message…", send: "Envoyer", newChat: "Nouveau chat", stop: "Arrêter", interrupted: "Réponse interrompue" },
+    es: { placeholder: "Escribe un mensaje…", send: "Enviar", newChat: "Nueva conversación", stop: "Detener", interrupted: "Respuesta interrumpida" },
+    it: { placeholder: "Scrivi un messaggio…", send: "Invia", newChat: "Nuova chat", stop: "Interrompi", interrupted: "Risposta interrotta" },
+    pt: { placeholder: "Escreva uma mensagem…", send: "Enviar", newChat: "Nova conversa", stop: "Parar", interrupted: "Resposta interrompida" },
+    nl: { placeholder: "Typ een bericht…", send: "Versturen", newChat: "Nieuw gesprek", stop: "Stoppen", interrupted: "Reactie onderbroken" },
+    pl: { placeholder: "Wpisz wiadomość…", send: "Wyślij", newChat: "Nowy czat", stop: "Zatrzymaj", interrupted: "Odpowiedź przerwana" },
+    ru: { placeholder: "Введите сообщение…", send: "Отправить", newChat: "Новый чат", stop: "Остановить", interrupted: "Ответ прерван" },
+    zh: { placeholder: "输入消息…", send: "发送", newChat: "新对话", stop: "停止", interrupted: "回答被中断" },
+    ja: { placeholder: "メッセージを入力…", send: "送信", newChat: "新しいチャット", stop: "停止", interrupted: "回答が中断されました" },
+    ar: { placeholder: "اكتب رسالة…", send: "إرسال", newChat: "محادثة جديدة", stop: "إيقاف", interrupted: "تم مقاطعة الإجابة" },
+    he: { placeholder: "כתוב הודעה…", send: "שלח", newChat: "שיחה חדשה", stop: "עצור", interrupted: "התשובה הופסקה" },
+    tr: { placeholder: "Mesaj yazın…", send: "Gönder", newChat: "Yeni Sohbet", stop: "Durdur", interrupted: "Yanıt yarıda kesildi" },
+  };
 
   // --- DOM refs --------------------------------------------------------
   var messagesEl = document.getElementById("widgetMessages");
@@ -37,11 +67,34 @@
   var headerTitle = document.getElementById("widgetHeaderTitle");
 
   // --- Init ------------------------------------------------------------
+  function _updateSendBtnState() {
+    if (!sendBtn) return;
+    var s = UI_STRINGS[currentLang] || UI_STRINGS["en"];
+    if (sending) {
+      sendBtn.textContent = s.stop || "Stop";
+      sendBtn.classList.add("widget-stop-btn");
+      sendBtn.disabled = false;
+    } else {
+      sendBtn.textContent = s.send || "Send";
+      sendBtn.classList.remove("widget-stop-btn");
+      sendBtn.disabled = false;
+    }
+  }
+
+  function _stopGeneration() {
+    if (abortController) {
+      abortController.abort();
+      abortController = null;
+    }
+  }
+
   function init() {
     // Theme — follow OS preference
     if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) {
       document.documentElement.setAttribute("data-theme", "dark");
     }
+
+    _updateSendBtnState();
 
     // Restore chat history from sessionStorage
     var saved = sessionStorage.getItem(STORAGE_PREFIX + "_msgs");
@@ -55,7 +108,10 @@
 
     sendBtn.addEventListener("click", _send);
     inputEl.addEventListener("keydown", function (e) {
-      if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); _send(); }
+      if (e.key === "Enter" && !e.shiftKey) { 
+        e.preventDefault(); 
+        if (!sending) _send(); 
+      }
     });
     newChatBtn.addEventListener("click", _newChat);
     attachBtn.addEventListener("click", function () { fileInput.click(); });
@@ -88,10 +144,14 @@
 
   // --- Send message ----------------------------------------------------
   function _send() {
+    if (sending) {
+      _stopGeneration();
+      return;
+    }
     var text = inputEl.value.trim();
     var files = pendingFiles.slice();
     var canvasCtx = window.mateGetCanvasCode && window.mateGetCanvasCode();
-    if ((!text && !files.length && !canvasCtx) || sending) return;
+    if ((!text && !files.length && !canvasCtx)) return;
 
     if (greetingEl) greetingEl.style.display = "none";
     var userEl = _appendMessage("user", text, false, files, "user");
@@ -106,7 +166,7 @@
     inputEl.style.height = "auto";
     _clearPendingFiles();
     sending = true;
-    sendBtn.disabled = true;
+    _updateSendBtnState();
     _showTyping(true);
 
     // Build parts array — append canvas code to the text part
@@ -129,6 +189,8 @@
       ? Promise.resolve(sessionId)
       : _createSession();
 
+    abortController = new AbortController();
+
     doSend
       .then(function (sid) {
         var payload = {
@@ -149,6 +211,7 @@
             Accept: "text/event-stream",
           },
           body: JSON.stringify(payload),
+          signal: abortController.signal
         });
       })
       .then(function (res) {
@@ -172,6 +235,7 @@
                 Accept: "text/event-stream",
               },
               body: JSON.stringify(payload),
+              signal: abortController.signal
             });
           });
         }
@@ -189,6 +253,19 @@
       })
       .catch(function (err) {
         _showTyping(false);
+        if (err.name === "AbortError") {
+          console.log("Generation interrupted by user.");
+          var s = UI_STRINGS[currentLang] || UI_STRINGS["en"];
+          var interruptText = " [" + (s.interrupted || "Response interrupted") + "]";
+          if (activeAgentEl) {
+            activeAgentText += interruptText;
+            _updateMessage(activeAgentEl, activeAgentText);
+          } else {
+            _appendMessage("agent", s.interrupted || "Response interrupted", false, null, activeAgentAuthor || "agent");
+          }
+          _saveHistory();
+          return;
+        }
         var msg = err.message || "Sorry, something went wrong. Please try again.";
         msg = msg.replace(/^Error:\s*/i, "");
         _appendMessage("agent", msg, false, null, "agent");
@@ -196,7 +273,8 @@
       })
       .finally(function () {
         sending = false;
-        sendBtn.disabled = false;
+        abortController = null;
+        _updateSendBtnState();
       });
   }
 
@@ -205,9 +283,9 @@
     var reader = response.body.getReader();
     var decoder = new TextDecoder();
     var buffer = "";
-    var agentText = "";
-    var agentEl = null;
-    var currentAuthor = "";
+    activeAgentText = "";
+    activeAgentEl = null;
+    activeAgentAuthor = "";
 
     var THINKING_HTML =
       '<span class="widget-thinking-inline">' +
@@ -217,26 +295,26 @@
       " Thinking\u2026</span>";
 
     function _ensureBubble() {
-      if (!agentEl) {
+      if (!activeAgentEl) {
         var wrapper = document.createElement("div");
         wrapper.className = "widget-message-wrapper agent-message";
         
-        var avatarColor = getAgentColor(currentAuthor);
-        var initials = getAgentInitials(currentAuthor);
+        var avatarColor = getAgentColor(activeAgentAuthor);
+        var initials = getAgentInitials(activeAgentAuthor);
         
         var avatarEl = document.createElement("div");
         avatarEl.className = "widget-agent-avatar";
         avatarEl.style.backgroundColor = avatarColor;
         avatarEl.textContent = initials;
-        avatarEl.title = currentAuthor;
+        avatarEl.title = activeAgentAuthor;
         
-        agentEl = document.createElement("div");
-        agentEl.className = "widget-message agent";
-        agentEl.setAttribute("data-author", currentAuthor);
-        agentEl.innerHTML = THINKING_HTML;
+        activeAgentEl = document.createElement("div");
+        activeAgentEl.className = "widget-message agent";
+        activeAgentEl.setAttribute("data-author", activeAgentAuthor);
+        activeAgentEl.innerHTML = THINKING_HTML;
         
         wrapper.appendChild(avatarEl);
-        wrapper.appendChild(agentEl);
+        wrapper.appendChild(activeAgentEl);
         messagesEl.appendChild(wrapper);
         _scrollToBottom();
       }
@@ -274,15 +352,15 @@
                 "/sessions/" + sessionId + "/artifacts/" + artFilename +
                 "/versions/" + artVersion;
               // Clear thinking dots if present
-              if (agentEl.querySelector(".widget-thinking-inline")) {
-                agentEl.innerHTML = "";
+              if (activeAgentEl.querySelector(".widget-thinking-inline")) {
+                activeAgentEl.innerHTML = "";
               }
               var imgEl = document.createElement("img");
               imgEl.className = "widget-msg-image widget-generated-image";
               imgEl.alt = artFilename;
               imgEl.title = artFilename;
               imgEl.style.opacity = "0.5";
-              agentEl.appendChild(imgEl);
+              activeAgentEl.appendChild(imgEl);
               _scrollToBottom();
               
               (function(imgElem, url) {
@@ -310,11 +388,11 @@
         }
 
         var author = evt.author || "";
-        if (author && author !== currentAuthor) {
-          currentAuthor = author;
-          agentText = "";
+        if (author && author !== activeAgentAuthor) {
+          activeAgentAuthor = author;
+          activeAgentText = "";
           // When author changes, start a new bubble instead of overwriting/resetting the existing one.
-          agentEl = null;
+          activeAgentEl = null;
         }
 
         var parts = (evt.content && evt.content.parts) || [];
@@ -351,10 +429,10 @@
             imgEl2.className = 'widget-msg-image widget-generated-image';
             imgEl2.alt = 'Generated image';
             // If bubble had thinking dots, clear them first
-            if (agentEl.querySelector('.widget-thinking-inline')) {
-              agentEl.innerHTML = '';
+            if (activeAgentEl.querySelector('.widget-thinking-inline')) {
+              activeAgentEl.innerHTML = '';
             }
-            agentEl.appendChild(imgEl2);
+            activeAgentEl.appendChild(imgEl2);
             _scrollToBottom();
             continue;
           }
@@ -366,15 +444,15 @@
           _ensureBubble();
 
           // De-duplicate partial vs complete events
-          if (agentText && t.length >= agentText.length && t.indexOf(agentText) === 0) {
-            agentText = t;
-          } else if (agentText && agentText.indexOf(t) === 0 && t.length <= agentText.length) {
+          if (activeAgentText && t.length >= activeAgentText.length && t.indexOf(activeAgentText) === 0) {
+            activeAgentText = t;
+          } else if (activeAgentText && activeAgentText.indexOf(t) === 0 && t.length <= activeAgentText.length) {
             continue;
           } else {
-            agentText += t;
+            activeAgentText += t;
           }
 
-          _updateMessage(agentEl, agentText);
+          _updateMessage(activeAgentEl, activeAgentText);
         }
       } catch (_) {}
     }
@@ -382,13 +460,13 @@
     return reader.read().then(function pump(result) {
       if (result.done) {
         _showTyping(false);
-        if (!agentText && agentEl) {
-          agentEl.innerHTML = _renderMarkdown("(no response)");
-        } else if (!agentText && !agentEl) {
+        if (!activeAgentText && activeAgentEl) {
+          activeAgentEl.innerHTML = _renderMarkdown("(no response)");
+        } else if (!activeAgentText && !activeAgentEl) {
           _appendMessage("agent", "(no response)", false, null, "agent");
         }
         _saveHistory();
-        if (agentEl && window.mateOnAgentDone) window.mateOnAgentDone(agentEl);
+        if (activeAgentEl && window.mateOnAgentDone) window.mateOnAgentDone(activeAgentEl);
         return;
       }
       buffer += decoder.decode(result.value, { stream: true });

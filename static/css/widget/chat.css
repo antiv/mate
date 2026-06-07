@@ -279,6 +279,8 @@ html, body {
 }
 .widget-send-btn:hover { background: var(--w-primary-hover); }
 .widget-send-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.widget-send-btn.widget-stop-btn { background: #ef4444; }
+.widget-send-btn.widget-stop-btn:hover { background: #dc2626; }
 
 /* Mobile chat */
 @media (max-width: 767px) {
