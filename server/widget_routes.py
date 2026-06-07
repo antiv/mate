@@ -197,6 +197,7 @@ async def widget_public_config(key: str = Query(...)):
     return {
         "button_color": cfg.get("button_color", "#2563eb"),
         "theme": cfg.get("theme", "auto"),
+        "icon_url": cfg.get("icon_url", ""),
     }
 
 

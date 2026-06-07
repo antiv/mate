@@ -151,6 +151,22 @@
     iframe._src = chatUrl;
   }
 
+  function updateButtonIcon(iconUrl) {
+    if (!button) return;
+    if (iconUrl) {
+      button.innerHTML = '<img src="' + _escapeHtml(iconUrl) + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%">';
+      button.style.padding = '0';
+    } else {
+      button.innerHTML = CONFIG.buttonText
+        ? '<span style="font-size:14px;font-weight:600">' + _escapeHtml(CONFIG.buttonText) + '</span>'
+        : '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">'
+          + '<path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H5.17L4 17.17V4h16v12z"/>'
+          + '<path d="M7 9h10v2H7zm0-3h10v2H7z"/>'
+          + '</svg>';
+      button.style.padding = '';
+    }
+  }
+
   // --- Public API ------------------------------------------------------
   function open() {
     if (isOpen) return;
@@ -207,6 +223,9 @@
     if (e.data.button_color && button) {
       button.style.background = e.data.button_color;
     }
+    if (e.data.hasOwnProperty("icon_url")) {
+      updateButtonIcon(e.data.icon_url);
+    }
   });
 
   // --- Init ------------------------------------------------------------
@@ -225,6 +244,9 @@
         }
         if (cfg.theme && cfg.theme !== "auto") {
           CONFIG.theme = cfg.theme;
+        }
+        if (cfg.icon_url) {
+          updateButtonIcon(cfg.icon_url);
         }
       })
       .catch(function () {});

@@ -1,139 +1,244 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Widget Admin — {{ agent_name }}</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+      tailwind.config = {
+          darkMode: 'class',
+      }
+  </script>
+  <!-- FontAwesome -->
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/css/widget/admin.css">
+  <script>
+    // Initialize theme based on localStorage, matching MATE dashboard behavior
+    (function() {
+      const theme = localStorage.getItem('theme') || 'dark';
+      if (theme === 'dark') {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+      }
+    })();
+  </script>
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+    }
+  </style>
 </head>
-<body>
-  <div class="admin-container">
-    <div class="admin-header">
-      <h1>Widget Admin</h1>
-      <span class="admin-header-badge">{{ agent_name }}</span>
-    </div>
-
-    <!-- Tabs -->
-    <div class="admin-tabs">
-      <button class="admin-tab active" data-tab="agent">Agent Settings</button>
-      <button class="admin-tab" data-tab="memory">Memory Blocks</button>
-      <button class="admin-tab" data-tab="files">Files</button>
-      <button class="admin-tab" data-tab="appearance">Appearance</button>
-    </div>
-
-    <!-- Agent Settings Panel -->
-    <div id="panel-agent" class="admin-panel active">
-      <div class="admin-card">
-        <div class="admin-card-title">Agent Configuration</div>
-        <form id="agentForm">
-          <div class="admin-field">
-            <label for="agentDescription">Description</label>
-            <input type="text" id="agentDescription" placeholder="Brief description of this agent">
-          </div>
-          <div class="admin-field">
-            <label for="agentModel">Model</label>
-            <input type="text" id="agentModel" placeholder="e.g. openrouter/google/gemini-2.5-flash">
-          </div>
-          <div class="admin-field">
-            <label for="agentInstruction">Instruction</label>
-            <textarea id="agentInstruction" rows="10" placeholder="Agent system instruction..."></textarea>
-          </div>
-          <div class="admin-actions">
-            <button type="submit" class="admin-btn admin-btn-primary">Save Changes</button>
-          </div>
-        </form>
+<body class="bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 min-h-screen transition-colors duration-200">
+  <div class="max-w-5xl mx-auto px-4 py-8 md:py-12">
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8 pb-6 border-b border-gray-200 dark:border-gray-800">
+      <div>
+        <h1 class="text-2xl font-bold tracking-tight text-gray-950 dark:text-white flex items-center gap-2">
+          <i class="fas fa-sliders text-blue-600 dark:text-blue-500"></i> Widget Admin
+        </h1>
+        <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Configure widget appearance, behaviors, memory, and files.</p>
+      </div>
+      <div class="flex items-center gap-2 self-start sm:self-center">
+        <span class="px-3 py-1 text-xs font-semibold bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300 rounded-full border border-blue-200/50 dark:border-blue-800/50 flex items-center gap-1.5">
+          <i class="fas fa-robot text-[10px]"></i> {{ agent_name }}
+        </span>
+        <!-- Back to dashboard button -->
+        <a href="/dashboard/agents" class="px-3 py-1 text-xs font-medium border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors flex items-center gap-1">
+          <i class="fas fa-arrow-left"></i> Dashboard
+        </a>
       </div>
     </div>
 
-    <!-- Memory Blocks Panel -->
-    <div id="panel-memory" class="admin-panel">
-      <div id="blocksList"></div>
-      <div class="admin-card" style="margin-top: 16px;">
-        <div class="admin-card-title" id="blockFormTitle">New Memory Block</div>
-        <form id="blockForm">
-          <div class="admin-field">
-            <label for="blockLabel">Label</label>
-            <input type="text" id="blockLabel" required placeholder="e.g. company_info">
-          </div>
-          <div class="admin-field">
-            <label for="blockValue">Value</label>
-            <textarea id="blockValue" rows="5" placeholder="Content of the memory block..."></textarea>
-          </div>
-          <div class="admin-field">
-            <label for="blockDescription">Description</label>
-            <input type="text" id="blockDescription" placeholder="Optional description">
-          </div>
-          <div class="admin-actions">
-            <button type="submit" class="admin-btn admin-btn-primary">Save</button>
-            <button type="button" id="blockFormCancel" class="admin-btn">Cancel</button>
-          </div>
-        </form>
-      </div>
-    </div>
-
-    <!-- Files Panel -->
-    <div id="panel-files" class="admin-panel">
-      <div id="fileStoresList"></div>
-      <div class="admin-card" style="margin-top: 16px;">
-        <div class="admin-card-title">Upload File</div>
-        <div class="admin-field">
-          <label for="uploadStore">Target Store</label>
-          <select id="uploadStore"></select>
+    <!-- Tabs Layout -->
+    <div class="grid grid-cols-1 lg:grid-cols-4 gap-8">
+      <!-- Tab Buttons Sidebar -->
+      <div class="lg:col-span-1">
+        <div class="flex lg:flex-col overflow-x-auto lg:overflow-x-visible border-b lg:border-b-0 border-gray-200 dark:border-gray-800 gap-1 pb-2 lg:pb-0">
+          <button class="admin-tab active w-full text-left px-4 py-3 rounded-lg text-sm font-medium transition-all duration-150 flex items-center gap-2 whitespace-nowrap" data-tab="agent">
+            <i class="fas fa-cog text-gray-400 dark:text-gray-500"></i> Agent Settings
+          </button>
+          <button class="admin-tab w-full text-left px-4 py-3 rounded-lg text-sm font-medium transition-all duration-150 flex items-center gap-2 whitespace-nowrap" data-tab="memory">
+            <i class="fas fa-brain text-gray-400 dark:text-gray-500"></i> Memory Blocks
+          </button>
+          <button class="admin-tab w-full text-left px-4 py-3 rounded-lg text-sm font-medium transition-all duration-150 flex items-center gap-2 whitespace-nowrap" data-tab="files">
+            <i class="fas fa-folder-open text-gray-400 dark:text-gray-500"></i> Files
+          </button>
+          <button class="admin-tab w-full text-left px-4 py-3 rounded-lg text-sm font-medium transition-all duration-150 flex items-center gap-2 whitespace-nowrap" data-tab="appearance">
+            <i class="fas fa-palette text-gray-400 dark:text-gray-500"></i> Appearance
+          </button>
         </div>
-        <form id="uploadForm">
-          <div class="admin-upload-area" id="uploadArea">
-            <input type="file" id="uploadFile">
-            <p>Click or drag a file here to upload</p>
+      </div>
+
+      <!-- Tab Content Area -->
+      <div class="lg:col-span-3">
+        <!-- Agent Settings Panel -->
+        <div id="panel-agent" class="admin-panel active space-y-6">
+          <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-6 shadow-sm">
+            <h2 class="text-lg font-bold text-gray-900 dark:text-white mb-6 flex items-center gap-2">
+              <i class="fas fa-sliders-h text-blue-500"></i> Agent Configuration
+            </h2>
+            <form id="agentForm" class="space-y-5">
+              <div class="flex flex-col gap-1.5">
+                <label for="agentDescription" class="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Description</label>
+                <input type="text" id="agentDescription" placeholder="Brief description of this agent" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-950 dark:text-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-sm">
+              </div>
+              <div class="flex flex-col gap-1.5">
+                <label for="agentModel" class="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Model</label>
+                <input type="text" id="agentModel" placeholder="e.g. openrouter/google/gemini-2.5-flash" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-950 dark:text-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-sm">
+              </div>
+              <div class="flex flex-col gap-1.5">
+                <label for="agentInstruction" class="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Instruction</label>
+                <textarea id="agentInstruction" rows="10" placeholder="Agent system instruction..." class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-950 dark:text-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-sm resize-y font-mono text-xs"></textarea>
+              </div>
+              <div class="flex justify-end pt-2">
+                <button type="submit" class="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg shadow-sm transition-colors text-sm flex items-center gap-2">
+                  <i class="fas fa-save"></i> Save Changes
+                </button>
+              </div>
+            </form>
           </div>
-        </form>
+        </div>
+
+        <!-- Memory Blocks Panel -->
+        <div id="panel-memory" class="admin-panel space-y-6">
+          <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-6 shadow-sm">
+            <div class="flex items-center justify-between mb-6">
+              <h2 class="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                <i class="fas fa-brain text-blue-500"></i> Memory Blocks
+              </h2>
+              <button onclick="widgetAdmin.showBlockModal(false)" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium shadow-sm transition-colors flex items-center gap-1.5">
+                <i class="fas fa-plus"></i> Add Block
+              </button>
+            </div>
+            <div id="blocksList" class="space-y-3"></div>
+          </div>
+        </div>
+
+        <!-- Files Panel -->
+        <div id="panel-files" class="admin-panel space-y-6">
+          <div id="fileStoresList" class="space-y-6"></div>
+          <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-6 shadow-sm">
+            <h2 class="text-lg font-bold text-gray-900 dark:text-white mb-6 flex items-center gap-2">
+              <i class="fas fa-cloud-arrow-up text-blue-500"></i> Upload File
+            </h2>
+            <div class="space-y-4">
+              <div class="flex flex-col gap-1.5">
+                <label for="uploadStore" class="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Target Store</label>
+                <select id="uploadStore" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-950 dark:text-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-sm"></select>
+              </div>
+              <form id="uploadForm">
+                <div class="border-2 border-dashed border-gray-300 dark:border-gray-600 hover:border-blue-500 dark:hover:border-blue-400 rounded-xl p-8 text-center cursor-pointer bg-gray-50/50 dark:bg-gray-850/50 transition-colors" id="uploadArea">
+                  <input type="file" id="uploadFile">
+                  <i class="fas fa-file-arrow-up text-3xl text-gray-400 dark:text-gray-500 mb-2"></i>
+                  <p class="text-sm font-medium text-gray-700 dark:text-gray-300">Click or drag a file here to upload</p>
+                  <p class="text-xs text-gray-400 dark:text-gray-500 mt-1">Supported formats: Text, PDFs, Images</p>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+
+        <!-- Appearance Panel -->
+        <div id="panel-appearance" class="admin-panel space-y-6">
+          <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-6 shadow-sm">
+            <h2 class="text-lg font-bold text-gray-900 dark:text-white mb-6 flex items-center gap-2">
+              <i class="fas fa-palette text-blue-500"></i> Widget Appearance & Behaviour
+            </h2>
+            <form id="appearanceForm" class="space-y-5">
+              <div class="flex flex-col gap-1.5">
+                <label for="cfgTitle" class="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Widget Title</label>
+                <input type="text" id="cfgTitle" placeholder="e.g. Support Chat" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-950 dark:text-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-sm">
+              </div>
+              <div class="flex flex-col gap-1.5">
+                <label for="cfgGreeting" class="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Greeting / Welcome Message</label>
+                <textarea id="cfgGreeting" rows="3" placeholder="How can I help you today?" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-950 dark:text-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-sm resize-y"></textarea>
+              </div>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="flex flex-col gap-1.5">
+                  <label for="cfgTheme" class="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Theme</label>
+                  <select id="cfgTheme" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-950 dark:text-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-sm">
+                    <option value="auto">Auto (follow system)</option>
+                    <option value="light">Light</option>
+                    <option value="dark">Dark</option>
+                  </select>
+                </div>
+                <div class="flex flex-col gap-1.5">
+                  <label for="cfgButtonColor" class="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Button / Accent Color</label>
+                  <div class="flex items-center gap-2">
+                    <input type="color" id="cfgButtonColor" value="#2563eb" class="w-10 h-10 border border-gray-300 dark:border-gray-600 rounded cursor-pointer p-0 bg-transparent">
+                    <span class="text-xs text-gray-500 dark:text-gray-400 font-mono" id="buttonColorHex">#2563eb</span>
+                  </div>
+                </div>
+              </div>
+              <div class="flex flex-col gap-1.5">
+                <label for="cfgIconUrl" class="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 flex items-center justify-between">
+                  <span>Custom Icon URL</span>
+                  <span class="text-[10px] font-normal text-gray-400 dark:text-gray-500 lowercase">(optional)</span>
+                </label>
+                <input type="url" id="cfgIconUrl" placeholder="https://example.com/icon.png" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-950 dark:text-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-sm">
+              </div>
+              <div class="space-y-3 pt-2">
+                <label class="flex items-start gap-3 cursor-pointer">
+                  <input type="checkbox" id="cfgShowAttachments" class="mt-1 w-4 h-4 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 focus:outline-none focus:border-blue-500">
+                  <div class="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Show attachment button
+                    <p class="text-xs text-gray-400 dark:text-gray-500 font-normal mt-0.5">Allows users to upload text, PDF, and image files in chat conversations.</p>
+                  </div>
+                </label>
+                <label class="flex items-start gap-3 cursor-pointer">
+                  <input type="checkbox" id="cfgContextInjection" class="mt-1 w-4 h-4 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 focus:outline-none focus:border-blue-500">
+                  <div class="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Inject page context into conversations (URL &amp; title)
+                    <p class="text-xs text-gray-400 dark:text-gray-500 font-normal mt-0.5">Automatically prefixes incoming user messages with their current page details and language.</p>
+                  </div>
+                </label>
+              </div>
+              <div class="flex justify-end pt-4">
+                <button type="submit" class="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg shadow-sm transition-colors text-sm flex items-center gap-2">
+                  <i class="fas fa-save"></i> Save Appearance
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       </div>
     </div>
-    <!-- Appearance Panel -->
-    <div id="panel-appearance" class="admin-panel">
-      <div class="admin-card">
-        <div class="admin-card-title">Widget Appearance &amp; Behaviour</div>
-        <form id="appearanceForm">
-          <div class="admin-field">
-            <label for="cfgTitle">Widget Title</label>
-            <input type="text" id="cfgTitle" placeholder="e.g. Support Chat">
-          </div>
-          <div class="admin-field">
-            <label for="cfgGreeting">Greeting / Welcome Message</label>
-            <textarea id="cfgGreeting" rows="3" placeholder="How can I help you today?"></textarea>
-          </div>
-          <div class="admin-field">
-            <label for="cfgTheme">Theme</label>
-            <select id="cfgTheme">
-              <option value="auto">Auto (follow system)</option>
-              <option value="light">Light</option>
-              <option value="dark">Dark</option>
-            </select>
-          </div>
-          <div class="admin-field">
-            <label for="cfgButtonColor">Button / Accent Color</label>
-            <input type="color" id="cfgButtonColor" value="#2563eb">
-          </div>
-          <div class="admin-field">
-            <label for="cfgIconUrl">Custom Icon URL <span style="font-weight:400;font-size:12px">(optional)</span></label>
-            <input type="url" id="cfgIconUrl" placeholder="https://example.com/icon.png">
-          </div>
-          <div class="admin-field">
-            <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-              <input type="checkbox" id="cfgShowAttachments" style="width:auto">
-              Show attachment button
-            </label>
-          </div>
-          <div class="admin-field">
-            <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-              <input type="checkbox" id="cfgContextInjection" style="width:auto">
-              Inject page context into conversations (URL &amp; title)
-            </label>
-          </div>
-          <div class="admin-actions">
-            <button type="submit" class="admin-btn admin-btn-primary">Save Appearance</button>
-          </div>
-        </form>
+  </div>
+
+  <!-- Memory Block Form Modal -->
+  <div id="blockModal" class="fixed inset-0 bg-black/50 dark:bg-black/75 flex items-center justify-center hidden z-50 transition-opacity duration-200">
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-lg mx-4 border border-gray-200 dark:border-gray-700 overflow-hidden" onclick="event.stopPropagation()">
+      <div class="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+        <h3 class="text-base font-semibold text-gray-900 dark:text-white flex items-center gap-2" id="blockFormTitle">
+          <i class="fas fa-brain text-blue-500"></i> New Memory Block
+        </h3>
+        <button onclick="widgetAdmin.hideBlockModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
+          <i class="fas fa-times text-lg"></i>
+        </button>
       </div>
+      <form id="blockForm" class="p-6 space-y-4">
+        <div class="flex flex-col gap-1.5">
+          <label for="blockLabel" class="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Label</label>
+          <input type="text" id="blockLabel" required placeholder="e.g. company_info" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-950 dark:text-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-sm">
+        </div>
+        <div class="flex flex-col gap-1.5">
+          <label for="blockValue" class="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Value</label>
+          <textarea id="blockValue" rows="6" placeholder="Content of the memory block..." class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-950 dark:text-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-sm resize-y font-mono text-xs"></textarea>
+        </div>
+        <div class="flex flex-col gap-1.5">
+          <label for="blockDescription" class="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Description</label>
+          <input type="text" id="blockDescription" placeholder="Optional description" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-950 dark:text-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-sm">
+        </div>
+        <div class="flex justify-end gap-3 pt-4 border-t border-gray-100 dark:border-gray-700/60 mt-4">
+          <button type="button" id="blockFormCancel" class="px-4 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors font-medium">Cancel</button>
+          <button type="submit" class="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors shadow-sm">Save</button>
+        </div>
+      </form>
     </div>
   </div>
 
@@ -141,6 +246,18 @@
     window.WIDGET_API_KEY = "{{ api_key }}";
     window.WIDGET_AGENT_NAME = "{{ agent_name }}";
     window.WIDGET_PROJECT_ID = {{ project_id }};
+
+    // Update hex value text dynamically
+    document.getElementById("cfgButtonColor").addEventListener("input", function(e) {
+      document.getElementById("buttonColorHex").textContent = e.target.value;
+    });
+
+    // Close modal on overlay click
+    document.getElementById("blockModal").addEventListener("click", function(e) {
+      if (e.target === this) {
+        widgetAdmin.hideBlockModal();
+      }
+    });
 
     // Inject the real embeddable widget so the admin sees an authentic preview
     (function () {

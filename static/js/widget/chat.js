@@ -133,9 +133,24 @@
       document.documentElement.style.setProperty("--w-primary", color);
       document.documentElement.style.setProperty("--w-primary-hover", colorDark);
       document.documentElement.style.setProperty("--w-user-bubble", color);
-      // Notify parent so it can update the floating button color
-      try { window.parent.postMessage({ type: "mate-config", button_color: color }, "*"); } catch (_) {}
     }
+
+    if (CFG.icon_url) {
+      const headerIcon = document.getElementById("widgetHeaderIcon");
+      if (headerIcon) {
+        headerIcon.src = CFG.icon_url;
+        headerIcon.style.display = "block";
+      }
+    }
+
+    // Notify parent so it can update the floating button color and icon
+    try {
+      window.parent.postMessage({
+        type: "mate-config",
+        button_color: CFG.button_color || "",
+        icon_url: CFG.icon_url || ""
+      }, "*");
+    } catch (_) {}
 
     // Listen for messages from parent page (theme, page context, language)
     window.addEventListener("message", function (e) {
@@ -278,8 +293,13 @@
         
         var avatarEl = document.createElement("div");
         avatarEl.className = "widget-agent-avatar";
-        avatarEl.style.backgroundColor = avatarColor;
-        avatarEl.textContent = initials;
+        if (CFG.icon_url) {
+          avatarEl.innerHTML = '<img src="' + CFG.icon_url + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%">';
+          avatarEl.style.backgroundColor = "transparent";
+        } else {
+          avatarEl.style.backgroundColor = avatarColor;
+          avatarEl.textContent = initials;
+        }
         avatarEl.title = currentAuthor;
         
         agentEl = document.createElement("div");
@@ -548,8 +568,13 @@
       
       var avatarEl = document.createElement("div");
       avatarEl.className = "widget-agent-avatar";
-      avatarEl.style.backgroundColor = avatarColor;
-      avatarEl.textContent = initials;
+      if (CFG.icon_url) {
+        avatarEl.innerHTML = '<img src="' + CFG.icon_url + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%">';
+        avatarEl.style.backgroundColor = "transparent";
+      } else {
+        avatarEl.style.backgroundColor = avatarColor;
+        avatarEl.textContent = initials;
+      }
       avatarEl.title = author || "agent";
       
       el.className = "widget-message agent";

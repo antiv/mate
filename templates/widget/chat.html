@@ -11,7 +11,10 @@
 <body>
   <div class="widget-container">
     <div class="widget-header">
-      <span class="widget-header-title" id="widgetHeaderTitle">{{ agent_name }}</span>
+      <div class="widget-header-left" style="display:flex;align-items:center;gap:8px">
+        <img id="widgetHeaderIcon" src="" style="display:none;width:24px;height:24px;border-radius:50%;object-fit:cover;flex-shrink:0">
+        <span class="widget-header-title" id="widgetHeaderTitle">{{ agent_name }}</span>
+      </div>
       <div class="widget-header-actions">
         <button class="widget-header-btn" id="widgetNewChat" title="New conversation">New Chat</button>
       </div>

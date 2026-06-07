@@ -84,7 +84,7 @@
     });
   });
 
-  // --- Memory Blocks ---------------------------------------------------
+  // --- Memory Blocks & Modal -------------------------------------------
   var blocksList = document.getElementById("blocksList");
   var blockForm = document.getElementById("blockForm");
   var blockLabel = document.getElementById("blockLabel");
@@ -93,24 +93,48 @@
   var blockFormTitle = document.getElementById("blockFormTitle");
   var editingBlockId = null;
 
+  function showBlockModal(isEdit) {
+    var modal = document.getElementById("blockModal");
+    if (!modal) return;
+    modal.classList.remove("hidden");
+    if (!isEdit) {
+      editingBlockId = null;
+      blockLabel.value = "";
+      blockValue.value = "";
+      blockDesc.value = "";
+      blockFormTitle.innerHTML = '<i class="fas fa-brain text-blue-500"></i> New Memory Block';
+    }
+  }
+
+  function hideBlockModal() {
+    var modal = document.getElementById("blockModal");
+    if (modal) modal.classList.add("hidden");
+  }
+
   function loadBlocks() {
     api("GET", "/memory-blocks").then(function (res) {
       if (!res.success) {
-        blocksList.innerHTML = '<div class="admin-empty">No memory blocks found or tool not configured.</div>';
+        blocksList.innerHTML = '<div class="text-center py-8 text-sm text-gray-400 dark:text-gray-500 flex flex-col items-center justify-center gap-2"><i class="fas fa-exclamation-triangle text-2xl text-yellow-500/80"></i><span>No memory blocks found or tool not configured.</span></div>';
         return;
       }
       var blocks = res.blocks || [];
       if (blocks.length === 0) {
-        blocksList.innerHTML = '<div class="admin-empty">No memory blocks yet.</div>';
+        blocksList.innerHTML = '<div class="text-center py-8 text-sm text-gray-400 dark:text-gray-500 flex flex-col items-center justify-center gap-2"><i class="fas fa-brain text-2xl text-gray-300 dark:text-gray-650"></i><span>No memory blocks yet. Click "Add Block" to create one.</span></div>';
         return;
       }
       blocksList.innerHTML = blocks.map(function (b) {
-        return '<div class="admin-list-item">'
-          + '<div><div class="admin-list-item-label">' + escapeHtml(b.label) + '</div>'
-          + '<div class="admin-list-item-desc">' + escapeHtml((b.value || "").substring(0, 100)) + '</div></div>'
-          + '<div class="admin-list-item-actions">'
-          + '<button class="admin-btn admin-btn-sm" onclick="widgetAdmin.editBlock(\'' + b.block_id + '\')">Edit</button>'
-          + '<button class="admin-btn admin-btn-sm admin-btn-danger" onclick="widgetAdmin.deleteBlock(\'' + b.block_id + '\')">Delete</button>'
+        var valueText = (b.value || "");
+        var truncated = valueText.length > 100 ? valueText.substring(0, 100) + "..." : valueText;
+        return '<div class="flex items-center justify-between p-4 border border-gray-200 dark:border-gray-700 rounded-xl bg-gray-50/50 dark:bg-gray-800/40 hover:bg-gray-100/30 dark:hover:bg-gray-800/80 transition-all">'
+          + '<div class="min-w-0 pr-4">'
+          + '<div class="text-sm font-semibold text-gray-900 dark:text-white flex items-center gap-1.5">'
+          + '<i class="fas fa-brain text-xs text-blue-500/80"></i> ' + escapeHtml(b.label)
+          + '</div>'
+          + '<div class="text-xs text-gray-500 dark:text-gray-400 mt-1 break-all font-mono font-normal">' + escapeHtml(truncated) + '</div>'
+          + '</div>'
+          + '<div class="flex items-center gap-2 flex-shrink-0">'
+          + '<button class="px-2.5 py-1.5 text-xs font-medium border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-750 rounded-lg transition-colors" onclick="widgetAdmin.editBlock(\'' + b.block_id + '\')"><i class="fas fa-edit"></i> Edit</button>'
+          + '<button class="px-2.5 py-1.5 text-xs font-medium border border-red-200 dark:border-red-800/40 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/20 rounded-lg transition-colors" onclick="widgetAdmin.deleteBlock(\'' + b.block_id + '\')"><i class="fas fa-trash"></i> Delete</button>'
           + '</div></div>';
       }).join("");
     });
@@ -124,7 +148,8 @@
       blockLabel.value = block.label || "";
       blockValue.value = block.value || "";
       blockDesc.value = block.description || "";
-      blockFormTitle.textContent = "Edit Memory Block";
+      blockFormTitle.innerHTML = '<i class="fas fa-brain text-blue-500"></i> Edit Memory Block';
+      showBlockModal(true);
     });
   }
 
@@ -148,8 +173,8 @@
         blockValue.value = "";
         blockDesc.value = "";
         editingBlockId = null;
-        blockFormTitle.textContent = "New Memory Block";
         loadBlocks();
+        hideBlockModal();
       }
     });
   });
@@ -159,7 +184,7 @@
     blockLabel.value = "";
     blockValue.value = "";
     blockDesc.value = "";
-    blockFormTitle.textContent = "New Memory Block";
+    hideBlockModal();
   });
 
   // --- File Search -----------------------------------------------------
@@ -171,7 +196,7 @@
   function loadFiles() {
     api("GET", "/files").then(function (res) {
       if (!res.success || !res.stores || res.stores.length === 0) {
-        fileStoresList.innerHTML = '<div class="admin-empty">No file search stores assigned to this agent.</div>';
+        fileStoresList.innerHTML = '<div class="text-center py-8 text-sm text-gray-400 dark:text-gray-500 flex flex-col items-center justify-center gap-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-6 shadow-sm"><i class="fas fa-folder-open text-2xl text-gray-300 dark:text-gray-600"></i><span>No file search stores assigned to this agent.</span></div>';
         uploadStoreSelect.innerHTML = '<option value="">No stores available</option>';
         return;
       }
@@ -183,19 +208,24 @@
       fileStoresList.innerHTML = res.stores.map(function (s) {
         var files = s.files || [];
         var filesHtml = files.length === 0
-          ? '<div class="admin-empty" style="padding:12px">No files in this store.</div>'
+          ? '<div class="text-center py-6 text-sm text-gray-400 dark:text-gray-500 flex flex-col items-center justify-center gap-1.5"><i class="fas fa-folder-open text-xl text-gray-300 dark:text-gray-600"></i><span>No files in this store.</span></div>'
           : files.map(function (f) {
-              return '<div class="admin-list-item">'
-                + '<div><div class="admin-list-item-label">' + escapeHtml(f.display_name || f.document_name) + '</div>'
-                + '<div class="admin-list-item-desc">' + (f.mime_type || "") + ' — ' + _fmtSize(f.file_size) + '</div></div>'
-                + '<div class="admin-list-item-actions">'
-                + '<button class="admin-btn admin-btn-sm admin-btn-danger" onclick="widgetAdmin.deleteFile(' + f.id + ')">Delete</button>'
-                + '</div></div>';
+              return '<div class="flex items-center justify-between p-3 border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50/30 dark:bg-gray-800/30">'
+                + '<div class="min-w-0 pr-4">'
+                + '<div class="text-sm font-medium text-gray-900 dark:text-white flex items-center gap-1.5">'
+                + '<i class="fas fa-file-alt text-gray-400 dark:text-gray-500"></i> ' + escapeHtml(f.display_name || f.document_name)
+                + '</div>'
+                + '<div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">' + (f.mime_type || "") + ' — ' + _fmtSize(f.file_size) + '</div>'
+                + '</div>'
+                + '<button class="px-2.5 py-1.5 text-xs font-medium border border-red-200 dark:border-red-800/40 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/20 rounded-lg transition-colors flex-shrink-0" onclick="widgetAdmin.deleteFile(' + f.id + ')"><i class="fas fa-trash"></i> Delete</button>'
+                + '</div>';
             }).join("");
 
-        return '<div class="admin-card">'
-          + '<div class="admin-card-title">' + escapeHtml(s.display_name || s.store_name) + '</div>'
-          + filesHtml
+        return '<div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-6 shadow-sm">'
+          + '<h3 class="text-base font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">'
+          + '<i class="fas fa-folder text-blue-500"></i> ' + escapeHtml(s.display_name || s.store_name)
+          + '</h3>'
+          + '<div class="space-y-2">' + filesHtml + '</div>'
           + '</div>';
       }).join("");
     });
@@ -314,5 +344,7 @@
     editBlock: editBlock,
     deleteBlock: deleteBlock,
     deleteFile: deleteFile,
+    showBlockModal: showBlockModal,
+    hideBlockModal: hideBlockModal,
   };
 })();
