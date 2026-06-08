@@ -643,6 +643,7 @@
       
       el.className = "widget-message agent";
       el.setAttribute("data-author", author || "");
+      el._rawMarkdown = text;
       el.innerHTML = _renderMarkdown(text);
       
       wrapper.appendChild(avatarEl);
@@ -688,7 +689,7 @@
   }
 
   function _updateMessage(el, text) {
-    el.setAttribute("data-raw-markdown", text);
+    el._rawMarkdown = text;
     var html = _renderMarkdown(text);
     if (activeAgentImages && activeAgentImages.length) {
       activeAgentImages.forEach(function(img) {
@@ -778,7 +779,7 @@
       var author = el.getAttribute("data-author") || "";
       var textContent = "";
       if (role === "agent") {
-        textContent = el.getAttribute("data-raw-markdown") || el.innerHTML;
+        textContent = el._rawMarkdown || el.innerHTML;
       } else {
         textContent = el.textContent;
       }
@@ -980,7 +981,7 @@
   }
 
   function _getCleanMessageText(messageEl) {
-    return messageEl.getAttribute("data-raw-markdown") || messageEl.innerText || "";
+    return messageEl._rawMarkdown || messageEl.innerText || "";
   }
 
 

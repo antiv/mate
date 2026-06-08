@@ -156,6 +156,7 @@ html, body {
   background: var(--w-agent-bubble);
   color: var(--w-agent-text);
   border-bottom-left-radius: 4px;
+  min-width: 85px;
 }
 
 .widget-message.agent p { margin: 0 0 8px 0; }
@@ -457,8 +458,8 @@ html, body {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 4px;
-  margin-top: 4px;
+  gap: 10px;
+  margin-top: 8px;
 }
 
 .widget-message-action-btn {
