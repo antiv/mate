@@ -35,12 +35,12 @@
 
   // UI string translations — placeholder, send button, new-chat button, stop button, interrupted message
   const UI_STRINGS = {
-    en: { placeholder: "Type a message…", send: "Send", newChat: "New Chat", stop: "Stop", interrupted: "Response interrupted" },
-    sr: { placeholder: "Unesite poruku…", send: "Pošalji", newChat: "Nov razgovor", stop: "Prekini", interrupted: "Odgovor je prekinut" },
-    hr: { placeholder: "Unesite poruku…", send: "Pošalji", newChat: "Novi razgovor", stop: "Prekini", interrupted: "Odgovor je prekinut" },
-    bs: { placeholder: "Unesite poruku…", send: "Pošalji", newChat: "Novi razgovor", stop: "Prekini", interrupted: "Odgovor je prekinut" },
-    de: { placeholder: "Nachricht eingeben…", send: "Senden", newChat: "Neuer Chat", stop: "Stoppen", interrupted: "Antwort unterbrochen" },
-    fr: { placeholder: "Écrivez un message…", send: "Envoyer", newChat: "Nouveau chat", stop: "Arrêter", interrupted: "Réponse interrompue" },
+    en: { placeholder: "Type a message…", send: "Send", newChat: "New Chat", stop: "Stop", interrupted: "Response interrupted", copy: "Copy", copied: "Copied!", download: "Download" },
+    sr: { placeholder: "Unesite poruku…", send: "Pošalji", newChat: "Nov razgovor", stop: "Prekini", interrupted: "Odgovor je prekinut", copy: "Kopiraj", copied: "Kopirano!", download: "Preuzmi" },
+    hr: { placeholder: "Unesite poruku…", send: "Pošalji", newChat: "Novi razgovor", stop: "Prekini", interrupted: "Odgovor je prekinut", copy: "Kopiraj", copied: "Kopirano!", download: "Preuzmi" },
+    bs: { placeholder: "Unesite poruku…", send: "Pošalji", newChat: "Novi razgovor", stop: "Prekini", interrupted: "Odgovor je prekinut", copy: "Kopiraj", copied: "Kopirano!", download: "Preuzmi" },
+    de: { placeholder: "Nachricht eingeben…", send: "Senden", newChat: "Neuer Chat", stop: "Stoppen", interrupted: "Antwort unterbrochen", copy: "Kopieren", copied: "Kopiert!", download: "Herunterladen" },
+    fr: { placeholder: "Écrivez un message…", send: "Envoyer", newChat: "Nouveau chat", stop: "Arrêter", interrupted: "Réponse interrompue", copy: "Copier", copied: "Copié !", download: "Télécharger" },
     es: { placeholder: "Escribe un mensaje…", send: "Enviar", newChat: "Nueva conversación", stop: "Detener", interrupted: "Respuesta interrumpida" },
     it: { placeholder: "Scrivi un messaggio…", send: "Invia", newChat: "Nuova chat", stop: "Interrompi", interrupted: "Risposta interrotta" },
     pt: { placeholder: "Escreva uma mensagem…", send: "Enviar", newChat: "Nova conversa", stop: "Parar", interrupted: "Resposta interrompida" },
@@ -288,6 +288,7 @@
           if (activeAgentEl) {
             activeAgentText += interruptText;
             _updateMessage(activeAgentEl, activeAgentText);
+            _addMessageActions(activeAgentEl);
           } else {
             _appendMessage("agent", s.interrupted || "Response interrupted", false, null, activeAgentAuthor || "agent");
           }
@@ -485,8 +486,11 @@
         _showTyping(false);
         if (!activeAgentText && activeAgentEl) {
           activeAgentEl.innerHTML = _renderMarkdown("(no response)");
+          _addMessageActions(activeAgentEl);
         } else if (!activeAgentText && !activeAgentEl) {
           _appendMessage("agent", "(no response)", false, null, "agent");
+        } else if (activeAgentEl) {
+          _addMessageActions(activeAgentEl);
         }
         _saveHistory();
         return;
@@ -689,6 +693,7 @@
       wrapper.appendChild(avatarEl);
       wrapper.appendChild(el);
       messagesEl.appendChild(wrapper);
+      _addMessageActions(el);
     } else {
       el.className = "widget-message " + role;
       el.setAttribute("data-author", author || "");
@@ -728,6 +733,7 @@
   }
 
   function _updateMessage(el, text) {
+    el.setAttribute("data-raw-markdown", text);
     var html = _renderMarkdown(text);
     if (activeAgentImages && activeAgentImages.length) {
       activeAgentImages.forEach(function(img) {
@@ -813,7 +819,13 @@
     messagesEl.querySelectorAll(".widget-message").forEach(function (el) {
       var role = el.classList.contains("user") ? "user" : "agent";
       var author = el.getAttribute("data-author") || "";
-      msgs.push({ role: role, text: role === "user" ? el.textContent : el.innerHTML, author: author });
+      var textContent = "";
+      if (role === "agent") {
+        textContent = el.getAttribute("data-raw-markdown") || el.innerHTML;
+      } else {
+        textContent = el.textContent;
+      }
+      msgs.push({ role: role, text: textContent, author: author });
     });
     try { sessionStorage.setItem(`${STORAGE_PREFIX}_msgs`, JSON.stringify(msgs)); } catch (_) {}
   }
@@ -917,6 +929,99 @@
     d.textContent = text;
     return d.innerHTML;
   }
+
+  // --- SVG Icons & Actions ----------------------------------------------
+  const COPY_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>';
+  const CHECK_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+  const DOWNLOAD_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>';
+
+  function _addMessageActions(messageEl) {
+    if (!messageEl) return;
+    if (messageEl.querySelector(".widget-message-actions")) return;
+    
+    var actionsContainer = document.createElement("div");
+    actionsContainer.className = "widget-message-actions";
+    
+    var s = UI_STRINGS[currentLang] || UI_STRINGS["en"];
+    var copyText = s.copy || "Copy";
+    var copiedText = s.copied || "Copied!";
+    var downloadText = s.download || "Download";
+    
+    var copyBtn = document.createElement("button");
+    copyBtn.className = "widget-message-action-btn copy-btn";
+    copyBtn.title = copyText;
+    copyBtn.innerHTML = COPY_SVG;
+    
+    copyBtn.addEventListener("click", function (e) {
+      e.stopPropagation();
+      var cleanText = _getCleanMessageText(messageEl);
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(cleanText).then(function () {
+          copyBtn.innerHTML = CHECK_SVG;
+          copyBtn.title = copiedText;
+          setTimeout(function () {
+            copyBtn.innerHTML = COPY_SVG;
+            copyBtn.title = copyText;
+          }, 2000);
+        }).catch(function () {
+          _fallbackCopy(cleanText, copyBtn, copiedText, copyText);
+        });
+      } else {
+        _fallbackCopy(cleanText, copyBtn, copiedText, copyText);
+      }
+    });
+    
+    var downloadBtn = document.createElement("button");
+    downloadBtn.className = "widget-message-action-btn download-btn";
+    downloadBtn.title = downloadText;
+    downloadBtn.innerHTML = DOWNLOAD_SVG;
+    
+    downloadBtn.addEventListener("click", function (e) {
+      e.stopPropagation();
+      var cleanText = _getCleanMessageText(messageEl);
+      var fn = (AGENT_NAME || "agent").replace(/[^a-zA-Z0-9_-]/g, "") + "-response.md";
+      var blob = new Blob([cleanText], { type: "text/markdown;charset=utf-8" });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement("a");
+      a.href = url;
+      a.download = fn;
+      a.style.display = "none";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    });
+    
+    actionsContainer.appendChild(copyBtn);
+    actionsContainer.appendChild(downloadBtn);
+    messageEl.appendChild(actionsContainer);
+  }
+
+  function _fallbackCopy(text, btn, successLabel, normalLabel) {
+    var ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    try {
+      document.execCommand("copy");
+      btn.innerHTML = CHECK_SVG;
+      btn.title = successLabel;
+      setTimeout(function () {
+        btn.innerHTML = COPY_SVG;
+        btn.title = normalLabel;
+      }, 2000);
+    } catch (err) {
+      console.error("Fallback copy failed", err);
+    }
+    document.body.removeChild(ta);
+  }
+
+  function _getCleanMessageText(messageEl) {
+    return messageEl.getAttribute("data-raw-markdown") || messageEl.innerText || "";
+  }
+
 
   // --- Boot ------------------------------------------------------------
   if (document.readyState === "loading") {

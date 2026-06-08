@@ -452,3 +452,44 @@ html, body {
   border-color: var(--w-border);
 }
 
+/* Copy and Download Actions */
+.widget-message-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.widget-message-action-btn {
+  background: none;
+  border: none;
+  color: var(--w-text-secondary);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  transition: all 0.15s ease;
+  opacity: 0.6;
+}
+
+.widget-message-action-btn:hover {
+  opacity: 1;
+  background: rgba(0, 0, 0, 0.04);
+  color: var(--w-text);
+}
+
+[data-theme="dark"] .widget-message-action-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--w-text);
+}
+
+.widget-message-action-btn svg {
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+
