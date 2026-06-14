@@ -17,6 +17,37 @@ load_dotenv()
 from shared.utils.logging_config import configure_logging
 configure_logging()
 
+# Monkey patch prometheus_fastapi_instrumentator to fix AttributeError on _IncludedRouter in newer FastAPI versions
+try:
+    import prometheus_fastapi_instrumentator.routing
+    from starlette.routing import Match, Mount
+
+    def patched_get_route_name(scope, routes, route_name=None):
+        for route in routes:
+            try:
+                match, child_scope = route.matches(scope)
+            except Exception:
+                continue
+
+            if match == Match.FULL:
+                route_name = getattr(route, "path", "")
+                child_scope = {**scope, **child_scope}
+                if isinstance(route, Mount) and getattr(route, "routes", None):
+                    child_route_name = patched_get_route_name(child_scope, route.routes, route_name)
+                    if child_route_name is None:
+                        route_name = None
+                    else:
+                        route_name += child_route_name
+                return route_name
+            elif match == Match.PARTIAL and route_name is None:
+                route_name = getattr(route, "path", "")
+        return None
+
+    prometheus_fastapi_instrumentator.routing._get_route_name = patched_get_route_name
+    logging.getLogger(__name__).info("Successfully monkey-patched prometheus_fastapi_instrumentator routing for FastAPI compatibility")
+except Exception as patch_err:
+    logging.getLogger(__name__).warning("Failed to monkey-patch prometheus_fastapi_instrumentator: %s", patch_err)
+
 # Disable OpenTelemetry tracing to avoid TaskGroup errors with ParallelAgent
 # Only when OTEL_TRACING_ENABLED is not explicitly enabled
 if os.getenv("OTEL_TRACING_ENABLED", "false").lower() not in ("true", "1", "yes"):
