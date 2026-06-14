@@ -322,6 +322,7 @@
 
         formData.append('disabled', agent.disabled ? 'true' : 'false');
         formData.append('hardcoded', agent.hardcoded ? 'true' : 'false');
+        formData.append('expose_as_model', agent.expose_as_model ? 'true' : 'false');
 
         return formData;
     }
@@ -1248,6 +1249,21 @@
                         parents.length === 0 ? 'Root agent' : 'Parents: ' + parents.join(', '),
                     ),
                 ),
+                React.createElement(
+                    'div',
+                    { className: 'flex items-center justify-between mt-1' },
+                    React.createElement(
+                        'label',
+                        { className: 'inline-flex items-center space-x-1 text-[11px]' },
+                        React.createElement('input', {
+                            type: 'checkbox',
+                            className: 'rounded border-gray-300 dark:border-gray-600',
+                            checked: !!agent.expose_as_model,
+                            onChange: handleCheckbox('expose_as_model'),
+                        }),
+                        React.createElement('span', null, 'Expose as Model'),
+                    ),
+                ),
             ),
             React.createElement(
                 'div',
@@ -1455,6 +1471,7 @@
                 formData.append('max_iterations', document.getElementById('editAgentMaxIterations') ? document.getElementById('editAgentMaxIterations').value : '');
                 formData.append('disabled', document.getElementById('editAgentDisabled') ? document.getElementById('editAgentDisabled').checked : false);
                 formData.append('hardcoded', document.getElementById('editAgentHardcoded') ? document.getElementById('editAgentHardcoded').checked : false);
+                formData.append('expose_as_model', document.getElementById('editAgentExposeAsModel') ? document.getElementById('editAgentExposeAsModel').checked : false);
 
                 try {
                     const response = await fetch(`/dashboard/api/agents/${configId}`, {
@@ -2337,7 +2354,7 @@
                         planner_config: '{}', generate_content_config: '{}',
                         input_schema: '{}', output_schema: '{}',
                         include_contents: '', guardrail_config: '{}',
-                        max_iterations: '', disabled: false, hardcoded: false,
+                        max_iterations: '', disabled: false, hardcoded: false, expose_as_model: false,
                     };
                     setSaving(true);
                     try {

@@ -1531,6 +1531,7 @@ class DashboardServer:
                 "project_id": project_id,
                 "disabled": agent_data.get("disabled", False),
                 "hardcoded": agent_data.get("hardcoded", False),
+                "expose_as_model": agent_data.get("expose_as_model", False),
             }
             if isinstance(config_data["allowed_for_roles"], str):
                 try:
@@ -2422,6 +2423,146 @@ class DashboardServer:
                 audit_service.log(username, audit_service.ACTION_USER_DELETE, audit_service.RESOURCE_USER, resource_id=user_id, request=request)
             return {"success": success, "message": "User deleted successfully" if success else "Failed to delete user"}
 
+        # ---------- Personal Access Tokens API ----------
+        @self.app.get("/dashboard/api/tokens", tags=["Dashboard - Users"])
+        async def list_user_tokens(
+            request: Request,
+            username: str = Depends(self._get_auth_user_dependency)
+        ):
+            """Get all personal access tokens for the logged-in user."""
+            from shared.utils.models import PersonalAccessToken
+            db = self.db_client
+            session = db.get_session()
+            if not session:
+                raise HTTPException(status_code=500, detail="Database unavailable")
+            try:
+                tokens = session.query(PersonalAccessToken).filter_by(user_id=username).all()
+                return {"success": True, "tokens": [t.to_dict() for t in tokens]}
+            finally:
+                session.close()
+
+        @self.app.post("/dashboard/api/tokens", tags=["Dashboard - Users"])
+        async def create_user_token(
+            request: Request,
+            body: Dict[str, Any],
+            username: str = Depends(self._get_auth_user_dependency)
+        ):
+            """Create a new personal access token."""
+            from shared.utils.models import PersonalAccessToken
+            import secrets
+            import hashlib
+            from datetime import datetime, timezone
+            
+            name = body.get("name", "Unnamed Token")
+            expires_in_days = body.get("expires_in_days")
+            
+            raw_token = f"mate_pat_{secrets.token_urlsafe(32)}"
+            token_hash = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
+            token_prefix = raw_token[:13]
+            
+            expires_at = None
+            if expires_in_days:
+                from datetime import timedelta
+                expires_at = datetime.now(timezone.utc) + timedelta(days=float(expires_in_days))
+                
+            db = self.db_client
+            session = db.get_session()
+            if not session:
+                raise HTTPException(status_code=500, detail="Database unavailable")
+            try:
+                pat = PersonalAccessToken(
+                    token_hash=token_hash,
+                    token_prefix=token_prefix,
+                    name=name,
+                    user_id=username,
+                    expires_at=expires_at
+                )
+                session.add(pat)
+                session.commit()
+                
+                audit_service.log(username, "pat_create", "personal_access_token", resource_id=str(pat.id), details={"name": name}, request=request)
+                
+                return {
+                    "success": True,
+                    "token": raw_token,
+                    "pat": pat.to_dict()
+                }
+            except Exception as e:
+                session.rollback()
+                raise HTTPException(status_code=500, detail=str(e))
+            finally:
+                session.close()
+
+        @self.app.delete("/dashboard/api/tokens/{token_id}", tags=["Dashboard - Users"])
+        async def revoke_user_token(
+            token_id: int,
+            request: Request,
+            username: str = Depends(self._get_auth_user_dependency)
+        ):
+            """Revoke a personal access token."""
+            from shared.utils.models import PersonalAccessToken
+            db = self.db_client
+            session = db.get_session()
+            if not session:
+                raise HTTPException(status_code=500, detail="Database unavailable")
+            try:
+                pat = session.query(PersonalAccessToken).filter_by(id=token_id, user_id=username).first()
+                if not pat:
+                    raise HTTPException(status_code=404, detail="Token not found")
+                
+                session.delete(pat)
+                session.commit()
+                
+                audit_service.log(username, "pat_revoke", "personal_access_token", resource_id=str(token_id), request=request)
+                return {"success": True, "message": "Token revoked successfully"}
+            except HTTPException:
+                raise
+            except Exception as e:
+                session.rollback()
+                raise HTTPException(status_code=500, detail=str(e))
+            finally:
+                session.close()
+
+        @self.app.put("/dashboard/api/agents/{config_id}/expose", tags=["Dashboard - Agents"])
+        async def expose_agent(
+            config_id: int,
+            request: Request,
+            username: str = Depends(self._get_auth_user_dependency)
+        ):
+            """Toggle or set agent's expose_as_model flag."""
+            body = await request.json()
+            expose = body.get("expose", False)
+            db = self.db_client
+            session = db.get_session()
+            if not session:
+                raise HTTPException(status_code=500, detail="Database unavailable")
+            try:
+                config = session.query(self.AgentConfig).filter(self.AgentConfig.id == config_id).first()
+                if not config:
+                    raise HTTPException(status_code=404, detail="Agent not found")
+                
+                # Check if it has parent agents (should only expose root agents)
+                parents = config.get_parent_agents() if hasattr(config, 'get_parent_agents') else []
+                if expose and parents:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Only root agents (agents without parent agents) can be exposed as models."
+                    )
+                
+                config.expose_as_model = expose
+                session.commit()
+                
+                self._snapshot_agent_config(session, config, change_type='expose_toggle', changed_by=username)
+                audit_service.log(username, "agent_expose_toggle", audit_service.RESOURCE_AGENT, resource_id=config.name, details={"expose": expose}, request=request)
+                return {"success": True, "expose_as_model": config.expose_as_model}
+            except HTTPException:
+                raise
+            except Exception as e:
+                session.rollback()
+                raise HTTPException(status_code=500, detail=str(e))
+            finally:
+                session.close()
+
         @self.app.get("/dashboard/api/agents", tags=["Dashboard - Agents"])
         async def get_agents(
             request: Request,
@@ -2937,7 +3078,8 @@ class DashboardServer:
             guardrail_config: str = Form(""),
             max_iterations: str = Form(""),
             disabled: bool = Form(False),
-            hardcoded: bool = Form(False)
+            hardcoded: bool = Form(False),
+            expose_as_model: bool = Form(False)
         ):
             """Create a new agent configuration."""
             # Parse parent_agents JSON string to list
@@ -2966,7 +3108,8 @@ class DashboardServer:
                 "guardrail_config": guardrail_config,
                 "max_iterations": int(max_iterations) if max_iterations else None,
                 "disabled": disabled,
-                "hardcoded": hardcoded
+                "hardcoded": hardcoded,
+                "expose_as_model": expose_as_model
             }
             success = self._create_agent_config(config_data, changed_by=username)
             if success:
@@ -2996,7 +3139,8 @@ class DashboardServer:
             guardrail_config: str = Form(""),
             max_iterations: str = Form(""),
             disabled: bool = Form(False),
-            hardcoded: bool = Form(False)
+            hardcoded: bool = Form(False),
+            expose_as_model: bool = Form(False)
         ):
             """Update an agent configuration."""
             # Parse parent_agents JSON string to list
@@ -3025,7 +3169,8 @@ class DashboardServer:
                 "guardrail_config": guardrail_config,
                 "max_iterations": int(max_iterations) if max_iterations else None,
                 "disabled": disabled,
-                "hardcoded": hardcoded
+                "hardcoded": hardcoded,
+                "expose_as_model": expose_as_model
             }
             success = self._update_agent_config(config_id, config_data, changed_by=username)
             if success:

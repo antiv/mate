@@ -1,0 +1,157 @@
+# OpenAI Compatibility & Personal Access Tokens (PATs)
+
+MATE provides an OpenAI-compatible API bridge, allowing external coding agents, IDE extensions, and tools to interact with MATE agents as if they were standard LLM models. 
+
+This lets you use the full agentic reasoning, memory blocks, and local tools of your MATE agents inside interfaces like **OpenCode**, **Continue**, and **Cline (Roo Code)**.
+
+---
+
+## How It Works
+
+1. **Model Discovery (`GET /v1/models`)**: External clients query this endpoint to populate their model dropdown list. MATE returns the list of active root agents that have the `expose_as_model` attribute enabled.
+2. **Chat Completions (`POST /v1/chat/completions`)**: Requests are routed to the specified agent. MATE automatically creates or resumes a persistent chat session mapped to the user and the conversation's first message, executes the agent loop on the backend, and streams/returns the response in the standard OpenAI JSON/SSE structure.
+
+---
+
+## Authentication & Authorization
+
+All requests to the `/v1` endpoints are authenticated and authorized using:
+1. **Personal Access Tokens (PATs)**: Individual users generate PATs in the MATE dashboard. The PAT is sent as a bearer token (`Authorization: Bearer mate_pat_...`). MATE stores only the SHA-256 hash of the token for security.
+2. **Role Restrictions**: Access to the OpenAI compatible endpoints is restricted by user roles. By default, only users with the `admin` or `developer` roles are authorized to verify a PAT and call the API.
+   * *Note: Permitted roles can be custom configured in the MATE `.env` file via `ALLOWED_API_ROLES=admin,developer`.*
+
+---
+
+## Step-by-Step Configuration Guide
+
+### 1. Enable Model Exposure
+An agent must be a **root agent** (it cannot have parent agents) to be exposed.
+* **Via Dashboard UI**: Toggle the `Expose as Model` switch in the agent's configuration panel.
+* **Via API**: Send a `PUT` request to `/dashboard/api/agents/{config_id}/expose` with a JSON payload of `{"expose": true}`.
+
+### 2. Generate a Personal Access Token
+* **Via Dashboard UI**: 
+  1. Click on the user profile dropdown icon in the top right corner of the dashboard navbar.
+  2. Select **Personal Tokens** from the menu.
+  3. Enter a descriptive token name (e.g. "VS Code Continue") and select an expiration period, then click **Generate Token**.
+  4. Copy the generated token immediately. **For security, it is only shown once.**
+* **Via API**: Send a `POST` request to `/dashboard/api/tokens` with a JSON payload:
+  ```json
+  {
+    "name": "My VS Code Token",
+    "expires_in_days": 30
+  }
+  ```
+  Save the returned raw token (`mate_pat_...`). **It will only be shown once.**
+
+### 3. Configure External Clients
+
+#### OpenCode (`.opencode.json`)
+OpenCode is an open-source terminal-native coding agent. Configure it to use MATE by setting the provider to `openai` and pointing to your MATE server:
+
+```json
+{
+  "provider": {
+    "openai": {
+      "options": {
+        "baseURL": "http://localhost:8000/v1",
+        "apiKey": "mate_pat_your_generated_token"
+      }
+    }
+  },
+  "agent": {
+    "coder": {
+      "model": "openai/your-exposed-agent-name",
+      "tools": { "write": true, "bash": true }
+    }
+  }
+}
+```
+
+#### Continue (config.json)
+Continue is a popular VS Code and JetBrains extension. Add MATE under the `models` list:
+
+```json
+{
+  "models": [
+    {
+      "title": "MATE Coder Agent",
+      "provider": "openai",
+      "model": "your-exposed-agent-name",
+      "apiBase": "http://localhost:8000/v1",
+      "apiKey": "mate_pat_your_generated_token"
+    }
+  ]
+}
+```
+
+#### Cline / Roo Code
+In your VS Code Cline/Roo Code settings panel:
+1. Select **OpenAI Compatible** under the Model Provider.
+2. Set **Base URL** to `http://localhost:8000/v1`.
+3. Set **API Key** to `mate_pat_your_generated_token`.
+4. Set **Model ID** to your MATE agent's name (e.g., `chess_mate_root`).
+
+---
+
+## Example: Coding Agent Template (`coding-agent`)
+
+MATE includes a pre-configured multi-agent template specifically optimized for software development. This template uses the state-of-the-art code generation model `openrouter/qwen/qwen3-coder-next` (Qwen 2.5 Coder) and connects three specialized agents:
+
+1. **`coding_root`**: The Lead Coder (exposed as an OpenAI compatible model). It receives instructions, coordinates subagents, and generates core structures.
+2. **`coding_tester`**: The Test Engineer subagent. It writes unit/integration tests and executes them inside isolated sandboxes using MATE's `code_executor` tool.
+3. **`coding_security`**: The Security Auditor subagent. It scans code for OWASP Top 10 vulnerabilities, insecure dependency patterns, and secret leaks.
+
+### Using the Coding Agent in External Tools
+
+When you import the `Coding Agent` template in the MATE dashboard, the root agent `coding_root` is automatically created with `expose_as_model` enabled.
+
+To use it in your external tools (like **OpenCode** or **Continue**), reference the name generated by MATE during project creation (e.g., `your_project_coding_root`):
+
+#### OpenCode Example Config
+```json
+{
+  "provider": {
+    "openai": {
+      "options": {
+        "baseURL": "http://localhost:8000/v1",
+        "apiKey": "mate_pat_your_generated_token"
+      }
+    }
+  },
+  "agent": {
+    "coder": {
+      "model": "openai/your_project_coding_root",
+      "tools": { "write": true, "bash": true }
+    }
+  }
+}
+```
+
+#### Continue Example Config
+```json
+{
+  "models": [
+    {
+      "title": "MATE Coding Team (Qwen Coder)",
+      "provider": "openai",
+      "model": "your_project_coding_root",
+      "apiBase": "http://localhost:8000/v1",
+      "apiKey": "mate_pat_your_generated_token"
+    }
+  ]
+}
+```
+
+---
+
+## Developer API endpoints reference
+
+### Personal Access Tokens
+* **`GET /dashboard/api/tokens`**: Lists all active PATs for the currently logged-in user.
+* **`POST /dashboard/api/tokens`**: Generates a new PAT.
+* **`DELETE /dashboard/api/tokens/{token_id}`**: Revokes and deletes a PAT.
+
+### OpenAI Compatibility
+* **`GET /v1/models`**: Lists exposed MATE models.
+* **`POST /v1/chat/completions`**: Executes chat completions (supports `stream: true` and `stream: false`).

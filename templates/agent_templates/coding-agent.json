@@ -1,0 +1,77 @@
+{
+  "template_meta": {
+    "id": "coding-agent",
+    "name": "Coding Agent (Qwen 2.5 Coder)",
+    "description": "Multi-agent coding environment featuring a software lead, test engineer, and security compliance auditor using Qwen 2.5 Coder.",
+    "category": "code",
+    "version": "1.0",
+    "compatibility_tags": ["code_executor", "file_search", "memory_blocks"],
+    "root_agent": "coding_root",
+    "agent_prefix": "coding_"
+  },
+  "project": {
+    "name": "Coding Agent",
+    "description": "Pre-built software development agent team with testing and security audits."
+  },
+  "agents": [
+    {
+      "name": "coding_root",
+      "type": "llm",
+      "model_name": "openrouter/qwen/qwen3-coder-next",
+      "description": "Software Lead. Directs implementation, coordinates subagents, and writes core logic.",
+      "instruction": "IDENTITY:\nYou are the Software Engineering Lead. You orchestrate software development tasks, design application architecture, and write core code. You delegate specialized verification tasks to subagents: testing to coding_tester and security reviews to coding_security.\n\nPROTOCOL:\n1. Load memory instructions by calling list_shared_blocks for label search \"system_instruction_shared_\" or \"system_instruction_coding_\".\n2. When coding, design clean implementation plans, write files, and run code or commands via the code executor tools (execute_python_code, execute_shell_command).\n3. Before completing a coding task, you MUST run tests via coding_tester and a security check via coding_security.\n\nROUTING PROTOCOL:\n- Testing requests, executing unit tests -> coding_tester\n- Security audit, vulnerability scan, dependency reviews -> coding_security",
+      "parent_agents": [],
+      "allowed_for_roles": "[\"admin\", \"user\"]",
+      "tool_config": "{\"code_executor\": true, \"file_search\": true, \"memory_blocks\": true}",
+      "mcp_servers_config": null,
+      "disabled": false,
+      "hardcoded": false,
+      "expose_as_model": true
+    },
+    {
+      "name": "coding_tester",
+      "type": "llm",
+      "model_name": "openrouter/qwen/qwen3-coder-next",
+      "description": "Test Engineer. Writes unit/integration tests and executes them using the code executor.",
+      "instruction": "IDENTITY:\nYou are the Test Engineering Agent. Your focus is to write robust tests (unit, integration, regression), run them, and ensure code meets quality bars.\n\nPROTOCOL:\n1. Call list_shared_blocks to load testing standards and instruction files.\n2. When asked to test code, write the testing script/file (e.g. using unittest or pytest) and run it using the code executor tools (execute_python_code or execute_shell_command).\n3. Report detailed test results including failures, coverage metrics, and suggested fixes back to your parent agent.",
+      "parent_agents": ["coding_root"],
+      "allowed_for_roles": "[\"admin\", \"user\"]",
+      "tool_config": "{\"code_executor\": true, \"file_search\": true, \"memory_blocks\": true}",
+      "mcp_servers_config": null,
+      "disabled": false,
+      "hardcoded": false,
+      "expose_as_model": false
+    },
+    {
+      "name": "coding_security",
+      "type": "llm",
+      "model_name": "openrouter/qwen/qwen3-coder-next",
+      "description": "Security Compliance Auditor. Analyzes code safety, scans dependencies, and audits security patterns.",
+      "instruction": "IDENTITY:\nYou are the Security Auditor Agent. Your focus is identifying vulnerabilities, static analysis patterns (e.g., SQL injections, XSS, insecure storage), hardcoded secrets, and dependency safety.\n\nPROTOCOL:\n1. Call list_shared_blocks to load security guides.\n2. Audit the provided code, pointing out security violations, CWE designations, and severity levels.\n3. Run compliance scans or check package specifications if needed using command execution tools.\n4. Provide concrete, safe refactoring recommendations back to your parent agent.",
+      "parent_agents": ["coding_root"],
+      "allowed_for_roles": "[\"admin\", \"user\"]",
+      "tool_config": "{\"code_executor\": true, \"file_search\": true, \"memory_blocks\": true}",
+      "mcp_servers_config": null,
+      "disabled": false,
+      "hardcoded": false,
+      "expose_as_model": false
+    }
+  ],
+  "memory_blocks": [
+    {
+      "label": "system_instruction_coding_root",
+      "value": "As the Lead Coder, follow these rules:\n1. Break tasks down. Do not dump large chunks of unverified code.\n2. Ensure any new logic is verified by coding_tester (via tests) and coding_security (via audit).\n3. Keep the user updated on the development workflow.",
+      "description": "Development lead routing and verification rules"
+    },
+    {
+      "label": "system_instruction_coding_tester",
+      "value": "Testing Rules:\n1. Prefer pytest or Python unittest framework.\n2. Mock external services, databases, or API calls.\n3. Always print clear summary outputs from test runs so they can be parsed easily.",
+      "description": "Testing execution standards"
+    },
+    {
+      "label": "system_instruction_coding_security",
+      "value": "Security Standards:\n1. Look for OWASP Top 10 risks.\n2. Never allow hardcoded credentials, secret keys, or passwords.\n3. Check for shell command injections when using subprocess.",
+      "description": "Security audit rules"
+    }
+  ]
+}

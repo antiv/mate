@@ -1419,6 +1419,7 @@ function createAgentRow(config, depth, parentName, hasChildren, isHighlighted, r
     row.dataset.includeContents = config.include_contents || '';
     row.dataset.disabled = config.disabled ? 'true' : 'false';
     row.dataset.hardcoded = config.hardcoded ? 'true' : 'false';
+    row.dataset.exposeAsModel = config.expose_as_model ? 'true' : 'false';
     row.dataset.projectId = config.project_id !== undefined && config.project_id !== null ? String(config.project_id) : '';
     row.dataset.projectName = (config.project && config.project.name) || '';
     const parents = getParentList(config);

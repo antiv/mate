@@ -730,6 +730,7 @@ function editAgent(config) {
     document.getElementById('editAgentMaxIterations').value = config.max_iterations || '';
     document.getElementById('editAgentDisabled').checked = normalizeBoolean(config.disabled);
     document.getElementById('editAgentHardcoded').checked = normalizeBoolean(config.hardcoded);
+    document.getElementById('editAgentExposeAsModel').checked = normalizeBoolean(config.expose_as_model);
     const editProjectSelect = document.getElementById('editAgentProject');
     if (editProjectSelect) {
         const projectIdValue = (config.project_id !== undefined && config.project_id !== null)
@@ -796,8 +797,10 @@ function editAgent(config) {
         // Re-assert boolean checkboxes in case any other scripts toggled them
         const disabledEl = document.getElementById('editAgentDisabled');
         const hardcodedEl = document.getElementById('editAgentHardcoded');
+        const exposeAsModelEl = document.getElementById('editAgentExposeAsModel');
         if (disabledEl) disabledEl.checked = normalizeBoolean(config.disabled);
         if (hardcodedEl) hardcodedEl.checked = normalizeBoolean(config.hardcoded);
+        if (exposeAsModelEl) exposeAsModelEl.checked = normalizeBoolean(config.expose_as_model);
     }, 100);
 }
 
@@ -837,6 +840,7 @@ function copyAgent(config) {
     document.getElementById('copyAgentMaxIterations').value = config.max_iterations || '';
     document.getElementById('copyAgentDisabled').checked = normalizeBoolean(config.disabled);
     document.getElementById('copyAgentHardcoded').checked = normalizeBoolean(config.hardcoded);
+    document.getElementById('copyAgentExposeAsModel').checked = normalizeBoolean(config.expose_as_model);
     const copyProjectSelect = document.getElementById('copyAgentProject');
     if (copyProjectSelect) {
         const projectIdValue = (config.project_id !== undefined && config.project_id !== null)

@@ -657,6 +657,27 @@ except Exception as e:
 
 if __name__ == "__main__":
     try:
+        # Monitor parent process liveness to prevent orphaned ADK processes
+        import threading
+        def monitor_parent():
+            import time
+            import os
+            import sys
+            import signal
+            
+            parent_pid = os.getppid()
+            if parent_pid > 1:
+                while True:
+                    time.sleep(2)
+                    if os.getppid() != parent_pid:
+                        print(f"⚠️ Parent process {parent_pid} died. Terminating ADK server...", flush=True)
+                        os.kill(os.getpid(), signal.SIGTERM)
+                        time.sleep(5)
+                        sys.exit(0)
+
+        monitor_thread = threading.Thread(target=monitor_parent, daemon=True)
+        monitor_thread.start()
+
         port = int(os.getenv("PORT", 8000))
         print(f"🚀 Starting ADK server on {HOST}:{port}")
         print(f"🚀 Agents directory: {AGENT_DIR}")

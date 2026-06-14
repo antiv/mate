@@ -193,6 +193,12 @@ Drill into individual request logs — prompt / response / thought / tool-use to
 - Light/dark/auto theme, configurable accent color, optional file attachments
 - Page context injection: widget auto-reads the embedding page's URL and title and passes it to the agent as conversation context
 
+**OpenAI Compatibility & External Clients**
+- OpenAI-compatible API bridge mapping MATE agents as standard LLM models at `/v1`
+- Expose any root agent as a model with a single switch in the dashboard
+- Secure access using Personal Access Tokens (PATs) hashed with SHA-256 in the database
+- Integration with external coding engines, CLI tools, and IDE extensions (OpenCode, Continue, Cline/Roo Code)
+
 **Infrastructure**
 - SQLite (dev), PostgreSQL, MySQL — auto-migrations on startup
 - Docker Compose with health checks
@@ -353,6 +359,7 @@ Each exposed agent gets endpoints at `/agents/{name}/mcp/*`. Built-in MCP server
 
 ## Additional Documentation
 
+- **[documents/OPENAI_COMPATIBILITY.md](documents/OPENAI_COMPATIBILITY.md)** — OpenAI-compatible API bridge, PAT generation, and external client setup (OpenCode, Continue, Cline)
 - **[documents/WIDGET_INTEGRATION.md](documents/WIDGET_INTEGRATION.md)** — embed code, widget admin panel, JS API, security, theming, page context
 - **[documents/SSO_OAUTH.md](documents/SSO_OAUTH.md)** — Google and GitHub SSO setup, enterprise domain restrictions, session security
 - **[documents/EVALS.md](documents/EVALS.md)** — eval methods, regression alerts, LLM-as-Judge configuration, API reference

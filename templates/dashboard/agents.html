@@ -460,6 +460,7 @@
                 const hardcoded = document.getElementById('agentHardcoded').checked;
                 formData.append('disabled', document.getElementById('agentDisabled').checked);
                 formData.append('hardcoded', hardcoded);
+                formData.append('expose_as_model', document.getElementById('agentExposeAsModel').checked);
 
                 // Check if this is a top-level agent (no parents) and not hardcoded
                 let shouldCreateFolder = false;
@@ -622,6 +623,7 @@
                 formData.append('disabled', document.getElementById('editAgentDisabled').checked);
                 const newHardcoded = document.getElementById('editAgentHardcoded').checked;
                 formData.append('hardcoded', newHardcoded);
+                formData.append('expose_as_model', document.getElementById('editAgentExposeAsModel').checked);
 
                 // Check if hardcoded status changed and if it's a top-level agent
                 const originalHardcoded = window.editAgentOriginalHardcoded || false;
@@ -812,6 +814,7 @@
                 const hardcoded = document.getElementById('copyAgentHardcoded').checked;
                 formData.append('disabled', document.getElementById('copyAgentDisabled').checked);
                 formData.append('hardcoded', hardcoded);
+                formData.append('expose_as_model', document.getElementById('copyAgentExposeAsModel').checked);
 
                 // Check if this is a top-level agent (no parents) and not hardcoded
                 let shouldCreateFolder = false;

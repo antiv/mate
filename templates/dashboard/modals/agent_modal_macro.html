@@ -396,7 +396,7 @@ container_class='', projects_list=None, current_project_id=None) %}
                         <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Control whether the agent receives
                             prior conversation history.</p>
                     </div>
-                    <div class="grid grid-cols-2 gap-2">
+                    <div class="grid grid-cols-3 gap-2">
                         <div class="flex items-center">
                             <input type="checkbox" id="{{ id_prefix }}Disabled" name="{{ id_prefix }}Disabled"
                                 class="h-3 w-3 text-blue-600 focus:ring-blue-500 border-gray-300 dark:border-gray-600 rounded">
@@ -407,8 +407,13 @@ container_class='', projects_list=None, current_project_id=None) %}
                             <input type="checkbox" id="{{ id_prefix }}Hardcoded" name="{{ id_prefix }}Hardcoded"
                                 class="h-3 w-3 text-blue-600 focus:ring-blue-500 border-gray-300 dark:border-gray-600 rounded">
                             <label for="{{ id_prefix }}Hardcoded"
-                                class="ml-1.5 block text-xs text-gray-900 dark:text-gray-300">Hardcoded (skip folder
-                                creation)</label>
+                                class="ml-1.5 block text-xs text-gray-900 dark:text-gray-300">Hardcoded</label>
+                        </div>
+                        <div class="flex items-center">
+                            <input type="checkbox" id="{{ id_prefix }}ExposeAsModel" name="{{ id_prefix }}ExposeAsModel"
+                                class="h-3 w-3 text-blue-600 focus:ring-blue-500 border-gray-300 dark:border-gray-600 rounded">
+                            <label for="{{ id_prefix }}ExposeAsModel"
+                                class="ml-1.5 block text-xs text-gray-900 dark:text-gray-300" title="Expose this agent as a model to the OpenAI compatible API">Expose as Model</label>
                         </div>
                     </div>
                 </div>

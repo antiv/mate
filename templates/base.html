@@ -315,8 +315,11 @@
                                     {% else %}Dashboard User{% endif %}
                                 </div>
                             </div>
+                            <a href="#" onclick="showTokensModal(event)" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 border-b border-gray-200 dark:border-gray-700">
+                                <i class="fas fa-key mr-2 text-xs"></i>Personal Tokens
+                            </a>
                             <a href="#" onclick="handleLogout(event)" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">
-                                <i class="fas fa-sign-out-alt mr-2"></i>Logout
+                                <i class="fas fa-sign-out-alt mr-2 text-xs"></i>Logout
                             </a>
                         </div>
                     </div>
@@ -475,6 +478,109 @@
         <main class="flex-1 p-4 md:p-4 bg-gray-50 dark:bg-gray-900 min-w-0">
             {% block content %}{% endblock %}
         </main>
+    </div>
+
+    <!-- Personal Access Tokens Modal -->
+    <div id="tokensModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm hidden z-[9999] dashboard-modal flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col border border-gray-200 dark:border-gray-700/80 transform transition-all">
+            <!-- Modal Header -->
+            <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center bg-gray-50/50 dark:bg-gray-800/50 rounded-t-xl">
+                <h3 class="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                    <i class="fas fa-key text-blue-600 dark:text-blue-400"></i>
+                    Personal Access Tokens (PATs)
+                </h3>
+                <button type="button" onclick="closeTokensModal()" class="text-gray-400 hover:text-gray-500 dark:hover:text-gray-300 touch-target p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            
+            <!-- Modal Body (scrollable) -->
+            <div class="p-6 overflow-y-auto space-y-6 flex-1">
+                <!-- Description -->
+                <div class="text-xs text-gray-600 dark:text-gray-400 leading-relaxed bg-blue-50/40 dark:bg-blue-950/20 border border-blue-100/50 dark:border-blue-900/30 p-3 rounded-lg flex gap-2">
+                    <i class="fas fa-info-circle text-blue-500 mt-0.5"></i>
+                    <span>Generate personal access tokens to securely authenticate and access the MATE OpenAI-compatible APIs from external coding agents and extensions (e.g. OpenCode, Continue, Roo Code).</span>
+                </div>
+                
+                <!-- Create Token Form -->
+                <div class="bg-gray-50 dark:bg-gray-800/40 rounded-xl p-4 border border-gray-200 dark:border-gray-700/50 space-y-4">
+                    <h4 class="text-[11px] font-bold text-gray-900 dark:text-white uppercase tracking-wider">Generate New Token</h4>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <label for="newTokenName" class="block text-[11px] font-semibold text-gray-600 dark:text-gray-400 mb-1">Token Name / Description</label>
+                            <input type="text" id="newTokenName" placeholder="e.g. VS Code Continue Extension"
+                                class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2.5 py-1.5 text-xs focus:ring-1 focus:ring-blue-500 focus:outline-none">
+                        </div>
+                        <div>
+                            <label for="newTokenExpiry" class="block text-[11px] font-semibold text-gray-600 dark:text-gray-400 mb-1">Expiration</label>
+                            <select id="newTokenExpiry" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2.5 py-1.5 text-xs focus:ring-1 focus:ring-blue-500 focus:outline-none">
+                                <option value="7">7 Days</option>
+                                <option value="30" selected>30 Days</option>
+                                <option value="90">90 Days</option>
+                                <option value="365">365 Days</option>
+                                <option value="">Never Expires</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="flex justify-end">
+                        <button type="button" onclick="generateToken()" class="bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-1.5 text-xs font-semibold rounded shadow flex items-center transition-colors">
+                            <i class="fas fa-plus mr-1.5 text-[10px]"></i>
+                            Generate Token
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Display Newly Generated Token (hidden by default) -->
+                <div id="generatedTokenWrapper" class="hidden bg-green-50 dark:bg-green-950/20 border border-green-200/50 dark:border-green-900/30 rounded-xl p-4 space-y-3">
+                    <div class="flex items-start gap-2.5">
+                        <i class="fas fa-check-circle text-green-600 dark:text-green-400 text-base mt-0.5"></i>
+                        <div class="flex-1">
+                            <h4 class="text-xs font-bold text-green-800 dark:text-green-200">Token Generated Successfully!</h4>
+                            <p class="text-[10px] text-green-700 dark:text-green-400 mt-1 leading-relaxed">
+                                Copy this token now. <strong>For security, it will not be shown again.</strong>
+                            </p>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <input type="text" id="generatedTokenVal" readonly class="flex-1 bg-white dark:bg-gray-900 border border-green-300 dark:border-green-700/80 rounded px-2.5 py-1.5 text-xs font-mono text-gray-900 dark:text-white select-all">
+                        <button type="button" onclick="copyGeneratedToken()" class="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 text-xs font-semibold rounded flex items-center transition-colors">
+                            <i class="fas fa-copy mr-1.5"></i>Copy
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Active Tokens List -->
+                <div class="space-y-3">
+                    <h4 class="text-[11px] font-bold text-gray-900 dark:text-white uppercase tracking-wider">Active Tokens</h4>
+                    <div class="border border-gray-250 dark:border-gray-700/80 rounded-xl overflow-hidden shadow-sm">
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left border-collapse">
+                                <thead>
+                                    <tr class="bg-gray-50 dark:bg-gray-700/40 border-b border-gray-250 dark:border-gray-700/80 text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                        <th class="px-4 py-2.5">Name</th>
+                                        <th class="px-4 py-2.5">Prefix</th>
+                                        <th class="px-4 py-2.5">Created</th>
+                                        <th class="px-4 py-2.5">Expires</th>
+                                        <th class="px-4 py-2.5">Status</th>
+                                        <th class="px-4 py-2.5 text-right">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tokensTableBody" class="divide-y divide-gray-200 dark:divide-gray-700/60 text-xs">
+                                    <!-- Rendered dynamically -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Modal Footer -->
+            <div class="px-6 py-3 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/40 rounded-b-xl flex justify-end">
+                <button type="button" onclick="closeTokensModal()" class="px-4 py-1.5 text-xs border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700/50 rounded transition-colors">
+                    Close
+                </button>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -883,6 +989,152 @@
             
             // Force redirect to login with cache-busting
             window.location.replace('/login?logout=1');
+        }
+
+        // ---------- Personal Access Token Modal JS Functions ----------
+        
+        async function showTokensModal(event) {
+            if (event) event.preventDefault();
+            
+            // Hide user menu dropdown
+            const dropdown = document.getElementById('userMenuDropdown');
+            if (dropdown) dropdown.classList.add('hidden');
+            
+            // Clear new token creation inputs & alerts
+            document.getElementById('newTokenName').value = '';
+            document.getElementById('newTokenExpiry').value = '30';
+            document.getElementById('generatedTokenWrapper').classList.add('hidden');
+            document.getElementById('generatedTokenVal').value = '';
+            
+            // Show modal
+            document.getElementById('tokensModal').classList.remove('hidden');
+            
+            // Fetch existing tokens
+            await loadActiveTokens();
+        }
+        
+        function closeTokensModal() {
+            document.getElementById('tokensModal').classList.add('hidden');
+        }
+        
+        function formatTokenDate(isoStr) {
+            if (!isoStr) return 'Never';
+            try {
+                const d = new Date(isoStr);
+                return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            } catch (e) {
+                return isoStr;
+            }
+        }
+        
+        function esc(s) {
+            return String(s ?? '')
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        }
+        
+        async function loadActiveTokens() {
+            const tbody = document.getElementById('tokensTableBody');
+            tbody.innerHTML = `<tr><td colspan="6" class="px-4 py-6 text-center text-gray-500 dark:text-gray-400"><i class="fas fa-spinner fa-spin mr-1.5"></i>Loading tokens...</td></tr>`;
+            
+            try {
+                const data = await apiCall('/dashboard/api/tokens');
+                if (data.success && data.tokens) {
+                    if (data.tokens.length === 0) {
+                        tbody.innerHTML = `<tr><td colspan="6" class="px-4 py-6 text-center text-gray-500 dark:text-gray-400">No active tokens found. Create one above to get started.</td></tr>`;
+                        return;
+                    }
+                    
+                    tbody.innerHTML = data.tokens.map(t => {
+                        const isExpired = t.expires_at && new Date(t.expires_at) < new Date();
+                        const statusBadge = isExpired 
+                            ? `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400"><span class="w-1.5 h-1.5 rounded-full bg-red-500 mr-1.5"></span>Expired</span>`
+                            : `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"><span class="w-1.5 h-1.5 rounded-full bg-green-500 mr-1.5"></span>Active</span>`;
+                        
+                        const expiresVal = isExpired ? 'Expired' : formatTokenDate(t.expires_at);
+                        
+                        return `
+                            <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/20 transition-colors">
+                                <td class="px-4 py-3 font-semibold text-gray-900 dark:text-white truncate max-w-[150px]" title="${esc(t.name)}">${esc(t.name)}</td>
+                                <td class="px-4 py-3 font-mono text-xs text-gray-500 dark:text-gray-400">${esc(t.token_prefix)}...</td>
+                                <td class="px-4 py-3 text-gray-500 dark:text-gray-400">${formatTokenDate(t.created_at)}</td>
+                                <td class="px-4 py-3 text-gray-500 dark:text-gray-400">${expiresVal}</td>
+                                <td class="px-4 py-3">${statusBadge}</td>
+                                <td class="px-4 py-3 text-right">
+                                    <button type="button" onclick="revokeToken(${t.id}, '${esc(t.name)}')" class="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 font-medium inline-flex items-center gap-1 transition-colors">
+                                        <i class="fas fa-trash-alt text-[10px]"></i> Revoke
+                                    </button>
+                                </td>
+                            </tr>
+                        `;
+                    }).join('');
+                } else {
+                    tbody.innerHTML = `<tr><td colspan="6" class="px-4 py-6 text-center text-red-500 dark:text-red-400">Failed to load tokens.</td></tr>`;
+                }
+            } catch (err) {
+                tbody.innerHTML = `<tr><td colspan="6" class="px-4 py-6 text-center text-red-500 dark:text-red-400">Error fetching tokens.</td></tr>`;
+            }
+        }
+        
+        async function generateToken() {
+            const nameInput = document.getElementById('newTokenName');
+            const expirySelect = document.getElementById('newTokenExpiry');
+            const name = nameInput.value.trim() || 'Unnamed Token';
+            const expiry = expirySelect.value ? parseInt(expirySelect.value) : null;
+            
+            try {
+                const res = await apiCall('/dashboard/api/tokens', 'POST', {
+                    name: name,
+                    expires_in_days: expiry
+                });
+                
+                if (res.success && res.token) {
+                    // Show the newly generated token
+                    const wrapper = document.getElementById('generatedTokenWrapper');
+                    const valInput = document.getElementById('generatedTokenVal');
+                    valInput.value = res.token;
+                    wrapper.classList.remove('hidden');
+                    
+                    showNotification('Token generated successfully.');
+                    
+                    // Clear the form
+                    nameInput.value = '';
+                    
+                    // Reload active list
+                    await loadActiveTokens();
+                } else {
+                    showNotification(res.message || 'Failed to generate token', 'error');
+                }
+            } catch (err) {
+                showNotification('Error generating token', 'error');
+            }
+        }
+        
+        async function revokeToken(tokenId, tokenName) {
+            const confirmed = await showConfirm(`Are you sure you want to revoke the token "${tokenName}"?\nAny external clients using this token will lose access to the MATE API immediately.`, 'Revoke Token', 'Revoke', 'Cancel', 'danger');
+            if (!confirmed) return;
+            
+            try {
+                const res = await apiCall(`/dashboard/api/tokens/${tokenId}`, 'DELETE');
+                if (res.success) {
+                    showNotification('Token revoked successfully.');
+                    await loadActiveTokens();
+                } else {
+                    showNotification(res.message || 'Failed to revoke token', 'error');
+                }
+            } catch (err) {
+                showNotification('Error revoking token', 'error');
+            }
+        }
+        
+        function copyGeneratedToken() {
+            const valInput = document.getElementById('generatedTokenVal');
+            valInput.select();
+            navigator.clipboard.writeText(valInput.value).then(() => {
+                showNotification('Token copied to clipboard.');
+            }).catch(() => {
+                showNotification('Failed to copy token automatically.', 'warning');
+            });
         }
     </script>
     

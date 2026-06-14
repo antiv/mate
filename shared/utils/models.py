@@ -205,6 +205,7 @@ class AgentConfig(Base):
     guardrail_config = Column(Text, nullable=True)  # JSON config for safety guardrails (PII, injection, content policy, etc.)
     disabled = Column(Boolean, nullable=False, default=False)  # Flag to disable agent
     hardcoded = Column(Boolean, nullable=False, default=False)  # Flag to mark agent as hardcoded (skip folder creation)
+    expose_as_model = Column(Boolean, nullable=False, default=False)  # Flag to expose agent as model to API
     project_id = Column(Integer, ForeignKey('projects.id'), nullable=False, default=1)
     
     project = relationship("Project", back_populates="agents")
@@ -296,6 +297,7 @@ class AgentConfig(Base):
             'guardrail_config': self.guardrail_config,
             'disabled': self.disabled,
             'hardcoded': self.hardcoded,
+            'expose_as_model': self.expose_as_model,
             'project_id': self.project_id,
             'project': self.project.to_dict() if self.project else None
         }
@@ -619,6 +621,35 @@ class WidgetApiKey(Base):
             'widget_config': self.get_widget_config(),
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+
+
+class PersonalAccessToken(Base):
+    """Model for user Personal Access Tokens (PATs)."""
+    
+    __tablename__ = 'personal_access_tokens'
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    token_hash = Column(String(64), unique=True, nullable=False, index=True) # SHA-256 hash
+    token_prefix = Column(String(16), nullable=False) # e.g. "mate_pat_abcdef"
+    name = Column(String(255), nullable=False) # Label (e.g., "OpenCode VS Code")
+    user_id = Column(String(255), ForeignKey('users.user_id', ondelete='CASCADE'), nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    last_used_at = Column(DateTime, nullable=True)
+    expires_at = Column(DateTime, nullable=True)
+    
+    user = relationship("User")
+    
+    def to_dict(self) -> dict:
+        """Convert model instance to dictionary."""
+        return {
+            'id': self.id,
+            'token_prefix': self.token_prefix,
+            'name': self.name,
+            'user_id': self.user_id,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'last_used_at': self.last_used_at.isoformat() if self.last_used_at else None,
+            'expires_at': self.expires_at.isoformat() if self.expires_at else None
         }
 
 

@@ -293,6 +293,7 @@ from server.auth_routes import router as auth_router
 from server.oauth_routes import router as oauth_router
 from server.proxy_routes import router as proxy_router
 from server.browser_routes import router as browser_router
+from server.openai_routes import router as openai_router
 from server.widget_routes import (
     router as widget_router,
     admin_api_router as widget_admin_api_router,
@@ -305,12 +306,29 @@ configure_widget_proxy(ADK_HOST, ADK_PORT)
 
 app.include_router(auth_router)
 app.include_router(oauth_router)
+app.include_router(openai_router)
 app.include_router(widget_router)
 app.include_router(widget_admin_api_router)
 app.include_router(dashboard_widget_router)
 app.include_router(public_artifacts_router)
 app.include_router(proxy_router)
 app.include_router(browser_router)
+
+
+# ---------- Shutdown Hooks ----------
+@app.on_event("shutdown")
+def shutdown_event():
+    logger.info("Shutdown event triggered: stopping ADK server...")
+    try:
+        from shared.utils.server_control_service import ServerControlService
+        sc = ServerControlService(
+            adk_host=ADK_HOST,
+            adk_port=ADK_PORT,
+            session_service_uri=SESSION_SERVICE_URI,
+        )
+        sc.stop_adk_server()
+    except Exception as e:
+        logger.warning("Error stopping ADK server during shutdown event: %s", e)
 
 
 # ---------- Entry point ----------
@@ -320,6 +338,10 @@ if __name__ == "__main__":
         adk_port=ADK_PORT,
         session_service_uri=SESSION_SERVICE_URI,
     )
+
+    # Register Python atexit shutdown hook for standard termination
+    import atexit as _atexit
+    _atexit.register(lambda: server_control.stop_adk_server())
 
     def start_adk_in_thread():
         result = server_control.start_adk_server()

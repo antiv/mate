@@ -131,6 +131,12 @@ function populateEditModalOtherConfiguration(row) {
     
     // Set hardcoded checkbox
     document.getElementById('editAgentHardcoded').checked = row.dataset.hardcoded === 'true';
+
+    // Set expose as model checkbox
+    const exposeAsModelEl = document.getElementById('editAgentExposeAsModel');
+    if (exposeAsModelEl) {
+        exposeAsModelEl.checked = row.dataset.exposeAsModel === 'true';
+    }
 }
 
 function setupPanelEventListeners() {
