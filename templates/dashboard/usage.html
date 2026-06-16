@@ -292,8 +292,7 @@
                 </tbody>
             </table>
         </div>
-        {% if logs %}
-        <div class="px-3 py-2 bg-gray-50 dark:bg-gray-700 border-t border-gray-200 dark:border-gray-600">
+        <div id="paginationControls" class="px-3 py-2 bg-gray-50 dark:bg-gray-700 border-t border-gray-200 dark:border-gray-600 {% if not logs %}hidden{% endif %}">
             <div class="flex items-center justify-between">
                 <div class="text-xs text-gray-500 dark:text-gray-400">
                     Showing <span id="currentPageInfo">1-{{ logs|length }}</span> of <span id="totalRecords">{{ logs|length }}</span> records
@@ -311,7 +310,6 @@
                 </div>
             </div>
         </div>
-        {% endif %}
     </div>
     {% endif %}
 
@@ -710,13 +708,27 @@
     }
 
     function updatePaginationControls(totalRecords, currentPage, totalPages, pageSize) {
+        const paginationControls = document.getElementById('paginationControls');
+        if (paginationControls) {
+            if (totalRecords > 0) {
+                paginationControls.classList.remove('hidden');
+            } else {
+                paginationControls.classList.add('hidden');
+            }
+        }
+
         const start = (currentPage - 1) * pageSize + 1;
         const end = Math.min(currentPage * pageSize, totalRecords);
         
-        document.getElementById('currentPageInfo').textContent = `${start}-${end}`;
-        document.getElementById('totalRecords').textContent = totalRecords;
-        document.getElementById('currentPage').textContent = currentPage;
-        document.getElementById('totalPages').textContent = totalPages;
+        const currentPageInfo = document.getElementById('currentPageInfo');
+        const totalRecordsEl = document.getElementById('totalRecords');
+        const currentPageEl = document.getElementById('currentPage');
+        const totalPagesEl = document.getElementById('totalPages');
+
+        if (currentPageInfo) currentPageInfo.textContent = `${start}-${end}`;
+        if (totalRecordsEl) totalRecordsEl.textContent = totalRecords;
+        if (currentPageEl) currentPageEl.textContent = currentPage;
+        if (totalPagesEl) totalPagesEl.textContent = totalPages;
         
         // Update button states
         const prevBtn = document.getElementById('prevPageBtn');
