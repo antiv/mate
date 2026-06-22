@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+
+{% block title %}Wizard Leads - MATE{% endblock %}
+
+{% block content %}
+<div class="space-y-4">
+    <div class="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center">
+        <div class="min-w-0">
+            <h2 class="text-xl font-bold text-gray-900 dark:text-white">Wizard Leads</h2>
+            <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                Prospects who built and tested an agent through the public wizard. No billing — follow up to activate.
+            </p>
+        </div>
+        <div class="flex flex-wrap gap-2 items-center flex-shrink-0">
+            <input type="text" id="searchInput" placeholder="Search name, email, company…"
+                   class="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg w-56">
+            <select id="filterStatus" onchange="loadLeads()" class="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg">
+                <option value="">All statuses</option>
+                <option value="new">New</option>
+                <option value="contacted">Contacted</option>
+                <option value="converted">Converted</option>
+                <option value="archived">Archived</option>
+            </select>
+            <button type="button" onclick="loadLeads()" class="px-3 py-2 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center min-h-[44px] touch-target">
+                <i class="fas fa-sync-alt mr-1"></i>Refresh
+            </button>
+        </div>
+    </div>
+
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-x-auto">
+        <table class="min-w-full text-sm">
+            <thead class="bg-gray-50 dark:bg-gray-700/50 text-gray-600 dark:text-gray-300">
+                <tr>
+                    <th class="text-left px-4 py-2 font-medium">Created</th>
+                    <th class="text-left px-4 py-2 font-medium">Contact</th>
+                    <th class="text-left px-4 py-2 font-medium">Company</th>
+                    <th class="text-left px-4 py-2 font-medium">Tier</th>
+                    <th class="text-left px-4 py-2 font-medium">Estimate</th>
+                    <th class="text-left px-4 py-2 font-medium">Trial</th>
+                    <th class="text-left px-4 py-2 font-medium">Status</th>
+                </tr>
+            </thead>
+            <tbody id="leadsBody" class="divide-y divide-gray-100 dark:divide-gray-700">
+                <tr><td colspan="7" class="px-4 py-6 text-center text-gray-400">Loading…</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function esc(s) {
+    return String(s == null ? "" : s)
+        .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
+function fmtDate(iso) {
+    if (!iso) return "—";
+    try { return new Date(iso).toLocaleString(); } catch (e) { return iso; }
+}
+
+const STATUS_BADGE = {
+    new: "bg-blue-100 text-blue-700",
+    contacted: "bg-amber-100 text-amber-700",
+    converted: "bg-green-100 text-green-700",
+    archived: "bg-gray-100 text-gray-500",
+};
+
+function loadLeads() {
+    const status = document.getElementById("filterStatus").value;
+    const search = document.getElementById("searchInput").value.trim();
+    const params = [];
+    if (status) params.push("status=" + encodeURIComponent(status));
+    if (search) params.push("search=" + encodeURIComponent(search));
+    const url = "/dashboard/api/wizard/leads" + (params.length ? "?" + params.join("&") : "");
+    fetch(url)
+        .then(r => r.json())
+        .then(d => renderLeads(d.leads || []))
+        .catch(() => {
+            document.getElementById("leadsBody").innerHTML =
+                '<tr><td colspan="7" class="px-4 py-6 text-center text-red-500">Failed to load leads.</td></tr>';
+        });
+}
+
+let _searchTimer = null;
+function onSearchInput() {
+    clearTimeout(_searchTimer);
+    _searchTimer = setTimeout(loadLeads, 300);
+}
+
+function renderLeads(leads) {
+    const body = document.getElementById("leadsBody");
+    if (!leads.length) {
+        body.innerHTML = '<tr><td colspan="7" class="px-4 py-6 text-center text-gray-400">No leads yet.</td></tr>';
+        return;
+    }
+    body.innerHTML = leads.map(function (l) {
+        var trialParts = [];
+        if (l.trial_alive) {
+            trialParts.push('<a class="text-blue-600 hover:underline" target="_blank" href="/widget/chat?key=' + esc(l.trial_widget_key) + '">Open chat</a>');
+        } else if (l.trial_widget_key) {
+            trialParts.push('<span class="text-gray-400 dark:text-gray-500" title="Trial expired and was cleaned up">expired</span>');
+        }
+        if (l.has_snapshot) {
+            trialParts.push('<a class="text-blue-600 hover:underline" href="/dashboard/api/wizard/leads/' + l.id + '/snapshot"><i class="fas fa-download mr-1"></i>JSON</a>');
+        }
+        const trial = trialParts.length ? trialParts.join(' · ') : '<span class="text-gray-400">—</span>';
+        const opts = ["new", "contacted", "converted", "archived"].map(function (s) {
+            return '<option value="' + s + '"' + (s === l.status ? " selected" : "") + '>' + s + '</option>';
+        }).join("");
+        const contact =
+            '<div class="font-medium text-gray-900 dark:text-white">' + esc(l.name || "—") + '</div>' +
+            '<div class="text-xs text-gray-500 dark:text-gray-400"><a class="hover:underline" href="mailto:' + esc(l.email) + '">' + esc(l.email) + '</a></div>' +
+            (l.phone ? '<div class="text-xs text-gray-400 dark:text-gray-500">' + esc(l.phone) + '</div>' : '');
+        return '<tr>' +
+            '<td class="px-4 py-2 whitespace-nowrap text-gray-500 dark:text-gray-400">' + esc(fmtDate(l.created_at)) + '</td>' +
+            '<td class="px-4 py-2">' + contact + '</td>' +
+            '<td class="px-4 py-2 text-gray-700 dark:text-gray-300">' + esc(l.company || "—") + '</td>' +
+            '<td class="px-4 py-2 whitespace-nowrap text-gray-700 dark:text-gray-300">' + esc(l.tier || "—") + '</td>' +
+            '<td class="px-4 py-2 whitespace-nowrap text-gray-700 dark:text-gray-300">' + esc(l.estimated_price || "—") + '</td>' +
+            '<td class="px-4 py-2 whitespace-nowrap">' + trial + '</td>' +
+            '<td class="px-4 py-2 whitespace-nowrap">' +
+                '<select onchange="updateStatus(' + l.id + ', this.value)" class="text-xs border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1">' + opts + '</select>' +
+            '</td>' +
+            '</tr>';
+    }).join("");
+}
+
+function updateStatus(id, status) {
+    fetch("/dashboard/api/wizard/leads/" + id, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: status }),
+    })
+        .then(r => { if (!r.ok) throw new Error(); return r.json(); })
+        .then(() => loadLeads())  // reflect re-ordering + freed trial (archived frees its trial)
+        .catch(() => alert("Could not update status"));
+}
+
+document.addEventListener("DOMContentLoaded", function () {
+    document.getElementById("searchInput").addEventListener("input", onSearchInput);
+    loadLeads();
+});
+</script>
+{% endblock %}

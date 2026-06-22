@@ -624,6 +624,102 @@ class WidgetApiKey(Base):
         }
 
 
+class WizardSession(Base):
+    """Tracks a public Agent Builder Wizard run and the trial it provisioned."""
+
+    __tablename__ = 'wizard_sessions'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    session_token = Column(String(64), unique=True, nullable=False, index=True)
+    tier = Column(String(20), nullable=True)  # tier1, tier2, tier3, tier4
+    step_data = Column(Text, nullable=True)  # JSON: accumulated step inputs
+    status = Column(String(30), nullable=False, default='started')  # started|provisioning|provisioned|lead_submitted|failed|expired
+    trial_project_id = Column(Integer, ForeignKey('projects.id', ondelete='SET NULL'), nullable=True)
+    widget_api_key = Column(String(255), nullable=True)
+    root_agent_name = Column(String(255), nullable=True)
+    client_ip = Column(String(64), nullable=True)
+    origin = Column(String(500), nullable=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc),
+                        onupdate=lambda: datetime.now(timezone.utc), nullable=False)
+    expires_at = Column(DateTime, nullable=True)
+
+    def get_step_data(self) -> dict:
+        try:
+            return json.loads(self.step_data) if self.step_data else {}
+        except json.JSONDecodeError:
+            return {}
+
+    def set_step_data(self, data: dict):
+        self.step_data = json.dumps(data) if data else None
+
+    def to_dict(self) -> dict:
+        return {
+            'id': self.id,
+            'session_token': self.session_token,
+            'tier': self.tier,
+            'step_data': self.get_step_data(),
+            'status': self.status,
+            'trial_project_id': self.trial_project_id,
+            'widget_api_key': self.widget_api_key,
+            'root_agent_name': self.root_agent_name,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+            'expires_at': self.expires_at.isoformat() if self.expires_at else None,
+        }
+
+
+class WizardLead(Base):
+    """A captured lead from the Agent Builder Wizard (contact + chosen tier + trial refs)."""
+
+    __tablename__ = 'wizard_leads'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    wizard_session_id = Column(Integer, ForeignKey('wizard_sessions.id', ondelete='SET NULL'), nullable=True)
+    tier = Column(String(20), nullable=True)
+    name = Column(String(255), nullable=True)
+    email = Column(String(320), nullable=False)
+    company = Column(String(255), nullable=True)
+    phone = Column(String(64), nullable=True)
+    message = Column(Text, nullable=True)
+    requirements = Column(Text, nullable=True)  # JSON for Tier 4 structured form
+    estimated_price = Column(String(64), nullable=True)  # snapshot of shown estimate
+    trial_project_id = Column(Integer, nullable=True)  # denormalized so lead survives trial cleanup
+    trial_widget_key = Column(String(255), nullable=True)
+    agent_snapshot = Column(Text, nullable=True)  # JSON export of the trial agent(s) + memory blocks
+    status = Column(String(30), nullable=False, default='new')  # new|contacted|converted|archived
+    client_ip = Column(String(64), nullable=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+
+    def get_requirements(self) -> dict:
+        try:
+            return json.loads(self.requirements) if self.requirements else {}
+        except json.JSONDecodeError:
+            return {}
+
+    def set_requirements(self, data: dict):
+        self.requirements = json.dumps(data) if data else None
+
+    def to_dict(self) -> dict:
+        return {
+            'id': self.id,
+            'wizard_session_id': self.wizard_session_id,
+            'tier': self.tier,
+            'name': self.name,
+            'email': self.email,
+            'company': self.company,
+            'phone': self.phone,
+            'message': self.message,
+            'requirements': self.get_requirements(),
+            'estimated_price': self.estimated_price,
+            'trial_project_id': self.trial_project_id,
+            'trial_widget_key': self.trial_widget_key,
+            'has_snapshot': bool(self.agent_snapshot),
+            'status': self.status,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+        }
+
+
 class PersonalAccessToken(Base):
     """Model for user Personal Access Tokens (PATs)."""
     

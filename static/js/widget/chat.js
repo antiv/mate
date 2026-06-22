@@ -24,9 +24,10 @@
   let forceNewSession = false;
   let pendingFiles = []; // [{dataUrl, mimeType, base64, name}]
   let pageContext = null; // {url, title, description, lang} from parent page via postMessage
-  let currentLang = "en";  
+  let currentLang = "en";
   let abortController = null;
   let activeAgentEl = null;
+  let _locked = false; // set by parent (wizard) to lock input after the trial prompt limit
   let activeAgentText = "";
   let activeAgentAuthor = "";
   let activeAgentImages = [];
@@ -221,6 +222,14 @@
           document.documentElement.style.setProperty("--w-user-bubble", color);
         }
       }
+      if (e.data.type === "mate-lock-input") {
+        _locked = true;
+        if (inputEl) {
+          inputEl.disabled = true;
+          inputEl.placeholder = e.data.message || "Test finished";
+        }
+        if (sendBtn) sendBtn.disabled = true;
+      }
     });
   }
 
@@ -230,12 +239,15 @@
       _stopGeneration();
       return;
     }
+    if (_locked) return;
     const text = inputEl.value.trim();
     const files = pendingFiles.slice();
     if (!text && !files.length) return;
 
     if (greetingEl) greetingEl.style.display = "none";
     _appendMessage("user", text, false, files, "user");
+    // Notify parent (wizard) that the visitor sent a prompt — used for the trial prompt limit.
+    try { window.parent.postMessage({ type: "mate-user-message" }, "*"); } catch (_) {}
     inputEl.value = "";
     inputEl.style.height = "auto";
     _clearPendingFiles();

@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="{{ lang }}">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Build your AI agent</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <style>
+    body { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+    .wz-step { display: none; }
+    .wz-step.active { display: block; }
+    .tier-card.selected { border-color: #2563eb; box-shadow: 0 0 0 2px rgba(37,99,235,0.3); }
+    .lang-btn.active { color: #2563eb; font-weight: 700; }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800">
+  <div id="wizard-app" class="max-w-3xl mx-auto p-5"
+       data-preselect="{{ preselect_tier }}"
+       data-lang="{{ lang }}"
+       data-contact-email="{{ contact_email }}">
+
+    <!-- Language switch -->
+    <div class="flex justify-end mb-2 text-xs gap-2 text-slate-400">
+      <button class="lang-btn" data-setlang="en">EN</button>
+      <span>·</span>
+      <button class="lang-btn" data-setlang="sr">SR</button>
+    </div>
+
+    <!-- Progress -->
+    <div class="flex items-center justify-between mb-6 text-xs font-medium text-slate-400" id="wzProgress">
+      <span data-stepdot="tier" data-i18n="step_choose">1. Choose</span>
+      <span data-stepdot="config" data-i18n="step_configure">2. Configure</span>
+      <span data-stepdot="test" data-i18n="step_test">3. Test</span>
+      <span data-stepdot="lead" data-i18n="step_start">4. Get started</span>
+    </div>
+
+    <!-- Step: Tier selection -->
+    <section class="wz-step active" data-step="tier">
+      <h1 class="text-2xl font-bold mb-1" data-i18n="tier_h1">Build your AI agent</h1>
+      <p class="text-slate-500 mb-5" data-i18n="tier_sub">Pick what you need. You can test it before deciding.</p>
+      <div id="tierList" class="grid gap-3 sm:grid-cols-2">
+        <div class="text-slate-400 text-sm" data-i18n="loading">Loading…</div>
+      </div>
+    </section>
+
+    <!-- Step: Configure (provisionable tiers) -->
+    <section class="wz-step" data-step="config">
+      <button class="text-sm text-blue-600 mb-3" data-back="tier"><i class="fas fa-arrow-left mr-1"></i><span data-i18n="back">Back</span></button>
+      <h2 class="text-xl font-bold mb-1" id="configTitle">Configure your agent</h2>
+      <p class="text-slate-500 mb-4" id="configSubtitle"></p>
+
+      <!-- tier1 / website-based config -->
+      <div id="configWebsite" class="space-y-4 hidden">
+        <div>
+          <label class="block text-sm font-medium mb-1" data-i18n="cfg_site_label">Your website URL</label>
+          <input id="cfgSiteUrl" type="url" placeholder="https://example.com"
+                 class="w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+          <p class="text-xs text-slate-400 mt-1" data-i18n="cfg_site_help">The agent reads this site to answer questions.</p>
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1" data-i18n="cfg_instructions_label">Extra instructions (optional)</label>
+          <textarea id="cfgInstructions" rows="4" data-i18n-ph="ph_instructions" placeholder="e.g. Always offer code WELCOME. Hours 9–17."
+                    class="w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+        </div>
+      </div>
+
+      <!-- non-provisionable / custom request config -->
+      <div id="configRequest" class="space-y-4 hidden">
+        <div>
+          <label class="block text-sm font-medium mb-1" data-i18n="cfg_request_label">Tell us what you need</label>
+          <textarea id="cfgRequest" rows="5" data-i18n-ph="ph_request" placeholder="Describe what the agent should do, which systems it connects to, etc."
+                    class="w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+        </div>
+      </div>
+
+      <div id="configError" class="text-sm text-red-600 mt-3 hidden"></div>
+      <button id="configNext" class="mt-5 bg-blue-600 hover:bg-blue-700 text-white font-medium px-5 py-2.5 rounded-lg" data-i18n="continue">
+        Continue
+      </button>
+    </section>
+
+    <!-- Step: Test (embedded widget chat) -->
+    <section class="wz-step" data-step="test">
+      <button class="text-sm text-blue-600 mb-3" data-back="config"><i class="fas fa-arrow-left mr-1"></i><span data-i18n="back">Back</span></button>
+      <h2 class="text-xl font-bold mb-1" data-i18n="test_h2">Try your agent</h2>
+      <p class="text-slate-500 mb-4" data-i18n="test_sub">Ask it up to 6 questions (optional). Confirm the agent whenever you're ready to finish the test.</p>
+      <div id="testLoading" class="text-center py-10 text-slate-400">
+        <i class="fas fa-spinner fa-spin text-2xl mb-2"></i>
+        <div id="testLoadingText" data-i18n="test_loading">Reading your website and building your agent…</div>
+      </div>
+      <div id="testChatWrap" class="hidden">
+        <div class="flex items-center justify-between mb-2 text-sm">
+          <span class="text-slate-500" data-i18n="counter_label">Test questions used</span>
+          <span id="testCounter" class="font-semibold text-blue-600">0 / 6</span>
+        </div>
+        <div class="h-1.5 bg-slate-200 rounded-full overflow-hidden mb-3">
+          <div id="testCounterBar" class="h-full bg-blue-600 transition-all" style="width:0%"></div>
+        </div>
+        <iframe id="testChat" class="w-full rounded-xl border border-slate-200" style="height:520px"></iframe>
+        <div id="testDoneNote" class="hidden mt-3 p-3 rounded-lg bg-green-50 text-green-800 text-sm" data-i18n="done_note">
+          You've used all 6 test questions. Confirm the agent to finish the test.
+        </div>
+      </div>
+      <div id="testError" class="text-sm text-red-600 mt-3 hidden"></div>
+      <button id="testNext" class="mt-5 bg-blue-600 hover:bg-blue-700 text-white font-medium px-5 py-2.5 rounded-lg hidden" data-i18n="confirm_finish">
+        Confirm agent &amp; finish test
+      </button>
+    </section>
+
+    <!-- Step: Lead capture + price + contact -->
+    <section class="wz-step" data-step="lead">
+      <h2 class="text-xl font-bold mb-1" data-i18n="lead_h2">Get your agent activated</h2>
+      <div id="leadPrice" class="mb-4 p-3 rounded-lg bg-blue-50 text-blue-800 text-sm hidden"></div>
+      <p class="text-slate-500 mb-4" data-i18n="lead_sub">Leave your details and we'll get in touch to activate it.</p>
+      <div class="space-y-3">
+        <input id="leadName" type="text" data-i18n-ph="ph_name" placeholder="Your name"
+               class="w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+        <input id="leadEmail" type="email" data-i18n-ph="ph_email" placeholder="Email *"
+               class="w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+        <input id="leadCompany" type="text" data-i18n-ph="ph_company" placeholder="Company"
+               class="w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+        <input id="leadPhone" type="tel" data-i18n-ph="ph_phone" placeholder="Phone"
+               class="w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+      </div>
+      <div id="leadError" class="text-sm text-red-600 mt-3 hidden"></div>
+      <button id="leadSubmit" class="mt-5 bg-blue-600 hover:bg-blue-700 text-white font-medium px-5 py-2.5 rounded-lg" data-i18n="submit">
+        Submit
+      </button>
+    </section>
+
+    <!-- Step: Done -->
+    <section class="wz-step" data-step="done">
+      <div class="text-center py-10">
+        <i class="fas fa-circle-check text-5xl text-green-500 mb-4"></i>
+        <h2 class="text-xl font-bold mb-2" data-i18n="done_h2">Thank you!</h2>
+        <p class="text-slate-500 mb-1" data-i18n="done_p1">We've received your details and will contact you shortly.</p>
+        <p class="text-slate-500"><span data-i18n="done_p2_prefix">Questions? Email</span> <a id="doneEmail" class="text-blue-600 underline" href="#"></a></p>
+      </div>
+    </section>
+
+  </div>
+
+  <script src="/static/js/wizard/wizard.js?v=5"></script>
+</body>
+</html>

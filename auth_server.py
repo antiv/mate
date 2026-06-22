@@ -169,6 +169,7 @@ def initialize_dashboard_server():
     try:
         from shared.utils.dashboard.dashboard_server import DashboardServer
         dashboard_server = DashboardServer(app, project_root)
+        app.state.dashboard_server = dashboard_server  # used by the wizard provisioning service
         logger.info("Dashboard server initialized successfully")
     except Exception as e:
         logger.warning("Dashboard server initialization error: %s", e)
@@ -332,6 +333,7 @@ from server.widget_routes import (
     configure_widget_proxy,
     public_artifacts_router,
 )
+from server.wizard_routes import router as wizard_router
 
 configure_widget_proxy(ADK_HOST, ADK_PORT)
 
@@ -341,6 +343,7 @@ app.include_router(openai_router)
 app.include_router(widget_router)
 app.include_router(widget_admin_api_router)
 app.include_router(dashboard_widget_router)
+app.include_router(wizard_router)
 app.include_router(public_artifacts_router)
 app.include_router(proxy_router)
 app.include_router(browser_router)
