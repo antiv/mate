@@ -74,6 +74,27 @@ def _rate_limited(action: str, ip: str) -> bool:
     return False
 
 
+def _partner_origin_ok(request: Request, partner_data: Optional[dict]) -> bool:
+    """Enforce a partner's origin allowlist.
+
+    Allows: no partner / no restriction; a matching parent-page origin (the top-level /embed
+    Referer); or same-host calls — the wizard's own in-iframe API calls carry the MATE /embed
+    URL as Referer, so legitimate API traffic is allowed while cross-site direct calls are not.
+    """
+    if not partner_data:
+        return True
+    allowed = partner_data.get("allowed_origins") or []
+    if not allowed:
+        return True
+    from shared.utils.wizard import partners as _p
+    ref = request.headers.get("referer") or request.headers.get("origin") or ""
+    req_origin = _p._origin_of(ref)
+    this_host = (request.headers.get("host") or "").lower()
+    if req_origin and this_host and req_origin.split("://", 1)[-1] == this_host:
+        return True
+    return _p.origin_allowed(partner_data, ref)
+
+
 def _verify_captcha(token: Optional[str]) -> bool:
     """No-op captcha hook. When WIZARD_CAPTCHA_PROVIDER is unset, always passes.
 
@@ -104,17 +125,40 @@ def _get_session(token: str) -> Optional[WizardSession]:
 
 @router.get("/embed", response_class=HTMLResponse, include_in_schema=False)
 async def wizard_embed(request: Request, tier: Optional[str] = Query(None),
-                       lang: Optional[str] = Query(None), contact: Optional[str] = Query(None)):
+                       lang: Optional[str] = Query(None), contact: Optional[str] = Query(None),
+                       currency: Optional[str] = Query(None), partner: Optional[str] = Query(None),
+                       fresh: bool = Query(False)):
     """Serve the wizard page (loaded inside an iframe on the customer's site).
 
-    ``lang`` (en|sr) and ``contact`` (override email) are passed by the embedding site.
+    ``partner`` selects a site config (own pricing, allowed origins, contact). ``lang``,
+    ``currency`` and ``contact`` can override the partner defaults.
     """
+    from shared.utils.wizard import partners as partners_svc
+    partner_data = partners_svc.get_partner(partner) if partner else None
+
+    # Enforce the partner's origin allowlist (where the iframe may be embedded).
+    if not _partner_origin_ok(request, partner_data):
+        return HTMLResponse("<h3>This agent wizard is not enabled for this site.</h3>", status_code=403)
+
+    partner_key = partner_data["partner_key"] if partner_data else ""
+    lang_eff = lang or (partner_data or {}).get("default_lang")
+    contact_eff = (contact or "").strip() or (partner_data or {}).get("contact_email") or pricing.get_contact_email()
     return templates.TemplateResponse(request, "wizard/wizard.html", {
         "request": request,
         "preselect_tier": tier or "",
-        "lang": pricing.normalize_lang(lang),
-        "contact_email": (contact or "").strip() or pricing.get_contact_email(),
+        "lang": pricing.normalize_lang(lang_eff),
+        "currency": pricing.normalize_currency(currency, partner=partner_key),
+        "contact_email": contact_eff,
+        "partner": partner_key,
+        "fresh": fresh,
     })
+
+
+@router.get("/demo", response_class=HTMLResponse, include_in_schema=False)
+async def wizard_demo():
+    """Serve the developer demo/test harness for the wizard embed."""
+    demo_path = project_root / "static" / "wizard-demo.html"
+    return FileResponse(str(demo_path), media_type="text/html")
 
 
 @router.get("/mate-wizard.js", include_in_schema=False)
@@ -132,13 +176,20 @@ async def serve_wizard_loader():
 # ---------------------------------------------------------------------------
 
 @router.get("/api/tiers")
-async def list_tiers(lang: Optional[str] = Query(None)):
-    """Return the tier catalogue (localized) with display prices for the wizard UI."""
+async def list_tiers(lang: Optional[str] = Query(None), currency: Optional[str] = Query(None),
+                     partner: Optional[str] = Query(None)):
+    """Return the tier catalogue (localized) with prices for the requested currency + partner."""
+    from shared.utils.wizard import partners as partners_svc
+    partner_data = partners_svc.get_partner(partner) if partner else None
+    partner_key = partner_data["partner_key"] if partner_data else None
+    currency = pricing.normalize_currency(currency, partner=partner_key)
     tiers = []
-    for t in pricing.get_tiers(lang=pricing.normalize_lang(lang)):
+    for t in pricing.get_tiers(lang=pricing.normalize_lang(lang), currency=currency, partner=partner_key):
         provisionable = bool(t["provisionable"]) and _tier_has_template(t["id"])
         tiers.append({**t, "provisionable": provisionable})
-    return {"tiers": tiers, "contact_email": pricing.get_contact_email()}
+    contact = (partner_data or {}).get("contact_email") or pricing.get_contact_email()
+    return {"tiers": tiers, "contact_email": contact, "currency": currency,
+            "capabilities": pricing.get_capabilities(pricing.normalize_lang(lang))}
 
 
 @router.get("/api/session/{token}")
@@ -172,6 +223,13 @@ async def start_session(request: Request):
     except Exception:
         pass
     tier = body.get("tier")
+    partner_key = (body.get("partner") or "").strip() or None
+
+    if partner_key:
+        from shared.utils.wizard import partners as partners_svc
+        partner_data = partners_svc.get_partner(partner_key)
+        if not _partner_origin_ok(request, partner_data):
+            raise HTTPException(status_code=403, detail="Not enabled for this site.")
 
     token = secrets.token_urlsafe(32)
     db = get_database_client()
@@ -181,6 +239,7 @@ async def start_session(request: Request):
             session_token=token,
             tier=tier if tier in {"tier1", "tier2", "tier3", "tier4"} else None,
             status="started",
+            partner_key=partner_key,
             client_ip=ip,
             origin=request.headers.get("referer") or request.headers.get("origin"),
         )
@@ -241,6 +300,8 @@ async def provision(request: Request):
     if not _verify_captcha(body.get("captcha_token")):
         raise HTTPException(status_code=400, detail="Captcha verification failed")
 
+    reprovision = bool(body.get("reprovision"))
+    old_pid = None
     db = get_database_client()
     session = db.get_session()
     try:
@@ -249,7 +310,7 @@ async def provision(request: Request):
         ).first()
         if not ws:
             raise HTTPException(status_code=404, detail="Session not found")
-        if ws.widget_api_key:
+        if ws.widget_api_key and not reprovision:
             # Already provisioned — return existing trial (idempotent).
             return {
                 "widget_api_key": ws.widget_api_key,
@@ -257,12 +318,31 @@ async def provision(request: Request):
                 "project_id": ws.trial_project_id,
                 "root_agent_name": ws.root_agent_name,
             }
+        if ws.widget_api_key and reprovision:
+            # Config changed after provisioning — drop the old trial and rebuild.
+            old_pid = ws.trial_project_id
+            ws.widget_api_key = None
+            ws.trial_project_id = None
+            ws.root_agent_name = None
         tier = ws.tier
         step_data = ws.get_step_data()
+        partner_key = ws.partner_key
         ws.status = "provisioning"
         session.commit()
     finally:
         session.close()
+
+    if partner_key:
+        from shared.utils.wizard import partners as partners_svc
+        if not _partner_origin_ok(request, partners_svc.get_partner(partner_key)):
+            raise HTTPException(status_code=403, detail="Not enabled for this site.")
+
+    if old_pid:
+        try:
+            from shared.utils.wizard.cleanup import release_trial
+            release_trial(old_pid)
+        except Exception as exc:
+            logger.warning("Could not release old trial %s on reprovision: %s", old_pid, exc)
 
     if tier not in TIER_TEMPLATES:
         raise HTTPException(status_code=400, detail=f"Tier '{tier}' is not provisionable")
@@ -271,9 +351,30 @@ async def provision(request: Request):
     if dashboard_server is None or dashboard_server.db_client is None:
         raise HTTPException(status_code=503, detail="Provisioning service unavailable")
 
+    # Crawl the site and analyze it BEFORE provisioning, so the agent's description +
+    # instruction (e.g. bookable services / appointment reasons) are tailored to the business.
+    site_url = (step_data.get("site_url") or "").strip()
+    pages = None
+    analysis = None
+    if site_url:
+        try:
+            from shared.utils.wizard.site_crawler import crawl_site
+            pages = await crawl_site(site_url, session_token=token)
+        except Exception as exc:
+            logger.warning("Site crawl failed for %s: %s", site_url, exc)
+            pages = None
+        if pages:
+            try:
+                from shared.utils.wizard.site_analyzer import analyze_site
+                analysis = analyze_site(pages, site_url=site_url)
+            except Exception as exc:
+                logger.warning("Site analysis failed for %s: %s", site_url, exc)
+                analysis = None
+
     svc = WizardProvisioningService(dashboard_server)
     result = svc.provision_trial(tier, step_data, token, ttl_days=TRIAL_TTL_DAYS,
-                                 origin=request.headers.get("referer"))
+                                 origin=request.headers.get("referer"),
+                                 pages=pages, analysis=analysis)
     if result.get("error"):
         # Mark failed so the session reflects reality.
         db2 = get_database_client()
@@ -287,18 +388,9 @@ async def provision(request: Request):
             s2.close()
         raise HTTPException(status_code=500, detail=result["error"])
 
-    # Preload site content into memory blocks (so the agent answers without browsing live).
-    site_url = (step_data.get("site_url") or "").strip()
-    if site_url:
-        try:
-            from shared.utils.wizard.site_crawler import crawl_site
-            pages = await crawl_site(site_url, session_token=token)
-            indexed = svc.store_site_memory_blocks(result["project_id"], pages)
-            result["pages_indexed"] = indexed
-        except Exception as exc:
-            logger.warning("Site crawl failed for %s: %s", site_url, exc)
-            result["pages_indexed"] = 0
-
+    result["pages_indexed"] = len(pages) if pages else 0
+    if analysis:
+        result["services_found"] = len(analysis.get("services") or [])
     return result
 
 
@@ -312,6 +404,7 @@ async def submit_lead(request: Request):
         raise HTTPException(status_code=400, detail="A valid email is required")
 
     tier = body.get("tier")
+    currency = body.get("currency")
     requirements = body.get("requirements")
 
     db = get_database_client()
@@ -322,6 +415,7 @@ async def submit_lead(request: Request):
         ).first()
         if ws and not tier:
             tier = ws.tier
+        partner_key = (ws.partner_key if ws else None) or (body.get("partner") or "").strip() or None
 
         lead = WizardLead(
             wizard_session_id=ws.id if ws else None,
@@ -331,7 +425,8 @@ async def submit_lead(request: Request):
             company=(body.get("company") or "").strip() or None,
             phone=(body.get("phone") or "").strip() or None,
             message=(body.get("message") or "").strip() or None,
-            estimated_price=pricing.get_estimated_price(tier) if tier else None,
+            estimated_price=pricing.get_estimated_price(tier, currency, partner_key) if tier else None,
+            partner_key=partner_key,
             trial_project_id=ws.trial_project_id if ws else None,
             trial_widget_key=ws.widget_api_key if ws else None,
             status="new",

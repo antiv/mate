@@ -138,7 +138,7 @@ GITHUB_CLIENT_SECRET=<Client Secret>
 | `GITHUB_CLIENT_ID` | For GitHub SSO | — | OAuth client ID from GitHub Settings |
 | `GITHUB_CLIENT_SECRET` | For GitHub SSO | — | OAuth client secret from GitHub Settings |
 | `SECRET_KEY` | **Yes, in production** | Random (new per restart) | Signs and verifies the encrypted session cookie. A random key means sessions are invalidated on restart. |
-| `OAUTH_DEFAULT_ROLE` | No | `user` | Role assigned to newly provisioned SSO users. Common values: `user`, `admin` |
+| `OAUTH_DEFAULT_ROLE` | No | `pending` | Role assigned to newly provisioned SSO users. Default `pending` = **no access** until an admin grants a role. Other values: `user`, `admin` |
 | `SESSION_SECURE_COOKIE` | No | `false` | Set to `true` behind HTTPS to add the `Secure` flag to the session cookie |
 
 ---
@@ -153,7 +153,22 @@ On each successful OAuth login MATE **upserts** a row in the `users` table:
 | `email` | Verified email from the provider |
 | `display_name` | Full name from the provider profile |
 | `oauth_provider` | `google` or `github` |
-| `roles` | `["<OAUTH_DEFAULT_ROLE>"]` on first login; unchanged on subsequent logins |
+| `roles` | `["<OAUTH_DEFAULT_ROLE>"]` on first login (default `["pending"]`); unchanged on subsequent logins |
+
+### Approval flow (default)
+
+New SSO users are created with the **`pending`** role and have **no agent access**. An admin must
+promote them (filter the Users page by role `pending`). The role model:
+
+| Role | Access |
+|---|---|
+| `admin` | Everything, incl. agents with no roles configured |
+| `user` | Dashboard agents whose `allowed_for_roles` includes `user` |
+| `widget` | Public embeddable-widget / wizard-trial agents (auto-assigned to `widget_*` visitors) |
+| `pending` | None — awaiting admin approval |
+
+**Secure default:** an agent with **no `allowed_for_roles` set is admin-only**. Grant `user`/`widget`
+explicitly to widen access.
 
 ### Changing a user's role after first login
 

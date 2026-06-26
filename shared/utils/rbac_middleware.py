@@ -39,12 +39,17 @@ class RBACMiddleware:
             
             # Get allowed roles for the agent
             allowed_roles = agent_config.get('allowed_for_roles', [])
-            
-            # If no roles specified, allow access (backward compatibility)
+
+            # Secure default: an agent with no roles configured is admin-only
+            # (was previously open-to-all). Set explicit roles to grant wider access.
             if not allowed_roles:
-                logger.debug(f"RBAC: No role restrictions for agent {agent_config.get('name', 'unknown')}, allowing access")
-                return True, None
-            
+                if self.user_service.check_user_access(user_id, ["admin"]):
+                    return True, None
+                user_roles = user.get_roles()
+                error_msg = f"Access denied. This agent has no roles configured (admin-only). Your roles: {user_roles}"
+                logger.warning(f"RBAC: Access denied for user {user_id} to agent {agent_config.get('name', 'unknown')} (no roles configured; admin-only). User roles: {user_roles}")
+                return False, error_msg
+
             # Check user access
             has_access = self.user_service.check_user_access(user_id, allowed_roles)
             

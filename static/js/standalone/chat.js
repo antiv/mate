@@ -63,6 +63,22 @@
   var typingEl = document.getElementById("widgetTyping");
   var newChatBtn = document.getElementById("widgetNewChat");
   var greetingEl = document.getElementById("widgetGreeting");
+
+  // Delegated handler for card actions (book a slot, add to cart, download .ics, ...).
+  if (messagesEl) {
+    messagesEl.addEventListener("click", function (e) {
+      var btn = e.target.closest ? e.target.closest(".wz-card-act") : null;
+      if (!btn) return;
+      var kind = btn.getAttribute("data-kind");
+      if (kind === "ics") {
+        _downloadIcs({ summary: btn.getAttribute("data-summary"), start: btn.getAttribute("data-start"),
+          end: btn.getAttribute("data-end"), desc: btn.getAttribute("data-desc"), loc: btn.getAttribute("data-loc") });
+      } else if (kind === "message") {
+        var v = btn.getAttribute("data-value");
+        if (v) _sendText(v);
+      }
+    });
+  }
   var attachBtn = document.getElementById("widgetAttachBtn");
   var fileInput = document.getElementById("widgetFileInput");
   var imagePreview = document.getElementById("widgetImagePreview");
@@ -644,8 +660,8 @@
       el.className = "widget-message agent";
       el.setAttribute("data-author", author || "");
       el._rawMarkdown = text;
-      el.innerHTML = _renderMarkdown(text);
-      
+      el.innerHTML = _renderMessageHtml(text);
+
       wrapper.appendChild(avatarEl);
       wrapper.appendChild(el);
       messagesEl.appendChild(wrapper);
@@ -690,7 +706,7 @@
 
   function _updateMessage(el, text) {
     el._rawMarkdown = text;
-    var html = _renderMarkdown(text);
+    var html = _renderMessageHtml(text);
     if (activeAgentImages && activeAgentImages.length) {
       activeAgentImages.forEach(function(img) {
         if (img.type === "inline") {
@@ -705,6 +721,97 @@
     el.innerHTML = html;
     _scrollToBottom();
     _loadLazyArtifacts();
+  }
+
+  // --- Generic rich cards (markers an agent prints: [[CARD]]{...} / [[APPOINTMENT]]{...}) ----
+  function _balancedEnd(text, start) {
+    var depth = 0, inStr = false, esc = false;
+    for (var i = start; i < text.length; i++) {
+      var ch = text[i];
+      if (inStr) { if (esc) esc = false; else if (ch === "\\") esc = true; else if (ch === '"') inStr = false; }
+      else if (ch === '"') inStr = true;
+      else if (ch === "{") depth++;
+      else if (ch === "}") { depth--; if (depth === 0) return i; }
+    }
+    return -1;
+  }
+  function _appointmentToCard(d) {
+    var actions = [{ label: "📅 Add to calendar", kind: "ics" }];
+    if (d.html_link) actions.push({ label: "Open in Google Calendar", kind: "link", value: d.html_link });
+    return { type: "appointment", badge: "✓ Confirmed", title: d.summary || "Appointment",
+      subtitle: _fmtRange(d.start, d.end), location: d.location,
+      ics: { summary: d.summary, start: d.start, end: d.end, description: d.description, location: d.location }, actions: actions };
+  }
+  function _extractCards(text) {
+    var cards = [], ranges = [], re = /\[\[(CARD|APPOINTMENT)\]\]\s*\{/g, m;
+    while ((m = re.exec(text)) !== null) {
+      var bs = text.indexOf("{", m.index), end = _balancedEnd(text, bs);
+      if (end === -1) continue;
+      var data; try { data = JSON.parse(text.slice(bs, end + 1)); } catch (e) { continue; }
+      cards.push(m[1] === "APPOINTMENT" ? _appointmentToCard(data) : data);
+      ranges.push([m.index, end + 1]); re.lastIndex = end + 1;
+    }
+    var cleaned = text;
+    ranges.sort(function (a, b) { return b[0] - a[0]; }).forEach(function (r) { cleaned = cleaned.slice(0, r[0]) + cleaned.slice(r[1]); });
+    return { cleaned: cleaned.trim(), cards: cards };
+  }
+  function _renderMessageHtml(text) {
+    var ext = _extractCards(text);
+    if (!ext.cards.length) return _renderMarkdown(text);
+    var html = _renderMarkdown(ext.cleaned);
+    ext.cards.forEach(function (c) { html += _cardHtml(c); });
+    return html;
+  }
+  function _fmtRange(startIso, endIso) {
+    try {
+      var s = new Date(startIso);
+      var out = s.toLocaleString(currentLang || undefined, { weekday: "short", year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+      if (endIso) out += " – " + new Date(endIso).toLocaleTimeString(currentLang || undefined, { hour: "2-digit", minute: "2-digit" });
+      return out;
+    } catch (e) { return startIso + (endIso ? " – " + endIso : ""); }
+  }
+  function _cardHtml(c) {
+    function a(s) { return String(s == null ? "" : s).replace(/"/g, "&quot;"); }
+    function e(s) { return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+    var body = "";
+    if (c.badge) body += '<div style="font-size:12px;color:#16a34a;font-weight:600">' + e(c.badge) + "</div>";
+    if (c.title) body += '<div style="font-weight:600;margin-top:2px;color:#0f172a">' + e(c.title) + "</div>";
+    if (c.subtitle) body += '<div style="font-size:13px;color:#475569;margin-top:2px">' + e(c.subtitle) + "</div>";
+    (c.lines || []).forEach(function (l) { body += '<div style="font-size:13px;color:#475569">' + e(l) + "</div>"; });
+    if (c.location) body += '<div style="font-size:13px;color:#475569">📍 ' + e(c.location) + "</div>";
+    var img = c.image ? '<img src="' + a(c.image) + '" style="width:48px;height:48px;object-fit:cover;border-radius:8px;flex-shrink:0">' : "";
+    var inner = img ? '<div style="display:flex;gap:10px">' + img + "<div>" + body + "</div></div>" : body;
+    var actions = (c.actions || []).map(function (act) {
+      if (act.kind === "link") return '<a href="' + a(act.value) + '" target="_blank" rel="noopener" style="font-size:13px;color:var(--w-primary,#2563eb);text-decoration:none;padding:6px 0">' + e(act.label) + "</a>";
+      var attrs = 'data-kind="' + a(act.kind) + '" data-value="' + a(act.value || "") + '"';
+      if (act.kind === "ics" && c.ics) attrs += ' data-summary="' + a(c.ics.summary) + '" data-start="' + a(c.ics.start) + '" data-end="' + a(c.ics.end || "") + '" data-desc="' + a(c.ics.description || "") + '" data-loc="' + a(c.ics.location || "") + '"';
+      return '<button type="button" class="wz-card-act" ' + attrs + ' style="background:var(--w-primary,#2563eb);color:#fff;border:0;border-radius:8px;padding:6px 12px;font-size:13px;cursor:pointer">' + e(act.label) + "</button>";
+    }).join("");
+    return '<div style="border:1px solid #e2e8f0;border-radius:12px;padding:12px;margin-top:8px;background:#f8fafc">' + inner + (actions ? '<div style="display:flex;gap:10px;align-items:center;margin-top:8px;flex-wrap:wrap">' + actions + "</div>" : "") + "</div>";
+  }
+  function _buildIcs(c) {
+    function fmt(dt) { try { return new Date(dt).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, ""); } catch (e) { return ""; } }
+    function esc(s) { return String(s || "").replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\n/g, "\\n"); }
+    var lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//MATE//Wizard//EN", "CALSCALE:GREGORIAN", "BEGIN:VEVENT",
+      "UID:mate-" + Date.now() + "@wizard", "DTSTAMP:" + fmt(new Date().toISOString()),
+      "DTSTART:" + fmt(c.start), "DTEND:" + fmt(c.end || c.start), "SUMMARY:" + esc(c.summary)];
+    if (c.desc) lines.push("DESCRIPTION:" + esc(c.desc));
+    if (c.loc) lines.push("LOCATION:" + esc(c.loc));
+    lines.push("END:VEVENT", "END:VCALENDAR");
+    return lines.join("\r\n");
+  }
+  function _downloadIcs(c) {
+    var blob = new Blob([_buildIcs(c)], { type: "text/calendar;charset=utf-8" });
+    var url = URL.createObjectURL(blob);
+    var link = document.createElement("a");
+    link.href = url; link.download = (c.summary || "appointment").replace(/[^\w\-]+/g, "_").slice(0, 40) + ".ics";
+    document.body.appendChild(link); link.click(); link.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1500);
+  }
+  function _sendText(text) {
+    if (!inputEl || sending) return;
+    inputEl.value = text;
+    _send();
   }
 
   function _loadLazyArtifacts() {

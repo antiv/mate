@@ -13,7 +13,7 @@ from pathlib import Path
 
 from shared.utils.database_client import get_database_client
 from shared.utils.models import (
-    AgentConfig, AgentConfigVersion, Credential, MemoryBlock, Project, WidgetApiKey, WizardSession,
+    AgentConfig, AgentConfigVersion, Credential, MemoryBlock, Project, WidgetApiKey, WizardLead, WizardSession,
 )
 
 logger = logging.getLogger(__name__)
@@ -103,6 +103,9 @@ def _delete_trial_project(session, pid: int) -> list:
 
     session.query(WizardSession).filter(WizardSession.trial_project_id == pid).update(
         {"trial_project_id": None, "status": "expired"}, synchronize_session=False
+    )
+    session.query(WizardLead).filter(WizardLead.trial_project_id == pid).update(
+        {"trial_project_id": None}, synchronize_session=False
     )
     session.query(Project).filter(Project.id == pid).delete(synchronize_session=False)
     return agent_names

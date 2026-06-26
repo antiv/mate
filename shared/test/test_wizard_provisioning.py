@@ -114,6 +114,27 @@ class TestWizardProvisioning(unittest.TestCase):
         self.assertEqual(self.mock_ws.status, "provisioned")
         self.assertEqual(self.mock_ws.trial_project_id, 7)
 
+    def test_substitutions_inject_services_and_description(self):
+        from shared.utils.wizard.provisioning_service import WizardProvisioningService
+        svc = WizardProvisioningService(MagicMock())
+        analysis = {"description": "A hair salon in Belgrade.", "services": ["Haircut", "Coloring"]}
+        subs = svc._build_substitutions("tier2", {"site_url": "https://x.com"}, analysis)
+        self.assertEqual(subs["AGENT_DESCRIPTION"], "A hair salon in Belgrade.")
+        self.assertIn("Haircut", subs["SERVICES"])
+        self.assertIn("Coloring", subs["SERVICES"])
+        self.assertIn("schedul", subs["SERVICES"].lower())
+        # No analysis -> sensible fallbacks
+        subs2 = svc._build_substitutions("tier1", {"site_url": "https://x.com"}, None)
+        self.assertIn("x.com", subs2["AGENT_DESCRIPTION"])
+        self.assertEqual(subs2["AGENT_MODEL"], "openrouter/google/gemini-2.5-flash")  # default
+
+    def test_agent_model_env_override(self):
+        from shared.utils.wizard.provisioning_service import WizardProvisioningService
+        svc = WizardProvisioningService(MagicMock())
+        with patch.dict(os.environ, {"WIZARD_AGENT_MODEL": "openai/gpt-4o"}):
+            subs = svc._build_substitutions("tier1", {"site_url": "https://x.com"}, None)
+        self.assertEqual(subs["AGENT_MODEL"], "openai/gpt-4o")
+
     def test_provision_non_provisionable_tier(self):
         from shared.utils.wizard.provisioning_service import WizardProvisioningService
 

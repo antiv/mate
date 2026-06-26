@@ -30,7 +30,8 @@ class ToolFactory:
             'user_profile': self._create_user_profile_tools,
             'code_executor': self._create_code_executor_tools,
             'image_data_extraction': self._create_image_data_extraction_tools,
-            'browser': self._create_browser_tools
+            'browser': self._create_browser_tools,
+            'google_calendar': self._create_google_calendar_tools
         }
     
     def create_tools(self, config: Dict[str, Any]) -> List[Any]:
@@ -186,6 +187,11 @@ class ToolFactory:
         """Create image data extraction (vision) tools."""
         from .image_tools import create_image_data_extraction_tools_from_config
         return create_image_data_extraction_tools_from_config(config)
+
+    def _create_google_calendar_tools(self, config: Dict[str, Any]) -> List[Any]:
+        """Create Google Calendar tools (check availability, list/create events)."""
+        from .google_calendar_tools import create_google_calendar_tools_from_config
+        return create_google_calendar_tools_from_config(config)
 
     def _create_browser_tools(self, config: Dict[str, Any]) -> List[Any]:
         """Create native browser automation tools."""

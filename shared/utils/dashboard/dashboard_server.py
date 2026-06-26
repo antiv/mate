@@ -379,16 +379,29 @@ class DashboardServer:
         """Delete a project and associated agents."""
         if not self.db_client:
             raise HTTPException(status_code=500, detail="Database connection failed")
-        
+
         session = self.db_client.get_session()
         if not session:
             raise HTTPException(status_code=500, detail="Database connection failed")
-        
+
         try:
             project = session.query(self.Project).filter(self.Project.id == project_id).first()
             if not project:
                 raise HTTPException(status_code=404, detail="Project not found")
-            
+
+            # Delete in dependency order to avoid NOT NULL constraint on
+            # agent_config_versions.agent_config_id (ORM cascade would try SET NULL).
+            agent_ids = [a.id for a in session.query(self.AgentConfig.id).filter(
+                self.AgentConfig.project_id == project_id
+            ).all()]
+            if agent_ids:
+                session.query(self.AgentConfigVersion).filter(
+                    self.AgentConfigVersion.agent_config_id.in_(agent_ids)
+                ).delete(synchronize_session=False)
+                session.query(self.AgentConfig).filter(
+                    self.AgentConfig.id.in_(agent_ids)
+                ).delete(synchronize_session=False)
+
             session.delete(project)
             session.commit()
             return {"success": True}
@@ -2283,15 +2296,18 @@ class DashboardServer:
 
         @self.app.get("/dashboard/api/wizard/leads", tags=["Dashboard - Wizard"])
         async def get_wizard_leads(request: Request, username: str = Depends(self._get_auth_user_dependency),
-                                   status: Optional[str] = None, search: Optional[str] = None, limit: int = 200):
-            """List wizard leads: NEW first, then newest first. Optional status filter + text search."""
-            from shared.utils.models import WizardLead, WidgetApiKey
+                                   status: Optional[str] = None, search: Optional[str] = None,
+                                   partner: Optional[str] = None, limit: int = 200):
+            """List wizard leads: NEW first, then newest first. Optional status/partner filter + text search."""
+            from shared.utils.models import WizardLead, WizardSession, WidgetApiKey
             from sqlalchemy import case, or_
             session = self.db_client.get_session()
             try:
                 q = session.query(WizardLead)
                 if status:
                     q = q.filter(WizardLead.status == status)
+                if partner:
+                    q = q.filter(WizardLead.partner_key == partner)
                 if search:
                     like = f"%{search.strip()}%"
                     q = q.filter(or_(
@@ -2311,10 +2327,20 @@ class DashboardServer:
                     ).all()
                     alive = {r[0] for r in rows}
 
+                # Fetch root_agent_name from the linked wizard sessions in one query.
+                session_ids = [l.wizard_session_id for l in leads if l.wizard_session_id]
+                agent_name_by_session: dict = {}
+                if session_ids:
+                    ws_rows = session.query(WizardSession.id, WizardSession.root_agent_name).filter(
+                        WizardSession.id.in_(session_ids)
+                    ).all()
+                    agent_name_by_session = {r[0]: r[1] for r in ws_rows}
+
                 out = []
                 for l in leads:
                     d = l.to_dict()
                     d["trial_alive"] = bool(l.trial_widget_key and l.trial_widget_key in alive)
+                    d["trial_agent_name"] = agent_name_by_session.get(l.wizard_session_id)
                     out.append(d)
                 return {"leads": out}
             finally:
@@ -2367,6 +2393,121 @@ class DashboardServer:
             finally:
                 session.close()
 
+        @self.app.get("/dashboard/wizard-pricing", response_class=HTMLResponse, tags=["Dashboard - Pages"])
+        async def dashboard_wizard_pricing(request: Request, username: str = Depends(self._get_auth_user_dependency)):
+            """Dashboard page to edit Agent Builder Wizard tier prices and currencies."""
+            if not self._get_is_admin(request):
+                return RedirectResponse(url="/dashboard/workroom", status_code=302)
+            return self.templates.TemplateResponse(request, "dashboard/wizard_pricing.html", {
+                "request": request,
+                "page_title": "Wizard Pricing",
+                "username": username,
+                "is_admin": True,
+            })
+
+        @self.app.get("/dashboard/api/wizard/pricing", tags=["Dashboard - Wizard"])
+        async def get_wizard_pricing(request: Request, username: str = Depends(self._get_auth_user_dependency),
+                                     partner: Optional[str] = None):
+            """Return the effective wizard pricing config (global or for a partner)."""
+            from shared.utils.wizard import pricing
+            return pricing.get_pricing_config_for_admin(partner or None)
+
+        @self.app.put("/dashboard/api/wizard/pricing", tags=["Dashboard - Wizard"])
+        async def update_wizard_pricing(request: Request, username: str = Depends(self._get_auth_user_dependency)):
+            """Save wizard tier prices + default currency, global or for a partner (admin only)."""
+            if not self._get_is_admin(request):
+                raise HTTPException(status_code=403, detail="Admin only")
+            from shared.utils.wizard import pricing
+            body = await request.json()
+            try:
+                saved = pricing.save_pricing_config(
+                    self.db_client,
+                    default_currency=body.get("default_currency"),
+                    prices=body.get("prices") or {},
+                    partner=(body.get("partner") or "").strip() or None,
+                )
+                return {"success": True, **saved}
+            except Exception as exc:
+                raise HTTPException(status_code=500, detail=str(exc))
+
+        @self.app.get("/dashboard/api/wizard/partners", tags=["Dashboard - Wizard"])
+        async def list_wizard_partners(request: Request, username: str = Depends(self._get_auth_user_dependency)):
+            """List embedding partners/sites."""
+            from shared.utils.wizard import partners as partners_svc
+            return {"partners": partners_svc.list_partners()}
+
+        @self.app.post("/dashboard/api/wizard/partners", tags=["Dashboard - Wizard"])
+        async def upsert_wizard_partner(request: Request, username: str = Depends(self._get_auth_user_dependency)):
+            """Create or update a partner (admin only)."""
+            if not self._get_is_admin(request):
+                raise HTTPException(status_code=403, detail="Admin only")
+            from shared.utils.wizard import partners as partners_svc
+            body = await request.json()
+            res = partners_svc.upsert_partner(
+                partner_key=(body.get("partner_key") or "").strip(),
+                name=body.get("name"),
+                allowed_origins=body.get("allowed_origins") if body.get("allowed_origins") is not None else None,
+                contact_email=body.get("contact_email"),
+                default_lang=body.get("default_lang"),
+                is_active=body.get("is_active", True),
+            )
+            if res.get("error"):
+                raise HTTPException(status_code=400, detail=res["error"])
+            return {"success": True, "partner": res}
+
+        @self.app.delete("/dashboard/api/wizard/partners/{partner_key}", tags=["Dashboard - Wizard"])
+        async def delete_wizard_partner(partner_key: str, request: Request,
+                                        username: str = Depends(self._get_auth_user_dependency)):
+            """Delete a partner (admin only)."""
+            if not self._get_is_admin(request):
+                raise HTTPException(status_code=403, detail="Admin only")
+            from shared.utils.wizard import partners as partners_svc
+            return partners_svc.delete_partner(partner_key)
+
+        @self.app.post("/dashboard/api/wizard/leads/{lead_id}/convert", tags=["Dashboard - Wizard"])
+        async def convert_wizard_lead(lead_id: int, request: Request,
+                                      username: str = Depends(self._get_auth_user_dependency)):
+            """Convert a lead's live trial into a permanent agent (rename project + keep widget)."""
+            if not self._get_is_admin(request):
+                raise HTTPException(status_code=403, detail="Admin only")
+            from shared.utils.models import WizardLead
+            from shared.utils.wizard.provisioning_service import WizardProvisioningService
+            body = await request.json()
+            session = self.db_client.get_session()
+            try:
+                lead = session.query(WizardLead).filter(WizardLead.id == lead_id).first()
+                if not lead:
+                    raise HTTPException(status_code=404, detail="Lead not found")
+                if not lead.trial_project_id:
+                    raise HTTPException(status_code=400, detail="This lead has no live trial to convert.")
+                project_name = (body.get("project_name") or "").strip() or (lead.company or "").strip() or None
+
+                svc = WizardProvisioningService(self)
+                result = svc.promote_trial(lead.trial_project_id, project_name)
+                if result.get("error"):
+                    raise HTTPException(status_code=400, detail=result["error"])
+
+                lead.status = "converted"
+                session.commit()
+                # The trial project is now permanent; refresh ADK so the agent stays loaded.
+                try:
+                    from shared.utils.utils import get_adk_config
+                    import httpx
+                    adk = get_adk_config()
+                    with httpx.Client(timeout=30.0) as client:
+                        client.post(f"http://{adk['adk_host']}:{adk['adk_port']}/api/reload-all-agents")
+                except Exception:
+                    pass
+                return {"success": True, **result}
+            except HTTPException:
+                session.rollback()
+                raise
+            except Exception as exc:
+                session.rollback()
+                raise HTTPException(status_code=500, detail=str(exc))
+            finally:
+                session.close()
+
         @self.app.get("/dashboard/api/wizard/leads/{lead_id}/snapshot", tags=["Dashboard - Wizard"])
         async def download_wizard_lead_snapshot(lead_id: int, request: Request,
                                                 username: str = Depends(self._get_auth_user_dependency)):
@@ -2385,6 +2526,39 @@ class DashboardServer:
                 )
             finally:
                 session.close()
+
+        @self.app.delete("/dashboard/api/wizard/leads/{lead_id}", tags=["Dashboard - Wizard"])
+        async def delete_wizard_lead(lead_id: int, request: Request,
+                                     username: str = Depends(self._get_auth_user_dependency)):
+            """Permanently delete an archived lead and any remaining trial assets (agent, project, memory blocks)."""
+            if not self._get_is_admin(request):
+                raise HTTPException(status_code=403, detail="Admin only")
+            from shared.utils.models import WizardLead
+            session = self.db_client.get_session()
+            try:
+                lead = session.query(WizardLead).filter(WizardLead.id == lead_id).first()
+                if not lead:
+                    raise HTTPException(status_code=404, detail="Lead not found")
+                if lead.status != "archived":
+                    raise HTTPException(status_code=400, detail="Only archived leads can be deleted")
+
+                release_pid = lead.trial_project_id
+                session.delete(lead)
+                session.commit()
+            except HTTPException:
+                session.rollback()
+                raise
+            except Exception as exc:
+                session.rollback()
+                raise HTTPException(status_code=500, detail=str(exc))
+            finally:
+                session.close()
+
+            if release_pid:
+                from shared.utils.wizard.cleanup import release_trial
+                release_trial(release_pid)
+
+            return {"success": True}
 
         # API Endpoints for Dashboard
         @self.app.get("/dashboard/api/stats", tags=["Dashboard - Usage Analytics"])

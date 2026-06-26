@@ -24,6 +24,8 @@
     target: currentScript.getAttribute("data-target") || "",
     tier: currentScript.getAttribute("data-tier") || "",
     lang: currentScript.getAttribute("data-lang") || "",
+    currency: currentScript.getAttribute("data-currency") || "",
+    partner: currentScript.getAttribute("data-partner") || "",
     contactEmail: currentScript.getAttribute("data-contact-email") || "",
     height: currentScript.getAttribute("data-height") || "720",
   };
@@ -43,6 +45,8 @@
     var params = [];
     if (CONFIG.tier) params.push("tier=" + encodeURIComponent(CONFIG.tier));
     if (CONFIG.lang) params.push("lang=" + encodeURIComponent(CONFIG.lang));
+    if (CONFIG.currency) params.push("currency=" + encodeURIComponent(CONFIG.currency));
+    if (CONFIG.partner) params.push("partner=" + encodeURIComponent(CONFIG.partner));
     if (CONFIG.contactEmail) params.push("contact=" + encodeURIComponent(CONFIG.contactEmail));
     var src = CONFIG.server + "/wizard/embed" + (params.length ? "?" + params.join("&") : "");
 

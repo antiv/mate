@@ -11,6 +11,8 @@ function syncToolConfigToJson(prefix = '') {
     
     // Check each tool checkbox
     const googleDrive = document.getElementById(prefix + 'GoogleDrive');
+    const googleCalendar = document.getElementById(prefix + 'GoogleCalendar');
+    const browser = document.getElementById(prefix + 'Browser');
     const cvTools = document.getElementById(prefix + 'CvTools');
     const imageTools = document.getElementById(prefix + 'ImageTools');
     const imageModel = document.getElementById(prefix + 'ImageModel');
@@ -19,9 +21,24 @@ function syncToolConfigToJson(prefix = '') {
     const codeExecutor = document.getElementById(prefix + 'CodeExecutor');
     const imageDataExtraction = document.getElementById(prefix + 'ImageDataExtraction');
     const imageDataExtractionModel = document.getElementById(prefix + 'ImageDataExtractionModel');
-    
+
     if (googleDrive && googleDrive.checked) {
         config.google_drive = true;
+    }
+    if (googleCalendar && googleCalendar.checked) {
+        const calId = document.getElementById(prefix + 'GoogleCalendarId');
+        const calTz = document.getElementById(prefix + 'GoogleCalendarTz');
+        const calHours = document.getElementById(prefix + 'GoogleCalendarHours');
+        const calSlot = document.getElementById(prefix + 'GoogleCalendarSlot');
+        const gc = {};
+        if (calId && calId.value.trim()) gc.calendar_id = calId.value.trim();
+        if (calTz && calTz.value.trim()) gc.timezone = calTz.value.trim();
+        if (calHours && calHours.value.trim()) gc.working_hours = calHours.value.trim();
+        if (calSlot && calSlot.value.trim() && !isNaN(parseInt(calSlot.value, 10))) gc.slot_minutes = parseInt(calSlot.value, 10);
+        config.google_calendar = Object.keys(gc).length ? gc : true;
+    }
+    if (browser && browser.checked) {
+        config.browser = true;
     }
     if (cvTools && cvTools.checked) {
         config.cv_tools = true;
@@ -81,6 +98,18 @@ function handleImageToolsChange(prefix) {
 }
 
 /**
+ * Handle Google Calendar checkbox change (show/hide the Calendar ID field + sync)
+ */
+function handleGoogleCalendarChange(prefix) {
+    const cb = document.getElementById(prefix + 'GoogleCalendar');
+    const container = document.getElementById(prefix + 'GoogleCalendarIdContainer');
+    if (cb && container) {
+        container.style.display = cb.checked ? 'block' : 'none';
+    }
+    syncToolConfigToJson(prefix);
+}
+
+/**
  * Handle memory blocks checkbox change (sync + update section visibility)
  */
 function handleMemoryBlocksChange(prefix) {
@@ -102,6 +131,8 @@ function syncJsonToToolConfig(prefix = '') {
         
         // Update checkboxes based on config
         const googleDrive = document.getElementById(prefix + 'GoogleDrive');
+        const googleCalendar = document.getElementById(prefix + 'GoogleCalendar');
+        const browser = document.getElementById(prefix + 'Browser');
         const cvTools = document.getElementById(prefix + 'CvTools');
         const imageTools = document.getElementById(prefix + 'ImageTools');
         const imageModel = document.getElementById(prefix + 'ImageModel');
@@ -112,8 +143,23 @@ function syncJsonToToolConfig(prefix = '') {
         const imageDataExtraction = document.getElementById(prefix + 'ImageDataExtraction');
         const imageDataExtractionModel = document.getElementById(prefix + 'ImageDataExtractionModel');
         const imageDataExtractionModelContainer = document.getElementById(prefix + 'ImageDataExtractionModelContainer');
-        
+
         if (googleDrive) googleDrive.checked = !!config.google_drive;
+        if (googleCalendar) {
+            googleCalendar.checked = !!config.google_calendar;
+            const calContainer = document.getElementById(prefix + 'GoogleCalendarIdContainer');
+            if (calContainer) calContainer.style.display = config.google_calendar ? 'block' : 'none';
+            const gc = (config.google_calendar && typeof config.google_calendar === 'object') ? config.google_calendar : {};
+            const calId = document.getElementById(prefix + 'GoogleCalendarId');
+            const calTz = document.getElementById(prefix + 'GoogleCalendarTz');
+            const calHours = document.getElementById(prefix + 'GoogleCalendarHours');
+            const calSlot = document.getElementById(prefix + 'GoogleCalendarSlot');
+            if (calId) calId.value = gc.calendar_id || '';
+            if (calTz) calTz.value = gc.timezone || '';
+            if (calHours) calHours.value = gc.working_hours || '';
+            if (calSlot) calSlot.value = (gc.slot_minutes != null ? gc.slot_minutes : '');
+        }
+        if (browser) browser.checked = !!config.browser;
         if (cvTools) cvTools.checked = !!config.cv_tools;
         if (createAgent) createAgent.checked = !!config.create_agent;
         if (codeExecutor) codeExecutor.checked = !!config.code_executor;
@@ -200,6 +246,8 @@ function setupToolListeners(prefix) {
                 // Check if it's one of our tool checkboxes
                 const toolCheckboxIds = [
                     prefix + 'GoogleDrive',
+                    prefix + 'GoogleCalendar',
+                    prefix + 'Browser',
                     prefix + 'CvTools',
                     prefix + 'MemoryBlocks',
                     prefix + 'ImageTools',
@@ -215,6 +263,8 @@ function setupToolListeners(prefix) {
                         handleImageDataExtractionChange(prefix);
                     } else if (checkboxId === prefix + 'MemoryBlocks') {
                         handleMemoryBlocksChange(prefix);
+                    } else if (checkboxId === prefix + 'GoogleCalendar') {
+                        handleGoogleCalendarChange(prefix);
                     } else {
                         syncToolConfigToJson(prefix);
                     }
@@ -225,7 +275,9 @@ function setupToolListeners(prefix) {
         console.warn('Parent container not found, falling back to individual listeners');
         // Fallback to individual listeners
         const toolCheckboxes = [
-            prefix + 'GoogleDrive', 
+            prefix + 'GoogleDrive',
+            prefix + 'GoogleCalendar',
+            prefix + 'Browser',
             prefix + 'CvTools',
             prefix + 'MemoryBlocks',
             prefix + 'CreateAgent',
@@ -239,6 +291,8 @@ function setupToolListeners(prefix) {
                 checkbox.addEventListener('change', function(e) {
                     if (checkboxId === prefix + 'MemoryBlocks') {
                         handleMemoryBlocksChange(prefix);
+                    } else if (checkboxId === prefix + 'GoogleCalendar') {
+                        handleGoogleCalendarChange(prefix);
                     } else {
                         syncToolConfigToJson(prefix);
                     }
@@ -260,6 +314,11 @@ function setupToolListeners(prefix) {
             syncToolConfigToJson(prefix);
         });
     }
+
+    [prefix + 'GoogleCalendarId', prefix + 'GoogleCalendarTz', prefix + 'GoogleCalendarHours', prefix + 'GoogleCalendarSlot'].forEach(function(id) {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener('input', function() { syncToolConfigToJson(prefix); });
+    });
 
     // JSON textarea sync
     const toolTextarea = document.getElementById(prefix + 'ToolConfig');
