@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="{{ lang }}">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Build your AI agent</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <style>
+    body { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+    .wz-step { display: none; }
+    .wz-step.active { display: block; }
+    .tier-card.selected { border-color: #2563eb; box-shadow: 0 0 0 2px rgba(37,99,235,0.3); }
+    .lang-btn.active { color: #2563eb; font-weight: 700; }
+    .industry-card.selected { border-color: #2563eb; background: #eff6ff; }
+    .goal-card.selected { border-color: #2563eb; background: #eff6ff; }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800">
+  <div id="wizard-app" class="max-w-3xl mx-auto p-5"
+       data-preselect="{{ preselect_tier }}"
+       data-lang="{{ lang }}"
+       data-currency="{{ currency }}"
+       data-partner="{{ partner }}"
+       data-contact-email="{{ contact_email }}"
+       data-fresh="{{ 'true' if fresh else '' }}">
+
+    <!-- Language switch -->
+    <div class="flex justify-end mb-2 text-xs gap-2 text-slate-400">
+      <button class="lang-btn" data-setlang="en">EN</button>
+      <span>·</span>
+      <button class="lang-btn" data-setlang="sr">SR</button>
+    </div>
+
+    <!-- Progress (hidden on intro, click a completed step to go back) -->
+    <div class="flex items-center justify-between mb-6 text-xs font-medium text-slate-400 select-none" id="wzProgress">
+      <span data-stepdot="tier" data-i18n="step_choose">1. Choose</span>
+      <span data-stepdot="config" data-i18n="step_configure">2. Configure</span>
+      <span data-stepdot="test" data-i18n="step_test">3. Test</span>
+      <span data-stepdot="lead" data-i18n="step_start">4. Get started</span>
+    </div>
+
+    <!-- Step: Intro / Hero (shown on first visit, before tier selection) -->
+    <section class="wz-step active" data-step="intro">
+      <div class="text-center py-4">
+        <h1 class="text-3xl font-extrabold mb-3 text-slate-900 leading-tight" data-i18n="intro_h1">Your AI agent in 5 minutes.</h1>
+        <p class="text-slate-500 mb-6 text-base max-w-md mx-auto" data-i18n="intro_sub">Test it free on your website. Answers customers 24/7. We set everything up for you.</p>
+        <div class="flex flex-col sm:flex-row gap-4 justify-center mb-8">
+          <div class="flex items-center gap-2 text-sm text-slate-700">
+            <span class="bg-blue-100 text-blue-600 rounded-full w-8 h-8 flex items-center justify-center flex-shrink-0"><i class="fas fa-headset text-xs"></i></span>
+            <span data-i18n="intro_stat1">85% lower support costs</span>
+          </div>
+          <div class="flex items-center gap-2 text-sm text-slate-700">
+            <span class="bg-blue-100 text-blue-600 rounded-full w-8 h-8 flex items-center justify-center flex-shrink-0"><i class="fas fa-clock text-xs"></i></span>
+            <span data-i18n="intro_stat2">Available 24/7 without breaks</span>
+          </div>
+          <div class="flex items-center gap-2 text-sm text-slate-700">
+            <span class="bg-blue-100 text-blue-600 rounded-full w-8 h-8 flex items-center justify-center flex-shrink-0"><i class="fas fa-tools text-xs"></i></span>
+            <span data-i18n="intro_stat3">We handle the full setup</span>
+          </div>
+        </div>
+        <button id="introCta" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-8 py-3 rounded-xl text-base shadow-sm">
+          <span data-i18n="intro_cta">Try for free →</span>
+        </button>
+        <p class="text-xs text-slate-400 mt-3" data-i18n="intro_note">No credit card. No charge during the test.</p>
+      </div>
+    </section>
+
+    <!-- Step: Tier selection -->
+    <section class="wz-step" data-step="tier">
+      <h1 class="text-2xl font-bold mb-1" data-i18n="tier_h1">Build your AI agent</h1>
+      <p class="text-slate-500 mb-5" data-i18n="tier_sub">Pick what you need. You can test it before deciding.</p>
+      <div id="tierList" class="grid gap-3 sm:grid-cols-2">
+        <div class="text-slate-400 text-sm" data-i18n="loading">Loading…</div>
+      </div>
+    </section>
+
+    <!-- Step: Configure (provisionable tiers 1-3) -->
+    <section class="wz-step" data-step="config">
+      <button class="text-sm text-blue-600 mb-3" data-back="tier"><i class="fas fa-arrow-left mr-1"></i><span data-i18n="back">Back</span></button>
+      <h2 class="text-xl font-bold mb-1" id="configTitle">Configure your agent</h2>
+      <p class="text-slate-500 mb-4" id="configSubtitle"></p>
+
+      <!-- tier1/2/3: website-based config -->
+      <div id="configWebsite" class="space-y-4 hidden">
+        <div>
+          <label class="block text-sm font-medium mb-1" data-i18n="cfg_site_label">Your website URL</label>
+          <input id="cfgSiteUrl" type="url" placeholder="https://example.com"
+                 class="w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+          <p class="text-xs text-slate-400 mt-1" data-i18n="cfg_site_help">The agent reads this site to answer questions.</p>
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1" data-i18n="cfg_instructions_label">Extra instructions (optional)</label>
+          <textarea id="cfgInstructions" rows="4" data-i18n-ph="ph_instructions" placeholder="e.g. Always offer code WELCOME. Hours 9–17."
+                    class="w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+        </div>
+      </div>
+
+      <!-- Tier 4 old path (kept for session restore compatibility; hidden in normal flow) -->
+      <div id="configRequest" class="space-y-4 hidden">
+        <div>
+          <p class="text-sm font-medium mb-2" data-i18n="cfg_caps_intro">MATE can do a lot — pick what you're interested in:</p>
+          <div id="capabilitiesList" class="grid gap-2 sm:grid-cols-2"></div>
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1" data-i18n="cfg_request_label">Tell us what you need</label>
+          <textarea id="cfgRequest" rows="4" data-i18n-ph="ph_request" placeholder="Describe what the agent should do, which systems it connects to, etc."
+                    class="w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+        </div>
+      </div>
+
+      <div id="configError" class="text-sm text-red-600 mt-3 hidden"></div>
+      <button id="configNext" class="mt-5 bg-blue-600 hover:bg-blue-700 text-white font-medium px-5 py-2.5 rounded-lg" data-i18n="continue">
+        Continue
+      </button>
+    </section>
+
+    <!-- Step: Tier 4 — Industry selection -->
+    <section class="wz-step" data-step="t4-industry">
+      <button class="text-sm text-blue-600 mb-3" data-back="tier"><i class="fas fa-arrow-left mr-1"></i><span data-i18n="back">Back</span></button>
+      <h2 class="text-xl font-bold mb-1" data-i18n="t4_ind_h2">What industry are you in?</h2>
+      <p class="text-slate-500 mb-4" data-i18n="t4_ind_sub">We'll tailor the solution to your business type.</p>
+      <div id="industryList" class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5"></div>
+      <div id="t4IndError" class="text-sm text-red-600 mb-3 hidden" data-i18n="t4_ind_err">Please select your industry.</div>
+      <button id="t4IndNext" class="bg-blue-600 hover:bg-blue-700 text-white font-medium px-5 py-2.5 rounded-lg" data-i18n="continue">Continue</button>
+    </section>
+
+    <!-- Step: Tier 4 — Goals selection -->
+    <section class="wz-step" data-step="t4-goals">
+      <button class="text-sm text-blue-600 mb-3" data-back="t4-industry"><i class="fas fa-arrow-left mr-1"></i><span data-i18n="back">Back</span></button>
+      <h2 class="text-xl font-bold mb-1" data-i18n="t4_goals_h2">What do you want to automate?</h2>
+      <p class="text-slate-500 mb-4" data-i18n="t4_goals_sub">Select all that apply — we'll design the right setup.</p>
+      <div id="goalsList" class="grid gap-2 sm:grid-cols-2 mb-5"></div>
+      <div id="t4GoalsError" class="text-sm text-red-600 mb-3 hidden" data-i18n="t4_goals_err">Please select at least one goal.</div>
+      <button id="t4GoalsNext" class="bg-blue-600 hover:bg-blue-700 text-white font-medium px-5 py-2.5 rounded-lg" data-i18n="t4_goals_cta">Continue to consultation →</button>
+    </section>
+
+    <!-- Step: Test (embedded widget chat) -->
+    <section class="wz-step" data-step="test">
+      <button class="text-sm text-blue-600 mb-3" data-back="config"><i class="fas fa-arrow-left mr-1"></i><span data-i18n="back">Back</span></button>
+      <h2 class="text-xl font-bold mb-1" data-i18n="test_h2">Your agent is ready — talk to it</h2>
+      <p class="text-slate-500 mb-4" data-i18n="test_sub">Ask it up to 6 questions (optional). Confirm the agent whenever you're ready to finish the test.</p>
+      <div id="testLoading" class="text-center py-10 text-slate-400">
+        <i class="fas fa-spinner fa-spin text-2xl mb-2"></i>
+        <div id="testLoadingText" data-i18n="test_loading">Reading your website and building your agent…</div>
+      </div>
+      <div id="testChatWrap" class="hidden">
+        <div class="flex items-center justify-between mb-2 text-sm">
+          <span class="text-slate-500" data-i18n="counter_label">Test questions used</span>
+          <span id="testCounter" class="font-semibold text-blue-600">0 / 6</span>
+        </div>
+        <div class="h-1.5 bg-slate-200 rounded-full overflow-hidden mb-3">
+          <div id="testCounterBar" class="h-full bg-blue-600 transition-all" style="width:0%"></div>
+        </div>
+        <!-- Side-by-side: chat widget (left) + appearance panel (right) -->
+        <div class="flex gap-5 items-start flex-wrap">
+          <!-- Chat widget — floats like a real website widget -->
+          <div style="flex-shrink:0;width:380px;max-width:100%;border-radius:16px;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,0.18);border:1px solid #e2e8f0;">
+            <iframe id="testChat" style="width:100%;height:520px;display:block;border:none;"></iframe>
+          </div>
+          <!-- Appearance customization panel -->
+          <div id="appearancePanel" class="hidden flex-1" style="min-width:220px">
+            <div class="border border-slate-200 rounded-xl bg-white overflow-hidden">
+              <div class="px-4 py-3 border-b border-slate-100">
+                <p class="text-sm font-semibold text-slate-700" id="appearToggleLabel">Customize appearance</p>
+              </div>
+              <div id="appearBody" class="px-4 pt-3 pb-4 space-y-3">
+                <div>
+                  <label class="block text-xs font-medium text-slate-600 mb-1" id="appearTitleLabel">Widget title</label>
+                  <input id="appearTitle" type="text" placeholder="e.g. Support" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+                <div>
+                  <label class="block text-xs font-medium text-slate-600 mb-1" id="appearGreetingLabel">Greeting message</label>
+                  <textarea id="appearGreeting" rows="2" placeholder="How can I help you today?" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"></textarea>
+                </div>
+                <div>
+                  <label class="block text-xs font-medium text-slate-600 mb-1" id="appearColorLabel">Button color</label>
+                  <input id="appearColor" type="color" value="#2563eb" class="h-9 w-16 border border-slate-300 rounded-lg cursor-pointer p-0.5">
+                </div>
+                <div>
+                  <label class="block text-xs font-medium text-slate-600 mb-2" id="appearThemeLabel">Theme</label>
+                  <div class="flex gap-1.5">
+                    <button type="button" data-theme="light" id="themeLight" class="appear-theme-btn flex-1 py-1.5 px-1 text-xs rounded-lg border border-slate-200 hover:border-blue-400 transition-colors">☀ Light</button>
+                    <button type="button" data-theme="dark" id="themeDark" class="appear-theme-btn flex-1 py-1.5 px-1 text-xs rounded-lg border border-slate-200 hover:border-blue-400 transition-colors">☾ Dark</button>
+                    <button type="button" data-theme="auto" id="themeAuto" class="appear-theme-btn flex-1 py-1.5 px-1 text-xs rounded-lg border border-slate-200 hover:border-blue-400 transition-colors">⬡ Auto</button>
+                  </div>
+                </div>
+                <button id="appearApply" type="button" class="w-full bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg">Apply</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="testDoneNote" class="hidden mt-3 p-3 rounded-lg bg-green-50 text-green-800 text-sm" data-i18n="done_note">
+          You've used all 6 test questions. Confirm the agent to finish the test.
+        </div>
+      </div>
+      <div id="testError" class="text-sm text-red-600 mt-3 hidden"></div>
+      <button id="testNext" class="mt-5 bg-blue-600 hover:bg-blue-700 text-white font-medium px-5 py-2.5 rounded-lg hidden" data-i18n="confirm_finish">
+        Confirm agent &amp; finish test
+      </button>
+    </section>
+
+    <!-- Step: Lead capture + price + contact -->
+    <section class="wz-step" data-step="lead">
+      <button id="leadBack" class="text-sm text-blue-600 mb-3"><i class="fas fa-arrow-left mr-1"></i><span data-i18n="back">Back</span></button>
+      <h2 class="text-xl font-bold mb-1" id="leadHeading" data-i18n="lead_h2">Activate your agent — we handle the setup</h2>
+      <div id="leadPrice" class="mb-4 p-3 rounded-lg bg-blue-50 text-blue-800 text-sm hidden"></div>
+      <p class="text-slate-500 mb-4" id="leadSubtitle" data-i18n="lead_sub">Leave your contact and our team will activate the agent within 24h. No charge until confirmation.</p>
+      <div class="space-y-3">
+        <input id="leadName" type="text" data-i18n-ph="ph_name" placeholder="Your name"
+               class="w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+        <input id="leadEmail" type="email" data-i18n-ph="ph_email" placeholder="Email *"
+               class="w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+        <input id="leadCompany" type="text" data-i18n-ph="ph_company" placeholder="Company"
+               class="w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+        <input id="leadPhone" type="tel" data-i18n-ph="ph_phone" placeholder="Phone"
+               class="w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+      </div>
+      <div id="leadError" class="text-sm text-red-600 mt-3 hidden"></div>
+      <button id="leadSubmit" class="mt-5 bg-blue-600 hover:bg-blue-700 text-white font-medium px-5 py-2.5 rounded-lg" data-i18n="submit">
+        Submit
+      </button>
+    </section>
+
+    <!-- Step: Done -->
+    <section class="wz-step" data-step="done">
+      <div class="py-4">
+        <!-- Header -->
+        <div class="text-center mb-6">
+          <div class="inline-flex items-center justify-center w-16 h-16 bg-green-100 rounded-full mb-4">
+            <i class="fas fa-check text-2xl text-green-600"></i>
+          </div>
+          <h2 class="text-2xl font-bold text-slate-900 mb-1" data-i18n="done_h2">Request received!</h2>
+          <p class="text-slate-500 text-sm" data-i18n="done_p1">We'll be in touch within 24h to set everything up.</p>
+        </div>
+
+        <!-- Order summary -->
+        <div class="bg-slate-50 border border-slate-200 rounded-xl p-5 mb-3">
+          <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3" data-i18n="done_order_label">Your order</p>
+          <div class="flex items-start justify-between mb-3">
+            <div class="flex-1 min-w-0 mr-3">
+              <p class="font-semibold text-slate-900" id="doneTierLabel"></p>
+              <p class="text-sm text-slate-500 mt-0.5" id="doneTierDesc"></p>
+            </div>
+            <span class="text-blue-700 font-semibold text-sm whitespace-nowrap" id="doneTierPrice"></span>
+          </div>
+          <ul id="doneTierFeatures" class="space-y-1.5 text-sm text-slate-600"></ul>
+          <div id="doneT4Summary" class="hidden mt-3 pt-3 border-t border-slate-200 space-y-1 text-sm text-slate-600">
+            <p id="doneT4Industry"></p>
+            <p id="doneT4Goals"></p>
+          </div>
+        </div>
+
+        <!-- Contact details -->
+        <div class="bg-white border border-slate-200 rounded-xl p-4 mb-5">
+          <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2" data-i18n="done_contact_label">Your details</p>
+          <p id="doneContactName" class="font-medium text-slate-800"></p>
+          <p id="doneContactEmail" class="text-sm text-slate-500"></p>
+          <p id="doneContactCompany" class="text-sm text-slate-500"></p>
+        </div>
+
+        <a id="doneEmail" href="#" class="flex items-center justify-center gap-2 text-sm text-slate-500 hover:text-blue-600 transition-colors group">
+          <i class="fas fa-envelope text-slate-400 group-hover:text-blue-500"></i>
+          <span id="doneEmailText"></span>
+        </a>
+      </div>
+    </section>
+
+  </div>
+
+  <script src="/static/js/wizard/wizard.js?v=15"></script>
+</body>
+</html>

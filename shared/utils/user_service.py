@@ -49,16 +49,18 @@ class UserService:
             if user:
                 logger.debug(f"Found existing user {user_id}")
                 return user
-            
-            # Create new user with default 'user' role
+
+            # Public embeddable-widget visitors are scoped as "widget_{keyid}_{uid}" and get a
+            # dedicated 'widget' role so they are isolated from dashboard 'user' accounts.
+            default_role = "widget" if user_id.startswith("widget_") else "user"
             new_user = User(
                 user_id=user_id,
-                roles='["user"]'  # Default role
+                roles=f'["{default_role}"]'
             )
-            
+
             session.add(new_user)
             session.commit()
-            logger.info(f"Created new user {user_id} with default 'user' role")
+            logger.info(f"Created new user {user_id} with default '{default_role}' role")
             return new_user
             
         except IntegrityError as e:

@@ -92,7 +92,7 @@ def _upsert_oauth_user(user_id: str, email: str, display_name: str, provider: st
                 email=email,
                 display_name=display_name,
                 oauth_provider=provider,
-                roles=json.dumps([_cfg("OAUTH_DEFAULT_ROLE", "user")]),
+                roles=json.dumps([_cfg("OAUTH_DEFAULT_ROLE", "pending")]),
             )
             session.add(user)
             logger.info("Created OAuth user %s via %s", user_id, provider)

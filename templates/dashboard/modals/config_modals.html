@@ -37,6 +37,49 @@
                                 class="ml-1.5 text-xs font-medium text-gray-700 dark:text-gray-300">CV Tools</label>
                         </div>
                         <div class="flex items-center">
+                            <input type="checkbox" id="{{ id_prefix }}Browser"
+                                class="w-3 h-3 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-gray-800 focus:ring-1 dark:bg-gray-700 dark:border-gray-600">
+                            <label for="{{ id_prefix }}Browser"
+                                class="ml-1.5 text-xs font-medium text-gray-700 dark:text-gray-300">Browser</label>
+                        </div>
+                        <div class="flex items-center">
+                            <input type="checkbox" id="{{ id_prefix }}GoogleCalendar"
+                                class="w-3 h-3 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-gray-800 focus:ring-1 dark:bg-gray-700 dark:border-gray-600">
+                            <label for="{{ id_prefix }}GoogleCalendar"
+                                class="ml-1.5 text-xs font-medium text-gray-700 dark:text-gray-300">Google Calendar</label>
+                        </div>
+                        <div id="{{ id_prefix }}GoogleCalendarIdContainer" style="display: none;" class="space-y-1.5 pl-1 border-l-2 border-gray-200 dark:border-gray-600 ml-1">
+                            <div>
+                                <label for="{{ id_prefix }}GoogleCalendarId"
+                                    class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Calendar ID / email</label>
+                                <input type="text" id="{{ id_prefix }}GoogleCalendarId"
+                                    placeholder="customer@gmail.com (empty = demo calendar)"
+                                    class="w-full px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded focus:outline-none focus:ring-1 focus:ring-blue-500">
+                                <p class="text-[10px] text-gray-400 mt-0.5">Share this calendar with the service account email first.</p>
+                            </div>
+                            <div>
+                                <label for="{{ id_prefix }}GoogleCalendarTz"
+                                    class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Timezone</label>
+                                <input type="text" id="{{ id_prefix }}GoogleCalendarTz"
+                                    placeholder="Europe/Belgrade"
+                                    class="w-full px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded focus:outline-none focus:ring-1 focus:ring-blue-500">
+                            </div>
+                            <div>
+                                <label for="{{ id_prefix }}GoogleCalendarHours"
+                                    class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Working hours</label>
+                                <input type="text" id="{{ id_prefix }}GoogleCalendarHours"
+                                    placeholder="Mon-Fri 09:00-17:00, Sat 09:00-13:00"
+                                    class="w-full px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded focus:outline-none focus:ring-1 focus:ring-blue-500">
+                            </div>
+                            <div>
+                                <label for="{{ id_prefix }}GoogleCalendarSlot"
+                                    class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Appointment length (min)</label>
+                                <input type="number" id="{{ id_prefix }}GoogleCalendarSlot" min="5" step="5"
+                                    placeholder="30"
+                                    class="w-full px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded focus:outline-none focus:ring-1 focus:ring-blue-500">
+                            </div>
+                        </div>
+                        <div class="flex items-center">
                         </div>
                         <div class="flex items-center">
                             <input type="checkbox" id="{{ id_prefix }}ImageTools"
@@ -109,7 +152,7 @@
                             style="display: none; height: 350px; border: 1px solid #d1d5db; border-radius: 0.25rem;"
                             class="mt-0.5"></div>
                         <p class="text-xs text-gray-500 dark:text-gray-400 mt-2">Available keys: google_search,
-                            google_drive,
+                            google_drive, google_calendar, browser,
                             cv_tools, image_tools, memory_blocks, create_agent, custom_functions, code_executor, image_data_extraction.</p>
                     </div>
                 </div>

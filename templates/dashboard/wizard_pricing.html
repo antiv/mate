@@ -1,0 +1,216 @@
+{% extends "base.html" %}
+
+{% block title %}Wizard Pricing - MATE{% endblock %}
+
+{% block content %}
+<div class="space-y-4">
+    <div class="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center">
+        <div class="min-w-0">
+            <h2 class="text-xl font-bold text-gray-900 dark:text-white">Wizard Pricing &amp; Partners</h2>
+            <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                Display-only estimates. Edit the <strong>Global default</strong>, or per <strong>partner site</strong>
+                that embeds the wizard (own prices, allowed domains, contact). Sites reference a partner via
+                <code>data-partner</code>.
+            </p>
+        </div>
+    </div>
+
+    <!-- Scope selector -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 space-y-4">
+        <div class="flex flex-wrap items-end gap-4">
+            <div>
+                <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Site / partner</label>
+                <select id="scopeSelect" onchange="onScopeChange()" class="border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-sm min-w-[220px]"></select>
+            </div>
+            <button type="button" onclick="newPartner()" class="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"><i class="fas fa-plus mr-1"></i>New partner</button>
+            <button type="button" id="deletePartnerBtn" onclick="deletePartner()" class="px-3 py-1.5 text-sm border border-red-300 dark:border-red-700 rounded text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 hidden"><i class="fas fa-trash mr-1"></i>Delete partner</button>
+        </div>
+
+        <!-- Partner settings (hidden for Global) -->
+        <div id="partnerSettings" class="hidden grid grid-cols-1 sm:grid-cols-2 gap-3 border-t border-gray-100 dark:border-gray-700 pt-3">
+            <div>
+                <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Name</label>
+                <input type="text" id="pName" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-sm">
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Contact email</label>
+                <input type="email" id="pContact" placeholder="sales@partner.com" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-sm">
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Default language</label>
+                <select id="pLang" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-sm">
+                    <option value="">— (use embed/EN) —</option>
+                    <option value="en">English</option>
+                    <option value="sr">Srpski</option>
+                </select>
+            </div>
+            <div class="flex items-end">
+                <label class="inline-flex items-center text-sm text-gray-700 dark:text-gray-300">
+                    <input type="checkbox" id="pActive" class="mr-2 w-4 h-4"> Active
+                </label>
+            </div>
+            <div class="sm:col-span-2">
+                <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Allowed origins (one per line; empty = any)</label>
+                <textarea id="pOrigins" rows="2" placeholder="https://partner-site.com" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-sm font-mono"></textarea>
+            </div>
+            <div class="sm:col-span-2 flex items-center justify-between gap-3">
+                <code id="embedSnippet" class="text-[11px] text-gray-500 dark:text-gray-400 break-all"></code>
+                <button type="button" onclick="savePartnerMeta()" class="px-3 py-1.5 text-xs bg-gray-700 hover:bg-gray-800 text-white rounded whitespace-nowrap"><i class="fas fa-save mr-1"></i>Save partner settings</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Prices -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 space-y-4">
+        <div class="flex flex-wrap items-end gap-4">
+            <div>
+                <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Default currency</label>
+                <select id="defaultCurrency" class="border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-sm"></select>
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Add currency</label>
+                <div class="flex gap-2">
+                    <input type="text" id="newCurrency" placeholder="e.g. USD" maxlength="8" class="border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-sm w-28 uppercase">
+                    <button type="button" onclick="addCurrency()" class="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">Add</button>
+                </div>
+            </div>
+            <button type="button" onclick="savePricing()" class="ml-auto px-3 py-2 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center"><i class="fas fa-save mr-1"></i>Save prices</button>
+        </div>
+
+        <div class="overflow-x-auto">
+            <table class="min-w-full text-sm">
+                <thead class="bg-gray-50 dark:bg-gray-700/50 text-gray-600 dark:text-gray-300"><tr id="pricingHead"></tr></thead>
+                <tbody id="pricingBody" class="divide-y divide-gray-100 dark:divide-gray-700"></tbody>
+            </table>
+        </div>
+        <p class="text-xs text-gray-400">Full display string incl. currency, e.g. <code>€49</code> or <code>5.900 RSD</code>. Empty cell falls back to the default currency. Partner prices override the global default.</p>
+    </div>
+
+    <div id="saveMsg" class="text-sm hidden"></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let STATE = { default_currency: "", currencies: [], prices: {}, tiers: [] };
+let PARTNERS = [];
+let SCOPE = "";  // "" = global, else partner_key
+
+function esc(s) { return String(s == null ? "" : s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;"); }
+
+function loadPartners(thenSelect) {
+    fetch("/dashboard/api/wizard/partners").then(r => r.json()).then(d => {
+        PARTNERS = d.partners || [];
+        const sel = document.getElementById("scopeSelect");
+        let html = '<option value="">Global default</option>';
+        PARTNERS.forEach(p => { html += '<option value="' + esc(p.partner_key) + '">' + esc(p.name || p.partner_key) + ' (' + esc(p.partner_key) + ')</option>'; });
+        sel.innerHTML = html;
+        if (thenSelect !== undefined) sel.value = thenSelect;
+        SCOPE = sel.value;
+        renderPartnerSettings();
+        loadPricing();
+    });
+}
+
+function partnerByKey(k) { return PARTNERS.filter(p => p.partner_key === k)[0] || null; }
+
+function renderPartnerSettings() {
+    const box = document.getElementById("partnerSettings");
+    const delBtn = document.getElementById("deletePartnerBtn");
+    if (!SCOPE) { box.classList.add("hidden"); delBtn.classList.add("hidden"); return; }
+    box.classList.remove("hidden"); delBtn.classList.remove("hidden");
+    const p = partnerByKey(SCOPE) || {};
+    document.getElementById("pName").value = p.name || "";
+    document.getElementById("pContact").value = p.contact_email || "";
+    document.getElementById("pLang").value = p.default_lang || "";
+    document.getElementById("pActive").checked = p.is_active !== false;
+    document.getElementById("pOrigins").value = (p.allowed_origins || []).join("\n");
+    const origin = window.location.origin;
+    document.getElementById("embedSnippet").textContent =
+        '<script src="' + origin + '/wizard/mate-wizard.js" data-server="' + origin + '" data-target="mate-wizard" data-partner="' + (p.partner_key || SCOPE) + '"></' + 'script>';
+}
+
+function onScopeChange() {
+    SCOPE = document.getElementById("scopeSelect").value;
+    renderPartnerSettings();
+    loadPricing();
+}
+
+function newPartner() {
+    const key = prompt("New partner key (letters, digits, - or _):", "");
+    if (!key) return;
+    fetch("/dashboard/api/wizard/partners", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({ partner_key: key, name: key }) })
+        .then(r => r.json().then(d => { if (!r.ok) throw new Error(d.detail || "Failed"); return d; }))
+        .then(() => loadPartners(key))
+        .catch(e => showMsg(e.message, true));
+}
+
+function savePartnerMeta() {
+    if (!SCOPE) return;
+    const origins = document.getElementById("pOrigins").value.split("\n").map(s => s.trim()).filter(Boolean);
+    fetch("/dashboard/api/wizard/partners", { method: "POST", headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({ partner_key: SCOPE, name: document.getElementById("pName").value, contact_email: document.getElementById("pContact").value, default_lang: document.getElementById("pLang").value, is_active: document.getElementById("pActive").checked, allowed_origins: origins }) })
+        .then(r => r.json().then(d => { if (!r.ok) throw new Error(d.detail || "Failed"); return d; }))
+        .then(() => { loadPartners(SCOPE); showMsg("Partner settings saved.", false); })
+        .catch(e => showMsg(e.message, true));
+}
+
+function deletePartner() {
+    if (!SCOPE || !confirm("Delete partner '" + SCOPE + "'? Its prices are removed (leads are kept).")) return;
+    fetch("/dashboard/api/wizard/partners/" + encodeURIComponent(SCOPE), { method: "DELETE" })
+        .then(r => r.json()).then(() => loadPartners("")).catch(e => showMsg(String(e), true));
+}
+
+function loadPricing() {
+    const url = "/dashboard/api/wizard/pricing" + (SCOPE ? "?partner=" + encodeURIComponent(SCOPE) : "");
+    fetch(url).then(r => r.json()).then(d => { STATE = d; render(); }).catch(() => showMsg("Failed to load pricing.", true));
+}
+
+function render() {
+    const sel = document.getElementById("defaultCurrency");
+    sel.innerHTML = STATE.currencies.map(c => '<option value="' + esc(c) + '"' + (c === STATE.default_currency ? " selected" : "") + '>' + esc(c) + '</option>').join("");
+    document.getElementById("pricingHead").innerHTML = '<th class="text-left px-4 py-2 font-medium">Tier</th>' +
+        STATE.currencies.map(c => '<th class="text-left px-4 py-2 font-medium">' + esc(c) + '</th>').join("");
+    document.getElementById("pricingBody").innerHTML = STATE.tiers.filter(t => t.priced).map(function (t) {
+        const cells = STATE.currencies.map(function (c) {
+            const val = (STATE.prices[t.id] && STATE.prices[t.id][c]) || "";
+            return '<td class="px-4 py-2"><input type="text" data-tier="' + t.id + '" data-cur="' + c + '" value="' + esc(val) + '" class="w-32 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1"></td>';
+        }).join("");
+        return '<tr><td class="px-4 py-2 font-medium text-gray-900 dark:text-white whitespace-nowrap">' + esc(t.label) + ' <span class="text-gray-400 text-xs">(' + esc(t.id) + ')</span></td>' + cells + '</tr>';
+    }).join("");
+}
+
+function collect() {
+    const prices = {};
+    document.querySelectorAll("#pricingBody input[data-tier]").forEach(function (inp) {
+        const v = inp.value.trim(); if (!v) return;
+        const tier = inp.getAttribute("data-tier"), cur = inp.getAttribute("data-cur");
+        prices[tier] = prices[tier] || {}; prices[tier][cur] = v;
+    });
+    return prices;
+}
+
+function addCurrency() {
+    const input = document.getElementById("newCurrency");
+    const code = (input.value || "").trim().toUpperCase();
+    if (code && STATE.currencies.indexOf(code) === -1) { STATE.prices = collect(); STATE.currencies.push(code); render(); }
+    input.value = "";
+}
+
+function savePricing() {
+    fetch("/dashboard/api/wizard/pricing", { method: "PUT", headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({ partner: SCOPE || null, default_currency: document.getElementById("defaultCurrency").value, prices: collect() }) })
+        .then(r => { if (!r.ok) throw new Error(); return r.json(); })
+        .then(d => { STATE = { default_currency: d.default_currency, currencies: d.currencies, prices: d.prices, tiers: d.tiers }; render(); showMsg("Prices saved" + (SCOPE ? " for " + SCOPE : "") + ".", false); })
+        .catch(() => showMsg("Save failed.", true));
+}
+
+function showMsg(text, isErr) {
+    const el = document.getElementById("saveMsg");
+    el.textContent = text; el.className = "text-sm " + (isErr ? "text-red-500" : "text-green-600");
+    el.classList.remove("hidden"); setTimeout(() => el.classList.add("hidden"), 3500);
+}
+
+document.addEventListener("DOMContentLoaded", () => loadPartners());
+</script>
+{% endblock %}
