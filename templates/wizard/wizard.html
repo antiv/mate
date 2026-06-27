@@ -11,7 +11,6 @@
     .wz-step { display: none; }
     .wz-step.active { display: block; }
     .tier-card.selected { border-color: #2563eb; box-shadow: 0 0 0 2px rgba(37,99,235,0.3); }
-    .lang-btn.active { color: #2563eb; font-weight: 700; }
     .industry-card.selected { border-color: #2563eb; background: #eff6ff; }
     .goal-card.selected { border-color: #2563eb; background: #eff6ff; }
   </style>
@@ -24,13 +23,6 @@
        data-partner="{{ partner }}"
        data-contact-email="{{ contact_email }}"
        data-fresh="{{ 'true' if fresh else '' }}">
-
-    <!-- Language switch -->
-    <div class="flex justify-end mb-2 text-xs gap-2 text-slate-400">
-      <button class="lang-btn" data-setlang="en">EN</button>
-      <span>·</span>
-      <button class="lang-btn" data-setlang="sr">SR</button>
-    </div>
 
     <!-- Progress (hidden on intro, click a completed step to go back) -->
     <div class="flex items-center justify-between mb-6 text-xs font-medium text-slate-400 select-none" id="wzProgress">
