@@ -610,7 +610,11 @@
     var tm = state.tierMeta;
     var box = document.getElementById("leadPrice");
     if (tm && tm.monthly_estimate) {
-      box.innerHTML = t("price_tmpl")
+      var tmpl = t("price_tmpl");
+      if (tm.monthly_estimate === "Custom pricing") {
+        tmpl = tmpl.replace("{price}/month", "{price}").replace("{price}/mesec", "{price}");
+      }
+      box.innerHTML = tmpl
         .replace("{label}", "<strong>" + escapeHtml(tm.label) + "</strong>")
         .replace("{price}", escapeHtml(tm.monthly_estimate));
       box.classList.remove("hidden");
@@ -671,7 +675,7 @@
       document.getElementById("doneTierDesc").textContent = tm.description || "";
       var priceEl = document.getElementById("doneTierPrice");
       priceEl.textContent = tm.monthly_estimate
-        ? tm.monthly_estimate + "/" + t("done_per_month")
+        ? (tm.monthly_estimate === "Custom pricing" ? tm.monthly_estimate : tm.monthly_estimate + "/" + t("done_per_month"))
         : "";
 
       // Features list

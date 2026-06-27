@@ -2470,6 +2470,7 @@ class DashboardServer:
                     self.db_client,
                     default_currency=body.get("default_currency"),
                     prices=body.get("prices") or {},
+                    show_from=body.get("show_from") or {},
                     partner=(body.get("partner") or "").strip() or None,
                 )
                 return {"success": True, **saved}

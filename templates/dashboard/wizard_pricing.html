@@ -92,7 +92,7 @@
 
 {% block scripts %}
 <script>
-let STATE = { default_currency: "", currencies: [], prices: {}, tiers: [] };
+let STATE = { default_currency: "", currencies: [], prices: {}, show_from: {}, tiers: [] };
 let PARTNERS = [];
 let SCOPE = "";  // "" = global, else partner_key
 
@@ -170,13 +170,16 @@ function render() {
     const sel = document.getElementById("defaultCurrency");
     sel.innerHTML = STATE.currencies.map(c => '<option value="' + esc(c) + '"' + (c === STATE.default_currency ? " selected" : "") + '>' + esc(c) + '</option>').join("");
     document.getElementById("pricingHead").innerHTML = '<th class="text-left px-4 py-2 font-medium">Tier</th>' +
+        '<th class="text-left px-4 py-2 font-medium text-center">Show "from" / "od"</th>' +
         STATE.currencies.map(c => '<th class="text-left px-4 py-2 font-medium">' + esc(c) + '</th>').join("");
     document.getElementById("pricingBody").innerHTML = STATE.tiers.filter(t => t.priced).map(function (t) {
+        const isFromChecked = (STATE.show_from && STATE.show_from[t.id]) ? "checked" : "";
+        const fromCell = '<td class="px-4 py-2 text-center"><input type="checkbox" data-from-tier="' + t.id + '" ' + isFromChecked + ' class="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"></td>';
         const cells = STATE.currencies.map(function (c) {
             const val = (STATE.prices[t.id] && STATE.prices[t.id][c]) || "";
             return '<td class="px-4 py-2"><input type="text" data-tier="' + t.id + '" data-cur="' + c + '" value="' + esc(val) + '" class="w-32 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1"></td>';
         }).join("");
-        return '<tr><td class="px-4 py-2 font-medium text-gray-900 dark:text-white whitespace-nowrap">' + esc(t.label) + ' <span class="text-gray-400 text-xs">(' + esc(t.id) + ')</span></td>' + cells + '</tr>';
+        return '<tr><td class="px-4 py-2 font-medium text-gray-900 dark:text-white whitespace-nowrap">' + esc(t.label) + ' <span class="text-gray-400 text-xs">(' + esc(t.id) + ')</span></td>' + fromCell + cells + '</tr>';
     }).join("");
 }
 
@@ -190,18 +193,32 @@ function collect() {
     return prices;
 }
 
+function collectShowFrom() {
+    const show_from = {};
+    document.querySelectorAll("#pricingBody input[data-from-tier]").forEach(function (cb) {
+        const tier = cb.getAttribute("data-from-tier");
+        show_from[tier] = cb.checked;
+    });
+    return show_from;
+}
+
 function addCurrency() {
     const input = document.getElementById("newCurrency");
     const code = (input.value || "").trim().toUpperCase();
-    if (code && STATE.currencies.indexOf(code) === -1) { STATE.prices = collect(); STATE.currencies.push(code); render(); }
+    if (code && STATE.currencies.indexOf(code) === -1) {
+        STATE.prices = collect();
+        STATE.show_from = collectShowFrom();
+        STATE.currencies.push(code);
+        render();
+    }
     input.value = "";
 }
 
 function savePricing() {
     fetch("/dashboard/api/wizard/pricing", { method: "PUT", headers: {"Content-Type":"application/json"},
-        body: JSON.stringify({ partner: SCOPE || null, default_currency: document.getElementById("defaultCurrency").value, prices: collect() }) })
+        body: JSON.stringify({ partner: SCOPE || null, default_currency: document.getElementById("defaultCurrency").value, prices: collect(), show_from: collectShowFrom() }) })
         .then(r => { if (!r.ok) throw new Error(); return r.json(); })
-        .then(d => { STATE = { default_currency: d.default_currency, currencies: d.currencies, prices: d.prices, tiers: d.tiers }; render(); showMsg("Prices saved" + (SCOPE ? " for " + SCOPE : "") + ".", false); })
+        .then(d => { STATE = { default_currency: d.default_currency, currencies: d.currencies, prices: d.prices, show_from: d.show_from, tiers: d.tiers }; render(); showMsg("Prices saved" + (SCOPE ? " for " + SCOPE : "") + ".", false); })
         .catch(() => showMsg("Save failed.", true));
 }
 
