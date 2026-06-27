@@ -128,7 +128,7 @@
             return;
         }
         const confirmed = await showConfirmDialog(
-            `Delete project "${project.name}"? All agents in this project will also be removed.`,
+            `Are you sure you want to delete the project "${project.name}"?\n\nThis will permanently delete the project and all its associated resources:\n• All Agents and their configuration versions\n• All RAG File Search stores and documents\n• All Memory blocks\n• All Agent triggers\n• All Widget API keys\n\nThis action cannot be undone.`,
             'Delete Project',
             'Delete',
             'Cancel',

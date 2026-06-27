@@ -282,9 +282,6 @@
       if (v) el.placeholder = v;
     });
     document.documentElement.setAttribute("lang", state.lang);
-    document.querySelectorAll("[data-setlang]").forEach(function (b) {
-      b.classList.toggle("active", b.getAttribute("data-setlang") === state.lang);
-    });
   }
 
   function show(stepName) {
@@ -826,10 +823,6 @@
     }
   }
 
-  document.querySelectorAll("[data-setlang]").forEach(function (btn) {
-    btn.addEventListener("click", function () { setLang(btn.getAttribute("data-setlang")); });
-  });
-
   // --- Back navigation (static data-back buttons) ---------------------
   document.querySelectorAll("[data-back]").forEach(function (btn) {
     btn.addEventListener("click", function () { show(btn.getAttribute("data-back")); });
@@ -845,7 +838,9 @@
 
   // --- Messages from the embedded widget chat (nested iframe) ----------
   window.addEventListener("message", function (e) {
-    if (e.data && e.data.type === "mate-user-message") onUserPrompt();
+    if (!e.data) return;
+    if (e.data.type === "mate-user-message") onUserPrompt();
+    if (e.data.type === "mate-set-lang" && e.data.lang) setLang(e.data.lang);
   });
 
   // --- Appearance panel (test step) -----------------------------------

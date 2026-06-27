@@ -54,7 +54,12 @@ class DashboardServer:
             from shared.utils.database_client import get_database_client
             from shared.utils.user_service import UserService
             from shared.utils.token_usage_service import TokenUsageService
-            from shared.utils.models import AgentConfig, AgentConfigVersion, Project, User, TokenUsageLog, GuardrailLog, AuditLog, TestCase, EvalResult, AgentTrigger
+            from shared.utils.models import (
+                AgentConfig, AgentConfigVersion, Project, User, TokenUsageLog,
+                GuardrailLog, AuditLog, TestCase, EvalResult, AgentTrigger,
+                FileSearchStore, AgentFileSearchStore, FileSearchDocument,
+                MemoryBlock, WidgetApiKey, WizardSession
+            )
 
             self.db_client = get_database_client()
             self.user_service = UserService()
@@ -69,6 +74,12 @@ class DashboardServer:
             self.TestCase = TestCase
             self.EvalResult = EvalResult
             self.AgentTrigger = AgentTrigger
+            self.FileSearchStore = FileSearchStore
+            self.AgentFileSearchStore = AgentFileSearchStore
+            self.FileSearchDocument = FileSearchDocument
+            self.MemoryBlock = MemoryBlock
+            self.WidgetApiKey = WidgetApiKey
+            self.WizardSession = WizardSession
             
             print("✅ Dashboard database services initialized successfully")
         except Exception as e:
@@ -376,7 +387,7 @@ class DashboardServer:
             session.close()
     
     def _delete_project(self, project_id: int) -> Dict[str, Any]:
-        """Delete a project and associated agents."""
+        """Delete a project and associated agents, stores, triggers, memory blocks, and keys."""
         if not self.db_client:
             raise HTTPException(status_code=500, detail="Database connection failed")
 
@@ -389,8 +400,7 @@ class DashboardServer:
             if not project:
                 raise HTTPException(status_code=404, detail="Project not found")
 
-            # Delete in dependency order to avoid NOT NULL constraint on
-            # agent_config_versions.agent_config_id (ORM cascade would try SET NULL).
+            # 1. Delete Agent Config Versions and Agent Configs in dependency order
             agent_ids = [a.id for a in session.query(self.AgentConfig.id).filter(
                 self.AgentConfig.project_id == project_id
             ).all()]
@@ -402,6 +412,42 @@ class DashboardServer:
                     self.AgentConfig.id.in_(agent_ids)
                 ).delete(synchronize_session=False)
 
+            # 2. Delete Agent File Search Stores, Documents, and File Search Stores in dependency order
+            store_ids = [s.id for s in session.query(self.FileSearchStore.id).filter(
+                self.FileSearchStore.project_id == project_id
+            ).all()]
+            if store_ids:
+                session.query(self.AgentFileSearchStore).filter(
+                    self.AgentFileSearchStore.store_id.in_(store_ids)
+                ).delete(synchronize_session=False)
+                session.query(self.FileSearchDocument).filter(
+                    self.FileSearchDocument.store_id.in_(store_ids)
+                ).delete(synchronize_session=False)
+                session.query(self.FileSearchStore).filter(
+                    self.FileSearchStore.id.in_(store_ids)
+                ).delete(synchronize_session=False)
+
+            # 3. Delete Memory Blocks
+            session.query(self.MemoryBlock).filter(
+                self.MemoryBlock.project_id == project_id
+            ).delete(synchronize_session=False)
+
+            # 4. Delete Widget API Keys
+            session.query(self.WidgetApiKey).filter(
+                self.WidgetApiKey.project_id == project_id
+            ).delete(synchronize_session=False)
+
+            # 5. Delete Agent Triggers
+            session.query(self.AgentTrigger).filter(
+                self.AgentTrigger.project_id == project_id
+            ).delete(synchronize_session=False)
+
+            # 6. Disassociate public wizard sessions (set trial_project_id to NULL)
+            session.query(self.WizardSession).filter(
+                self.WizardSession.trial_project_id == project_id
+            ).update({self.WizardSession.trial_project_id: None}, synchronize_session=False)
+
+            # 7. Delete the Project itself
             session.delete(project)
             session.commit()
             return {"success": True}
