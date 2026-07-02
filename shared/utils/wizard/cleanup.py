@@ -33,8 +33,10 @@ def _delete_agent_folder(agent_name: str) -> None:
 def cleanup_expired_trials(ttl_days: int = None) -> dict:
     """Delete expired trial projects/agents/keys/credentials. Returns a small summary."""
     ttl_days = ttl_days if ttl_days is not None else int(os.getenv("WIZARD_TRIAL_TTL_DAYS", "7"))
+    idle_hours = int(os.getenv("WIZARD_SESSION_IDLE_HOURS", "4"))
     now = datetime.now(timezone.utc)
     cutoff = now - timedelta(days=ttl_days)
+    idle_cutoff = now - timedelta(hours=idle_hours)
 
     db = get_database_client()
     session = db.get_session()
@@ -47,6 +49,15 @@ def cleanup_expired_trials(ttl_days: int = None) -> dict:
             WizardSession.expires_at < now,
         ).all()
         project_ids = {s.trial_project_id for s in expired_sessions}
+
+        # Idle trials: provisioned but no activity for WIZARD_SESSION_IDLE_HOURS.
+        # updated_at is refreshed on every step/provision write, so it tracks real activity.
+        idle_sessions = session.query(WizardSession).filter(
+            WizardSession.trial_project_id.isnot(None),
+            WizardSession.status == "provisioned",
+            WizardSession.updated_at < idle_cutoff,
+        ).all()
+        project_ids.update(s.trial_project_id for s in idle_sessions)
 
         # Safety net: orphaned trial projects older than the TTL (no live session row).
         orphan_projects = session.query(Project).filter(

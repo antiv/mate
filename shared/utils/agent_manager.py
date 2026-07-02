@@ -344,8 +344,8 @@ class AgentManager:
         try:
             agent_type = config.get('type', 'llm').lower()
             agent_name = config['name']
-            description = config.get('description', '')
-            instruction = config.get('instruction', '')
+            description = config.get('description') or ''
+            instruction = config.get('instruction') or ''
             sub_agents = sub_agents or []
             
             # Parse input_schema if present and convert to Pydantic model

@@ -91,6 +91,7 @@ Opening a new session (New Chat button) closes and fully resets the canvas — n
     - Include Contents ('default', 'none', or not set - controls conversation history)
   - Max iterations (for Loop agents)
   - Role-based access control
+  - Debug Mode (widget chat shows the raw backend error message on failure instead of a generic one — for troubleshooting; leave off in production)
 - **Edit Agents**: Modify existing agent configurations
 - **Copy Agents**: Duplicate agents with a new name
 - **View Agents**: Read-only view of agent details

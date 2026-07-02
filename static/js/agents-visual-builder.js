@@ -323,6 +323,7 @@
         formData.append('disabled', agent.disabled ? 'true' : 'false');
         formData.append('hardcoded', agent.hardcoded ? 'true' : 'false');
         formData.append('expose_as_model', agent.expose_as_model ? 'true' : 'false');
+        formData.append('debug_mode', agent.debug_mode ? 'true' : 'false');
 
         return formData;
     }
@@ -944,6 +945,7 @@
         { key: 'create_agent', label: 'Create Agent' },
         { key: 'code_executor', label: 'Code Executor' },
         { key: 'image_data_extraction', label: 'Image Data Extraction' },
+        { key: 'shop', label: 'Shop (E-commerce)' },
     ];
 
     function ConfigPanel(props) {
@@ -966,6 +968,19 @@
                 .catch(function () { setFsStores([]); })
                 .finally(function () { setFsLoading(false); });
         }, [agentName]);
+
+        useEffect(function () {
+            if (agent) {
+                window.onInstructionModalSave = function (targetId, newValue) {
+                    if (targetId === 'vbInstruction') {
+                        onChange(Object.assign({}, agent, { instruction: newValue }));
+                    }
+                };
+            }
+            return function () {
+                window.onInstructionModalSave = null;
+            };
+        }, [agent, onChange]);
 
         if (!agent) {
             return React.createElement(
@@ -1068,12 +1083,14 @@
                     null,
                     React.createElement(
                         'label',
-                        { className: 'block text-[11px] font-semibold mb-1' },
-                        'Description',
+                        { className: 'block text-[11px] font-semibold mb-1 text-gray-700 dark:text-gray-300' },
+                        'Description ',
+                        React.createElement('span', { className: 'text-red-500 font-bold' }, '*')
                     ),
                     React.createElement('textarea', {
-                        className: 'w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-xs min-h-[60px]',
+                        className: 'w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-xs min-h-[40px]',
                         value: agent.description || '',
+                        placeholder: 'Description is required...',
                         onChange: handleInput('description'),
                     }),
                 ),
@@ -1082,19 +1099,23 @@
                     null,
                     React.createElement(
                         'label',
-                        { className: 'block text-[11px] font-semibold mb-1' },
-                        'Instruction (preview)',
+                        { className: 'block text-[11px] font-semibold mb-1 text-gray-700 dark:text-gray-300' },
+                        'Instruction ',
+                        React.createElement('span', { className: 'text-red-500 font-bold' }, '*')
                     ),
                     React.createElement('textarea', {
-                        className: 'w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-[11px] min-h-[60px]',
+                        className: 'w-full px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-xs min-h-[60px] cursor-pointer hover:border-blue-400 dark:hover:border-blue-500',
                         value: agent.instruction || '',
-                        onChange: handleInput('instruction'),
+                        readOnly: true,
+                        placeholder: 'Click to edit instructions in Markdown editor...',
+                        onClick: function () {
+                            const ta = document.getElementById('vbInstruction');
+                            if (ta) ta.value = agent.instruction || '';
+                            if (window.openInstructionModal) {
+                                window.openInstructionModal('vbInstruction');
+                            }
+                        }
                     }),
-                    React.createElement(
-                        'p',
-                        { className: 'mt-1 text-[10px] text-gray-500 dark:text-gray-400' },
-                        'Use the main Agents page for full-screen Monaco editing if needed.',
-                    ),
                 ),
 
                 /* ── Tools ── */
@@ -1411,6 +1432,19 @@
         // Used by ToolConfigPanel / McpConfigPanel / tool picker bridge to save a directly-provided agent object
         const handleSaveAgent = useCallback(async (updatedAgent) => {
             if (!updatedAgent || !updatedAgent.id) return;
+
+            const description = (updatedAgent.description || '').trim();
+            const instruction = (updatedAgent.instruction || '').trim();
+
+            if (!description) {
+                if (typeof window.showNotification === 'function') window.showNotification('Description is required.', 'error');
+                return;
+            }
+            if (!instruction) {
+                if (typeof window.showNotification === 'function') window.showNotification('Instruction is required.', 'error');
+                return;
+            }
+
             setSaving(true);
             try {
                 await apiUpdateAgent(updatedAgent);
@@ -1452,13 +1486,31 @@
                     return;
                 }
 
+                const description = (document.getElementById('editAgentDescription').value || '').trim();
+                const instruction = (document.getElementById('editAgentInstruction').value || '').trim();
+
+                if (!description) {
+                    if (typeof window.showNotification === 'function') window.showNotification('Description is required.', 'error');
+                    if (submitBtn) submitBtn.disabled = false;
+                    if (loader) loader.classList.add('hidden');
+                    if (btnText) btnText.textContent = 'Update Agent';
+                    return;
+                }
+                if (!instruction) {
+                    if (typeof window.showNotification === 'function') window.showNotification('Instruction is required.', 'error');
+                    if (submitBtn) submitBtn.disabled = false;
+                    if (loader) loader.classList.add('hidden');
+                    if (btnText) btnText.textContent = 'Update Agent';
+                    return;
+                }
+
                 const formData = new FormData();
                 formData.append('name', agentName);
                 if (projectId) formData.append('project_id', projectId);
                 formData.append('type', document.getElementById('editAgentType').value);
                 formData.append('model_name', document.getElementById('editAgentModel').value || '');
-                formData.append('description', document.getElementById('editAgentDescription').value || '');
-                formData.append('instruction', document.getElementById('editAgentInstruction').value || '');
+                formData.append('description', description);
+                formData.append('instruction', instruction);
 
                 const getJson = (id, fallbackId) =>
                     (typeof monacoEditors !== 'undefined' && monacoEditors[id]) ? getJsonFromEditor(monacoEditors[id]) : (document.getElementById(fallbackId) ? document.getElementById(fallbackId).value : '') || '';
@@ -1477,6 +1529,7 @@
                 formData.append('disabled', document.getElementById('editAgentDisabled') ? document.getElementById('editAgentDisabled').checked : false);
                 formData.append('hardcoded', document.getElementById('editAgentHardcoded') ? document.getElementById('editAgentHardcoded').checked : false);
                 formData.append('expose_as_model', document.getElementById('editAgentExposeAsModel') ? document.getElementById('editAgentExposeAsModel').checked : false);
+                formData.append('debug_mode', document.getElementById('editAgentDebugMode') ? document.getElementById('editAgentDebugMode').checked : false);
 
                 try {
                     const response = await fetch(`/dashboard/api/agents/${configId}`, {
@@ -1564,21 +1617,18 @@
                     };
 
                     window.toggleJsonEditor = function (textareaId, editorId) {
+                        // Monaco isn't bundled in the Visual Builder — keep the plain <textarea>
+                        // as the editable JSON editor instead of showing an unusable placeholder.
                         var ta = document.getElementById(textareaId);
                         var ed = document.getElementById(editorId);
-                        if (!ta || !ed) return;
-                        if (ta.style.display !== 'none') {
-                            ta.style.display = 'none';
-                            ed.style.display = 'block';
-                            ed.innerText = "Monaco Editor not loaded in Visual Builder";
-                        } else {
-                            ta.style.display = 'block';
-                            ed.style.display = 'none';
-                        }
+                        if (ta) ta.style.display = 'block';
+                        if (ed) ed.style.display = 'none';
+                        if (ta) ta.focus();
                     };
                 }
             }
         }, [toolPickerModal, agentsByName, handleSaveAgent]);
+
 
 
         useEffect(() => {
@@ -2353,13 +2403,15 @@
                     const agent = {
                         id: null, name: name, type: 'llm',
                         project_id: props.projectId,
-                        model_name: '', description: '', instruction: '',
+                        model_name: '',
+                        description: 'Description for ' + name,
+                        instruction: 'Instruction for ' + name,
                         parent_agents: [], allowed_for_roles: '["user","admin"]',
                         tool_config: '{}', mcp_servers_config: '{}',
                         planner_config: '{}', generate_content_config: '{}',
                         input_schema: '{}', output_schema: '{}',
                         include_contents: '', guardrail_config: '{}',
-                        max_iterations: '', disabled: false, hardcoded: false, expose_as_model: false,
+                        max_iterations: '', disabled: false, hardcoded: false, expose_as_model: false, debug_mode: false,
                     };
                     setSaving(true);
                     try {

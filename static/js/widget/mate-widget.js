@@ -48,6 +48,35 @@
   var isOpen = false;
   var container, iframe, button, badge;
   var _currentLang = "";
+  var _iconUrl = "";
+
+  var CHAT_ICON_SVG = '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">'
+    + '<path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H5.17L4 17.17V4h16v12z"/>'
+    + '<path d="M7 9h10v2H7zm0-3h10v2H7z"/></svg>';
+  var CLOSE_ICON_SVG = '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">'
+    + '<path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>';
+
+  // Render the launcher icon based on open state: X when open, else custom icon / text / chat glyph.
+  function _renderButtonIcon() {
+    if (!button) return;
+    if (isOpen) {
+      button.innerHTML = CLOSE_ICON_SVG;
+      button.style.padding = "";
+      button.setAttribute("aria-label", "Close chat");
+      return;
+    }
+    button.setAttribute("aria-label", "Open chat");
+    if (_iconUrl) {
+      button.innerHTML = '<img src="' + _escapeHtml(_iconUrl) + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%">';
+      button.style.padding = "0";
+    } else if (CONFIG.buttonText) {
+      button.innerHTML = '<span style="font-size:14px;font-weight:600">' + _escapeHtml(CONFIG.buttonText) + '</span>';
+      button.style.padding = "";
+    } else {
+      button.innerHTML = CHAT_ICON_SVG;
+      button.style.padding = "";
+    }
+  }
 
   // --- Language helpers ------------------------------------------------
   function _detectLang() {
@@ -124,13 +153,7 @@
     // Chat button
     button = document.createElement("button");
     button.id = "mate-widget-btn";
-    button.setAttribute("aria-label", "Open chat");
-    button.innerHTML = CONFIG.buttonText
-      ? '<span style="font-size:14px;font-weight:600">' + _escapeHtml(CONFIG.buttonText) + '</span>'
-      : '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">'
-        + '<path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H5.17L4 17.17V4h16v12z"/>'
-        + '<path d="M7 9h10v2H7zm0-3h10v2H7z"/>'
-        + '</svg>';
+    _renderButtonIcon();
     button.addEventListener("click", toggle);
 
     // Container + iframe
@@ -152,25 +175,15 @@
   }
 
   function updateButtonIcon(iconUrl) {
-    if (!button) return;
-    if (iconUrl) {
-      button.innerHTML = '<img src="' + _escapeHtml(iconUrl) + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%">';
-      button.style.padding = '0';
-    } else {
-      button.innerHTML = CONFIG.buttonText
-        ? '<span style="font-size:14px;font-weight:600">' + _escapeHtml(CONFIG.buttonText) + '</span>'
-        : '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">'
-          + '<path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H5.17L4 17.17V4h16v12z"/>'
-          + '<path d="M7 9h10v2H7zm0-3h10v2H7z"/>'
-          + '</svg>';
-      button.style.padding = '';
-    }
+    _iconUrl = iconUrl || "";
+    _renderButtonIcon();
   }
 
   // --- Public API ------------------------------------------------------
   function open() {
     if (isOpen) return;
     isOpen = true;
+    _renderButtonIcon();
     // Load iframe on first open
     if (iframe._src) {
       iframe.src = iframe._src;
@@ -205,6 +218,7 @@
     if (!isOpen) return;
     isOpen = false;
     container.classList.remove("open");
+    _renderButtonIcon();
   }
 
   function toggle() {
@@ -219,7 +233,13 @@
 
   // --- Listen for config pushed back from the iframe -------------------
   window.addEventListener("message", function (e) {
-    if (!e.data || e.data.type !== "mate-config") return;
+    if (!e.data) return;
+    // The chat iframe asks the launcher to minimize (e.g. after "End conversation").
+    if (e.data.type === "mate-close") {
+      close();
+      return;
+    }
+    if (e.data.type !== "mate-config") return;
     if (e.data.button_color && button) {
       button.style.background = e.data.button_color;
     }

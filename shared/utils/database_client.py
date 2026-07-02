@@ -105,9 +105,11 @@ class DatabaseClient:
                     "check_same_thread": False,
                     "timeout": 30,  # 30 second timeout for busy database
                 }
-                # Enable connection pooling for SQLite
-                engine_kwargs["poolclass"] = sqlalchemy.pool.StaticPool
-                engine_kwargs["pool_pre_ping"] = True
+                # NullPool: each get_session() gets its own SQLite connection so
+                # concurrent async coroutines never share one connection object.
+                # WAL mode (set via the connect event below) handles cross-connection
+                # and cross-process safety at the file level.
+                engine_kwargs["poolclass"] = sqlalchemy.pool.NullPool
             
             self._engine = create_engine(database_url, **engine_kwargs)
             self._session_factory = sessionmaker(bind=self._engine)

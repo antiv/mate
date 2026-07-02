@@ -23,11 +23,19 @@ _ASSET_SUFFIXES = (
 )
 
 # Text-extraction JS (mirrors browser_tools._generate_page_summary cleaning).
+# Hidden-element removal defends against indirect prompt injection: a malicious site
+# could hide "ignore previous instructions" in invisible divs. We strip those before
+# extraction so they never reach the agent's memory blocks.
 _EXTRACT_TEXT_JS = """() => {
     const el = document.body;
     if (!el) return '';
     const clone = el.cloneNode(true);
-    clone.querySelectorAll('script, style, iframe, noscript, svg, nav, footer').forEach(n => n.remove());
+    clone.querySelectorAll(
+        'script, style, iframe, noscript, svg, nav, footer, ' +
+        '[hidden], [aria-hidden="true"], [style*="display:none"], ' +
+        '[style*="display: none"], [style*="visibility:hidden"], ' +
+        '[style*="visibility: hidden"], [style*="opacity:0"]'
+    ).forEach(n => n.remove());
     return clone.innerText || clone.textContent || '';
 }"""
 

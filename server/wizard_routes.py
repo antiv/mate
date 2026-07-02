@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Request, Query
-from fastapi.responses import HTMLResponse, FileResponse, JSONResponse
+from fastapi.responses import HTMLResponse, FileResponse, JSONResponse, Response
 from fastapi.templating import Jinja2Templates
 
 from shared.utils.database_client import get_database_client
@@ -45,6 +45,8 @@ def _tier_has_template(tier_id: str) -> bool:
 import os
 
 TRIAL_TTL_DAYS = int(os.getenv("WIZARD_TRIAL_TTL_DAYS", "7"))
+TRIAL_TTL_DAYS_TIER3 = int(os.getenv("WIZARD_TIER3_TRIAL_TTL_DAYS", "2"))
+TRIAL_MAX_PAGES = int(os.getenv("WIZARD_TRIAL_MAX_PAGES", "5"))
 
 # --- Lightweight in-process per-IP throttle for the costly endpoints -----------
 _RATE_BUCKET: dict = defaultdict(list)
@@ -359,7 +361,7 @@ async def provision(request: Request):
     if site_url:
         try:
             from shared.utils.wizard.site_crawler import crawl_site
-            pages = await crawl_site(site_url, session_token=token)
+            pages = await crawl_site(site_url, session_token=token, max_pages=TRIAL_MAX_PAGES)
         except Exception as exc:
             logger.warning("Site crawl failed for %s: %s", site_url, exc)
             pages = None
@@ -372,7 +374,8 @@ async def provision(request: Request):
                 analysis = None
 
     svc = WizardProvisioningService(dashboard_server)
-    result = svc.provision_trial(tier, step_data, token, ttl_days=TRIAL_TTL_DAYS,
+    ttl = TRIAL_TTL_DAYS_TIER3 if tier == "tier3" else TRIAL_TTL_DAYS
+    result = svc.provision_trial(tier, step_data, token, ttl_days=ttl,
                                  origin=request.headers.get("referer"),
                                  pages=pages, analysis=analysis)
     if result.get("error"):
@@ -392,6 +395,55 @@ async def provision(request: Request):
     if analysis:
         result["services_found"] = len(analysis.get("services") or [])
     return result
+
+
+@router.post("/api/session/abandon")
+async def wizard_session_abandon(request: Request):
+    """Release an unused trial when the user leaves the wizard without submitting a lead.
+
+    Called via navigator.sendBeacon on pagehide. Only acts when:
+    - The session has a provisioned trial project, AND
+    - No lead exists for that project (a lead means the trial has business value — keep it).
+
+    Always returns 204; sendBeacon ignores the response body.
+    """
+    try:
+        body = await request.body()
+        import json as _json
+        data = _json.loads(body) if body else {}
+    except Exception:
+        return Response(status_code=204)
+
+    token = (data.get("token") or "").strip()
+    if not token:
+        return Response(status_code=204)
+
+    db = get_database_client()
+    session = db.get_session()
+    try:
+        ws = session.query(WizardSession).filter(
+            WizardSession.session_token == token
+        ).first()
+        if not ws or not ws.trial_project_id:
+            return Response(status_code=204)
+        # Keep the trial if a lead was captured — admin may want to review it.
+        lead_exists = session.query(WizardLead).filter(
+            WizardLead.trial_project_id == ws.trial_project_id
+        ).first()
+        if lead_exists:
+            return Response(status_code=204)
+        project_id = ws.trial_project_id
+    finally:
+        session.close()
+
+    try:
+        from shared.utils.wizard.cleanup import release_trial
+        release_trial(project_id)
+        logger.info("Abandoned wizard trial project %s released on pagehide", project_id)
+    except Exception as exc:
+        logger.warning("Could not release abandoned trial %s: %s", project_id, exc)
+
+    return Response(status_code=204)
 
 
 @router.post("/api/lead")

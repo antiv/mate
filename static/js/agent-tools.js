@@ -6,9 +6,32 @@
 /**
  * Sync tool configuration form controls to JSON
  */
+// Keys that the checkbox UI owns: these are rebuilt from checkbox state below (and removed
+// when unchecked). Every OTHER key in the JSON (e.g. shop, google_search, file_search,
+// supabase_storage, user_profile, custom_functions) is preserved as-is.
+const CHECKBOX_MANAGED_TOOL_KEYS = [
+    'google_drive', 'google_calendar', 'browser', 'cv_tools', 'image_tools',
+    'memory_blocks', 'create_agent', 'code_executor', 'image_data_extraction', 'shop',
+];
+
 function syncToolConfigToJson(prefix = '') {
-    const config = {};
-    
+    // Start from the existing JSON so keys without a checkbox survive; only the
+    // checkbox-managed keys are reset and re-derived from the checkboxes below.
+    let config = {};
+    const existingTextarea = document.getElementById(prefix + 'ToolConfig');
+    if (existingTextarea && existingTextarea.value.trim()) {
+        try {
+            const parsed = JSON.parse(existingTextarea.value);
+            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                config = parsed;
+            }
+        } catch (e) { /* malformed JSON — fall back to rebuilding from checkboxes only */ }
+    }
+    // Preserve the shop object (catalog etc.) across a checkbox re-sync — the checkbox only
+    // toggles presence, the catalog is authored in the JSON editor.
+    const existingShop = (config.shop && typeof config.shop === 'object') ? config.shop : null;
+    CHECKBOX_MANAGED_TOOL_KEYS.forEach(function (k) { delete config[k]; });
+
     // Check each tool checkbox
     const googleDrive = document.getElementById(prefix + 'GoogleDrive');
     const googleCalendar = document.getElementById(prefix + 'GoogleCalendar');
@@ -67,7 +90,12 @@ function syncToolConfigToJson(prefix = '') {
             config.image_data_extraction = true;
         }
     }
-    
+    const shop = document.getElementById(prefix + 'Shop');
+    if (shop && shop.checked) {
+        // Keep the authored catalog/currency/partner_key; default to an empty catalog.
+        config.shop = existingShop || { catalog: [] };
+    }
+
     const textarea = document.getElementById(prefix + 'ToolConfig');
     if (textarea) {
         textarea.value = JSON.stringify(config, null, 2);
@@ -105,6 +133,18 @@ function handleGoogleCalendarChange(prefix) {
     const container = document.getElementById(prefix + 'GoogleCalendarIdContainer');
     if (cb && container) {
         container.style.display = cb.checked ? 'block' : 'none';
+    }
+    syncToolConfigToJson(prefix);
+}
+
+/**
+ * Handle Shop checkbox change (show/hide the catalog hint + sync)
+ */
+function handleShopChange(prefix) {
+    const cb = document.getElementById(prefix + 'Shop');
+    const hint = document.getElementById(prefix + 'ShopHint');
+    if (cb && hint) {
+        hint.style.display = cb.checked ? 'block' : 'none';
     }
     syncToolConfigToJson(prefix);
 }
@@ -163,6 +203,12 @@ function syncJsonToToolConfig(prefix = '') {
         if (cvTools) cvTools.checked = !!config.cv_tools;
         if (createAgent) createAgent.checked = !!config.create_agent;
         if (codeExecutor) codeExecutor.checked = !!config.code_executor;
+        const shop = document.getElementById(prefix + 'Shop');
+        if (shop) {
+            shop.checked = !!config.shop;
+            const shopHint = document.getElementById(prefix + 'ShopHint');
+            if (shopHint) shopHint.style.display = config.shop ? 'block' : 'none';
+        }
         if (memoryBlocks) {
             memoryBlocks.checked = config.memory_blocks === true ||
                 (config.memory_blocks && typeof config.memory_blocks === 'object' && config.memory_blocks.enabled !== false);
@@ -253,9 +299,10 @@ function setupToolListeners(prefix) {
                     prefix + 'ImageTools',
                     prefix + 'CreateAgent',
                     prefix + 'CodeExecutor',
-                    prefix + 'ImageDataExtraction'
+                    prefix + 'ImageDataExtraction',
+                    prefix + 'Shop'
                 ];
-                
+
                 if (toolCheckboxIds.includes(checkboxId)) {
                     if (checkboxId === prefix + 'ImageTools') {
                         handleImageToolsChange(prefix);
@@ -265,6 +312,8 @@ function setupToolListeners(prefix) {
                         handleMemoryBlocksChange(prefix);
                     } else if (checkboxId === prefix + 'GoogleCalendar') {
                         handleGoogleCalendarChange(prefix);
+                    } else if (checkboxId === prefix + 'Shop') {
+                        handleShopChange(prefix);
                     } else {
                         syncToolConfigToJson(prefix);
                     }
@@ -282,9 +331,10 @@ function setupToolListeners(prefix) {
             prefix + 'MemoryBlocks',
             prefix + 'CreateAgent',
             prefix + 'CodeExecutor',
-            prefix + 'ImageDataExtraction'
+            prefix + 'ImageDataExtraction',
+            prefix + 'Shop'
         ];
-        
+
         toolCheckboxes.forEach(checkboxId => {
             const checkbox = document.getElementById(checkboxId);
             if (checkbox) {
@@ -293,6 +343,8 @@ function setupToolListeners(prefix) {
                         handleMemoryBlocksChange(prefix);
                     } else if (checkboxId === prefix + 'GoogleCalendar') {
                         handleGoogleCalendarChange(prefix);
+                    } else if (checkboxId === prefix + 'Shop') {
+                        handleShopChange(prefix);
                     } else {
                         syncToolConfigToJson(prefix);
                     }

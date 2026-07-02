@@ -26,8 +26,12 @@
   let pageContext = null; // {url, title, description, lang} from parent page via postMessage
   let currentLang = "en";
   let abortController = null;
+  let debugMode = false;
   let activeAgentEl = null;
-  let _locked = false; // set by parent (wizard) to lock input after the trial prompt limit
+  // Locked by wizard via postMessage when trial prompt limit is reached. Persisted in
+  // localStorage so the lock survives widget iframe reloads (iframe destruction clears sessionStorage).
+  const _LOCK_KEY = `${STORAGE_PREFIX}_locked`;
+  let _locked = localStorage.getItem(_LOCK_KEY) === "1";
   let activeAgentText = "";
   let activeAgentAuthor = "";
   let activeAgentImages = [];
@@ -36,23 +40,23 @@
 
   // UI string translations — placeholder, send button, new-chat button, stop button, interrupted message
   const UI_STRINGS = {
-    en: { placeholder: "Type a message…", send: "Send", newChat: "New Chat", stop: "Stop", interrupted: "Response interrupted", copy: "Copy", copied: "Copied!", download: "Download" },
-    sr: { placeholder: "Unesite poruku…", send: "Pošalji", newChat: "Nov razgovor", stop: "Prekini", interrupted: "Odgovor je prekinut", copy: "Kopiraj", copied: "Kopirano!", download: "Preuzmi" },
-    hr: { placeholder: "Unesite poruku…", send: "Pošalji", newChat: "Novi razgovor", stop: "Prekini", interrupted: "Odgovor je prekinut", copy: "Kopiraj", copied: "Kopirano!", download: "Preuzmi" },
-    bs: { placeholder: "Unesite poruku…", send: "Pošalji", newChat: "Novi razgovor", stop: "Prekini", interrupted: "Odgovor je prekinut", copy: "Kopiraj", copied: "Kopirano!", download: "Preuzmi" },
-    de: { placeholder: "Nachricht eingeben…", send: "Senden", newChat: "Neuer Chat", stop: "Stoppen", interrupted: "Antwort unterbrochen", copy: "Kopieren", copied: "Kopiert!", download: "Herunterladen" },
-    fr: { placeholder: "Écrivez un message…", send: "Envoyer", newChat: "Nouveau chat", stop: "Arrêter", interrupted: "Réponse interrompue", copy: "Copier", copied: "Copié !", download: "Télécharger" },
-    es: { placeholder: "Escribe un mensaje…", send: "Enviar", newChat: "Nueva conversación", stop: "Detener", interrupted: "Respuesta interrumpida" },
-    it: { placeholder: "Scrivi un messaggio…", send: "Invia", newChat: "Nuova chat", stop: "Interrompi", interrupted: "Risposta interrotta" },
-    pt: { placeholder: "Escreva uma mensagem…", send: "Enviar", newChat: "Nova conversa", stop: "Parar", interrupted: "Resposta interrompida" },
-    nl: { placeholder: "Typ een bericht…", send: "Versturen", newChat: "Nieuw gesprek", stop: "Stoppen", interrupted: "Reactie onderbroken" },
-    pl: { placeholder: "Wpisz wiadomość…", send: "Wyślij", newChat: "Nowy czat", stop: "Zatrzymaj", interrupted: "Odpowiedź przerwana" },
-    ru: { placeholder: "Введите сообщение…", send: "Отправить", newChat: "Новый чат", stop: "Остановить", interrupted: "Ответ прерван" },
-    zh: { placeholder: "输入消息…", send: "发送", newChat: "新对话", stop: "停止", interrupted: "回答被中断" },
-    ja: { placeholder: "メッセージを入力…", send: "送信", newChat: "新しいチャット", stop: "停止", interrupted: "回答が中断されました" },
-    ar: { placeholder: "اكتب رسالة…", send: "إرسال", newChat: "محادثة جديدة", stop: "إيقاف", interrupted: "تم مقاطعة الإجابة" },
-    he: { placeholder: "כתוב הודעה…", send: "שלח", newChat: "שיחה חדשה", stop: "עצור", interrupted: "התשובה הופסקה" },
-    tr: { placeholder: "Mesaj yazın…", send: "Gönder", newChat: "Yeni Sohbet", stop: "Durdur", interrupted: "Yanıt yarıda kesildi" },
+    en: { placeholder: "Type a message…", send: "Send", newChat: "New Chat", stop: "Stop", interrupted: "Response interrupted", copy: "Copy", copied: "Copied!", download: "Download", access_denied: "You don't have permission to use this agent. Please contact the administrator.", error_occurred: "Something went wrong. Please try again.", endChat: "End chat", endConfirm: "End this conversation? Your chat will be cleared.", endYes: "Yes, end", endNo: "No" },
+    sr: { placeholder: "Unesite poruku…", send: "Pošalji", newChat: "Nov razgovor", stop: "Prekini", interrupted: "Odgovor je prekinut", copy: "Kopiraj", copied: "Kopirano!", download: "Preuzmi", access_denied: "Nemate pristup ovom agentu. Molimo kontaktirajte administratora.", error_occurred: "Nešto nije u redu. Molimo pokušajte ponovo.", endChat: "Završi", endConfirm: "Završiti razgovor? Vaš chat će biti obrisan.", endYes: "Da, završi", endNo: "Ne" },
+    hr: { placeholder: "Unesite poruku…", send: "Pošalji", newChat: "Novi razgovor", stop: "Prekini", interrupted: "Odgovor je prekinut", copy: "Kopiraj", copied: "Kopirano!", download: "Preuzmi", access_denied: "Nemate pristup ovom agentu. Kontaktirajte administratora.", error_occurred: "Nešto je pošlo po krivu. Pokušajte ponovo." },
+    bs: { placeholder: "Unesite poruku…", send: "Pošalji", newChat: "Novi razgovor", stop: "Prekini", interrupted: "Odgovor je prekinut", copy: "Kopiraj", copied: "Kopirano!", download: "Preuzmi", access_denied: "Nemate pristup ovom agentu. Kontaktirajte administratora.", error_occurred: "Nešto nije u redu. Pokušajte ponovo." },
+    de: { placeholder: "Nachricht eingeben…", send: "Senden", newChat: "Neuer Chat", stop: "Stoppen", interrupted: "Antwort unterbrochen", copy: "Kopieren", copied: "Kopiert!", download: "Herunterladen", access_denied: "Sie haben keinen Zugriff auf diesen Agenten. Bitte kontaktieren Sie den Administrator.", error_occurred: "Etwas ist schiefgelaufen. Bitte versuchen Sie es erneut." },
+    fr: { placeholder: "Écrivez un message…", send: "Envoyer", newChat: "Nouveau chat", stop: "Arrêter", interrupted: "Réponse interrompue", copy: "Copier", copied: "Copié !", download: "Télécharger", access_denied: "Vous n'avez pas accès à cet agent. Veuillez contacter l'administrateur.", error_occurred: "Une erreur s'est produite. Veuillez réessayer." },
+    es: { placeholder: "Escribe un mensaje…", send: "Enviar", newChat: "Nueva conversación", stop: "Detener", interrupted: "Respuesta interrumpida", access_denied: "No tienes permiso para usar este agente. Contacta al administrador.", error_occurred: "Algo salió mal. Por favor, inténtalo de nuevo." },
+    it: { placeholder: "Scrivi un messaggio…", send: "Invia", newChat: "Nuova chat", stop: "Interrompi", interrupted: "Risposta interrotta", access_denied: "Non hai accesso a questo agente. Contatta l'amministratore.", error_occurred: "Qualcosa è andato storto. Riprova." },
+    pt: { placeholder: "Escreva uma mensagem…", send: "Enviar", newChat: "Nova conversa", stop: "Parar", interrupted: "Resposta interrompida", access_denied: "Você não tem acesso a este agente. Contacte o administrador.", error_occurred: "Algo correu mal. Por favor, tente novamente." },
+    nl: { placeholder: "Typ een bericht…", send: "Versturen", newChat: "Nieuw gesprek", stop: "Stoppen", interrupted: "Reactie onderbroken", access_denied: "U heeft geen toegang tot deze agent. Neem contact op met de beheerder.", error_occurred: "Er is iets misgegaan. Probeer het opnieuw." },
+    pl: { placeholder: "Wpisz wiadomość…", send: "Wyślij", newChat: "Nowy czat", stop: "Zatrzymaj", interrupted: "Odpowiedź przerwana", access_denied: "Nie masz dostępu do tego agenta. Skontaktuj się z administratorem.", error_occurred: "Coś poszło nie tak. Spróbuj ponownie." },
+    ru: { placeholder: "Введите сообщение…", send: "Отправить", newChat: "Новый чат", stop: "Остановить", interrupted: "Ответ прерван", access_denied: "У вас нет доступа к этому агенту. Свяжитесь с администратором.", error_occurred: "Что-то пошло не так. Пожалуйста, попробуйте снова." },
+    zh: { placeholder: "输入消息…", send: "发送", newChat: "新对话", stop: "停止", interrupted: "回答被中断", access_denied: "您没有访问此代理的权限。请联系管理员。", error_occurred: "出现了问题。请重试。" },
+    ja: { placeholder: "メッセージを入力…", send: "送信", newChat: "新しいチャット", stop: "停止", interrupted: "回答が中断されました", access_denied: "このエージェントへのアクセス権がありません。管理者にお問い合わせください。", error_occurred: "エラーが発生しました。もう一度お試しください。" },
+    ar: { placeholder: "اكتب رسالة…", send: "إرسال", newChat: "محادثة جديدة", stop: "إيقاف", interrupted: "تم مقاطعة الإجابة", access_denied: "ليس لديك صلاحية الوصول إلى هذا الوكيل. يرجى التواصل مع المسؤول.", error_occurred: "حدث خطأ ما. يرجى المحاولة مرة أخرى." },
+    he: { placeholder: "כתוב הודעה…", send: "שלח", newChat: "שיחה חדשה", stop: "עצור", interrupted: "התשובה הופסקה", access_denied: "אין לך הרשאה לשימוש בסוכן זה. אנא פנה למנהל המערכת.", error_occurred: "אירעה שגיאה. אנא נסה שוב." },
+    tr: { placeholder: "Mesaj yazın…", send: "Gönder", newChat: "Yeni Sohbet", stop: "Durdur", interrupted: "Yanıt yarıda kesildi", access_denied: "Bu ajana erişim izniniz yok. Lütfen yönetici ile iletişime geçin.", error_occurred: "Bir şeyler ters gitti. Lütfen tekrar deneyin." },
   };
   const RTL_LANGS = ["ar", "he", "fa", "ur"];
 
@@ -90,7 +94,10 @@
     var s = UI_STRINGS[lang] || UI_STRINGS["en"];
     if (inputEl) inputEl.placeholder = s.placeholder;
     _updateSendBtnState();
-    if (newChatBtn) newChatBtn.textContent = s.newChat;
+    if (newChatBtn) newChatBtn.textContent = s.endChat || UI_STRINGS["en"].endChat;
+    if (endConfirmText) endConfirmText.textContent = s.endConfirm || UI_STRINGS["en"].endConfirm;
+    if (endConfirmYes) endConfirmYes.textContent = s.endYes || UI_STRINGS["en"].endYes;
+    if (endConfirmNo) endConfirmNo.textContent = s.endNo || UI_STRINGS["en"].endNo;
     // RTL support
     var dir = RTL_LANGS.indexOf(lang) !== -1 ? "rtl" : "ltr";
     document.documentElement.setAttribute("dir", dir);
@@ -102,11 +109,21 @@
   const sendBtn = document.getElementById("widgetSendBtn");
   const typingEl = document.getElementById("widgetTyping");
   const newChatBtn = document.getElementById("widgetNewChat");
+  const endConfirm = document.getElementById("widgetEndConfirm");
+  const endConfirmText = document.getElementById("widgetEndConfirmText");
+  const endConfirmYes = document.getElementById("widgetEndConfirmYes");
+  const endConfirmNo = document.getElementById("widgetEndConfirmNo");
   const greetingEl = document.getElementById("widgetGreeting");
   const headerTitle = document.getElementById("widgetHeaderTitle");
   const attachBtn = document.getElementById("widgetAttachBtn");
   const fileInput = document.getElementById("widgetFileInput");
   const imagePreview = document.getElementById("widgetImagePreview");
+
+  // Re-apply lock from previous session if the widget was locked before iframe reload.
+  if (_locked) {
+    if (inputEl) { inputEl.disabled = true; inputEl.placeholder = "Test finished"; }
+    if (sendBtn) sendBtn.disabled = true;
+  }
 
   // Delegated handler for card actions (book a slot, add to cart, download .ics, ...).
   if (messagesEl) {
@@ -168,7 +185,16 @@
         if (!sending) _send(); 
       }
     });
-    newChatBtn.addEventListener("click", _newChat);
+    newChatBtn.addEventListener("click", function () {
+      if (endConfirm) endConfirm.style.display = "flex";
+    });
+    if (endConfirmNo) endConfirmNo.addEventListener("click", function () {
+      if (endConfirm) endConfirm.style.display = "none";
+    });
+    if (endConfirmYes) endConfirmYes.addEventListener("click", function () {
+      if (endConfirm) endConfirm.style.display = "none";
+      _endConversation();
+    });
     attachBtn.addEventListener("click", function () { fileInput.click(); });
     fileInput.addEventListener("change", _handleFileSelect);
 
@@ -249,6 +275,7 @@
       }
       if (e.data.type === "mate-lock-input") {
         _locked = true;
+        localStorage.setItem(_LOCK_KEY, "1");
         if (inputEl) {
           inputEl.disabled = true;
           inputEl.placeholder = e.data.message || "Test finished";
@@ -332,9 +359,10 @@
           _saveHistory();
           return;
         }
-        var msg = err.message || "Sorry, something went wrong. Please try again.";
-        msg = msg.replace(/^Error:\s*/i, "");
-        _appendMessage("agent", msg, false, null, "agent");
+        var s = UI_STRINGS[currentLang] || UI_STRINGS["en"];
+        var friendlyMsg = s.error_occurred || UI_STRINGS["en"].error_occurred;
+        if (debugMode && err.message) friendlyMsg += "\n\n`" + err.message.replace(/^Error:\s*/i, "") + "`";
+        _appendMessage("agent", friendlyMsg, false, null, "agent");
         console.error("Widget chat error:", err);
       })
       .finally(function () {
@@ -417,6 +445,21 @@
         if (evt.session_id) {
           sessionId = evt.session_id;
           localStorage.setItem(STORAGE_PREFIX + "_sid", sessionId);
+          if (evt.debug_mode !== undefined) debugMode = !!evt.debug_mode;
+        }
+
+        // --- Handle error events (e.g. RBAC access denied) ---
+        if (evt.error_code) {
+          var s = UI_STRINGS[currentLang] || UI_STRINGS["en"];
+          var errText = evt.error_code === "RBAC_ACCESS_DENIED"
+            ? (s.access_denied || UI_STRINGS["en"].access_denied)
+            : (s.error_occurred || UI_STRINGS["en"].error_occurred);
+          if (debugMode && evt.error_message) errText += "\n\n`" + evt.error_message + "`";
+          _showTyping(false);
+          _ensureBubble();
+          activeAgentText = errText;
+          _updateMessage(activeAgentEl, activeAgentText);
+          return;
         }
 
         var actions = evt.actions || {};
@@ -818,7 +861,9 @@
   }
 
   function _extractCards(text) {
-    var cards = [], ranges = [], re = /\[\[(CARD|APPOINTMENT)\]\]\s*\{/g, m;
+    // Regex handles normal: [[APPOINTMENT]]{"..."} and code-fenced: [[APPOINTMENT]]\n```json\n{...}
+    var cards = [], ranges = [],
+      re = /\[\[(CARD|APPOINTMENT)\]\][ \t]*\n?[ \t]*(?:```(?:json|JSON)?[ \t]*\n?)?\{/g, m;
     while ((m = re.exec(text)) !== null) {
       var braceStart = text.indexOf("{", m.index);
       var end = _balancedEnd(text, braceStart);
@@ -826,8 +871,12 @@
       var data;
       try { data = JSON.parse(text.slice(braceStart, end + 1)); } catch (e) { continue; }
       cards.push(m[1] === "APPOINTMENT" ? _appointmentToCard(data) : data);
-      ranges.push([m.index, end + 1]);
-      re.lastIndex = end + 1;
+      // Extend range to also swallow a closing code fence (```) immediately after the JSON.
+      var endExtended = end + 1;
+      var closingFence = text.slice(end + 1).match(/^[ \t]*\n?[ \t]*```[ \t]*\n?/);
+      if (closingFence) endExtended += closingFence[0].length;
+      ranges.push([m.index, endExtended]);
+      re.lastIndex = endExtended;
     }
     var cleaned = text;
     ranges.sort(function (a, b) { return b[0] - a[0]; }).forEach(function (r) { cleaned = cleaned.slice(0, r[0]) + cleaned.slice(r[1]); });
@@ -959,6 +1008,13 @@
     messagesEl.innerHTML = "";
     if (greetingEl) { greetingEl.style.display = ""; messagesEl.appendChild(greetingEl); }
     messagesEl.appendChild(typingEl);
+  }
+
+  // Deliberate "End conversation": clear the session + history, then ask the launcher to
+  // minimize the panel. Next open starts a fresh conversation.
+  function _endConversation() {
+    _newChat();
+    try { window.parent.postMessage({ type: "mate-close" }, "*"); } catch (_) {}
   }
 
   function _saveHistory() {

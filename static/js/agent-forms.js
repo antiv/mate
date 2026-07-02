@@ -484,13 +484,15 @@ function clearJsonField(prefix, fieldSuffix) {
 }
 
 function resetToolConfig(prefix) {
-    const ids = ['GoogleDrive', 'CvTools', 'ImageTools', 'MemoryBlocks', 'CreateAgent', 'CodeExecutor', 'ImageDataExtraction'];
+    const ids = ['GoogleDrive', 'CvTools', 'ImageTools', 'MemoryBlocks', 'CreateAgent', 'CodeExecutor', 'ImageDataExtraction', 'Shop'];
     ids.forEach(id => {
         const checkbox = document.getElementById(prefix + id);
         if (checkbox) {
             checkbox.checked = false;
         }
     });
+    const shopHint = document.getElementById(prefix + 'ShopHint');
+    if (shopHint) shopHint.style.display = 'none';
 
     const imageModelContainer = document.getElementById(prefix + 'ImageModelContainer');
     if (imageModelContainer) {
@@ -731,6 +733,7 @@ function editAgent(config) {
     document.getElementById('editAgentDisabled').checked = normalizeBoolean(config.disabled);
     document.getElementById('editAgentHardcoded').checked = normalizeBoolean(config.hardcoded);
     document.getElementById('editAgentExposeAsModel').checked = normalizeBoolean(config.expose_as_model);
+    document.getElementById('editAgentDebugMode').checked = normalizeBoolean(config.debug_mode);
     const editProjectSelect = document.getElementById('editAgentProject');
     if (editProjectSelect) {
         const projectIdValue = (config.project_id !== undefined && config.project_id !== null)
@@ -798,9 +801,11 @@ function editAgent(config) {
         const disabledEl = document.getElementById('editAgentDisabled');
         const hardcodedEl = document.getElementById('editAgentHardcoded');
         const exposeAsModelEl = document.getElementById('editAgentExposeAsModel');
+        const debugModeEl = document.getElementById('editAgentDebugMode');
         if (disabledEl) disabledEl.checked = normalizeBoolean(config.disabled);
         if (hardcodedEl) hardcodedEl.checked = normalizeBoolean(config.hardcoded);
         if (exposeAsModelEl) exposeAsModelEl.checked = normalizeBoolean(config.expose_as_model);
+        if (debugModeEl) debugModeEl.checked = normalizeBoolean(config.debug_mode);
     }, 100);
 }
 
@@ -841,6 +846,7 @@ function copyAgent(config) {
     document.getElementById('copyAgentDisabled').checked = normalizeBoolean(config.disabled);
     document.getElementById('copyAgentHardcoded').checked = normalizeBoolean(config.hardcoded);
     document.getElementById('copyAgentExposeAsModel').checked = normalizeBoolean(config.expose_as_model);
+    document.getElementById('copyAgentDebugMode').checked = normalizeBoolean(config.debug_mode);
     const copyProjectSelect = document.getElementById('copyAgentProject');
     if (copyProjectSelect) {
         const projectIdValue = (config.project_id !== undefined && config.project_id !== null)
@@ -1007,6 +1013,38 @@ function handleImportFile() {
     reader.readAsText(file);
 }
 
+function openInstructionConfigModal(prefix) {
+    const modal = document.getElementById(`${prefix}InstructionModal`);
+    if (!modal) return;
+    
+    const textarea = document.getElementById(`${prefix}Instruction`);
+    const currentVal = textarea ? textarea.value : '';
+    
+    modal.classList.remove('hidden');
+    document.body.classList.add('config-modal-open');
+    
+    const editorId = `${prefix}InstructionEditor`;
+    
+    if (!monacoEditors[editorId]) {
+        initMonacoEditor(editorId, currentVal, 'markdown').then(editor => {
+            monacoEditors[editorId] = editor;
+        });
+    } else {
+        setJsonInEditor(monacoEditors[editorId], currentVal);
+    }
+}
+
+function saveInstructionFromEditor(prefix) {
+    const editorId = `${prefix}InstructionEditor`;
+    const textarea = document.getElementById(`${prefix}Instruction`);
+    if (monacoEditors[editorId] && textarea) {
+        const val = monacoEditors[editorId].getValue();
+        textarea.value = val;
+        textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    closeConfigModal(prefix, 'Instruction');
+}
+
 // Make functions available globally for graph editor
 window.editAgent = editAgent;
 window.editAgentById = editAgentById;
@@ -1025,4 +1063,6 @@ window.initializeConfigSummaryHandling = initializeConfigSummaryHandling;
 window.updateConfigSummaries = updateConfigSummaries;
 window.updateMemoryBlocksSectionVisibility = updateMemoryBlocksSectionVisibility;
 window.openMemoryBlocksFromEditModal = openMemoryBlocksFromEditModal;
+window.openInstructionConfigModal = openInstructionConfigModal;
+window.saveInstructionFromEditor = saveInstructionFromEditor;
 

@@ -22,11 +22,13 @@ DEFAULT_LANG = "en"
 SUPPORTED_LANGS = ("en", "sr")
 
 # Seed prices (used until the dashboard saves a pricing config). Ready-to-display strings.
+# These are only defaults — the live base price is configured in the DB (wizard_config 'pricing')
+# and per-partner, editable from the dashboard with no code change.
 _DEFAULT_PRICES = {
-    "tier1": {"EUR": "€49", "RSD": "5.900 RSD"},
-    "tier2": {"EUR": "€99", "RSD": "11.900 RSD"},
-    "tier3": {"EUR": "€149", "RSD": "17.900 RSD"},
-    "tier4": {"EUR": "€299", "RSD": "35.000 RSD"},
+    "tier1": {"EUR": "€50", "RSD": "5.900 RSD"},
+    "tier2": {"EUR": "€125", "RSD": "14.900 RSD"},
+    "tier3": {"EUR": "€255", "RSD": "29.900 RSD"},
+    "tier4": {"EUR": "€300", "RSD": "35.000 RSD"},
 }
 _SEED_DEFAULT_CURRENCY = os.getenv("WIZARD_CURRENCY", "EUR").strip().upper()
 
@@ -73,20 +75,24 @@ WIZARD_TIERS = [
         "i18n": {
             "en": {
                 "label": "AI Support",
-                "description": "Answers your customers' questions 24/7. The agent automatically reads your website and learns everything about your business.",
+                "description": "Set up a chatbot in 1 minute by entering your link. It learns from your site and answers your customers' questions 24/7 with accurate data.",
                 "features": [
-                    "Answers questions 24/7 from your website content",
-                    "Custom tone and instructions",
-                    "Embeddable chat widget — no coding needed",
+                    "Up to 1,500 conversations / month (a conversation = a session up to 24h or 15 interactions)",
+                    "Training: up to 15 website pages (crawling) or 5 PDF/Word documents",
+                    "Brand-colored chat widget — no coding needed",
+                    "Automatic daily knowledge-base refresh (crawling)",
+                    "Answers 24/7 from your website content",
                 ],
             },
             "sr": {
                 "label": "AI podrška",
-                "description": "Odgovara na pitanja kupaca 24/7. Agent automatski čita vaš sajt i uči sve o vašem poslovanju.",
+                "description": "Postavite chat bota za 1 minut unošenjem vašeg linka. Sam uči sa vašeg sajta i odgovara na pitanja kupaca 24/7 tačnim podacima.",
                 "features": [
-                    "Odgovara na pitanja 24/7 sa sadržaja vašeg sajta",
-                    "Prilagođen ton i instrukcije",
-                    "Chat widget za ugradnju — bez programiranja",
+                    "Do 1.500 razgovora mesečno (razgovor = sesija do 24h ili 15 interakcija)",
+                    "Trening: do 15 stranica sajta (crawling) ili 5 PDF/Word dokumenata",
+                    "Chat widget u bojama brenda — bez programiranja",
+                    "Automatsko dnevno ažuriranje baze znanja (crawling)",
+                    "Odgovara 24/7 sa sadržaja vašeg sajta",
                 ],
             },
         },
@@ -98,20 +104,24 @@ WIZARD_TIERS = [
         "i18n": {
             "en": {
                 "label": "Support + Scheduling",
-                "description": "Everything in AI Support, plus bookings and appointment scheduling directly through chat, synced with your calendar.",
+                "description": "Turns site visitors into clients: the agent finds free slots in your calendar and books appointments 24/7 — directly in chat.",
                 "features": [
                     "Everything in AI Support",
-                    "Checks availability and books appointments",
+                    "Up to 3,000 conversations / month, up to 3 calendars",
+                    "Books appointments via interactive [[APPOINTMENT]] cards in chat",
                     "Synced with Google Calendar",
+                    ".ics file in chat + email/calendar invite confirmation",
                 ],
             },
             "sr": {
                 "label": "Podrška + zakazivanje",
-                "description": "Sve iz AI podrške + zakazivanje termina direktno kroz chat, sinhronizovano sa vašim kalendarom.",
+                "description": "Pretvara posetioce sajta u klijente: agent pronalazi slobodne termine u kalendaru i zakazuje sastanke 24/7 — direktno u četu.",
                 "features": [
                     "Sve iz AI podrške",
-                    "Proverava slobodne termine i zakazuje",
+                    "Do 3.000 razgovora mesečno, do 3 kalendara",
+                    "Zakazivanje kroz interaktivne [[APPOINTMENT]] kartice u četu",
                     "Sinhronizacija sa Google kalendarom",
+                    ".ics fajl u četu + potvrda mejlom / kalendarska pozivnica",
                 ],
             },
         },
@@ -123,20 +133,24 @@ WIZARD_TIERS = [
         "i18n": {
             "en": {
                 "label": "AI Sales Agent",
-                "description": "Recommends products, adds to cart and guides customers through checkout 24/7. Connects directly to your online store.",
+                "description": "Your best online seller: recommends products based on the customer's needs and fills the cart directly in chat, 24/7.",
                 "features": [
-                    "Recommends and adds products to cart",
-                    "Creates orders and checkout links",
-                    "Connects to your store (Shopify and others)",
+                    "Everything in Support + Scheduling",
+                    "Up to 5,000 conversations / month, up to 1,000 catalog items",
+                    "[[CARD]] rich cards — product image, price and 'Add to cart'",
+                    "Real-time cart and order creation in chat",
+                    "Connects to your store (Shopify, WooCommerce, custom)",
                 ],
             },
             "sr": {
                 "label": "AI prodavac",
-                "description": "Preporučuje proizvode, dodaje u korpu i vodi kupce kroz kupovinu 24/7. Direktno se povezuje sa vašim webshopom.",
+                "description": "Vaš najbolji online prodavac: preporučuje artikle na osnovu želja kupca i puni korpu direktno u četu, 24/7.",
                 "features": [
-                    "Preporučuje proizvode i dodaje u korpu",
-                    "Pravi porudžbine i linkove za plaćanje",
-                    "Povezuje se sa vašom prodavnicom (Shopify i drugi)",
+                    "Sve iz Podrške + zakazivanja",
+                    "Do 5.000 razgovora mesečno, do 1.000 artikala u katalogu",
+                    "[[CARD]] interaktivne kartice — slika, cena i „Dodaj u korpu“",
+                    "Korpa u realnom vremenu i kreiranje porudžbine u četu",
+                    "Povezivanje sa prodavnicom (Shopify, WooCommerce, custom)",
                 ],
             },
         },
@@ -148,22 +162,26 @@ WIZARD_TIERS = [
         "i18n": {
             "en": {
                 "label": "Enterprise",
-                "description": "Fully custom agent or team of agents for your business process. Consultation + implementation by our team.",
-                "price": "from €299",
+                "description": "Fully custom team of agents for your business process. One-time setup (≈€500) + monthly retainer; consultation and implementation by our team.",
+                "price": "from €300",
                 "features": [
-                    "Designed to your exact workflow",
-                    "Multiple connected tools and systems",
-                    "Full setup and onboarding by our team",
+                    "Complex multi-agent trees (support, pricing, security, logistics)",
+                    "Advanced guardrails & safety (PII masking, prompt-injection protection)",
+                    "Custom internal MCP servers (ERP, CRM, SAP)",
+                    "MATE Eval Framework (prompt regression testing before go-live)",
+                    "BYOK (bring your own API key) or fully metered billing",
                 ],
             },
             "sr": {
                 "label": "Enterprise",
-                "description": "Potpuno prilagođen agent ili tim agenata za vaš poslovni proces. Konsultacija + implementacija od strane našeg tima.",
+                "description": "Potpuno prilagođen tim agenata za vaš poslovni proces. Jednokratni setup (≈59.000 RSD) + mesečni retainer; konsultacija i implementacija od strane našeg tima.",
                 "price": "od 35.000 RSD",
                 "features": [
-                    "Napravljen za vaš tačan tok rada",
-                    "Više povezanih alata i sistema",
-                    "Kompletno podešavanje i onboarding od strane tima",
+                    "Kompleksna stabla agenata (podrška, cene, bezbednost, logistika)",
+                    "Napredni guardrails i bezbednost (PII maskiranje, zaštita od prompt injection-a)",
+                    "Custom interni MCP serveri (ERP, CRM, SAP)",
+                    "MATE Eval Framework (regresiono testiranje promptova pre puštanja u rad)",
+                    "BYOK (sopstveni API ključ) ili metered billing",
                 ],
             },
         },

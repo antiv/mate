@@ -152,8 +152,13 @@
       }
     });
 
-    // Start with the first preset
-    apply(PRESETS[0].cfg);
+    // On page load: resume existing session (if any) so the trial limit is preserved
+    // across page refreshes. If there is no saved session, apply the first preset (fresh start).
+    if (localStorage.getItem("mate_wiz_ls_token")) {
+      apply({ lang: "sr", currency: "RSD" });
+    } else {
+      apply(PRESETS[0].cfg);
+    }
   </script>
 </body>
 </html>

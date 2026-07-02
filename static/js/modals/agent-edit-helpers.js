@@ -137,6 +137,12 @@ function populateEditModalOtherConfiguration(row) {
     if (exposeAsModelEl) {
         exposeAsModelEl.checked = row.dataset.exposeAsModel === 'true';
     }
+
+    // Set debug mode checkbox
+    const debugModeEl = document.getElementById('editAgentDebugMode');
+    if (debugModeEl) {
+        debugModeEl.checked = row.dataset.debugMode === 'true';
+    }
 }
 
 function setupPanelEventListeners() {

@@ -13,13 +13,13 @@ let monacoEditors = {};
 /**
  * Initialize Monaco Editor
  */
-function initMonacoEditor(containerId, initialValue = '') {
+function initMonacoEditor(containerId, initialValue = '', language = 'json') {
     return new Promise((resolve) => {
         require.config({ paths: { 'vs': 'https://cdn.jsdelivr.net/npm/monaco-editor@0.44.0/min/vs' } });
         require(['vs/editor/editor.main'], function () {
             const editor = monaco.editor.create(document.getElementById(containerId), {
                 value: initialValue,
-                language: 'json',
+                language: language,
                 theme: document.documentElement.classList.contains('dark') ? 'vs-dark' : 'vs',
                 automaticLayout: true,
                 minimap: { enabled: false },
@@ -42,12 +42,14 @@ function initMonacoEditor(containerId, initialValue = '') {
                 lineHeight: 20
             });
 
-            // Add JSON validation
-            monaco.languages.json.jsonDefaults.setDiagnosticsOptions({
-                validate: true,
-                allowComments: false,
-                schemas: []
-            });
+            // Add JSON validation only for JSON language
+            if (language === 'json') {
+                monaco.languages.json.jsonDefaults.setDiagnosticsOptions({
+                    validate: true,
+                    allowComments: false,
+                    schemas: []
+                });
+            }
 
             resolve(editor);
         });
@@ -73,7 +75,7 @@ function setJsonInEditor(editor, value) {
 /**
  * Toggle between textarea and Monaco editor
  */
-function toggleJsonEditor(textareaId, editorId) {
+function toggleJsonEditor(textareaId, editorId, language = 'json') {
     const textarea = document.getElementById(textareaId);
     const editorContainer = document.getElementById(editorId);
 
@@ -83,7 +85,7 @@ function toggleJsonEditor(textareaId, editorId) {
         editorContainer.style.display = 'block';
 
         if (!monacoEditors[editorId]) {
-            initMonacoEditor(editorId, textarea.value).then(editor => {
+            initMonacoEditor(editorId, textarea.value, language).then(editor => {
                 monacoEditors[editorId] = editor;
             });
         }
@@ -966,18 +968,21 @@ let instructionModalTargetId = '';
 function initializeInstructionFieldModal() {
     initializeInstructionModalHandlers();
 
-    const editInstructionField = document.getElementById('editAgentInstruction');
-    if (editInstructionField && !editInstructionField.dataset.instructionModalAttached) {
-        editInstructionField.readOnly = true;
-        editInstructionField.style.cursor = 'pointer';
-        editInstructionField.title = 'Click to edit instruction';
-        editInstructionField.addEventListener('click', (event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            openInstructionModal(editInstructionField.id);
-        });
-        editInstructionField.dataset.instructionModalAttached = 'true';
-    }
+    const fieldIds = ['agentInstruction', 'editAgentInstruction', 'copyAgentInstruction'];
+    fieldIds.forEach(id => {
+        const field = document.getElementById(id);
+        if (field && !field.dataset.instructionModalAttached) {
+            field.readOnly = true;
+            field.style.cursor = 'pointer';
+            field.title = 'Click to edit instruction';
+            field.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                openInstructionModal(id);
+            });
+            field.dataset.instructionModalAttached = 'true';
+        }
+    });
 }
 
 function initializeInstructionModalHandlers() {
@@ -987,10 +992,44 @@ function initializeInstructionModalHandlers() {
     }
 
     const textarea = document.getElementById('editInstructionModalTextarea');
+    const monacoContainer = document.getElementById('editInstructionModalMonacoContainer');
+    const toggle = document.getElementById('editInstructionMarkdownToggle');
     const saveBtn = document.getElementById('editInstructionModalSaveBtn');
     const cancelBtn = document.getElementById('editInstructionModalCancelBtn');
     const closeBtn = document.getElementById('editInstructionModalCloseBtn');
     const backdrop = document.getElementById('editInstructionModalBackdrop');
+
+    if (toggle) {
+        toggle.addEventListener('change', () => {
+            const editorId = 'editInstructionModalMonaco';
+            if (toggle.checked) {
+                // Switch to Monaco Markdown Editor
+                const currentText = textarea.value || '';
+                textarea.style.display = 'none';
+                monacoContainer.style.display = 'block';
+
+                if (!monacoEditors[editorId]) {
+                    initMonacoEditor(editorId, currentText, 'markdown').then(editor => {
+                        monacoEditors[editorId] = editor;
+                        editor.focus();
+                    });
+                } else {
+                    setJsonInEditor(monacoEditors[editorId], currentText);
+                    setTimeout(() => {
+                        monacoEditors[editorId].focus();
+                    }, 50);
+                }
+            } else {
+                // Switch to plain Textarea
+                if (monacoEditors[editorId]) {
+                    textarea.value = monacoEditors[editorId].getValue() || '';
+                }
+                monacoContainer.style.display = 'none';
+                textarea.style.display = 'block';
+                textarea.focus();
+            }
+        });
+    }
 
     if (saveBtn) {
         saveBtn.addEventListener('click', () => closeInstructionModal(true));
@@ -1017,9 +1056,13 @@ function initializeInstructionModalHandlers() {
 }
 
 function openInstructionModal(fieldId) {
+    initializeInstructionModalHandlers();
+
     const field = document.getElementById(fieldId);
     const modal = document.getElementById('editInstructionModal');
     const textarea = document.getElementById('editInstructionModalTextarea');
+    const monacoContainer = document.getElementById('editInstructionModalMonacoContainer');
+    const toggle = document.getElementById('editInstructionMarkdownToggle');
 
     if (!field || !modal || !textarea) {
         return;
@@ -1027,6 +1070,18 @@ function openInstructionModal(fieldId) {
 
     instructionModalTargetId = fieldId;
     textarea.value = field.value || '';
+
+    // Reset toggle to false (plain textarea mode)
+    if (toggle) {
+        toggle.checked = false;
+    }
+
+    // Reset elements visibility
+    textarea.style.display = 'block';
+    if (monacoContainer) {
+        monacoContainer.style.display = 'none';
+    }
+
     modal.classList.remove('hidden');
 
     setTimeout(() => {
@@ -1039,16 +1094,28 @@ function closeInstructionModal(saveChanges) {
     const modal = document.getElementById('editInstructionModal');
     const textarea = document.getElementById('editInstructionModalTextarea');
     const targetField = document.getElementById(instructionModalTargetId);
+    const toggle = document.getElementById('editInstructionMarkdownToggle');
+    const editorId = 'editInstructionModalMonaco';
 
     if (!modal || !textarea) {
         return;
     }
 
     if (saveChanges && targetField) {
-        const newValue = textarea.value || '';
+        let newValue = '';
+        if (toggle && toggle.checked && monacoEditors[editorId]) {
+            newValue = monacoEditors[editorId].getValue() || '';
+        } else {
+            newValue = textarea.value || '';
+        }
+
         if (targetField.value !== newValue) {
             targetField.value = newValue;
             targetField.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+
+        if (window.onInstructionModalSave) {
+            window.onInstructionModalSave(instructionModalTargetId, newValue);
         }
     }
 
@@ -1420,6 +1487,7 @@ function createAgentRow(config, depth, parentName, hasChildren, isHighlighted, r
     row.dataset.disabled = config.disabled ? 'true' : 'false';
     row.dataset.hardcoded = config.hardcoded ? 'true' : 'false';
     row.dataset.exposeAsModel = config.expose_as_model ? 'true' : 'false';
+    row.dataset.debugMode = config.debug_mode ? 'true' : 'false';
     row.dataset.projectId = config.project_id !== undefined && config.project_id !== null ? String(config.project_id) : '';
     row.dataset.projectName = (config.project && config.project.name) || '';
     const parents = getParentList(config);
@@ -2006,4 +2074,6 @@ window.cancelChatUserSelection = cancelChatUserSelection;
 window.initializeChatUserSelectionHandlers = initializeChatUserSelectionHandlers;
 window.launchAgentChat = launchAgentChat;
 window.showAgentChatPanel = showAgentChatPanel;
+window.openInstructionModal = openInstructionModal;
+window.closeInstructionModal = closeInstructionModal;
 

@@ -210,6 +210,29 @@ Use `data-button-color` to match your site's branding:
 
 ---
 
+## Error Handling
+
+By default, chat errors show the visitor a friendly generic message rather than the raw backend
+error:
+
+- **General errors** (model/tool failures, timeouts): "Something went wrong. Please try again."
+- **RBAC access denied**: if [RBAC rules](../shared/callbacks/rbac_callback.py) block the request,
+  the widget shows "You don't have permission to use this agent. Please contact the
+  administrator." instead of a raw 403. Both messages are localized (see `UI_STRINGS` in
+  `static/js/widget/chat.js`).
+
+Enable **Debug Mode** on the agent (Dashboard → Agent Management → edit agent → Debug Mode
+checkbox) to append the raw backend error message to the chat bubble — useful while testing an
+integration; leave it off in production so visitors don't see internal error text.
+
+### Ending a Conversation
+
+The widget header button doubles as "New Chat" / "End chat": clicking it asks for confirmation,
+then clears the chat history and tells the parent page to minimize the widget via
+`postMessage({type: "mate-close"})`, handled automatically by `mate-widget.js`.
+
+---
+
 ## Chat Widget API Endpoints
 
 These endpoints are used internally by the widget. They authenticate via the `X-Widget-Key` header or `key` query parameter.

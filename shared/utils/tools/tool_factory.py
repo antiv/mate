@@ -31,7 +31,8 @@ class ToolFactory:
             'code_executor': self._create_code_executor_tools,
             'image_data_extraction': self._create_image_data_extraction_tools,
             'browser': self._create_browser_tools,
-            'google_calendar': self._create_google_calendar_tools
+            'google_calendar': self._create_google_calendar_tools,
+            'shop': self._create_shop_tools
         }
     
     def create_tools(self, config: Dict[str, Any]) -> List[Any]:
@@ -197,6 +198,11 @@ class ToolFactory:
         """Create native browser automation tools."""
         from .browser_tools import create_browser_tools_from_config
         return create_browser_tools_from_config(config)
+
+    def _create_shop_tools(self, config: Dict[str, Any]) -> List[Any]:
+        """Create native e-commerce shop tools (multi-user, session-scoped cart)."""
+        from .shop_tools import create_shop_tools_from_config
+        return create_shop_tools_from_config(config)
     
     
     def get_available_tool_types(self) -> List[str]:

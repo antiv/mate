@@ -206,6 +206,7 @@ class AgentConfig(Base):
     disabled = Column(Boolean, nullable=False, default=False)  # Flag to disable agent
     hardcoded = Column(Boolean, nullable=False, default=False)  # Flag to mark agent as hardcoded (skip folder creation)
     expose_as_model = Column(Boolean, nullable=False, default=False)  # Flag to expose agent as model to API
+    debug_mode = Column(Boolean, nullable=False, default=False)  # Show detailed error messages in chat
     project_id = Column(Integer, ForeignKey('projects.id'), nullable=False, default=1)
     
     project = relationship("Project", back_populates="agents")
@@ -298,6 +299,7 @@ class AgentConfig(Base):
             'disabled': self.disabled,
             'hardcoded': self.hardcoded,
             'expose_as_model': self.expose_as_model,
+            'debug_mode': self.debug_mode,
             'project_id': self.project_id,
             'project': self.project.to_dict() if self.project else None
         }
@@ -779,6 +781,54 @@ class WizardPartner(Base):
             'default_lang': self.default_lang,
             'pricing': self.get_pricing(),
             'is_active': self.is_active,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class ShopOrder(Base):
+    """An order placed through the e-commerce shop tools (shop_tools / shop_service).
+
+    Persisted only for real deployments (those that set a partner_key); wizard trial
+    widgets do not configure a partner key, so their test orders are not stored.
+    """
+
+    __tablename__ = 'shop_orders'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    order_id = Column(String(32), nullable=False, index=True)  # human-facing code, e.g. ORD-1A2B3C4D
+    partner_key = Column(String(100), nullable=True, index=True)  # which merchant/site this order belongs to
+    shop_name = Column(String(255), nullable=True)
+    customer_name = Column(String(255), nullable=True)
+    customer_email = Column(String(320), nullable=True)
+    items = Column(Text, nullable=True)  # JSON array of {id,name,price,quantity,line_total}
+    currency = Column(String(10), nullable=True)
+    total = Column(Float, nullable=True)
+    note = Column(Text, nullable=True)
+    status = Column(String(30), nullable=False, default='new')  # new|contacted|fulfilled|cancelled
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+
+    def get_items(self) -> list:
+        try:
+            return json.loads(self.items) if self.items else []
+        except json.JSONDecodeError:
+            return []
+
+    def set_items(self, data):
+        self.items = json.dumps(data) if data else None
+
+    def to_dict(self) -> dict:
+        return {
+            'id': self.id,
+            'order_id': self.order_id,
+            'partner_key': self.partner_key,
+            'shop_name': self.shop_name,
+            'customer_name': self.customer_name,
+            'customer_email': self.customer_email,
+            'items': self.get_items(),
+            'currency': self.currency,
+            'total': self.total,
+            'note': self.note,
+            'status': self.status,
             'created_at': self.created_at.isoformat() if self.created_at else None,
         }
 

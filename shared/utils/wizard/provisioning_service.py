@@ -9,6 +9,7 @@ Nothing here charges money — provisioning just stands up something the prospec
 import json
 import logging
 import os
+import re
 import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
@@ -37,7 +38,8 @@ class WizardProvisioningService:
         self.db_client = dashboard_server.db_client
         self.template_service = dashboard_server.template_service
 
-    def _build_substitutions(self, tier: str, step_data: Dict[str, Any], analysis: Dict[str, Any] = None) -> Dict[str, str]:
+    def _build_substitutions(self, tier: str, step_data: Dict[str, Any], analysis: Dict[str, Any] = None,
+                             pages: list = None) -> Dict[str, str]:
         """Map collected step inputs to the ``{{KEY}}`` placeholders in the tier template."""
         analysis = analysis or {}
         site_url = (step_data.get("site_url") or "").strip()
@@ -55,6 +57,79 @@ class WizardProvisioningService:
             subs["STORE_DOMAIN"] = (step_data.get("store_domain") or "").strip()
             subs["STORE_TOKEN"] = (step_data.get("store_token") or "").strip()
         return subs
+
+    @staticmethod
+    def _build_catalog(pages: list, services: list, site_url: str) -> list:
+        """Return the demo shop catalog as a list of product dicts.
+
+        Tries (in order):
+          1. LLM product extraction from crawled pages (``analyze_products``)
+          2. Services list → unit items with a placeholder price
+          3. Empty list (shop tools fall back to their generic catalog)
+        """
+        from shared.utils.wizard.site_analyzer import analyze_products
+
+        # 1. LLM extraction from crawled pages
+        if pages:
+            try:
+                products = analyze_products(pages, site_url=site_url)
+                if products:
+                    return products
+            except Exception as exc:
+                logger.warning("analyze_products failed, falling back to services: %s", exc)
+
+        # 2. Services list → simple catalog items
+        if services:
+            items = []
+            for svc in services[:12]:
+                pid = re.sub(r"[^a-z0-9]+", "-", svc.lower()).strip("-")
+                items.append({
+                    "id": pid,
+                    "name": svc,
+                    "price": 0.0,  # price unknown — shop tools will use a placeholder
+                    "category": "service",
+                    "description": svc,
+                })
+            if items:
+                return items
+
+        # 3. No catalog — shop tools use their generic fallback
+        return []
+
+    def _inject_shop_catalog(self, template: dict, catalog: list, analysis: Dict[str, Any]) -> None:
+        """Inject the extracted catalog into the tier3 root agent's tool_config "shop" block.
+
+        Done in Python (not via {{...}} string substitution) so the catalog — which contains
+        arbitrary quotes — can't corrupt the agent's JSON-encoded tool_config. No vendor_email
+        or partner_key is set: the trial must not email or persist orders.
+        """
+        import json as _json
+        meta = template.get("template_meta") or {}
+        root_name = meta.get("root_agent")
+        agents = template.get("agents") or []
+        agent = next((a for a in agents if a.get("name") == root_name), agents[0] if agents else None)
+        if not agent:
+            return
+        tc = agent.get("tool_config")
+        if isinstance(tc, str):
+            try:
+                tc = _json.loads(tc)
+            except json.JSONDecodeError:
+                tc = {}
+        tc = tc or {}
+        shop = tc.get("shop") if isinstance(tc.get("shop"), dict) else {}
+        shop["catalog"] = catalog
+        shop["currency"] = self._currency_from_analysis(analysis)
+        shop_name = (analysis or {}).get("site_name") or ""
+        if shop_name:
+            shop["shop_name"] = shop_name
+        tc["shop"] = shop
+        agent["tool_config"] = _json.dumps(tc, ensure_ascii=False)
+
+    @staticmethod
+    def _currency_from_analysis(analysis: Dict[str, Any]) -> str:
+        """Trial catalog currency — default EUR; overridable via env for localized demos."""
+        return (analysis or {}).get("currency") or os.getenv("WIZARD_SHOP_CURRENCY", "EUR")
 
     @staticmethod
     def _format_services_block(tier: str, services: list) -> str:
@@ -93,7 +168,18 @@ class WizardProvisioningService:
         if not template:
             return {"error": f"Template not found for tier '{tier}': {template_id}"}
 
-        substitutions = self._build_substitutions(tier, step_data, analysis)
+        substitutions = self._build_substitutions(tier, step_data, analysis, pages=pages)
+
+        # Tier 3: inject the extracted product catalog into the shop tool_config (in Python, to
+        # avoid corrupting the JSON-encoded tool_config via string substitution).
+        if tier == "tier3":
+            catalog = self._build_catalog(
+                pages=pages or [],
+                services=(analysis or {}).get("services") or [],
+                site_url=(step_data.get("site_url") or "").strip(),
+            )
+            self._inject_shop_catalog(template, catalog, analysis)
+
         project_name = f"trial_{tier}_{secrets.token_hex(4)}"
 
         result = self.dashboard._import_template(

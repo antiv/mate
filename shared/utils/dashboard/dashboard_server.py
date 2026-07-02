@@ -21,6 +21,29 @@ from shared.utils import audit_service
 logger = logging.getLogger(__name__)
 
 
+def sanitize_agent_text(text: Optional[str]) -> Optional[str]:
+    """
+    Sanitizes agent descriptions and instructions by:
+    1. Cleaning double/excessive backslash escapes before single and double quotes.
+    2. Normalizing Unicode characters (arrows, em-dashes, curly quotes) to prevent DB encoding issues.
+    """
+    if not text:
+        return text
+    import re
+    # 1. Clean escaped single and double quotes
+    text = re.sub(r'\\+\'', "'", text)
+    text = re.sub(r'\\+"', '"', text)
+    # 2. Normalize common UTF-8 punctuation that can cause database encoding issues
+    text = text.replace('→', '->')
+    text = text.replace('←', '<-')
+    text = text.replace('—', '-')
+    text = text.replace('–', '-')
+    text = text.replace('…', '...')
+    text = text.replace('‘', "'").replace('’', "'")
+    text = text.replace('“', '"').replace('”', '"')
+    return text
+
+
 class DashboardServer:
     """Dashboard Server with basic endpoint registration"""
     
@@ -881,6 +904,10 @@ class DashboardServer:
             import json
             # Convert list fields to JSON strings for database storage
             processed_data = config_data.copy()
+            if 'description' in processed_data:
+                processed_data['description'] = sanitize_agent_text(processed_data['description'])
+            if 'instruction' in processed_data:
+                processed_data['instruction'] = sanitize_agent_text(processed_data['instruction'])
             if 'parent_agents' in processed_data and isinstance(processed_data['parent_agents'], list):
                 processed_data['parent_agents'] = json.dumps(processed_data['parent_agents']) if processed_data['parent_agents'] else None
             if 'allowed_for_roles' in processed_data and isinstance(processed_data['allowed_for_roles'], list):
@@ -949,6 +976,8 @@ class DashboardServer:
                             except (TypeError, ValueError):
                                 pass
                         else:
+                            if key in ['description', 'instruction']:
+                                value = sanitize_agent_text(value)
                             setattr(config, key, value)
 
                 session.flush()
@@ -1387,6 +1416,8 @@ class DashboardServer:
                                     except (TypeError, ValueError):
                                         setattr(existing_agent, key, 1)
                                 else:
+                                    if key in ["description", "instruction"]:
+                                        value = sanitize_agent_text(value)
                                     setattr(existing_agent, key, value)
                         imported_count += 1
                     else:
@@ -1398,8 +1429,8 @@ class DashboardServer:
                             name=agent_data["name"],
                             type=agent_data["type"],
                             model_name=agent_data.get("model_name"),
-                            description=agent_data.get("description"),
-                            instruction=agent_data.get("instruction"),
+                            description=sanitize_agent_text(agent_data.get("description")),
+                            instruction=sanitize_agent_text(agent_data.get("instruction")),
                             mcp_servers_config=agent_data.get("mcp_servers_config"),
                             parent_agents=parent_agents_json,
                             allowed_for_roles=agent_data.get("allowed_for_roles"),
@@ -2511,6 +2542,83 @@ class DashboardServer:
             from shared.utils.wizard import partners as partners_svc
             return partners_svc.delete_partner(partner_key)
 
+        @self.app.get("/dashboard/shop-orders", response_class=HTMLResponse, tags=["Dashboard - Pages"])
+        async def dashboard_shop_orders(request: Request, username: str = Depends(self._get_auth_user_dependency)):
+            """Dashboard page listing orders placed through the e-commerce MCP, grouped by partner."""
+            if not self._get_is_admin(request):
+                return RedirectResponse(url="/dashboard/workroom", status_code=302)
+            return self.templates.TemplateResponse(request, "dashboard/wizard_orders.html", {
+                "request": request,
+                "page_title": "Shop Orders",
+                "username": username,
+                "is_admin": True,
+            })
+
+        @self.app.get("/dashboard/api/shop/orders", tags=["Dashboard - Wizard"])
+        async def get_shop_orders(request: Request, username: str = Depends(self._get_auth_user_dependency),
+                                  status: Optional[str] = None, partner: Optional[str] = None,
+                                  search: Optional[str] = None, limit: int = 200):
+            """List shop orders: NEW first, then newest first. Optional status/partner filter + text search."""
+            from shared.utils.models import ShopOrder
+            from sqlalchemy import case, or_
+            session = self.db_client.get_session()
+            try:
+                q = session.query(ShopOrder)
+                if status:
+                    q = q.filter(ShopOrder.status == status)
+                if partner:
+                    q = q.filter(ShopOrder.partner_key == partner)
+                if search:
+                    like = f"%{search.strip()}%"
+                    q = q.filter(or_(
+                        ShopOrder.customer_name.ilike(like),
+                        ShopOrder.customer_email.ilike(like),
+                        ShopOrder.order_id.ilike(like),
+                    ))
+                new_first = case((ShopOrder.status == 'new', 0), else_=1)
+                orders = q.order_by(new_first, ShopOrder.created_at.desc()).limit(limit).all()
+                return {"orders": [o.to_dict() for o in orders]}
+            finally:
+                session.close()
+
+        @self.app.patch("/dashboard/api/shop/orders/{order_pk}", tags=["Dashboard - Wizard"])
+        async def update_shop_order(order_pk: int, request: Request,
+                                    username: str = Depends(self._get_auth_user_dependency)):
+            """Update an order's status (new|contacted|fulfilled|cancelled)."""
+            from shared.utils.models import ShopOrder
+            body = await request.json()
+            new_status = (body.get("status") or "").strip()
+            if new_status not in {"new", "contacted", "fulfilled", "cancelled"}:
+                raise HTTPException(status_code=400, detail="Invalid status")
+            session = self.db_client.get_session()
+            try:
+                order = session.query(ShopOrder).filter(ShopOrder.id == order_pk).first()
+                if not order:
+                    raise HTTPException(status_code=404, detail="Order not found")
+                order.status = new_status
+                session.commit()
+                return {"success": True}
+            finally:
+                session.close()
+
+        @self.app.delete("/dashboard/api/shop/orders/{order_pk}", tags=["Dashboard - Wizard"])
+        async def delete_shop_order(order_pk: int, request: Request,
+                                    username: str = Depends(self._get_auth_user_dependency)):
+            """Delete an order (admin only)."""
+            if not self._get_is_admin(request):
+                raise HTTPException(status_code=403, detail="Admin only")
+            from shared.utils.models import ShopOrder
+            session = self.db_client.get_session()
+            try:
+                order = session.query(ShopOrder).filter(ShopOrder.id == order_pk).first()
+                if not order:
+                    raise HTTPException(status_code=404, detail="Order not found")
+                session.delete(order)
+                session.commit()
+                return {"success": True}
+            finally:
+                session.close()
+
         @self.app.post("/dashboard/api/wizard/leads/{lead_id}/convert", tags=["Dashboard - Wizard"])
         async def convert_wizard_lead(lead_id: int, request: Request,
                                       username: str = Depends(self._get_auth_user_dependency)):
@@ -3447,9 +3555,14 @@ class DashboardServer:
             max_iterations: str = Form(""),
             disabled: bool = Form(False),
             hardcoded: bool = Form(False),
-            expose_as_model: bool = Form(False)
+            expose_as_model: bool = Form(False),
+            debug_mode: bool = Form(False)
         ):
             """Create a new agent configuration."""
+            if not description or not description.strip():
+                raise HTTPException(status_code=400, detail="Description is required")
+            if not instruction or not instruction.strip():
+                raise HTTPException(status_code=400, detail="Instruction is required")
             # Parse parent_agents JSON string to list
             import json
             try:
@@ -3477,7 +3590,8 @@ class DashboardServer:
                 "max_iterations": int(max_iterations) if max_iterations else None,
                 "disabled": disabled,
                 "hardcoded": hardcoded,
-                "expose_as_model": expose_as_model
+                "expose_as_model": expose_as_model,
+                "debug_mode": debug_mode
             }
             success = self._create_agent_config(config_data, changed_by=username)
             if success:
@@ -3508,9 +3622,14 @@ class DashboardServer:
             max_iterations: str = Form(""),
             disabled: bool = Form(False),
             hardcoded: bool = Form(False),
-            expose_as_model: bool = Form(False)
+            expose_as_model: bool = Form(False),
+            debug_mode: bool = Form(False)
         ):
             """Update an agent configuration."""
+            if not description or not description.strip():
+                raise HTTPException(status_code=400, detail="Description is required")
+            if not instruction or not instruction.strip():
+                raise HTTPException(status_code=400, detail="Instruction is required")
             # Parse parent_agents JSON string to list
             import json
             try:
@@ -3538,7 +3657,8 @@ class DashboardServer:
                 "max_iterations": int(max_iterations) if max_iterations else None,
                 "disabled": disabled,
                 "hardcoded": hardcoded,
-                "expose_as_model": expose_as_model
+                "expose_as_model": expose_as_model,
+                "debug_mode": debug_mode
             }
             success = self._update_agent_config(config_id, config_data, changed_by=username)
             if success:

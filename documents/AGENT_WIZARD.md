@@ -130,9 +130,16 @@ Open the **MATE Dashboard → Wizard Leads** (`/dashboard/wizard-leads`, admin o
 |---|---|---|
 | `WIZARD_CONTACT_EMAIL` | `sales@example.com` | Contact address shown on the final wizard screen and returned to the lead |
 | `WIZARD_CURRENCY` | `EUR` | Default price currency when the embed doesn't pass `data-currency` (overridable per-tier in the pricing editor) |
+| `WIZARD_SHOP_CURRENCY` | `EUR` | Fallback currency for the Tier 3 trial shop catalog when site analysis doesn't detect one |
 | `GOOGLE_SERVICE_ACCOUNT_INFO` | — | Service-account JSON used by the Tier 2 Google Calendar tool (shared with the Drive integration) |
 | `WIZARD_DEMO_CALENDAR_ID` | SA `primary` | Calendar id used by Tier 2 **trial** agents (demo free/busy + booking) |
 | `WIZARD_CALENDAR_TIMEZONE` | `Europe/Belgrade` | Timezone for events created by the calendar tool |
+| `WIZARD_TRIAL_TTL_DAYS` | `7` | How long a trial agent lives before cleanup |
+| `WIZARD_TIER3_TRIAL_TTL_DAYS` | `2` | Shorter TTL for Tier 3 (sales) trials |
+| `WIZARD_SESSION_IDLE_HOURS` | `4` | Hours of inactivity after which a provisioned trial is eagerly cleaned up |
+| `WIZARD_TRIAL_MAX_PAGES` | `5` | Max pages crawled per trial provision (separate from `WIZARD_CRAWL_MAX_PAGES`) |
+| `WIZARD_CLEANUP_ENABLED` | `true` | Enable the daily trial cleanup job |
+| `WIZARD_CAPTCHA_PROVIDER` | (unset) | When set, enables the captcha hook on provisioning (pluggable; off by default) |
 
 ### Tier 2 calendar setup
 
@@ -151,22 +158,24 @@ If `demo` is **not** set and no `calendar_id`/`WIZARD_DEMO_CALENDAR_ID` is confi
 
 ### Tier 3 sales setup
 
-The Tier 3 agent shops via an **e-commerce MCP** (`mcp_servers_config`). To test without a real
-store, trials use a **built-in demo shop MCP** ([`shared/utils/mcp/demo_shop_server.py`](../shared/utils/mcp/demo_shop_server.py)) —
-a fake catalog + cart + order, spawned over stdio:
+The Tier 3 agent shops via the native **`shop` tools** ([`shared/utils/tools/shop_tools.py`](../shared/utils/tools/shop_tools.py)),
+enabled and configured through `tool_config`. The cart lives in `tool_context.state`, so it is
+**session-scoped and multi-user safe** — every widget visitor gets their own cart with no shared
+subprocess. During the wizard the catalog is extracted from the site and injected into the config:
 
 ```json
-{"mcpServers": {"demo-shop": {"command": "python", "args": ["-m", "shared.utils.mcp.demo_shop_server"], "timeout": 60}}}
+{"shop": {"catalog": [{"id": "item-1", "name": "Item", "price": 1500, "category": "...", "description": "..."}],
+          "currency": "RSD", "shop_name": "Store",
+          "vendor_email": "orders@store.com", "partner_key": "store-key"}}
 ```
 
 The agent shows products as **product cards** (Add to cart → sends a message back), keeps a cart, and
-**requires explicit confirmation before `place_order`**, then shows an order card. To go live, replace
-the `demo-shop` entry with the customer's real e-commerce MCP (e.g. a Shopify MCP via `npx`) — the
-agent instruction is generic, so only the MCP config changes. (`python` must be on PATH for the demo —
-run MATE from its venv.)
-| `WIZARD_TRIAL_TTL_DAYS` | `7` | How long a trial agent lives before cleanup |
-| `WIZARD_CLEANUP_ENABLED` | `true` | Enable the daily trial cleanup job |
-| `WIZARD_CAPTCHA_PROVIDER` | (unset) | When set, enables the captcha hook on provisioning (pluggable; off by default) |
+**requires explicit confirmation before `place_order`**, then shows an order card. `vendor_email` and
+`partner_key` are optional and independent: set `vendor_email` to email the vendor + customer on each
+order, and `partner_key` to persist orders to the **Shop Orders** dashboard (grouped by partner).
+Wizard trials set neither, so test orders neither email nor persist. The catalog falls back to a
+generic demo catalog when none is provided. The core logic (catalog, cart, persistence, email) lives
+in [`shared/utils/shop_service.py`](../shared/utils/shop_service.py).
 
 ---
 
@@ -183,6 +192,7 @@ Public (no login; protected by a per-session token + per-IP throttle):
 | `POST` | `/wizard/api/session/step` | Save step inputs |
 | `GET` | `/wizard/api/session/{token}` | Resume a session after refresh |
 | `POST` | `/wizard/api/session/provision` | Provision the trial agent (rate-limited; `reprovision` to rebuild) |
+| `POST` | `/wizard/api/session/abandon` | Release an unused trial on page unload (called via `sendBeacon`; no-op if a lead exists) |
 | `POST` | `/wizard/api/lead` | Submit the lead |
 
 Admin (dashboard auth):

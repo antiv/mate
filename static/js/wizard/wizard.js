@@ -246,17 +246,50 @@
     t4Industry: null,
     t4Goals: [],
     trialWidgetKey: null,
+    leadSubmitted: false,
   };
 
   function t(key) {
     return (STRINGS[state.lang] && STRINGS[state.lang][key]) || STRINGS.en[key] || key;
   }
 
-  // --- Resume-after-refresh persistence (per-tab sessionStorage) --------
+  // --- Resume-after-refresh persistence -----------------------------------
+  // SS_TOKEN/SS_STEP live in sessionStorage (fast, per-tab).
+  // LS_TOKEN also lives in localStorage so the token survives iframe destruction
+  // and parent-page refresh (sessionStorage is scoped to the iframe browsing context
+  // and is lost when the iframe is recreated).
   var SS_TOKEN = "mate_wiz_token", SS_STEP = "mate_wiz_step";
+  var LS_TOKEN = "mate_wiz_ls_token";
   function ssGet(k) { try { return sessionStorage.getItem(k); } catch (e) { return null; } }
   function ssSet(k, v) { try { sessionStorage.setItem(k, v); } catch (e) {} }
-  function ssClear() { try { sessionStorage.removeItem(SS_TOKEN); sessionStorage.removeItem(SS_STEP); } catch (e) {} }
+  function _lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+  function _lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+  function _lsRemove(k) { try { localStorage.removeItem(k); } catch (e) {} }
+
+  // Save session token to both sessionStorage and localStorage.
+  function _persistToken(token) {
+    ssSet(SS_TOKEN, token);
+    _lsSet(LS_TOKEN, token);
+  }
+  // Read saved token: sessionStorage first (same-iframe resume), fallback to localStorage
+  // (cross-iframe/page-refresh resume).
+  function _savedToken() { return ssGet(SS_TOKEN) || _lsGet(LS_TOKEN); }
+
+  // Prompt count lives in localStorage (keyed by token) so it survives iframe destruction.
+  function _countKey() { return "mate_wiz_count_" + (state.token || ""); }
+  function _getCount() { return _lsGet(_countKey()); }
+  function _setCount(n) { try { if (state.token) _lsSet(_countKey(), String(n)); } catch (e) {} }
+  function _clearCount() {
+    // Use state.token if available; otherwise fall back to the persisted LS_TOKEN so that
+    // ssClear() can remove the count even at boot time (when state.token is still null).
+    var tok = state.token || _lsGet(LS_TOKEN);
+    if (tok) _lsRemove("mate_wiz_count_" + tok);
+  }
+  function ssClear() {
+    _clearCount();
+    try { sessionStorage.removeItem(SS_TOKEN); sessionStorage.removeItem(SS_STEP); } catch (e) {}
+    _lsRemove(LS_TOKEN);
+  }
 
   // --- Helpers ---------------------------------------------------------
   function api(path, body) {
@@ -329,7 +362,7 @@
     if (state.token) return Promise.resolve(state.token);
     return api("/wizard/api/session/start", { tier: state.tier, partner: state.partner }).then(function (d) {
       state.token = d.session_token;
-      ssSet(SS_TOKEN, state.token);
+      _persistToken(state.token);
       return state.token;
     });
   }
@@ -417,29 +450,6 @@
     show("config");
   }
 
-  function renderCapabilities() {
-    var list = document.getElementById("capabilitiesList");
-    if (!list || list.childElementCount) return;
-    list.innerHTML = state.capabilities.map(function (c) {
-      return '<label class="flex items-start gap-2 text-sm text-slate-700 cursor-pointer">' +
-        '<input type="checkbox" class="wz-cap mt-0.5" value="' + escapeHtml(c.id) + '" data-label="' + escapeHtml(c.label) + '">' +
-        '<span>' + escapeHtml(c.label) + '</span></label>';
-    }).join("");
-    if (state._restoreCaps && state._restoreCaps.length) {
-      var set = {};
-      state._restoreCaps.forEach(function (l) { set[l] = 1; });
-      list.querySelectorAll(".wz-cap").forEach(function (cb) { if (set[cb.getAttribute("data-label")]) cb.checked = true; });
-      state._restoreCaps = null;
-    }
-  }
-
-  function collectCapabilities() {
-    var out = [];
-    document.querySelectorAll("#capabilitiesList .wz-cap:checked").forEach(function (cb) {
-      out.push(cb.getAttribute("data-label"));
-    });
-    return out;
-  }
 
   document.getElementById("configNext").addEventListener("click", function () {
     clearError("configError");
@@ -548,6 +558,7 @@
   function goTestProvision(reprovision) {
     show("test");
     state.promptCount = 0;
+    _setCount(0);
     updateCounter();
     document.getElementById("testLoading").classList.remove("hidden");
     document.getElementById("testChatWrap").classList.add("hidden");
@@ -591,6 +602,7 @@
 
   function onUserPrompt() {
     state.promptCount += 1;
+    _setCount(state.promptCount);
     updateCounter();
     if (state.promptCount >= PROMPT_LIMIT) {
       var iframe = document.getElementById("testChat");
@@ -653,6 +665,7 @@
     api("/wizard/api/lead", payload)
       .then(function (d) {
         if (!state.contactEmail) state.contactEmail = d.contact_email || "";
+        state.leadSubmitted = true;
         ssClear();
         showDone();
       })
@@ -739,7 +752,7 @@
     state.trialWidgetKey = widgetKey || state.trialWidgetKey;
     if (widgetKey) initAppearancePanel(widgetKey);
     show("test");
-    state.promptCount = 0;
+    state.promptCount = Math.min(parseInt(_getCount() || "0", 10), PROMPT_LIMIT);
     updateCounter();
     document.getElementById("testLoading").classList.add("hidden");
     document.getElementById("testDoneNote").classList.add("hidden");
@@ -747,6 +760,10 @@
     iframe.src = chatUrl;
     iframe.addEventListener("load", function () {
       try { iframe.contentWindow.postMessage({ type: "mate-lang", lang: state.lang }, "*"); } catch (e) {}
+      if (state.promptCount >= PROMPT_LIMIT) {
+        try { iframe.contentWindow.postMessage({ type: "mate-lock-input", message: t("lock_msg") }, "*"); } catch (e) {}
+        document.getElementById("testDoneNote").classList.remove("hidden");
+      }
     });
     document.getElementById("testChatWrap").classList.remove("hidden");
     document.getElementById("testNext").classList.remove("hidden");
@@ -764,7 +781,7 @@
         if (sd.site_url) document.getElementById("cfgSiteUrl").value = sd.site_url;
         if (sd.instructions) document.getElementById("cfgInstructions").value = sd.instructions;
         if (sd.message) document.getElementById("cfgRequest").value = sd.message;
-        if (sd.capabilities) state._restoreCaps = sd.capabilities;
+
         if (sd.industry) state.t4Industry = sd.industry;
         if (sd.goals && sd.goals.length) state.t4Goals = sd.goals;
 
@@ -773,7 +790,10 @@
 
         state.visited.tier = true;
         state.visited.config = true;
-        if (d.widget_api_key) state.visited.test = true;
+        if (d.widget_api_key) {
+          state.visited.test = true;
+          state.provisionedTier = d.tier; // restore so tier-change detection works after refresh
+        }
 
         var savedStep = ssGet(SS_STEP) || "tier";
         if (savedStep === "test" && d.widget_api_key) {
@@ -946,7 +966,7 @@
   applyI18n();
   fetchTiers(function () {
     renderTiers();
-    var savedToken = ssGet(SS_TOKEN);
+    var savedToken = _savedToken();
     if (savedToken) {
       resumeSession(savedToken);
       return;
@@ -960,4 +980,17 @@
     show("intro");
   });
   window.addEventListener("resize", notifyResize);
+
+  // Release the trial immediately when the user leaves without submitting a lead.
+  // Only fires when the trial was provisioned but never used (promptCount === 0),
+  // so trials where the user actually tested the agent are left to idle cleanup.
+  window.addEventListener("pagehide", function () {
+    if (!state.token || !state.trialWidgetKey || state.leadSubmitted) return;
+    try {
+      navigator.sendBeacon(
+        "/wizard/api/session/abandon",
+        new Blob([JSON.stringify({ token: state.token })], { type: "application/json" })
+      );
+    } catch (_) {}
+  });
 })();

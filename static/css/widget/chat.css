@@ -47,6 +47,64 @@ html, body {
   height: 100vh;
   height: 100dvh;
   overflow: hidden;
+  position: relative;
+}
+
+/* End-conversation confirmation overlay */
+.widget-confirm {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.45);
+}
+.widget-confirm-box {
+  background: var(--w-bg);
+  color: var(--w-text);
+  border: 1px solid var(--w-border);
+  border-radius: var(--w-radius);
+  padding: 20px;
+  max-width: 300px;
+  width: 100%;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+  text-align: center;
+}
+.widget-confirm-text {
+  font-size: 14px;
+  line-height: 1.4;
+  margin: 0 0 16px;
+}
+.widget-confirm-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+}
+.widget-confirm-btn {
+  cursor: pointer;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  border: 1px solid var(--w-border);
+  transition: all 0.15s ease;
+}
+.widget-confirm-no {
+  background: var(--w-bg-secondary);
+  color: var(--w-text);
+}
+.widget-confirm-no:hover {
+  background: var(--w-border);
+}
+.widget-confirm-yes {
+  background: #dc2626;
+  border-color: #dc2626;
+  color: #ffffff;
+}
+.widget-confirm-yes:hover {
+  background: #b91c1c;
 }
 
 /* Header */

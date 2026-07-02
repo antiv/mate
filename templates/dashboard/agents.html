@@ -429,11 +429,29 @@
                     btnText.textContent = 'Create Agent';
                     return;
                 }
+                const description = (document.getElementById('agentDescription').value || '').trim();
+                const instruction = (document.getElementById('agentInstruction').value || '').trim();
+
+                if (!description) {
+                    showNotification('Description is required.', 'error');
+                    submitBtn.disabled = false;
+                    loader.classList.add('hidden');
+                    btnText.textContent = 'Create Agent';
+                    return;
+                }
+                if (!instruction) {
+                    showNotification('Instruction is required.', 'error');
+                    submitBtn.disabled = false;
+                    loader.classList.add('hidden');
+                    btnText.textContent = 'Create Agent';
+                    return;
+                }
+
                 formData.append('project_id', projectId);
                 formData.append('type', document.getElementById('agentType').value);
                 formData.append('model_name', document.getElementById('agentModel').value || '');
-                formData.append('description', document.getElementById('agentDescription').value || '');
-                formData.append('instruction', document.getElementById('agentInstruction').value || '');
+                formData.append('description', description);
+                formData.append('instruction', instruction);
                 // Get values from Monaco editors if they're active, otherwise from form fields
                 const parentAgents = monacoEditors['agentParentsEditor'] ? getJsonFromEditor(monacoEditors['agentParentsEditor']) : document.getElementById('agentParents').value || '';
                 const allowedRoles = monacoEditors['agentRolesEditor'] ? getJsonFromEditor(monacoEditors['agentRolesEditor']) : document.getElementById('agentRoles').value || '';
@@ -461,6 +479,7 @@
                 formData.append('disabled', document.getElementById('agentDisabled').checked);
                 formData.append('hardcoded', hardcoded);
                 formData.append('expose_as_model', document.getElementById('agentExposeAsModel').checked);
+                formData.append('debug_mode', document.getElementById('agentDebugMode').checked);
 
                 // Check if this is a top-level agent (no parents) and not hardcoded
                 let shouldCreateFolder = false;
@@ -593,10 +612,30 @@
                 const formData = new FormData();
                 formData.append('name', agentName);
                 formData.append('project_id', projectId);
+                const description = (document.getElementById('editAgentDescription').value || '').trim();
+                const instruction = (document.getElementById('editAgentInstruction').value || '').trim();
+
+                if (!description) {
+                    showNotification('Description is required.', 'error');
+                    submitBtn.disabled = false;
+                    loader.classList.add('hidden');
+                    btnText.textContent = 'Update Agent';
+                    window.isSubmittingEditForm = false;
+                    return;
+                }
+                if (!instruction) {
+                    showNotification('Instruction is required.', 'error');
+                    submitBtn.disabled = false;
+                    loader.classList.add('hidden');
+                    btnText.textContent = 'Update Agent';
+                    window.isSubmittingEditForm = false;
+                    return;
+                }
+
                 formData.append('type', document.getElementById('editAgentType').value);
                 formData.append('model_name', document.getElementById('editAgentModel').value || '');
-                formData.append('description', document.getElementById('editAgentDescription').value || '');
-                formData.append('instruction', document.getElementById('editAgentInstruction').value || '');
+                formData.append('description', description);
+                formData.append('instruction', instruction);
                 // Get values from Monaco editors if they're active, otherwise from form fields
                 const parentAgents = monacoEditors['editAgentParentsEditor'] ? getJsonFromEditor(monacoEditors['editAgentParentsEditor']) : document.getElementById('editAgentParents').value || '';
                 const allowedRoles = monacoEditors['editAgentRolesEditor'] ? getJsonFromEditor(monacoEditors['editAgentRolesEditor']) : document.getElementById('editAgentRoles').value || '';
@@ -624,6 +663,7 @@
                 const newHardcoded = document.getElementById('editAgentHardcoded').checked;
                 formData.append('hardcoded', newHardcoded);
                 formData.append('expose_as_model', document.getElementById('editAgentExposeAsModel').checked);
+                formData.append('debug_mode', document.getElementById('editAgentDebugMode').checked);
 
                 // Check if hardcoded status changed and if it's a top-level agent
                 const originalHardcoded = window.editAgentOriginalHardcoded || false;
@@ -784,10 +824,28 @@
                     btnText.textContent = 'Copy Agent';
                     return;
                 }
+                const description = (document.getElementById('copyAgentDescription').value || '').trim();
+                const instruction = (document.getElementById('copyAgentInstruction').value || '').trim();
+
+                if (!description) {
+                    showNotification('Description is required.', 'error');
+                    submitBtn.disabled = false;
+                    loader.classList.add('hidden');
+                    btnText.textContent = 'Copy Agent';
+                    return;
+                }
+                if (!instruction) {
+                    showNotification('Instruction is required.', 'error');
+                    submitBtn.disabled = false;
+                    loader.classList.add('hidden');
+                    btnText.textContent = 'Copy Agent';
+                    return;
+                }
+
                 formData.append('project_id', projectId);
                 formData.append('model_name', document.getElementById('copyAgentModel').value || '');
-                formData.append('description', document.getElementById('copyAgentDescription').value || '');
-                formData.append('instruction', document.getElementById('copyAgentInstruction').value || '');
+                formData.append('description', description);
+                formData.append('instruction', instruction);
                 // Get values from Monaco editors if they're active, otherwise from form fields
                 const parentAgents = monacoEditors['copyAgentParentsEditor'] ? getJsonFromEditor(monacoEditors['copyAgentParentsEditor']) : document.getElementById('copyAgentParents').value || '';
                 const allowedRoles = monacoEditors['copyAgentRolesEditor'] ? getJsonFromEditor(monacoEditors['copyAgentRolesEditor']) : document.getElementById('copyAgentRoles').value || '';
@@ -815,6 +873,7 @@
                 formData.append('disabled', document.getElementById('copyAgentDisabled').checked);
                 formData.append('hardcoded', hardcoded);
                 formData.append('expose_as_model', document.getElementById('copyAgentExposeAsModel').checked);
+                formData.append('debug_mode', document.getElementById('copyAgentDebugMode').checked);
 
                 // Check if this is a top-level agent (no parents) and not hardcoded
                 let shouldCreateFolder = false;

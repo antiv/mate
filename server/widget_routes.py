@@ -234,7 +234,7 @@ async def widget_chat(request: Request, wk: WidgetApiKey = Depends(verify_widget
     lang = body.get("lang", "") or (page_context or {}).get("lang", "")  # BCP-47 short code e.g. "de"
 
     scoped_user = f"widget_{wk.id}_{user_id}"
-    app_name = wk.agent_name
+    app_name = (wk.agent_name or "").strip()
 
     # ADK requires a valid session — create one if missing or explicitly requested
     if not session_id or new_session:
@@ -269,8 +269,9 @@ async def widget_chat(request: Request, wk: WidgetApiKey = Depends(verify_widget
             if not injected:
                 message_parts.insert(0, {"text": prefix})
 
-    # Load model name from database to check vision support
+    # Load agent config from database (model name, debug_mode, etc.)
     model_name = ""
+    debug_mode = False
     try:
         from shared.utils.database_client import get_database_client
         from shared.utils.models import AgentConfig
@@ -280,6 +281,7 @@ async def widget_chat(request: Request, wk: WidgetApiKey = Depends(verify_widget
             agent_config = session.query(AgentConfig).filter_by(name=app_name).first()
             if agent_config:
                 model_name = agent_config.model_name
+                debug_mode = bool(getattr(agent_config, "debug_mode", False))
             session.close()
     except Exception as e:
         pass
@@ -366,8 +368,10 @@ async def widget_chat(request: Request, wk: WidgetApiKey = Depends(verify_widget
         # Prepend a JSON event with the session_id so the client can persist it
         async def streamer():
             try:
-                # Emit session_id as first SSE event so the client stores it
-                yield f"data: {{\"session_id\":\"{session_id}\"}}\n\n".encode()
+                # Emit session_id and debug_mode as first SSE event so the client stores them
+                import json as _json
+                init_event = _json.dumps({"session_id": session_id, "debug_mode": debug_mode})
+                yield f"data: {init_event}\n\n".encode()
                 async for chunk in r.aiter_bytes():
                     yield chunk
             finally:
@@ -695,7 +699,7 @@ async def create_widget_key(
         raise HTTPException(status_code=401, detail="Not authenticated")
     data = await request.json()
     project_id = data.get("project_id")
-    agent_name = data.get("agent_name")
+    agent_name = (data.get("agent_name") or "").strip()
     label = data.get("label", "")
     allowed_origins = data.get("allowed_origins")
     widget_config = data.get("widget_config")
@@ -757,6 +761,8 @@ async def update_widget_key(
                 val = data[field]
                 if field in ("allowed_origins", "widget_config") and isinstance(val, (dict, list)):
                     val = json.dumps(val)
+                elif field == "agent_name" and isinstance(val, str):
+                    val = val.strip()
                 setattr(wk, field, val)
         session.commit()
         session.refresh(wk)
