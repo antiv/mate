@@ -78,6 +78,7 @@ def _get_pydantic_field_type(field_schema: dict) -> Type:
 
 class GraphWorkflow(Workflow):
     sub_agents: list = []
+    max_iterations: Optional[int] = None
 
 
 
@@ -87,6 +88,7 @@ class AgentManager:
     def __init__(self):
         self.db_client = get_database_client()
         self.initialized_agents: Dict[str, Any] = {}
+        self.last_error: Optional[str] = None
     
     def get_session(self) -> Optional[Session]:
         """Get database session."""
@@ -282,7 +284,9 @@ class AgentManager:
             return agent
             
         except Exception as e:
-            logger.error(f"Error initializing agent {config.name}: {e}")
+            err_msg = f"Error initializing agent {config.name}: {e}"
+            logger.error(err_msg)
+            self.last_error = err_msg
             return None
     
     def _create_planner(self, planner_config: dict) -> Optional[Any]:
@@ -334,7 +338,7 @@ class AgentManager:
     def _initialize_agent(self, config: Dict[str, Any], sub_agents: List[Any] = None, parent_agent_type: str = None) -> Any:
         """Initialize an agent of any type."""
         # Import here to avoid circular imports
-        from google.adk.agents import Agent, LoopAgent
+        from google.adk.agents import Agent
         from .utils import create_model
         from ..callbacks.token_usage_callback import capture_model_name_callback, log_token_usage_callback
         from ..callbacks.rbac_callback import combined_rbac_and_token_callback
@@ -477,11 +481,54 @@ class AgentManager:
                     output_schema=output_schema
                 )
             elif agent_type in ['loop']:
-                max_iterations = config.get('max_iterations')  # Use None as default (Google ADK default)
-                agent = LoopAgent(
+                max_iterations = config.get('max_iterations')  # Use None as default
+                if not sub_agents:
+                    raise ValueError(f"No subagents configured for loop agent {agent_name}")
+                
+                from google.adk.workflow import START, FunctionNode, Edge
+                
+                # Create a loop condition function node
+                def make_loop_checker(max_iterations_val: int | None, loop_node_name: str):
+                    def loop_condition(ctx):
+                        count = ctx.state.get("loop_count", 0)
+                        count += 1
+                        ctx.state["loop_count"] = count
+                        logger.info(f"Loop {loop_node_name} iteration: {count} / {max_iterations_val}")
+                        if max_iterations_val is not None and count >= max_iterations_val:
+                            ctx.route = "stop"
+                        else:
+                            ctx.route = "continue"
+                    loop_condition.__name__ = loop_node_name
+                    return loop_condition
+
+                loop_checker_fn = make_loop_checker(max_iterations, f"{agent_name}_loop_condition")
+                loop_checker_node = FunctionNode(
+                    func=loop_checker_fn,
+                    name=f"{agent_name}_loop_condition"
+                )
+                
+                # Build loop edges
+                resolved_edges = []
+                # 1. START -> sub_agents[0]
+                resolved_edges.append(Edge(from_node=START, to_node=sub_agents[0]))
+                
+                # 2. Sequential links between subagents
+                for i in range(len(sub_agents) - 1):
+                    resolved_edges.append(Edge(from_node=sub_agents[i], to_node=sub_agents[i+1]))
+                
+                # 3. Last subagent -> loop_checker_node
+                resolved_edges.append(Edge(from_node=sub_agents[-1], to_node=loop_checker_node))
+                
+                # 4. loop_checker_node -> sub_agents[0] on route "continue"
+                resolved_edges.append(Edge(from_node=loop_checker_node, to_node=sub_agents[0], route="continue"))
+                
+                agent = GraphWorkflow(
                     name=agent_name,
-                    sub_agents=sub_agents or [],
+                    edges=resolved_edges,
                     description=description,
+                    sub_agents=sub_agents + [loop_checker_node],
+                    input_schema=input_schema,
+                    output_schema=output_schema,
                     max_iterations=max_iterations
                 )
             else:
@@ -594,7 +641,9 @@ class AgentManager:
             logger.info(f"{agent_type.title()} agent {agent_name} initialized")
             return agent
         except Exception as e:
-            logger.error(f"Error creating {config.get('type', 'unknown')} agent {config.get('name', 'unknown')}: {e}")
+            err_msg = f"Error creating {config.get('type', 'unknown')} agent {config.get('name', 'unknown')}: {e}"
+            logger.error(err_msg)
+            self.last_error = err_msg
             return None
     
     def initialize_agent_hierarchy(self, root_agent_name: str, hardcoded_agents: List[Any] = None) -> Optional[Any]:
@@ -616,11 +665,14 @@ class AgentManager:
             logger.error(f"Root agent {root_agent_name} not found")
             return None
         
+        self.last_error = None
+        
         # Initialize root agent with its database subagents
         root_agent = self._initialize_agent_with_subagents(root_config)
         if not root_agent:
-            logger.error(f"Failed to initialize root agent {root_agent_name}")
-            return None
+            err_msg = self.last_error or f"Failed to initialize root agent {root_agent_name}"
+            logger.error(err_msg)
+            raise ValueError(err_msg)
         
         # Add hardcoded agents as additional subagents
         if hardcoded_agents:
@@ -707,14 +759,17 @@ class AgentManager:
             logger.error(f"Root agent {root_agent_name} not found")
             return None
         
+        self.last_error = None
+        
         # Step 1: Create all agents independently (without subagents)
         self._create_all_agents_independently(root_agent_name)
         
         # Step 2: Build the tree relationships
         root_agent = self._build_tree_relationships(root_config)
         if not root_agent:
-            logger.error(f"Failed to build agent tree for root agent {root_agent_name}")
-            return None
+            err_msg = self.last_error or f"Failed to build agent tree for root agent {root_agent_name}"
+            logger.error(err_msg)
+            raise ValueError(err_msg)
         
         # Add hardcoded agents as additional subagents to root
         if hardcoded_agents:

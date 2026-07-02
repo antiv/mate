@@ -7,40 +7,48 @@ from shared.callbacks.token_usage_callback import capture_model_name_callback
 from shared.callbacks.function_call_guardrail import combined_after_model_callback
 
 
-def create_fallback_agent(agent_context_name: str = "MATE") -> Agent:
+def create_fallback_agent(agent_context_name: str = "MATE", error_message: str = None) -> Agent:
     """
     Creates a fallback agent that informs users about missing database configuration.
     
     Args:
         agent_context_name: The name of the agent context (e.g., "MATE", "Creative Agent")
+        error_message: The detailed error message to show to the user.
     
     Returns:
         Agent: A configured fallback agent
     """
+    instruction_text = (
+        f"You are a fallback {agent_context_name}. The main {agent_context_name} system is currently unavailable due to a configuration or initialization issue.\n\n"
+        "IMPORTANT: For any user query, respond with the following message:\n\n"
+        "🚨 **System Configuration Required**\n\n"
+        f"I apologize, but the {agent_context_name} system is currently not fully configured or failed to initialize.\n\n"
+    )
+    if error_message:
+        instruction_text += (
+            "**Detailed Error Message:**\n"
+            f"```\n{error_message}\n```\n\n"
+        )
+    instruction_text += (
+        "**What this means:**\n"
+        "- Agent configurations could not be loaded properly\n"
+        "- Specialized sub-agents cannot be initialized\n"
+        "- Full functionality is temporarily unavailable\n\n"
+        "**Next Steps:**\n"
+        "Please resolve the configuration issue or contact your system administrator:\n"
+        "1. Check the database configuration and agent table records\n"
+        "2. Ensure all referenced sub-agents exist and are correctly linked\n"
+        "3. Review the detailed error message above to correct the configuration\n\n"
+        "Thank you for your patience while we resolve this configuration issue."
+    )
+
     return Agent(
         name="mate_fallback_agent",
         model=create_model(
             model_name="openrouter/google/gemini-2.5-flash-lite",
         ),
-        description="Fallback agent that informs users about missing database configuration and provides support contact information.",
-        instruction=f"You are a fallback {agent_context_name}. The main {agent_context_name} system is currently unavailable due to missing database configuration.\n\n"
-                    "IMPORTANT: For any user query, respond with the following message:\n\n"
-                    "🚨 **System Configuration Required**\n\n"
-                    f"I apologize, but the {agent_context_name} system is currently not fully configured. The database connection is missing, which prevents me from accessing the full range of specialized agents and capabilities.\n\n"
-                    "**What this means:**\n"
-                    "- Agent configurations are not available\n"
-                    "- Specialized sub-agents (CV analysis, CRM, web search, etc.) cannot be loaded\n"
-                    "- Full functionality is temporarily unavailable\n\n"
-                    "**Next Steps:**\n"
-                    "Please contact the system administrator or technical support team to:\n"
-                    "1. Configure the database connection (PostgreSQL, MySQL, or SQLite)\n"
-                    "2. Set up the required environment variables\n"
-                    "3. Initialize the agent configurations in the database\n\n"
-                    "**For Support:**\n"
-                    "- Contact your system administrator\n"
-                    "- Check the database configuration documentation\n"
-                    "- Verify environment variables are properly set\n\n"
-                    "Thank you for your patience while we resolve this configuration issue.",
+        description="Fallback agent that informs users about missing database configuration.",
+        instruction=instruction_text,
         sub_agents=[],  # No sub-agents in fallback mode
         output_key="mate_fallback_output",
         before_model_callback=capture_model_name_callback,

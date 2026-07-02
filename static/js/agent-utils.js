@@ -2057,10 +2057,11 @@ function initializeSearchAndFilter(configs) {
 
 function toggleMaxIterationsField(selectElement, fieldId) {
     const field = document.getElementById(fieldId);
-    if (selectElement.value === 'root') {
-        field.style.display = 'block';
+    if (!field) return;
+    if (selectElement.value === 'loop') {
+        field.classList.remove('hidden');
     } else {
-        field.style.display = 'none';
+        field.classList.add('hidden');
     }
 }
 

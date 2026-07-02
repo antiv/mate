@@ -4,7 +4,7 @@ from typing import Optional
 from dotenv import load_dotenv
 from google.adk.artifacts.in_memory_artifact_service import InMemoryArtifactService
 from google.adk.auth.credential_service.in_memory_credential_service import InMemoryCredentialService
-from google.adk.cli.adk_web_server import AdkWebServer
+from google.adk.cli.adk_web_server import DevServer
 from google.adk.cli.utils.agent_loader import AgentLoader
 from google.adk.cli.service_registry import get_service_registry
 from google.adk.evaluation.local_eval_set_results_manager import LocalEvalSetResultsManager
@@ -261,7 +261,7 @@ eval_set_results_manager = LocalEvalSetResultsManager(agents_dir=AGENT_DIR)
 
 try:
     print(f"🚀 Initializing ADK web server...")
-    adk_web_server = AdkWebServer(
+    adk_web_server = DevServer(
           agent_loader=agent_loader,
           session_service=session_service,
           artifact_service=artifact_service,
@@ -688,7 +688,11 @@ if __name__ == "__main__":
         print(f"🚀 A2A support: {'Enabled' if ENABLE_A2A else 'Disabled'}")
         
         # Use uvicorn to run the FastAPI app with service registry
-        uvicorn.run(app, host=HOST, port=port)
+        log_level = os.getenv("LOG_LEVEL", "info").lower()
+        if log_level not in ["critical", "error", "warning", "info", "debug", "trace"]:
+            log_level = "info"
+        access_log = os.getenv("ACCESS_LOG", "true").lower() != "false"
+        uvicorn.run(app, host=HOST, port=port, log_level=log_level, access_log=access_log)
         
     except Exception as e:
         print(f"⚠️  Fatal error starting ADK server: {e}")

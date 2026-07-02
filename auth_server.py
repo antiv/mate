@@ -391,4 +391,8 @@ if __name__ == "__main__":
     logger.info("ADK server will be available on port %s", ADK_PORT)
     logger.info("Username: %s", AUTH_USERNAME)
 
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    log_level = os.getenv("LOG_LEVEL", "info").lower()
+    if log_level not in ["critical", "error", "warning", "info", "debug", "trace"]:
+        log_level = "info"
+    access_log = os.getenv("ACCESS_LOG", "true").lower() != "false"
+    uvicorn.run(app, host="0.0.0.0", port=8000, log_level=log_level, access_log=access_log)

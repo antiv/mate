@@ -29,7 +29,7 @@ try:
     print(f"   Database subagents + {hardcoded_count} hardcoded agents = {total_subagents} total subagents")
 except Exception as e:
     print(f"⚠️ Failed to initialize from database, using simple fallback agent: {e}")
-    root_agent = create_fallback_agent("Creative Agent")
+    root_agent = create_fallback_agent(root_agent_name, error_message=str(e))
 
 # Wrap root_agent in App with context caching configuration
 # The AdkWebServer will detect and use this App instance

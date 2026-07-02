@@ -39,21 +39,21 @@ document.addEventListener('DOMContentLoaded', function() {
     const agentTypeSelect = document.getElementById('agentType');
     if (agentTypeSelect) {
         agentTypeSelect.addEventListener('change', function() {
-            toggleMaxIterationsField(this, 'maxIterationsField');
+            toggleMaxIterationsField(this, 'agentMaxIterationsField');
         });
     }
     
     const editAgentTypeSelect = document.getElementById('editAgentType');
     if (editAgentTypeSelect) {
         editAgentTypeSelect.addEventListener('change', function() {
-            toggleMaxIterationsField(this, 'editMaxIterationsField');
+            toggleMaxIterationsField(this, 'editAgentMaxIterationsField');
         });
     }
     
     const copyAgentTypeSelect = document.getElementById('copyAgentType');
     if (copyAgentTypeSelect) {
         copyAgentTypeSelect.addEventListener('change', function() {
-            toggleMaxIterationsField(this, 'copyMaxIterationsField');
+            toggleMaxIterationsField(this, 'copyAgentMaxIterationsField');
         });
     }
     

@@ -122,7 +122,7 @@ class TestNewAgentTypes(unittest.TestCase):
     @patch('shared.utils.tools.tool_factory.ToolFactory')
     @patch('shared.utils.utils.create_model')
     def test_initialize_loop_agent(self, mock_create_model, mock_tool_factory):
-        """Test initialization of LoopAgent."""
+        """Test initialization of loop agent with GraphWorkflow."""
         # Mock tool factory
         mock_tool_factory.return_value.create_tools.return_value = []
         
@@ -141,8 +141,10 @@ class TestNewAgentTypes(unittest.TestCase):
             'allowed_for_roles': []
         }
         
-        # Mock sub-agents - use empty list for now to avoid validation issues
-        mock_sub_agents = []
+        # Mock sub-agents
+        from google.adk.workflow import Node
+        mock_sub_agent_1 = Node(name='sub_agent_1')
+        mock_sub_agents = [mock_sub_agent_1]
         
         # Call the method
         result = self.agent_manager._initialize_agent(config, mock_sub_agents)
@@ -151,13 +153,15 @@ class TestNewAgentTypes(unittest.TestCase):
         self.assertIsNotNone(result)
         self.assertEqual(result.name, 'test_loop_agent')
         self.assertEqual(result.description, 'Test loop agent')
-        self.assertEqual(len(result.sub_agents), 0)
+        self.assertEqual(len(result.sub_agents), 2)
+        self.assertEqual(result.sub_agents[0].name, 'sub_agent_1')
+        self.assertEqual(result.sub_agents[1].name, 'test_loop_agent_loop_condition')
         self.assertEqual(result.max_iterations, 10)
     
     @patch('shared.utils.tools.tool_factory.ToolFactory')
     @patch('shared.utils.utils.create_model')
     def test_initialize_loop_agent_default_iterations(self, mock_create_model, mock_tool_factory):
-        """Test initialization of LoopAgent with default max_iterations."""
+        """Test initialization of loop agent with default max_iterations."""
         # Mock tool factory
         mock_tool_factory.return_value.create_tools.return_value = []
         
@@ -177,7 +181,9 @@ class TestNewAgentTypes(unittest.TestCase):
         }
         
         # Mock sub-agents
-        mock_sub_agents = []
+        from google.adk.workflow import Node
+        mock_sub_agent_1 = Node(name='sub_agent_1')
+        mock_sub_agents = [mock_sub_agent_1]
         
         # Call the method
         result = self.agent_manager._initialize_agent(config, mock_sub_agents)
@@ -186,6 +192,9 @@ class TestNewAgentTypes(unittest.TestCase):
         self.assertIsNotNone(result)
         self.assertEqual(result.name, 'test_loop_agent_default')
         self.assertEqual(result.max_iterations, None)  # Default value
+        self.assertEqual(len(result.sub_agents), 2)
+        self.assertEqual(result.sub_agents[0].name, 'sub_agent_1')
+        self.assertEqual(result.sub_agents[1].name, 'test_loop_agent_default_loop_condition')
     
     def test_initialize_agent_from_config_with_new_types(self):
         """Test initialize_agent_from_config with new agent types."""
@@ -259,10 +268,41 @@ class TestNewAgentTypes(unittest.TestCase):
                     mock_init.return_value = Mock()
                     
                     result = self.agent_manager.initialize_agent_from_config(mock_config)
-                    
                     # Verify the method was called (not None)
                     self.assertIsNotNone(result)
                     mock_init.assert_called_once()
+
+    def test_initialize_agent_hierarchy_error_propagation(self):
+        """Test that initialize_agent_hierarchy propagates configuration errors as ValueError."""
+        # Mock database configuration retrieval
+        mock_config = Mock(spec=AgentConfig)
+        mock_config.name = 'test_error_root'
+        mock_config.type = 'graph'
+        mock_config.model_name = 'test-model'
+        mock_config.description = 'Test graph agent'
+        mock_config.instruction = 'Test instruction'
+        mock_config.mcp_servers_config = None
+        mock_config.tool_config = None
+        mock_config.max_iterations = None
+        mock_config.planner_config = None
+        mock_config.generate_content_config = None
+        mock_config.input_schema = None
+        mock_config.output_schema = None
+        mock_config.include_contents = None
+        mock_config.guardrail_config = None
+        mock_config.project_id = None
+        mock_config.allowed_for_roles = None
+        mock_config.get_parent_agents.return_value = []
+        
+        self.agent_manager.get_root_agent_by_name = Mock(return_value=mock_config)
+        self.agent_manager.get_subagents = Mock(return_value=[])
+        
+        # Force a ValueError during graph compilation (e.g. no subagents configured)
+        # Call the method and assert ValueError is raised with a descriptive message
+        with self.assertRaises(ValueError) as context:
+            self.agent_manager.initialize_agent_hierarchy('test_error_root')
+            
+        self.assertIn("No edges or subagents configured for graph agent test_error_root", str(context.exception))
 
 
 if __name__ == '__main__':
