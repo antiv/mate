@@ -7,31 +7,164 @@
     <title>Login - MATE Dashboard</title>
     <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
     <link rel="manifest" href="/static/manifest.json">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="/static/css/redesign.css">
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        // Initialize theme before rendering to avoid flash
+        (function() {
+            const savedTheme = localStorage.getItem('theme') || 'dark';
+            if (savedTheme === 'dark') {
+                document.documentElement.classList.add('dark');
+            } else {
+                document.documentElement.classList.remove('dark');
+            }
+        })();
+    </script>
     <style>
         body {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background-color: var(--bg-page) !important;
+            background-image: radial-gradient(at 0% 0%, var(--accent-soft) 0px, transparent 50%),
+                              radial-gradient(at 100% 100%, var(--accent-2-soft) 0px, transparent 50%);
+            background-attachment: fixed;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 16px;
+            font-family: 'Plus Jakarta Sans', ui-sans-serif, system-ui, -apple-system, sans-serif;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .login-card {
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            box-shadow: var(--shadow-card);
+            padding: 36px 32px;
+            width: 100%;
+            max-width: 420px;
+            position: relative;
+        }
+
+        .theme-toggle-btn {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            border: 1px solid var(--border);
+            background: var(--bg-surface-2);
+            color: var(--text-primary);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+        }
+
+        .theme-toggle-btn:hover {
+            border-color: var(--border-strong);
+            background: var(--bg-surface);
+        }
+
+        html.dark .theme-toggle-btn .fa-sun {
+            display: none;
+        }
+        html:not(.dark) .theme-toggle-btn .fa-moon {
+            display: none;
+        }
+
+        /* Customize inputs for high premium feel */
+        .login-input {
+            width: 100%;
+            padding: 11px 14px;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            background: var(--bg-surface-2);
+            color: var(--text-primary);
+            font-size: 13.5px;
+            font-family: inherit;
+            transition: all 0.2s ease;
+        }
+
+        .login-input:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 2px var(--accent-soft);
+            background: var(--bg-surface);
+        }
+
+        .login-btn {
+            width: 100%;
+            background: var(--accent);
+            color: white;
+            font-weight: 600;
+            padding: 12px 16px;
+            border-radius: 12px;
+            border: none;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-size: 14px;
+        }
+
+        .login-btn:hover {
+            background: var(--accent-hover);
+            transform: translateY(-1px);
+        }
+
+        .login-btn:active {
+            transform: translateY(0);
+        }
+
+        .social-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            padding: 11px 16px;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            background: var(--bg-surface-2);
+            color: var(--text-primary);
+            font-weight: 600;
+            font-size: 13.5px;
+            gap: 10px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .social-btn:hover {
+            background: var(--bg-surface);
+            border-color: var(--border-strong);
         }
     </style>
 </head>
-<body class="min-h-screen flex items-center justify-center">
-    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 md:p-8 w-full max-w-md mx-4">
-        <div class="text-center mb-6">
-            <img src="/static/logo.png" alt="MATE Logo" class="h-16 w-16 object-contain mx-auto mb-4">
-            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">MATE Dashboard</h1>
-            <p class="text-gray-600 dark:text-gray-400 mt-2">Sign in to continue</p>
+<body>
+    <div class="login-card">
+        <button class="theme-toggle-btn" onclick="toggleTheme()" title="Toggle Theme">
+            <i class="fas fa-sun"></i>
+            <i class="fas fa-moon"></i>
+        </button>
+
+        <div class="text-center mb-8">
+            <img src="/static/logo.png" alt="MATE Logo" class="h-16 w-16 object-contain mx-auto mb-4" style="border-radius: 12px;">
+            <h1 class="text-2xl font-bold" style="font-size: 22px; font-weight: 800; color: var(--text-primary); margin-top: 12px;">MATE Dashboard</h1>
+            <p class="mt-2" style="font-size: 13.5px; color: var(--text-secondary);">Sign in to continue</p>
         </div>
 
         {% if oauth_error %}
-        <div class="mb-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded text-sm">
+        <div class="mb-4 bg-red-100 dark:bg-red-950/30 border border-red-400 dark:border-red-800 text-red-700 dark:text-red-400 px-4 py-3 rounded-xl text-sm">
             {{ oauth_error }}
         </div>
         {% endif %}
 
         {% if google_enabled or github_enabled %}
-        <div class="space-y-3 mb-5">
+        <div class="space-y-3 mb-6">
             {% if google_enabled %}
-            <a href="/auth/login/google" class="flex items-center justify-center w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm bg-white hover:bg-gray-50 transition duration-200 text-sm font-medium text-gray-700 gap-3">
+            <a href="/auth/login/google" class="social-btn">
                 <!-- Google "G" logo (official colors) -->
                 <svg class="h-5 w-5 flex-shrink-0" viewBox="0 0 24 24">
                     <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -44,7 +177,7 @@
             {% endif %}
 
             {% if github_enabled %}
-            <a href="/auth/login/github" class="flex items-center justify-center w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm bg-white hover:bg-gray-50 transition duration-200 text-sm font-medium text-gray-700 gap-3">
+            <a href="/auth/login/github" class="social-btn">
                 <!-- GitHub mark -->
                 <svg class="h-5 w-5 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
                     <path fill-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" clip-rule="evenodd"/>
@@ -54,53 +187,69 @@
             {% endif %}
         </div>
 
-        <div class="relative my-5">
+        <div class="relative my-6">
             <div class="absolute inset-0 flex items-center">
-                <div class="w-full border-t border-gray-300"></div>
+                <div class="w-full border-t" style="border-color: var(--border);"></div>
             </div>
-            <div class="relative flex justify-center text-sm">
-                <span class="px-2 bg-white text-gray-500">or sign in with credentials</span>
+            <div class="relative flex justify-center text-xs">
+                <span class="px-3" style="background: var(--bg-surface); color: var(--text-tertiary);">or sign in with credentials</span>
             </div>
         </div>
         {% endif %}
 
         <form id="loginForm" class="space-y-4">
-            <div id="errorMessage" class="hidden bg-red-100 dark:bg-red-900 border border-red-400 text-red-700 dark:text-red-300 px-4 py-3 rounded"></div>
+            <div id="errorMessage" class="hidden bg-red-100 dark:bg-red-950/30 border border-red-400 dark:border-red-800 text-red-700 dark:text-red-400 px-4 py-3 rounded-xl text-sm mb-4"></div>
 
             <div>
-                <label for="username" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Username</label>
+                <label for="username" class="block text-xs font-semibold mb-1.5 uppercase tracking-wider" style="color: var(--text-secondary); font-size: 11px;">Username</label>
                 <input
                     type="text"
                     id="username"
                     name="username"
                     required
-                    class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+                    class="login-input"
                     autocomplete="username"
+                    placeholder="Enter your username"
                 >
             </div>
 
             <div>
-                <label for="password" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Password</label>
+                <label for="password" class="block text-xs font-semibold mb-1.5 uppercase tracking-wider" style="color: var(--text-secondary); font-size: 11px;">Password</label>
                 <input
                     type="password"
                     id="password"
                     name="password"
                     required
-                    class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+                    class="login-input"
                     autocomplete="current-password"
+                    placeholder="Enter your password"
                 >
             </div>
 
-            <button
-                type="submit"
-                class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-md transition duration-200"
-            >
-                Sign In
-            </button>
+            <div class="pt-2">
+                <button
+                    type="submit"
+                    class="login-btn"
+                >
+                    Sign In
+                </button>
+            </div>
         </form>
     </div>
 
     <script>
+        function toggleTheme() {
+            const html = document.documentElement;
+            const isDark = html.classList.contains('dark');
+            if (isDark) {
+                html.classList.remove('dark');
+                localStorage.setItem('theme', 'light');
+            } else {
+                html.classList.add('dark');
+                localStorage.setItem('theme', 'dark');
+            }
+        }
+
         document.getElementById('loginForm').addEventListener('submit', async function(e) {
             e.preventDefault();
 
