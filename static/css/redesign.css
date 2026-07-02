@@ -1,0 +1,252 @@
+/* ============================================================
+   MATE Dashboard Redesign — design token layer
+   Source: design_handoff_mate_dashboard_redesign (2026)
+
+   Two parts:
+   1. OKLCH design tokens (light + dark) & base typography
+   2. Remap of the Tailwind utility classes already used across
+      templates/ and static/js/ onto the new tokens, so every
+      page (including JS-generated markup) inherits the new
+      visual language without structural/functional changes.
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+
+/* ── 1. Design tokens ─────────────────────────────────────── */
+
+:root {
+    --bg-page: oklch(97.8% 0.008 75);
+    --bg-surface: oklch(99.2% 0.004 75);
+    --bg-surface-2: oklch(96% 0.012 75);
+    --border: oklch(91% 0.012 75);
+    --border-strong: oklch(85% 0.014 75);
+    --text-primary: oklch(27% 0.02 50);
+    --text-secondary: oklch(52% 0.02 50);
+    --text-tertiary: oklch(68% 0.015 50);
+    --accent: oklch(64% 0.15 255);
+    --accent-soft: oklch(93% 0.035 255);
+    --accent-2: oklch(62% 0.15 150);
+    --accent-2-soft: oklch(93% 0.04 150);
+    --accent-3: oklch(58% 0.14 305);
+    --accent-3-soft: oklch(93% 0.03 305);
+    --accent-4: oklch(72% 0.13 80);
+    --accent-4-soft: oklch(93% 0.035 80);
+    --success: oklch(62% 0.13 150);
+    --success-soft: oklch(93% 0.035 150);
+    --danger: oklch(58% 0.17 25);
+    --danger-soft: oklch(93% 0.04 25);
+    --warning: oklch(74% 0.13 85);
+    --warning-soft: oklch(94% 0.035 85);
+    --shadow-card: 0 1px 2px rgba(60, 40, 20, 0.04), 0 10px 26px -14px rgba(60, 40, 20, 0.16);
+    --accent-hover: oklch(58% 0.15 255);
+    --success-hover: oklch(56% 0.13 150);
+    --danger-hover: oklch(52% 0.17 25);
+    --warning-hover: oklch(68% 0.13 85);
+    --accent-3-hover: oklch(52% 0.14 305);
+    --accent-4-hover: oklch(66% 0.13 80);
+}
+
+html.dark {
+    --bg-page: oklch(17% 0.006 250);
+    --bg-surface: oklch(21% 0.007 250);
+    --bg-surface-2: oklch(25.5% 0.009 250);
+    --border: oklch(30% 0.011 250);
+    --border-strong: oklch(37% 0.013 250);
+    --text-primary: oklch(95% 0.005 250);
+    --text-secondary: oklch(73% 0.01 250);
+    --text-tertiary: oklch(54% 0.01 250);
+    --accent: oklch(72% 0.15 255);
+    --accent-soft: oklch(32% 0.06 255);
+    --accent-2: oklch(74% 0.15 150);
+    --accent-2-soft: oklch(30% 0.06 150);
+    --accent-3: oklch(72% 0.13 305);
+    --accent-3-soft: oklch(30% 0.045 305);
+    --accent-4: oklch(78% 0.13 80);
+    --accent-4-soft: oklch(32% 0.05 80);
+    --success: oklch(70% 0.14 150);
+    --success-soft: oklch(30% 0.05 150);
+    --danger: oklch(68% 0.17 25);
+    --danger-soft: oklch(32% 0.06 25);
+    --warning: oklch(78% 0.13 85);
+    --warning-soft: oklch(34% 0.05 85);
+    --shadow-card: 0 1px 0 rgba(0, 0, 0, 0.35), 0 12px 28px -14px rgba(0, 0, 0, 0.55);
+    --accent-hover: oklch(78% 0.15 255);
+    --success-hover: oklch(76% 0.14 150);
+    --danger-hover: oklch(74% 0.17 25);
+    --warning-hover: oklch(84% 0.13 85);
+    --accent-3-hover: oklch(78% 0.13 305);
+    --accent-4-hover: oklch(84% 0.13 80);
+}
+
+html, body {
+    font-family: 'Plus Jakarta Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif !important;
+    -webkit-font-smoothing: antialiased;
+}
+
+body {
+    background-color: var(--bg-page) !important;
+    color: var(--text-primary);
+}
+
+/* ── 2. Tailwind utility remap ────────────────────────────── */
+
+/* Neutral surfaces */
+.bg-white { background-color: var(--bg-surface) !important; }
+.bg-gray-50 { background-color: var(--bg-surface-2) !important; }
+.bg-gray-100, .bg-gray-200 { background-color: var(--bg-surface-2) !important; }
+.bg-gray-300 { background-color: var(--border-strong) !important; }
+.bg-slate-50, .bg-slate-100 { background-color: var(--bg-surface-2) !important; }
+.hover\:bg-gray-50:hover, .hover\:bg-gray-100:hover { background-color: var(--bg-surface-2) !important; }
+.hover\:bg-gray-200:hover, .hover\:bg-gray-300:hover { background-color: var(--border) !important; }
+.hover\:bg-slate-100:hover { background-color: var(--bg-surface-2) !important; }
+
+.dark .dark\:bg-gray-900, .dark [class*="dark:bg-gray-900/"] { background-color: var(--bg-page) !important; }
+.dark .dark\:bg-gray-800, .dark [class*="dark:bg-gray-800/"] { background-color: var(--bg-surface) !important; }
+.dark .dark\:bg-gray-700, .dark [class*="dark:bg-gray-700/"] { background-color: var(--bg-surface-2) !important; }
+.dark .dark\:bg-gray-600 { background-color: var(--bg-surface-2) !important; }
+.dark .dark\:bg-slate-900, .dark .dark\:bg-slate-950 { background-color: var(--bg-page) !important; }
+.dark .dark\:bg-slate-800, .dark [class*="dark:bg-slate-800/"] { background-color: var(--bg-surface-2) !important; }
+.dark .dark\:hover\:bg-gray-700:hover, .dark [class*="dark:hover:bg-gray-700/"]:hover { background-color: var(--bg-surface-2) !important; }
+.dark .dark\:hover\:bg-gray-600:hover, .dark .dark\:hover\:bg-gray-500:hover { background-color: var(--border-strong) !important; }
+.dark .dark\:hover\:bg-slate-800:hover { background-color: var(--bg-surface-2) !important; }
+
+/* Neutral text */
+.text-gray-900, .text-gray-800, .text-slate-800, .text-slate-900 { color: var(--text-primary) !important; }
+.text-gray-700, .text-gray-600, .text-slate-600, .text-slate-700 { color: var(--text-secondary) !important; }
+.text-gray-500, .text-slate-500 { color: var(--text-secondary) !important; }
+.text-gray-400, .text-gray-300, .text-slate-400 { color: var(--text-tertiary) !important; }
+.hover\:text-gray-900:hover, .hover\:text-gray-800:hover { color: var(--text-primary) !important; }
+.hover\:text-gray-700:hover, .hover\:text-gray-600:hover, .hover\:text-slate-800:hover, .hover\:text-slate-600:hover { color: var(--text-primary) !important; }
+.dark .dark\:text-white { color: var(--text-primary) !important; }
+.dark .dark\:text-gray-100, .dark .dark\:text-gray-200, .dark .dark\:text-slate-200 { color: var(--text-primary) !important; }
+.dark .dark\:text-gray-300, .dark .dark\:text-gray-400, .dark .dark\:text-slate-400 { color: var(--text-secondary) !important; }
+.dark .dark\:text-gray-500, .dark .dark\:text-slate-500 { color: var(--text-tertiary) !important; }
+.dark .dark\:hover\:text-gray-100:hover, .dark .dark\:hover\:text-gray-200:hover, .dark .dark\:hover\:text-slate-200:hover { color: var(--text-primary) !important; }
+.dark .dark\:hover\:text-gray-300:hover { color: var(--text-secondary) !important; }
+.dark .dark\:hover\:text-white:hover { color: var(--text-primary) !important; }
+
+/* Neutral borders */
+.border-gray-100, .border-gray-200, .border-gray-250, .border-gray-300, .border-slate-200 { border-color: var(--border) !important; }
+.border-gray-400, .border-gray-500 { border-color: var(--border-strong) !important; }
+.hover\:border-gray-400:hover { border-color: var(--border-strong) !important; }
+.dark .dark\:border-gray-600, .dark .dark\:border-gray-700, .dark [class*="dark:border-gray-700/"], .dark .dark\:border-slate-700, .dark .dark\:border-slate-800 { border-color: var(--border) !important; }
+.dark .dark\:border-gray-500, .dark .dark\:hover\:border-gray-500:hover { border-color: var(--border-strong) !important; }
+.divide-gray-200 > :not([hidden]) ~ :not([hidden]),
+.divide-gray-100 > :not([hidden]) ~ :not([hidden]),
+[class*="divide-gray-50/"] > :not([hidden]) ~ :not([hidden]) { border-color: var(--border) !important; }
+.dark .dark\:divide-gray-700 > :not([hidden]) ~ :not([hidden]),
+.dark [class*="dark:divide-gray-700/"] > :not([hidden]) ~ :not([hidden]) { border-color: var(--border) !important; }
+
+/* Blue / indigo → accent */
+.bg-blue-500, .bg-blue-600, .bg-blue-700, .bg-indigo-500, .bg-indigo-600 { background-color: var(--accent) !important; }
+.hover\:bg-blue-600:hover, .hover\:bg-blue-700:hover, .hover\:bg-blue-800:hover,
+.hover\:bg-indigo-700:hover { background-color: var(--accent-hover) !important; }
+.bg-blue-50, .bg-blue-100, .bg-indigo-50, .bg-indigo-100 { background-color: var(--accent-soft) !important; }
+.hover\:bg-blue-100:hover, .hover\:bg-blue-50:hover { background-color: var(--accent-soft) !important; }
+.dark .dark\:bg-blue-900, .dark [class*="dark:bg-blue-900/"], .dark [class*="dark:bg-blue-950/"],
+.dark [class*="dark:bg-indigo-900/"], .dark [class*="dark:hover:bg-blue-800/"]:hover,
+.dark [class*="dark:hover:bg-blue-900/"]:hover { background-color: var(--accent-soft) !important; }
+.text-blue-500, .text-blue-600, .text-blue-700, .text-blue-800, .text-indigo-600 { color: var(--accent) !important; }
+.hover\:text-blue-700:hover, .hover\:text-blue-800:hover { color: var(--accent-hover) !important; }
+.dark .dark\:text-blue-400, .dark .dark\:text-blue-300, .dark .dark\:text-blue-200,
+.dark .dark\:hover\:text-blue-300:hover { color: var(--accent) !important; }
+.border-blue-100, .border-blue-200, .border-blue-300 { border-color: var(--accent-soft) !important; }
+.border-blue-500, .border-blue-600, .focus\:border-blue-500:focus { border-color: var(--accent) !important; }
+.dark [class*="dark:border-blue-900/"], .dark .dark\:border-blue-800, .dark .dark\:border-blue-700 { border-color: var(--accent-soft) !important; }
+.focus\:ring-blue-500:focus, .focus\:ring-blue-600:focus,
+.dark .dark\:focus\:ring-blue-600:focus { --tw-ring-color: var(--accent) !important; }
+
+/* Green / emerald → success */
+.bg-green-500, .bg-green-600, .bg-green-700, .bg-emerald-500, .bg-emerald-600 { background-color: var(--success) !important; }
+.text-emerald-500 { color: var(--success) !important; }
+[class*="bg-emerald-500/"] { background-color: var(--success-soft) !important; }
+[class*="bg-rose-500/"] { background-color: var(--danger-soft) !important; }
+.hover\:bg-green-700:hover, .hover\:bg-green-600:hover, .hover\:bg-emerald-700:hover { background-color: var(--success-hover) !important; }
+.bg-green-400, .bg-emerald-500 { background-color: var(--success) !important; }
+.bg-green-50, .bg-green-100 { background-color: var(--success-soft) !important; }
+.dark .dark\:bg-green-900, .dark [class*="dark:bg-green-900/"], .dark [class*="dark:bg-green-950/"] { background-color: var(--success-soft) !important; }
+.text-green-500, .text-green-600, .text-green-700, .text-green-800, .text-emerald-600 { color: var(--success) !important; }
+.dark .dark\:text-green-400, .dark .dark\:text-green-300, .dark .dark\:text-green-200 { color: var(--success) !important; }
+.border-green-200, .border-green-300, .border-green-100 { border-color: var(--success-soft) !important; }
+.dark [class*="dark:border-green-900/"], .dark [class*="dark:border-green-700/"], .dark .dark\:border-green-700 { border-color: var(--success-soft) !important; }
+.focus\:ring-green-500:focus { --tw-ring-color: var(--success) !important; }
+
+/* Red / rose → danger */
+.bg-red-500, .bg-red-600, .bg-red-700, .bg-rose-500, .bg-rose-600 { background-color: var(--danger) !important; }
+.hover\:bg-red-700:hover, .hover\:bg-red-600:hover { background-color: var(--danger-hover) !important; }
+.bg-red-400 { background-color: var(--danger) !important; }
+.bg-red-50, .bg-red-100 { background-color: var(--danger-soft) !important; }
+.dark .dark\:bg-red-900, .dark [class*="dark:bg-red-900/"], .dark [class*="dark:bg-red-950/"] { background-color: var(--danger-soft) !important; }
+.text-red-500, .text-red-600, .text-red-700, .text-red-800, .text-rose-500, .text-rose-600 { color: var(--danger) !important; }
+.hover\:text-red-700:hover, .hover\:text-red-800:hover, .hover\:text-red-900:hover, .hover\:text-rose-700:hover { color: var(--danger-hover) !important; }
+.dark .dark\:text-red-400, .dark .dark\:text-red-300, .dark .dark\:text-red-200,
+.dark .dark\:hover\:text-red-300:hover { color: var(--danger) !important; }
+.border-red-200, .border-red-300 { border-color: var(--danger-soft) !important; }
+.border-red-500 { border-color: var(--danger) !important; }
+
+/* Yellow / amber → warning */
+.bg-yellow-500, .bg-yellow-600, .bg-amber-500 { background-color: var(--warning) !important; }
+.hover\:bg-yellow-700:hover, .hover\:bg-yellow-600:hover { background-color: var(--warning-hover) !important; }
+.bg-yellow-50, .bg-yellow-100, .bg-amber-50, [class*="bg-amber-500/"] { background-color: var(--warning-soft) !important; }
+.dark .dark\:bg-yellow-900, .dark [class*="dark:bg-yellow-900/"], .dark [class*="dark:bg-amber-900/"] { background-color: var(--warning-soft) !important; }
+.text-yellow-600, .text-yellow-700, .text-yellow-800, .text-yellow-900, .text-amber-500, .text-amber-600 { color: var(--warning) !important; }
+.hover\:text-yellow-900:hover, .hover\:text-amber-700:hover { color: var(--warning-hover) !important; }
+.dark .dark\:text-yellow-400, .dark .dark\:text-yellow-300, .dark .dark\:text-yellow-200 { color: var(--warning) !important; }
+.border-yellow-200, .border-yellow-300, .border-amber-200 { border-color: var(--warning-soft) !important; }
+
+/* Purple / violet → accent-3 */
+.bg-purple-500, .bg-purple-600, .bg-violet-600 { background-color: var(--accent-3) !important; }
+.hover\:bg-purple-700:hover { background-color: var(--accent-3-hover) !important; }
+.bg-purple-50, .bg-purple-100 { background-color: var(--accent-3-soft) !important; }
+.dark .dark\:bg-purple-900, .dark [class*="dark:bg-purple-900/"] { background-color: var(--accent-3-soft) !important; }
+.text-purple-600, .text-purple-700, .text-purple-800 { color: var(--accent-3) !important; }
+.dark .dark\:text-purple-400, .dark .dark\:text-purple-300, .dark .dark\:text-purple-200 { color: var(--accent-3) !important; }
+.border-purple-100, .border-purple-200 { border-color: var(--accent-3-soft) !important; }
+.dark .dark\:border-purple-800, .dark .dark\:border-purple-700 { border-color: var(--accent-3-soft) !important; }
+.bg-purple-200 { background-color: var(--accent-3-soft) !important; }
+
+/* Orange → accent-4 */
+.bg-orange-500, .bg-orange-600 { background-color: var(--accent-4) !important; }
+.hover\:bg-orange-700:hover, .hover\:bg-orange-600:hover { background-color: var(--accent-4-hover) !important; }
+.bg-orange-50, .bg-orange-100 { background-color: var(--accent-4-soft) !important; }
+.dark [class*="dark:bg-orange-900/"], .dark .dark\:bg-orange-900 { background-color: var(--accent-4-soft) !important; }
+.text-orange-500, .text-orange-600, .text-orange-700 { color: var(--accent-4) !important; }
+.dark .dark\:text-orange-400, .dark .dark\:text-orange-300 { color: var(--accent-4) !important; }
+.focus\:ring-orange-500:focus { --tw-ring-color: var(--accent-4) !important; }
+
+/* ── Shape & elevation ────────────────────────────────────── */
+.rounded { border-radius: 7px !important; }
+.rounded-md { border-radius: 9px !important; }
+.rounded-lg { border-radius: 12px !important; }
+.rounded-xl { border-radius: 16px !important; }
+.rounded-2xl { border-radius: 20px !important; }
+.rounded-t-xl { border-top-left-radius: 16px !important; border-top-right-radius: 16px !important; }
+.rounded-b-xl { border-bottom-left-radius: 16px !important; border-bottom-right-radius: 16px !important; }
+.rounded-t-lg { border-top-left-radius: 12px !important; border-top-right-radius: 12px !important; }
+.rounded-b-lg { border-bottom-left-radius: 12px !important; border-bottom-right-radius: 12px !important; }
+
+.shadow-sm, .shadow, .shadow-md, .shadow-lg {
+    box-shadow: var(--shadow-card) !important;
+}
+
+/* Big content cards (bg-surface + rounded-xl) get the 20px card treatment */
+.bg-white.rounded-xl, .bg-white.rounded-lg.shadow, .bg-white.rounded-lg.shadow-sm {
+    border-radius: 20px !important;
+}
+
+/* Page titles on non-redesigned screens inherit the new type scale */
+main h2.text-xl.font-bold {
+    font-size: 22px !important;
+    font-weight: 800 !important;
+}
+
+/* ── Form elements ────────────────────────────────────────── */
+input, select, textarea {
+    font-family: inherit;
+}
+
+/* ── Scrollbars (subtle, token-aware) ─────────────────────── */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-strong) transparent;
+}

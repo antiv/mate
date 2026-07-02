@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="theme-color" content="#3b82f6">
+    <meta name="theme-color" content="#468de5">
     <title>{% block title %}MATE Dashboard{% endblock %}</title>
     <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
     <link rel="manifest" href="/static/manifest.json">
@@ -14,200 +14,317 @@
         }
     </script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/redesign.css">
     <style>
-        .sidebar-active {
-            background-color: rgba(59, 130, 246, 0.1);
-            border-right: 3px solid #3b82f6;
-        }
-        
-        /* Dark theme styles */
-        .dark .sidebar-active {
-            background-color: rgba(59, 130, 246, 0.2);
-            border-right: 3px solid #60a5fa;
-        }
-        
+        @keyframes mate-slide-in { from { transform: translateX(120%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        @keyframes mate-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
         /* Theme transition */
         * {
             transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
         }
-        
-        /* Theme switcher button */
-        .theme-switcher {
-            position: relative;
-            width: 60px;
-            height: 30px;
-            background-color: #e5e7eb;
-            border-radius: 15px;
-            cursor: pointer;
-            transition: background-color 0.3s;
-            overflow: visible;
+
+        /* ── Top bar ──────────────────────────────────────── */
+        nav.dashboard-nav {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            height: 64px;
+            padding: 0 20px;
+            background: var(--bg-surface);
+            border-bottom: 1px solid var(--border);
+            position: sticky;
+            top: 0;
+            z-index: 50;
         }
-        
-        .dark .theme-switcher {
-            background-color: #374151;
+        .mate-brand-logo {
+            width: 34px;
+            height: 34px;
+            border-radius: 10px;
+            object-fit: contain;
+            box-shadow: var(--shadow-card);
         }
-        
-        .theme-switcher::before {
-            content: '';
-            position: absolute;
-            top: 3px;
-            left: 3px;
-            height: calc(100% - 6px);
-            width: auto;
-            aspect-ratio: 1;
-            background-color: white;
-            border-radius: 50%;
-            transition: transform 0.3s;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-        }
-        
-        .dark .theme-switcher::before {
-            transform: translateX(calc(60px - 100% - 6px));
-            background-color: #1f2937;
-        }
-        
-        .theme-icon {
-            position: absolute;
-            top: 50%;
-            transform: translateY(-50%);
-            font-size: 11px;
-            transition: opacity 0.3s;
-            width: 1em;
-            text-align: center;
-        }
-        
-        .theme-icon.sun {
-            left: 14px;
-            color: #f59e0b;
-        }
-        
-        .theme-icon.moon {
-            left: 36px;
-            right: auto;
-            color: #60a5fa;
-            opacity: 0;
-        }
-        
-        .dark .theme-icon.sun {
-            opacity: 0;
-        }
-        
-        .dark .theme-icon.moon {
-            opacity: 1;
-        }
-        
-        /* Sidebar Minimize/Collapse Styles */
-        #sidebar.sidebar-minimized {
-            width: 4rem !important; /* 64px - icon width */
-        }
-        
-        #sidebar.sidebar-minimized .sidebar-text {
-            display: none !important;
-        }
-        
-        #sidebar.sidebar-minimized .sidebar-icon {
-            margin-right: 0 !important;
-            margin-left: 0 !important;
-        }
-        
-        #sidebar.sidebar-minimized nav a {
-            justify-content: center !important;
-            padding-left: 0.75rem !important;
-            padding-right: 0.75rem !important;
-        }
-        
-        #sidebar.sidebar-minimized > div:last-child {
-            justify-content: center !important;
-            background-color: inherit !important;
-        }
-        
-        #sidebar.sidebar-minimized #sidebarToggleIcon {
-            transform: rotate(180deg);
+        .mate-brand-name {
+            font-weight: 800;
+            font-size: 17px;
+            letter-spacing: -0.01em;
+            color: var(--text-primary);
         }
 
-        /* Hide session list when sidebar is minimized */
-        #sidebar.sidebar-minimized #workroomSessionList,
-        #sidebar.sidebar-minimized .wr-recent-label {
-            display: none !important;
+        /* Space switcher segmented pill */
+        .mate-space-switch {
+            display: flex;
+            align-items: center;
+            gap: 2px;
+            padding: 3px;
+            border-radius: 999px;
+            background: var(--bg-surface-2);
+            border: 1px solid var(--border);
+            margin-left: 10px;
         }
-        
-        /* Smooth transitions */
-        .sidebar-collapsible {
-            transition: width 0.3s ease !important;
-        }
-
-        .sidebar-text {
-            transition: opacity 0.2s ease, display 0.2s ease;
-        }
-
-        /* Section headers in grouped sidebar */
-        .sidebar-section-header {
-            font-size: 0.65rem;
+        .mate-space-pill {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 14px;
+            border-radius: 999px;
+            font-size: 13px;
             font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.08em;
-            color: #9ca3af;
-            padding: 0.75rem 0.75rem 0.25rem;
+            color: var(--text-secondary);
+            text-decoration: none;
+            white-space: nowrap;
+            border: none;
+            background: transparent;
         }
-        .dark .sidebar-section-header {
-            color: #6b7280;
-        }
-        #sidebar.sidebar-minimized .sidebar-section-header {
-            display: none !important;
+        .mate-space-pill:hover { color: var(--text-primary); }
+        .mate-space-pill.active {
+            background: var(--accent-soft);
+            color: var(--accent);
         }
 
-        /* Space switcher pills */
-        .space-pill {
-            padding: 0.2rem 0.65rem;
-            border-radius: 9999px;
-            font-size: 0.7rem;
-            font-weight: 500;
-            transition: background-color 0.15s, color 0.15s;
+        /* ADK server status pill */
+        .mate-status-pill {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 10px;
+            border-radius: 999px;
+            background: var(--bg-surface-2);
+            border: 1px solid var(--border);
+        }
+        #adkStatusIndicator {
+            width: 8px !important;
+            height: 8px !important;
+            border-radius: 999px !important;
+            flex-shrink: 0;
+        }
+        #adkStatusText {
+            font-size: 11.5px !important;
+            font-weight: 600 !important;
             white-space: nowrap;
         }
-        .space-pill-active {
-            background-color: #3b82f6;
-            color: #fff;
+        .mate-adk-btn {
+            height: 22px;
+            min-width: 22px;
+            padding: 0 5px;
+            border-radius: 6px !important;
+            border: none;
+            cursor: pointer;
+            font-size: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            white-space: nowrap;
         }
-        .dark .space-pill-active {
-            background-color: #2563eb;
+        #startAdkBtn { background: var(--success-soft) !important; color: var(--success) !important; }
+        #stopAdkBtn { background: var(--danger-soft) !important; color: var(--danger) !important; }
+        #restartAdkBtn { background: var(--accent-3-soft) !important; color: var(--accent-3) !important; }
+
+        /* Theme toggle pill */
+        .theme-switcher {
+            position: relative;
+            width: 52px;
+            height: 28px;
+            border-radius: 999px;
+            border: 1px solid var(--border);
+            background-color: var(--bg-surface-2);
+            cursor: pointer;
+            flex-shrink: 0;
         }
-        .space-pill-inactive {
-            color: #6b7280;
+        .mate-theme-thumb {
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            width: 22px;
+            height: 22px;
+            border-radius: 999px;
+            background: var(--bg-surface);
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+            transition: left 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
-        .space-pill-inactive:hover {
-            background-color: #f3f4f6;
-            color: #374151;
+        html.dark .mate-theme-thumb { left: 26px; }
+        .theme-icon {
+            position: absolute;
+            font-size: 10px;
+            transition: opacity 0.3s;
         }
-        .dark .space-pill-inactive {
-            color: #9ca3af;
+        .theme-icon.sun { color: #e8a23d; opacity: 1; }
+        .theme-icon.moon { color: #8ea6d6; opacity: 0; }
+        html.dark .theme-icon.sun { opacity: 0; }
+        html.dark .theme-icon.moon { opacity: 1; }
+
+        /* User avatar + dropdown */
+        .mate-avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 999px !important;
+            background: var(--accent-soft) !important;
+            color: var(--accent) !important;
+            border: none;
+            cursor: pointer;
+            font-weight: 700;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
-        .dark .space-pill-inactive:hover {
-            background-color: #374151;
-            color: #d1d5db;
+        .mate-menu {
+            position: absolute;
+            right: 0;
+            top: 44px;
+            width: 220px;
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            box-shadow: var(--shadow-card);
+            overflow: hidden;
+            z-index: 60;
         }
-        
-        /* Force notifications to be completely opaque */
-        [style*="background-color"]:has(+ *),
-        div[style*="background-color"] {
-            /* This will be overridden by inline styles, but ensures base opacity */
+        .mate-menu-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            width: 100%;
+            text-align: left;
+            padding: 10px 14px;
+            border: none;
+            background: transparent;
+            color: var(--text-secondary);
+            font-size: 13px;
+            cursor: pointer;
+            text-decoration: none;
         }
-        
-        /* Notification animations */
-        @keyframes slideInRight {
-            from {
-                transform: translateX(100%);
-            }
-            to {
-                transform: translateX(0);
-            }
+        .mate-menu-item:hover { background: var(--bg-surface-2); }
+        .mate-menu-item.danger { color: var(--danger); border-top: 1px solid var(--border); }
+
+        /* ── Sidebar ──────────────────────────────────────── */
+        #sidebar {
+            width: 248px;
+            background: var(--bg-surface);
+            border-right: 1px solid var(--border);
+            height: calc(100vh - 64px);
+            position: sticky;
+            top: 64px;
+            display: flex;
+            flex-direction: column;
+            flex-shrink: 0;
+            transition: width 0.22s ease, transform 0.25s ease;
+        }
+        .sidebar-section-header {
+            font-size: 10.5px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.07em;
+            color: var(--text-tertiary);
+            margin: 14px 16px 6px;
+            white-space: nowrap;
+            overflow: hidden;
+        }
+        .mate-nav-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 12px;
+            margin: 0 8px;
+            border-radius: 12px;
+            font-size: 13.5px;
+            font-weight: 500;
+            color: var(--text-secondary);
+            text-decoration: none;
+            white-space: nowrap;
+        }
+        .mate-nav-item:hover {
+            background: var(--bg-surface-2);
+            color: var(--text-primary);
+        }
+        .mate-nav-item .sidebar-icon {
+            width: 16px;
+            text-align: center;
+            font-size: 13px;
+            flex-shrink: 0;
+        }
+        .sidebar-active {
+            background: var(--accent-soft) !important;
+            color: var(--accent) !important;
+            font-weight: 600;
+        }
+
+        /* Collapse (minimized) state */
+        #sidebar.sidebar-minimized { width: 76px; }
+        #sidebar.sidebar-minimized .sidebar-text { display: none !important; }
+        #sidebar.sidebar-minimized .sidebar-section-header { display: none !important; }
+        #sidebar.sidebar-minimized .mate-nav-item {
+            justify-content: center;
+            padding: 10px 0;
+        }
+        #sidebar.sidebar-minimized #sidebarToggleIcon { transform: rotate(180deg); }
+        #sidebar.sidebar-minimized #workroomSessionList,
+        #sidebar.sidebar-minimized .wr-recent-label { display: none !important; }
+
+        .mate-sidebar-foot {
+            display: flex;
+            justify-content: flex-end;
+            padding: 10px;
+            border-top: 1px solid var(--border);
+            margin-top: auto;
+            position: sticky;
+            bottom: 0;
+            background: var(--bg-surface);
+        }
+        #sidebarToggle {
+            width: 32px;
+            height: 32px;
+            border-radius: 9px;
+            border: 1px solid var(--border);
+            background: var(--bg-surface-2);
+            color: var(--text-secondary);
+            cursor: pointer;
+        }
+        #sidebarToggleIcon { transition: transform 0.2s ease; }
+
+        /* Hamburger (mobile only) */
+        #hamburgerBtn {
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            border: 1px solid var(--border);
+            background: var(--bg-surface-2);
+            color: var(--text-primary);
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+
+        /* Sidebar sessions list (Work Room) */
+        #workroomSessionList a { margin: 0; }
+
+        /* ── Toast notifications ──────────────────────────── */
+        .mate-notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 9999;
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            box-shadow: var(--shadow-card);
+            padding: 12px 16px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            min-width: 260px;
+            max-width: 400px;
+            animation: mate-slide-in 0.3s ease-out;
         }
 
         /* Mobile sidebar - drawer overlay */
         @media (max-width: 767px) {
             nav.dashboard-nav {
-                position: relative;
+                position: sticky;
                 z-index: 40;
             }
             #sidebar {
@@ -215,19 +332,18 @@
                 top: 0;
                 left: 0;
                 z-index: 30;
-                width: 16rem !important;
+                width: 260px !important;
                 height: 100vh;
                 transform: translateX(-100%);
-                transition: transform 0.3s ease, z-index 0s 0.3s;
+                transition: transform 0.25s ease, z-index 0s 0.25s;
                 box-shadow: none;
             }
             #sidebar.mobile-sidebar-open {
                 transform: translateX(0);
                 z-index: 50;
-                transition: transform 0.3s ease;
-                box-shadow: 4px 0 12px rgba(0,0,0,0.15);
+                transition: transform 0.25s ease;
+                box-shadow: 8px 0 24px rgba(0, 0, 0, 0.25);
             }
-            #sidebar .sidebar-minimized { width: 16rem !important; }
             #sidebarToggle { display: none !important; }
         }
         @media (min-width: 768px) {
@@ -240,136 +356,135 @@
     <script src="/static/js/server-control.js"></script>
     <script src="/static/js/dashboard-nav.js"></script>
 </head>
-<body class="bg-gray-50 dark:bg-gray-900">
+<body>
     <!-- Sidebar backdrop (mobile) -->
-    <div id="sidebarBackdrop" class="hidden fixed inset-0 bg-black/50 z-40 md:hidden" aria-hidden="true"></div>
+    <div id="sidebarBackdrop" class="hidden fixed inset-0 z-40 md:hidden" style="background: rgba(20,15,10,0.45);" aria-hidden="true"></div>
 
     <!-- Navigation -->
-    <nav class="dashboard-nav bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700">
-        <div class="flex justify-between items-center h-12 px-3 min-h-[48px]">
-            {% set cp = request.url.path %}
-            {% if cp.startswith('/dashboard/agents') or cp in ['/dashboard/triggers', '/dashboard/templates', '/dashboard/evals', '/dashboard/traces'] %}
-              {% set active_space = 'studio' %}
-            {% elif cp == '/dashboard/workroom' %}
-              {% set active_space = 'workroom' %}
-            {% else %}
-              {% set active_space = 'control_room' %}
-            {% endif %}
-            <div class="flex items-center space-x-2">
-                <button id="hamburgerBtn" type="button" class="touch-target p-2 -ml-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white md:hidden" aria-label="Open menu">
-                    <i class="fas fa-bars text-lg"></i>
-                </button>
-                <img src="/static/logo.png" alt="MATE Logo" class="h-8 w-8 object-contain">
-                <h1 class="text-lg font-bold text-gray-900 dark:text-white">MATE</h1>
-                <!-- Space switcher — desktop only — admin only -->
-                {% if is_admin is not defined or is_admin %}
-                <div class="hidden md:flex items-center space-x-1 ml-3 pl-3 border-l border-gray-200 dark:border-gray-700">
-                    <a href="/dashboard/workroom" class="space-pill {% if active_space == 'workroom' %}space-pill-active{% else %}space-pill-inactive{% endif %}">
-                        <i class="fas fa-comments mr-1"></i>Work Room
-                    </a>
-                    <a href="/dashboard/agents" class="space-pill {% if active_space == 'studio' %}space-pill-active{% else %}space-pill-inactive{% endif %}">
-                        <i class="fas fa-robot mr-1"></i>Studio
-                    </a>
-                    <a href="/dashboard/overview" class="space-pill {% if active_space == 'control_room' %}space-pill-active{% else %}space-pill-inactive{% endif %}">
-                        <i class="fas fa-tachometer-alt mr-1"></i>Control Room
-                    </a>
-                </div>
-                {% endif %}
+    <nav class="dashboard-nav">
+        {% set cp = request.url.path %}
+        {% if cp.startswith('/dashboard/agents') or cp in ['/dashboard/triggers', '/dashboard/templates', '/dashboard/evals', '/dashboard/traces'] %}
+          {% set active_space = 'studio' %}
+        {% elif cp == '/dashboard/workroom' %}
+          {% set active_space = 'workroom' %}
+        {% else %}
+          {% set active_space = 'control_room' %}
+        {% endif %}
+        <div class="flex items-center gap-3 min-w-0">
+            <button id="hamburgerBtn" type="button" class="touch-target md:hidden" aria-label="Open menu">
+                <i class="fas fa-bars"></i>
+            </button>
+            <div class="flex items-center gap-2.5 flex-shrink-0">
+                <img src="/static/logo.png" alt="MATE" class="mate-brand-logo">
+                <span class="mate-brand-name">Mate</span>
             </div>
-            <div class="flex items-center space-x-2 sm:space-x-4 pr-2 sm:pr-4">
-                    <!-- ADK Server Control - admin only -->
-                    {% if is_admin is not defined or is_admin %}
-                    <div class="hidden sm:flex items-center space-x-2">
-                        <div id="adkStatusIndicator" class="w-2 h-2 bg-gray-400 rounded-full"></div>
-                        <span id="adkStatusText" class="text-sm text-gray-600 dark:text-gray-400">Checking...</span>
-                        <div class="flex space-x-1">
-                            <button id="startAdkBtn" onclick="controlAdkServer('start')" class="px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 hidden touch-target">
-                                <i class="fas fa-play"></i>
-                            </button>
-                            <button id="stopAdkBtn" onclick="controlAdkServer('stop')" class="px-2 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700 hidden touch-target">
-                                <i class="fas fa-stop"></i>
-                            </button>
-                            <button id="restartAdkBtn" onclick="controlAdkServer('restart')" class="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 hidden touch-target">
-                                <i class="fas fa-redo"></i>
-                            </button>
-                        </div>
-                    </div>
-                    {% endif %}
-                    <!-- Theme Switcher -->
-                    <div class="theme-switcher touch-target flex items-center justify-center" onclick="toggleTheme()" role="button" tabindex="0" aria-label="Toggle theme">
-                        <i class="fas fa-sun theme-icon sun"></i>
-                        <i class="fas fa-moon theme-icon moon"></i>
-                    </div>
-                    <span class="text-gray-700 dark:text-gray-300 hidden sm:inline text-sm">Welcome, {{ username }}</span>
-                    <div class="relative">
-                        <button id="userMenuButton" onclick="toggleUserMenu()" class="bg-gray-200 dark:bg-gray-600 rounded-full w-9 h-9 flex items-center justify-center p-0 hover:bg-gray-300 dark:hover:bg-gray-500 transition-colors touch-target">
-                            <i class="fas fa-user text-gray-600 dark:text-gray-300 text-xs"></i>
-                        </button>
-                        <div id="userMenuDropdown" class="hidden absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-md shadow-lg py-1 z-50 border border-gray-200 dark:border-gray-700">
-                            <div class="px-4 py-2 text-sm text-gray-700 dark:text-gray-300 border-b border-gray-200 dark:border-gray-700">
-                                <div class="font-medium">{{ username }}</div>
-                                {% set _provider = request.session.get('user', {}).get('provider', '') if request.session is defined else '' %}
-                                <div class="text-xs text-gray-500 dark:text-gray-400">
-                                    {% if _provider == 'google' %}via Google
-                                    {% elif _provider == 'github' %}via GitHub
-                                    {% else %}Dashboard User{% endif %}
-                                </div>
-                            </div>
-                            <a href="#" onclick="showTokensModal(event)" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 border-b border-gray-200 dark:border-gray-700">
-                                <i class="fas fa-key mr-2 text-xs"></i>Personal Tokens
-                            </a>
-                            <a href="#" onclick="handleLogout(event)" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">
-                                <i class="fas fa-sign-out-alt mr-2 text-xs"></i>Logout
-                            </a>
-                        </div>
-                    </div>
+            <!-- Space switcher — desktop only — admin only -->
+            {% if is_admin is not defined or is_admin %}
+            <div class="mate-space-switch hidden md:flex">
+                <a href="/dashboard/workroom" class="mate-space-pill {% if active_space == 'workroom' %}active{% endif %}">
+                    <i class="fas fa-comments"></i><span>Work Room</span>
+                </a>
+                <a href="/dashboard/agents" class="mate-space-pill {% if active_space == 'studio' %}active{% endif %}">
+                    <i class="fas fa-robot"></i><span>Studio</span>
+                </a>
+                <a href="/dashboard/overview" class="mate-space-pill {% if active_space == 'control_room' %}active{% endif %}">
+                    <i class="fas fa-tachometer-alt"></i><span>Control Room</span>
+                </a>
+            </div>
+            {% endif %}
+        </div>
+        <div class="flex items-center gap-2.5 flex-shrink-0">
+            <!-- ADK Server Control - admin only -->
+            {% if is_admin is not defined or is_admin %}
+            <div class="mate-status-pill hidden sm:flex">
+                <div id="adkStatusIndicator" class="w-2 h-2 bg-gray-400 rounded-full"></div>
+                <span id="adkStatusText" class="text-sm text-gray-600 dark:text-gray-400">Checking...</span>
+                <div class="flex gap-1">
+                    <button id="startAdkBtn" onclick="controlAdkServer('start')" title="Start" class="mate-adk-btn hidden touch-target">
+                        <i class="fas fa-play"></i>
+                    </button>
+                    <button id="stopAdkBtn" onclick="controlAdkServer('stop')" title="Stop" class="mate-adk-btn hidden touch-target">
+                        <i class="fas fa-stop"></i>
+                    </button>
+                    <button id="restartAdkBtn" onclick="controlAdkServer('restart')" title="Restart" class="mate-adk-btn hidden touch-target">
+                        <i class="fas fa-redo"></i>
+                    </button>
                 </div>
+            </div>
+            {% endif %}
+            <!-- Theme Switcher -->
+            <div class="theme-switcher touch-target" onclick="toggleTheme()" role="button" tabindex="0" aria-label="Toggle theme">
+                <span class="mate-theme-thumb">
+                    <i class="fas fa-sun theme-icon sun"></i>
+                    <i class="fas fa-moon theme-icon moon"></i>
+                </span>
+            </div>
+            <div class="relative">
+                <button id="userMenuButton" onclick="toggleUserMenu()" class="mate-avatar touch-target">{{ (username or 'U')[:2] | upper }}</button>
+                <div id="userMenuDropdown" class="hidden mate-menu">
+                    <div style="padding: 12px 14px; border-bottom: 1px solid var(--border);">
+                        <div style="font-weight: 700; font-size: 13px; color: var(--text-primary);">{{ username }}</div>
+                        {% set _provider = request.session.get('user', {}).get('provider', '') if request.session is defined else '' %}
+                        <div style="font-size: 11px; color: var(--text-tertiary); margin-top: 2px;">
+                            {% if _provider == 'google' %}via Google
+                            {% elif _provider == 'github' %}via GitHub
+                            {% else %}Dashboard User{% endif %}
+                        </div>
+                    </div>
+                    <a href="#" onclick="showTokensModal(event)" class="mate-menu-item">
+                        <i class="fas fa-key" style="width: 14px;"></i>Personal Tokens
+                    </a>
+                    <a href="#" onclick="confirmLogout(event)" class="mate-menu-item danger">
+                        <i class="fas fa-sign-out-alt" style="width: 14px;"></i>Logout
+                    </a>
+                </div>
+            </div>
         </div>
     </nav>
 
     <div class="flex">
         <!-- Sidebar -->
-        <aside id="sidebar" class="w-48 bg-white dark:bg-gray-800 shadow-sm h-screen sticky top-0 transition-all duration-300 sidebar-collapsible flex flex-col">
-            <div class="flex justify-between items-center p-3 border-b border-gray-200 dark:border-gray-700 md:hidden">
-                <span class="text-sm font-semibold text-gray-900 dark:text-white">Menu</span>
-                <button type="button" onclick="closeMobileSidebar()" class="touch-target p-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300" aria-label="Close menu">
+        <aside id="sidebar" class="sidebar-collapsible">
+            <div class="flex justify-between items-center p-3 md:hidden" style="border-bottom: 1px solid var(--border);">
+                <span class="text-sm font-semibold" style="color: var(--text-primary);">Menu</span>
+                <button type="button" onclick="closeMobileSidebar()" class="touch-target p-2" style="color: var(--text-secondary); background: none; border: none; cursor: pointer;" aria-label="Close menu">
                     <i class="fas fa-times"></i>
                 </button>
             </div>
-            <nav class="mt-2 flex-1 overflow-y-auto">
+            <nav class="flex-1 overflow-y-auto" style="padding: 14px 0;">
                 {% if is_admin is not defined or is_admin %}
                 {% if active_space == 'studio' %}
                 <!-- ── Studio ────────────────────────── -->
                 <p class="sidebar-section-header">Build</p>
-                <div class="px-2 space-y-0.5">
-                    <a href="/dashboard/agents" class="flex items-center px-3 py-2 text-sm text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 {% if request.url.path == '/dashboard/agents' %}sidebar-active{% endif %}" title="Agents">
-                        <i class="fas fa-robot sidebar-icon mr-2 text-xs w-4 text-center"></i>
+                <div class="space-y-0.5">
+                    <a href="/dashboard/agents" class="mate-nav-item {% if request.url.path == '/dashboard/agents' %}sidebar-active{% endif %}" title="Agents">
+                        <i class="fas fa-robot sidebar-icon"></i>
                         <span class="sidebar-text">Agents</span>
                     </a>
-                    <a href="/dashboard/agents/visual" id="sidebarVisualBuilderLink" class="flex items-center px-3 py-2 text-sm text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 {% if request.url.path == '/dashboard/agents/visual' %}sidebar-active{% endif %}" title="Visual Builder" onclick="return handleVisualBuilderNav(event)">
-                        <i class="fas fa-sitemap sidebar-icon mr-2 text-xs w-4 text-center"></i>
+                    <a href="/dashboard/agents/visual" id="sidebarVisualBuilderLink" class="mate-nav-item {% if request.url.path == '/dashboard/agents/visual' %}sidebar-active{% endif %}" title="Visual Builder" onclick="return handleVisualBuilderNav(event)">
+                        <i class="fas fa-sitemap sidebar-icon"></i>
                         <span class="sidebar-text">Visual Builder</span>
                     </a>
-                    <a href="/dashboard/triggers" class="flex items-center px-3 py-2 text-sm text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 {% if request.url.path == '/dashboard/triggers' %}sidebar-active{% endif %}" title="Triggers">
-                        <i class="fas fa-bolt sidebar-icon mr-2 text-xs w-4 text-center"></i>
+                    <a href="/dashboard/triggers" class="mate-nav-item {% if request.url.path == '/dashboard/triggers' %}sidebar-active{% endif %}" title="Triggers">
+                        <i class="fas fa-bolt sidebar-icon"></i>
                         <span class="sidebar-text">Triggers</span>
                     </a>
                 </div>
                 <p class="sidebar-section-header">Templates</p>
-                <div class="px-2 space-y-0.5">
-                    <a href="/dashboard/templates" class="flex items-center px-3 py-2 text-sm text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 {% if request.url.path == '/dashboard/templates' %}sidebar-active{% endif %}" title="Template Library">
-                        <i class="fas fa-layer-group sidebar-icon mr-2 text-xs w-4 text-center"></i>
+                <div class="space-y-0.5">
+                    <a href="/dashboard/templates" class="mate-nav-item {% if request.url.path == '/dashboard/templates' %}sidebar-active{% endif %}" title="Template Library">
+                        <i class="fas fa-layer-group sidebar-icon"></i>
                         <span class="sidebar-text">Template Library</span>
                     </a>
                 </div>
-                <p class="sidebar-section-header">Test &amp; Monitor</p>
-                <div class="px-2 space-y-0.5">
-                    <a href="/dashboard/evals" class="flex items-center px-3 py-2 text-sm text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 {% if request.url.path == '/dashboard/evals' %}sidebar-active{% endif %}" title="Evals">
-                        <i class="fas fa-flask sidebar-icon mr-2 text-xs w-4 text-center"></i>
+                <p class="sidebar-section-header">Test &amp; Monitoring</p>
+                <div class="space-y-0.5">
+                    <a href="/dashboard/evals" class="mate-nav-item {% if request.url.path == '/dashboard/evals' %}sidebar-active{% endif %}" title="Evals">
+                        <i class="fas fa-flask sidebar-icon"></i>
                         <span class="sidebar-text">Evals</span>
                     </a>
-                    <a href="/dashboard/traces" class="flex items-center px-3 py-2 text-sm text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 {% if request.url.path == '/dashboard/traces' %}sidebar-active{% endif %}" title="Traces">
-                        <i class="fas fa-project-diagram sidebar-icon mr-2 text-xs w-4 text-center"></i>
+                    <a href="/dashboard/traces" class="mate-nav-item {% if request.url.path == '/dashboard/traces' %}sidebar-active{% endif %}" title="Traces">
+                        <i class="fas fa-project-diagram sidebar-icon"></i>
                         <span class="sidebar-text">Traces</span>
                     </a>
                 </div>
@@ -379,11 +494,11 @@
                 {% set _wr_agent = request.query_params.get('agent', '') %}
                 {% set _wr_session = request.query_params.get('session', '') %}
                 <p class="sidebar-section-header">Chat</p>
-                <div class="px-2 space-y-0.5">
+                <div class="space-y-0.5">
                     <a id="newConversationLink"
                        href="/dashboard/workroom{% if _wr_agent %}?agent={{ _wr_agent }}{% endif %}"
-                       class="flex items-center px-3 py-2 text-sm text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 {% if not _wr_session %}sidebar-active{% endif %}" title="New Conversation">
-                        <i class="fas fa-plus sidebar-icon mr-2 text-xs w-4 text-center"></i>
+                       class="mate-nav-item {% if not _wr_session %}sidebar-active{% endif %}" title="New Conversation">
+                        <i class="fas fa-plus sidebar-icon"></i>
                         <span class="sidebar-text">New Conversation</span>
                     </a>
                 </div>
@@ -397,57 +512,54 @@
                 {% else %}
                 <!-- ── Control Room ───────────────────── -->
                 <p class="sidebar-section-header">Overview</p>
-                <div class="px-2 space-y-0.5">
-                    <a href="/dashboard/overview" class="flex items-center px-3 py-2 text-sm text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 {% if request.url.path == '/dashboard/overview' %}sidebar-active{% endif %}" title="Platform Overview">
-                        <i class="fas fa-th-large sidebar-icon mr-2 text-xs w-4 text-center"></i>
+                <div class="space-y-0.5">
+                    <a href="/dashboard/overview" class="mate-nav-item {% if request.url.path == '/dashboard/overview' %}sidebar-active{% endif %}" title="Platform Overview">
+                        <i class="fas fa-th-large sidebar-icon"></i>
                         <span class="sidebar-text">Platform Overview</span>
                     </a>
                 </div>
                 <p class="sidebar-section-header">Observability</p>
-                <div class="px-2 space-y-0.5">
-                    <a href="/dashboard/usage" class="flex items-center px-3 py-2 text-sm text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 {% if request.url.path == '/dashboard/usage' %}sidebar-active{% endif %}" title="Usage Analytics">
-                        <i class="fas fa-chart-bar sidebar-icon mr-2 text-xs w-4 text-center"></i>
+                <div class="space-y-0.5">
+                    <a href="/dashboard/usage" class="mate-nav-item {% if request.url.path == '/dashboard/usage' %}sidebar-active{% endif %}" title="Usage Analytics">
+                        <i class="fas fa-chart-bar sidebar-icon"></i>
                         <span class="sidebar-text">Usage Analytics</span>
                     </a>
-                    <a href="/dashboard/audit-logs" class="flex items-center px-3 py-2 text-sm text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 {% if request.url.path == '/dashboard/audit-logs' %}sidebar-active{% endif %}" title="Audit Logs">
-                        <i class="fas fa-clipboard-list sidebar-icon mr-2 text-xs w-4 text-center"></i>
+                    <a href="/dashboard/audit-logs" class="mate-nav-item {% if request.url.path == '/dashboard/audit-logs' %}sidebar-active{% endif %}" title="Audit Logs">
+                        <i class="fas fa-clipboard-list sidebar-icon"></i>
                         <span class="sidebar-text">Audit Logs</span>
                     </a>
-                </div>
-                <p class="sidebar-section-header">Wizard &amp; Commerce</p>
-                <div class="px-2 space-y-0.5">
-                    <a href="/dashboard/wizard-leads" class="flex items-center px-3 py-2 text-sm text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 {% if request.url.path == '/dashboard/wizard-leads' %}sidebar-active{% endif %}" title="Wizard Leads">
-                        <i class="fas fa-inbox sidebar-icon mr-2 text-xs w-4 text-center"></i>
+                    <a href="/dashboard/wizard-leads" class="mate-nav-item {% if request.url.path == '/dashboard/wizard-leads' %}sidebar-active{% endif %}" title="Wizard Leads">
+                        <i class="fas fa-inbox sidebar-icon"></i>
                         <span class="sidebar-text">Wizard Leads</span>
                     </a>
-                    <a href="/dashboard/wizard-pricing" class="flex items-center px-3 py-2 text-sm text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 {% if request.url.path == '/dashboard/wizard-pricing' %}sidebar-active{% endif %}" title="Wizard Pricing">
-                        <i class="fas fa-tags sidebar-icon mr-2 text-xs w-4 text-center"></i>
+                    <a href="/dashboard/wizard-pricing" class="mate-nav-item {% if request.url.path == '/dashboard/wizard-pricing' %}sidebar-active{% endif %}" title="Wizard Pricing">
+                        <i class="fas fa-tags sidebar-icon"></i>
                         <span class="sidebar-text">Wizard Pricing</span>
                     </a>
-                    <a href="/dashboard/shop-orders" class="flex items-center px-3 py-2 text-sm text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 {% if request.url.path == '/dashboard/shop-orders' %}sidebar-active{% endif %}" title="Shop Orders">
-                        <i class="fas fa-shopping-bag sidebar-icon mr-2 text-xs w-4 text-center"></i>
+                    <a href="/dashboard/shop-orders" class="mate-nav-item {% if request.url.path == '/dashboard/shop-orders' %}sidebar-active{% endif %}" title="Shop Orders">
+                        <i class="fas fa-shopping-bag sidebar-icon"></i>
                         <span class="sidebar-text">Shop Orders</span>
                     </a>
                 </div>
                 <p class="sidebar-section-header">Governance &amp; Access</p>
-                <div class="px-2 space-y-0.5">
-                    <a href="/dashboard/users" class="flex items-center px-3 py-2 text-sm text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 {% if request.url.path == '/dashboard/users' %}sidebar-active{% endif %}" title="Users">
-                        <i class="fas fa-users sidebar-icon mr-2 text-xs w-4 text-center"></i>
+                <div class="space-y-0.5">
+                    <a href="/dashboard/users" class="mate-nav-item {% if request.url.path == '/dashboard/users' %}sidebar-active{% endif %}" title="Users">
+                        <i class="fas fa-users sidebar-icon"></i>
                         <span class="sidebar-text">Users</span>
                     </a>
-                    <a href="/dashboard/rate-limits" class="flex items-center px-3 py-2 text-sm text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 {% if request.url.path == '/dashboard/rate-limits' %}sidebar-active{% endif %}" title="Rate Limits">
-                        <i class="fas fa-shield-alt sidebar-icon mr-2 text-xs w-4 text-center"></i>
+                    <a href="/dashboard/rate-limits" class="mate-nav-item {% if request.url.path == '/dashboard/rate-limits' %}sidebar-active{% endif %}" title="Rate Limits">
+                        <i class="fas fa-shield-alt sidebar-icon"></i>
                         <span class="sidebar-text">Rate Limits</span>
                     </a>
                 </div>
                 <p class="sidebar-section-header">System</p>
-                <div class="px-2 space-y-0.5">
-                    <a href="/dashboard/migrations" class="flex items-center px-3 py-2 text-sm text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 {% if request.url.path == '/dashboard/migrations' %}sidebar-active{% endif %}" title="Migrations">
-                        <i class="fas fa-database sidebar-icon mr-2 text-xs w-4 text-center"></i>
+                <div class="space-y-0.5">
+                    <a href="/dashboard/migrations" class="mate-nav-item {% if request.url.path == '/dashboard/migrations' %}sidebar-active{% endif %}" title="Migrations">
+                        <i class="fas fa-database sidebar-icon"></i>
                         <span class="sidebar-text">Migrations</span>
                     </a>
-                    <a href="/dashboard/docs" class="flex items-center px-3 py-2 text-sm text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 {% if request.url.path == '/dashboard/docs' %}sidebar-active{% endif %}" title="API Documentation">
-                        <i class="fas fa-book sidebar-icon mr-2 text-xs w-4 text-center"></i>
+                    <a href="/dashboard/docs" class="mate-nav-item {% if request.url.path == '/dashboard/docs' %}sidebar-active{% endif %}" title="API Docs">
+                        <i class="fas fa-book sidebar-icon"></i>
                         <span class="sidebar-text">API Docs</span>
                     </a>
                 </div>
@@ -457,11 +569,11 @@
                 {% set _wr_agent = request.query_params.get('agent', '') %}
                 {% set _wr_session = request.query_params.get('session', '') %}
                 <p class="sidebar-section-header">Chat</p>
-                <div class="px-2 space-y-0.5">
+                <div class="space-y-0.5">
                     <a id="newConversationLink"
                        href="/dashboard/workroom{% if _wr_agent %}?agent={{ _wr_agent }}{% endif %}"
-                       class="flex items-center px-3 py-2 text-sm text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 {% if not _wr_session %}sidebar-active{% endif %}" title="New Conversation">
-                        <i class="fas fa-plus sidebar-icon mr-2 text-xs w-4 text-center"></i>
+                       class="mate-nav-item {% if not _wr_session %}sidebar-active{% endif %}" title="New Conversation">
+                        <i class="fas fa-plus sidebar-icon"></i>
                         <span class="sidebar-text">New Conversation</span>
                     </a>
                 </div>
@@ -472,106 +584,100 @@
                 </div>
                 {% endif %}
                 <p class="sidebar-section-header">Analytics</p>
-                <div class="px-2 space-y-0.5">
-                    <a href="/dashboard/usage" class="flex items-center px-3 py-2 text-sm text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 {% if request.url.path == '/dashboard/usage' %}sidebar-active{% endif %}" title="My Usage">
-                        <i class="fas fa-chart-bar sidebar-icon mr-2 text-xs w-4 text-center"></i>
+                <div class="space-y-0.5">
+                    <a href="/dashboard/usage" class="mate-nav-item {% if request.url.path == '/dashboard/usage' %}sidebar-active{% endif %}" title="My Usage">
+                        <i class="fas fa-chart-bar sidebar-icon"></i>
                         <span class="sidebar-text">My Usage</span>
                     </a>
                 </div>
                 {% endif %}
             </nav>
-            
+
             <!-- Minimize Toggle Button -->
-            <div class="flex justify-end p-2 border-t border-gray-200 dark:border-gray-700 mt-auto sticky bottom-0 bg-white dark:bg-gray-800">
-                <button id="sidebarToggle" onclick="toggleSidebar()" class="p-1.5 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded" title="Toggle sidebar">
+            <div class="mate-sidebar-foot">
+                <button id="sidebarToggle" onclick="toggleSidebar()" title="Toggle sidebar">
                     <i id="sidebarToggleIcon" class="fas fa-chevron-left"></i>
                 </button>
             </div>
         </aside>
 
         <!-- Main Content -->
-        <main class="flex-1 p-4 md:p-4 bg-gray-50 dark:bg-gray-900 min-w-0">
+        <main class="flex-1 min-w-0" style="padding: 22px; background: var(--bg-page);">
             {% block content %}{% endblock %}
         </main>
     </div>
 
     <!-- Personal Access Tokens Modal -->
-    <div id="tokensModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm hidden z-[9999] dashboard-modal flex items-center justify-center p-4">
-        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col border border-gray-200 dark:border-gray-700/80 transform transition-all">
+    <div id="tokensModal" class="fixed inset-0 hidden z-[9999] dashboard-modal flex items-center justify-center p-4" style="background: rgba(20,15,10,0.5);">
+        <div class="w-full flex flex-col" style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: 20px; box-shadow: var(--shadow-card); max-width: 640px; max-height: 88vh;">
             <!-- Modal Header -->
-            <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center bg-gray-50/50 dark:bg-gray-800/50 rounded-t-xl">
-                <h3 class="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                    <i class="fas fa-key text-blue-600 dark:text-blue-400"></i>
-                    Personal Access Tokens (PATs)
+            <div class="flex justify-between items-center" style="padding: 18px 22px; border-bottom: 1px solid var(--border);">
+                <h3 style="margin: 0; font-size: 15px; font-weight: 800; color: var(--text-primary); display: flex; align-items: center; gap: 8px;">
+                    <i class="fas fa-key" style="color: var(--accent); font-size: 13px;"></i>
+                    Personal Access Tokens
                 </h3>
-                <button type="button" onclick="closeTokensModal()" class="text-gray-400 hover:text-gray-500 dark:hover:text-gray-300 touch-target p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors">
+                <button type="button" onclick="closeTokensModal()" class="touch-target" style="width: 30px; height: 30px; border-radius: 9px; border: none; background: var(--bg-surface-2); color: var(--text-secondary); cursor: pointer;">
                     <i class="fas fa-times"></i>
                 </button>
             </div>
-            
+
             <!-- Modal Body (scrollable) -->
-            <div class="p-6 overflow-y-auto space-y-6 flex-1">
+            <div class="overflow-y-auto flex-1" style="padding: 22px; display: flex; flex-direction: column; gap: 18px;">
                 <!-- Description -->
-                <div class="text-xs text-gray-600 dark:text-gray-400 leading-relaxed bg-blue-50/40 dark:bg-blue-950/20 border border-blue-100/50 dark:border-blue-900/30 p-3 rounded-lg flex gap-2">
-                    <i class="fas fa-info-circle text-blue-500 mt-0.5"></i>
-                    <span>Generate personal access tokens to securely authenticate and access the MATE OpenAI-compatible APIs from external coding agents and extensions (e.g. OpenCode, Continue, Roo Code).</span>
+                <div style="display: flex; gap: 10px; font-size: 12px; color: var(--text-secondary); background: var(--accent-3-soft); border-radius: 12px; padding: 12px 14px; line-height: 1.5;">
+                    <i class="fas fa-info-circle" style="color: var(--accent-3); margin-top: 1px;"></i>
+                    <span>Generate a token to authenticate against the MATE API from external tools (VS Code, CI, etc).</span>
                 </div>
-                
+
                 <!-- Create Token Form -->
-                <div class="bg-gray-50 dark:bg-gray-800/40 rounded-xl p-4 border border-gray-200 dark:border-gray-700/50 space-y-4">
-                    <h4 class="text-[11px] font-bold text-gray-900 dark:text-white uppercase tracking-wider">Generate New Token</h4>
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div style="background: var(--bg-surface-2); border-radius: 16px; padding: 16px; display: flex; flex-direction: column; gap: 12px;">
+                    <span style="font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary);">Generate New Token</span>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div>
-                            <label for="newTokenName" class="block text-[11px] font-semibold text-gray-600 dark:text-gray-400 mb-1">Token Name / Description</label>
-                            <input type="text" id="newTokenName" placeholder="e.g. VS Code Continue Extension"
-                                class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2.5 py-1.5 text-xs focus:ring-1 focus:ring-blue-500 focus:outline-none">
+                            <label for="newTokenName" style="display: block; font-size: 11px; font-weight: 600; color: var(--text-secondary); margin-bottom: 5px;">Name</label>
+                            <input type="text" id="newTokenName" placeholder="e.g. VS Code Continue"
+                                class="w-full focus:outline-none" style="padding: 9px 11px; border-radius: 9px; border: 1px solid var(--border); background: var(--bg-surface); color: var(--text-primary); font-size: 12.5px;">
                         </div>
                         <div>
-                            <label for="newTokenExpiry" class="block text-[11px] font-semibold text-gray-600 dark:text-gray-400 mb-1">Expiration</label>
-                            <select id="newTokenExpiry" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2.5 py-1.5 text-xs focus:ring-1 focus:ring-blue-500 focus:outline-none">
-                                <option value="7">7 Days</option>
-                                <option value="30" selected>30 Days</option>
-                                <option value="90">90 Days</option>
-                                <option value="365">365 Days</option>
-                                <option value="">Never Expires</option>
+                            <label for="newTokenExpiry" style="display: block; font-size: 11px; font-weight: 600; color: var(--text-secondary); margin-bottom: 5px;">Expires</label>
+                            <select id="newTokenExpiry" class="w-full focus:outline-none" style="padding: 9px 11px; border-radius: 9px; border: 1px solid var(--border); background: var(--bg-surface); color: var(--text-primary); font-size: 12.5px;">
+                                <option value="7">7 days</option>
+                                <option value="30" selected>30 days</option>
+                                <option value="90">90 days</option>
+                                <option value="365">365 days</option>
+                                <option value="">Never</option>
                             </select>
                         </div>
                     </div>
                     <div class="flex justify-end">
-                        <button type="button" onclick="generateToken()" class="bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-1.5 text-xs font-semibold rounded shadow flex items-center transition-colors">
-                            <i class="fas fa-plus mr-1.5 text-[10px]"></i>
-                            Generate Token
+                        <button type="button" onclick="generateToken()" style="padding: 9px 16px; border-radius: 9px; border: none; background: var(--accent); color: white; font-size: 12.5px; font-weight: 700; cursor: pointer;">
+                            <i class="fas fa-plus" style="margin-right: 6px;"></i>Generate Token
                         </button>
                     </div>
                 </div>
 
                 <!-- Display Newly Generated Token (hidden by default) -->
-                <div id="generatedTokenWrapper" class="hidden bg-green-50 dark:bg-green-950/20 border border-green-200/50 dark:border-green-900/30 rounded-xl p-4 space-y-3">
-                    <div class="flex items-start gap-2.5">
-                        <i class="fas fa-check-circle text-green-600 dark:text-green-400 text-base mt-0.5"></i>
-                        <div class="flex-1">
-                            <h4 class="text-xs font-bold text-green-800 dark:text-green-200">Token Generated Successfully!</h4>
-                            <p class="text-[10px] text-green-700 dark:text-green-400 mt-1 leading-relaxed">
-                                Copy this token now. <strong>For security, it will not be shown again.</strong>
-                            </p>
+                <div id="generatedTokenWrapper" class="hidden" style="background: var(--success-soft); border-radius: 14px; padding: 14px;">
+                    <div style="display: flex; flex-direction: column; gap: 8px;">
+                        <span style="font-size: 12.5px; font-weight: 700; color: var(--success);"><i class="fas fa-check-circle" style="margin-right: 6px;"></i>Token generated successfully</span>
+                        <span style="font-size: 11px; color: var(--text-secondary);">Save it now — it won't be shown again.</span>
+                        <div class="flex items-center gap-2">
+                            <input type="text" id="generatedTokenVal" readonly class="flex-1 select-all" style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: 9px; padding: 9px 11px; font-family: ui-monospace, monospace; font-size: 11.5px; color: var(--text-primary); min-width: 0;">
+                            <button type="button" onclick="copyGeneratedToken()" style="padding: 9px 12px; border-radius: 9px; border: none; background: var(--success); color: white; font-size: 12px; font-weight: 700; cursor: pointer; flex-shrink: 0;">
+                                <i class="fas fa-copy" style="margin-right: 5px;"></i>Copy
+                            </button>
                         </div>
-                    </div>
-                    <div class="flex items-center gap-2">
-                        <input type="text" id="generatedTokenVal" readonly class="flex-1 bg-white dark:bg-gray-900 border border-green-300 dark:border-green-700/80 rounded px-2.5 py-1.5 text-xs font-mono text-gray-900 dark:text-white select-all">
-                        <button type="button" onclick="copyGeneratedToken()" class="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 text-xs font-semibold rounded flex items-center transition-colors">
-                            <i class="fas fa-copy mr-1.5"></i>Copy
-                        </button>
                     </div>
                 </div>
 
                 <!-- Active Tokens List -->
-                <div class="space-y-3">
-                    <h4 class="text-[11px] font-bold text-gray-900 dark:text-white uppercase tracking-wider">Active Tokens</h4>
-                    <div class="border border-gray-250 dark:border-gray-700/80 rounded-xl overflow-hidden shadow-sm">
+                <div style="display: flex; flex-direction: column; gap: 10px;">
+                    <span style="font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary);">Active Tokens</span>
+                    <div style="border: 1px solid var(--border); border-radius: 14px; overflow: hidden;">
                         <div class="overflow-x-auto">
                             <table class="w-full text-left border-collapse">
                                 <thead>
-                                    <tr class="bg-gray-50 dark:bg-gray-700/40 border-b border-gray-250 dark:border-gray-700/80 text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                    <tr style="background: var(--bg-surface-2); border-bottom: 1px solid var(--border); font-size: 10px; font-weight: 700; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.05em;">
                                         <th class="px-4 py-2.5">Name</th>
                                         <th class="px-4 py-2.5">Prefix</th>
                                         <th class="px-4 py-2.5">Created</th>
@@ -580,7 +686,7 @@
                                         <th class="px-4 py-2.5 text-right">Action</th>
                                     </tr>
                                 </thead>
-                                <tbody id="tokensTableBody" class="divide-y divide-gray-200 dark:divide-gray-700/60 text-xs">
+                                <tbody id="tokensTableBody" class="divide-y divide-gray-200 dark:divide-gray-700 text-xs">
                                     <!-- Rendered dynamically -->
                                 </tbody>
                             </table>
@@ -588,10 +694,10 @@
                     </div>
                 </div>
             </div>
-            
+
             <!-- Modal Footer -->
-            <div class="px-6 py-3 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/40 rounded-b-xl flex justify-end">
-                <button type="button" onclick="closeTokensModal()" class="px-4 py-1.5 text-xs border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700/50 rounded transition-colors">
+            <div class="flex justify-end" style="padding: 12px 22px; border-top: 1px solid var(--border);">
+                <button type="button" onclick="closeTokensModal()" style="padding: 9px 16px; border-radius: 10px; border: 1px solid var(--border); background: transparent; color: var(--text-secondary); font-size: 12.5px; font-weight: 600; cursor: pointer;">
                     Close
                 </button>
             </div>
@@ -604,22 +710,22 @@
             // Check localStorage first, then default to dark theme
             const savedTheme = localStorage.getItem('theme');
             const theme = savedTheme || 'dark';
-            
+
             if (theme === 'dark') {
                 document.documentElement.classList.add('dark');
             } else {
                 document.documentElement.classList.remove('dark');
             }
-            
+
             // Save the theme if it wasn't already saved (for default dark theme)
             if (!savedTheme) {
                 localStorage.setItem('theme', 'dark');
             }
         }
-        
+
         function toggleTheme() {
             const isDark = document.documentElement.classList.contains('dark');
-            
+
             if (isDark) {
                 document.documentElement.classList.remove('dark');
                 localStorage.setItem('theme', 'light');
@@ -627,16 +733,16 @@
                 document.documentElement.classList.add('dark');
                 localStorage.setItem('theme', 'dark');
             }
-            
+
             // Update chart colors if charts exist
             if (typeof updateChartTheme === 'function') {
                 updateChartTheme();
             }
         }
-        
+
         // Initialize theme before page loads
         initTheme();
-        
+
         // Initialize server control when page loads
         document.addEventListener('DOMContentLoaded', function() {
             initServerControl();
@@ -659,75 +765,47 @@
             // No stored project — let default navigation happen (page will show empty)
             return true;
         }
-        
+
         // Global JavaScript functions
         function showNotification(message, type = 'success') {
             const notification = document.createElement('div');
-            const isDark = document.documentElement.classList.contains('dark');
-            
-            // Same background color as modal (white/gray-800)
-            const bgColorRgba = isDark ? 'rgba(31, 41, 55, 1)' : 'rgba(255, 255, 255, 1)'; // gray-800 : white
-            
-            // Border and icon colors based on type
-            let borderColor, icon, iconColor;
+
+            // Icon + color by type (design token based)
+            let icon, iconColor;
             switch(type) {
                 case 'success':
-                    borderColor = isDark ? 'rgba(22, 163, 74, 1)' : 'rgba(22, 163, 74, 1)'; // green-600
                     icon = 'fa-check-circle';
-                    iconColor = isDark ? 'text-green-500' : 'text-green-600';
+                    iconColor = 'var(--success)';
                     break;
                 case 'error':
                 case 'danger':
-                    borderColor = isDark ? 'rgba(220, 38, 38, 1)' : 'rgba(220, 38, 38, 1)'; // red-600
                     icon = 'fa-exclamation-circle';
-                    iconColor = isDark ? 'text-red-500' : 'text-red-600';
+                    iconColor = 'var(--danger)';
                     break;
                 case 'warning':
-                    borderColor = isDark ? 'rgba(202, 138, 4, 1)' : 'rgba(202, 138, 4, 1)'; // yellow-600
                     icon = 'fa-exclamation-triangle';
-                    iconColor = isDark ? 'text-yellow-500' : 'text-yellow-600';
+                    iconColor = 'var(--warning)';
                     break;
                 case 'info':
-                    borderColor = isDark ? 'rgba(37, 99, 235, 1)' : 'rgba(37, 99, 235, 1)'; // blue-600
                     icon = 'fa-info-circle';
-                    iconColor = isDark ? 'text-blue-500' : 'text-blue-600';
+                    iconColor = 'var(--accent-3)';
                     break;
                 default:
-                    borderColor = isDark ? 'rgba(75, 85, 99, 1)' : 'rgba(75, 85, 99, 1)'; // gray-600
                     icon = 'fa-info-circle';
-                    iconColor = isDark ? 'text-gray-400' : 'text-gray-600';
+                    iconColor = 'var(--text-secondary)';
             }
-            
-            // Set a unique ID to target with CSS if needed
+
             notification.id = 'mate-notification-' + Date.now();
-            const textColor = isDark ? 'text-white' : 'text-gray-900';
-            notification.className = `fixed top-4 right-4 mate-notification px-4 py-3 rounded-lg ${textColor} z-[9999] shadow-2xl flex items-center space-x-2 min-w-[300px] max-w-[500px] border-2`;
-            // Force completely opaque background - same as modal
-            notification.style.setProperty('background-color', bgColorRgba, 'important');
-            notification.style.setProperty('background', bgColorRgba, 'important');
-            notification.style.setProperty('background-image', 'none', 'important');
-            notification.style.setProperty('opacity', '1', 'important');
-            notification.style.setProperty('backdrop-filter', 'none', 'important');
-            notification.style.setProperty('-webkit-backdrop-filter', 'none', 'important');
-            notification.style.setProperty('mix-blend-mode', 'normal', 'important');
-            notification.style.setProperty('--tw-bg-opacity', '1', 'important');
-            // Border color based on type
-            notification.style.setProperty('border-color', borderColor, 'important');
-            // Now set animation (which no longer affects opacity)
-            notification.style.animation = 'slideInRight 0.3s ease-out';
-            // Ensure opacity stays at 1 after animation
-            notification.addEventListener('animationend', function() {
-                notification.style.setProperty('opacity', '1', 'important');
-            }, { once: true });
+            notification.className = 'mate-notification';
             notification.innerHTML = `
-                <i class="fas ${icon} ${iconColor} text-lg"></i>
-                <span class="flex-1 text-sm font-medium">${message}</span>
-                <button onclick="this.parentElement.remove()" class="ml-2 ${isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-600 hover:text-gray-800'} opacity-80 hover:opacity-100">
+                <i class="fas ${icon}" style="font-size: 15px; color: ${iconColor}; flex-shrink: 0;"></i>
+                <span style="font-size: 13px; color: var(--text-primary); flex: 1;">${message}</span>
+                <button onclick="this.parentElement.remove()" style="border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; flex-shrink: 0;">
                     <i class="fas fa-times text-sm"></i>
                 </button>
             `;
             document.body.appendChild(notification);
-            
+
             // Auto remove after 5 seconds
             setTimeout(() => {
                 if (notification.parentNode) {
@@ -737,85 +815,76 @@
                 }
             }, 5000);
         }
-        
+
         // Custom confirm dialog
         function showConfirm(message, title = 'Confirm', confirmText = 'Confirm', cancelText = 'Cancel', type = 'warning') {
             return new Promise((resolve) => {
                 const modal = document.createElement('div');
-                modal.className = 'fixed inset-0 bg-black/50 dark:bg-black/70 z-[10000] flex items-center justify-center';
+                modal.className = 'fixed inset-0 z-[10000] flex items-center justify-center p-4';
+                modal.style.background = 'rgba(20,15,10,0.5)';
                 modal.id = 'customConfirmModal';
-                
-                const isDark = document.documentElement.classList.contains('dark');
-                // Same background color as notifications (white/gray-800)
-                const bgColorRgba = isDark ? 'rgba(31, 41, 55, 1)' : 'rgba(255, 255, 255, 1)'; // gray-800 : white
-                
-                // Border and icon colors based on type
-                let iconClass, iconColor, borderColorRgba;
+
+                // Icon chip colors based on type
+                let iconClass, chipFg, chipBg, okBg;
                 switch(type) {
                     case 'danger':
                         iconClass = 'fa-exclamation-triangle';
-                        iconColor = isDark ? 'text-red-500' : 'text-red-600';
-                        borderColorRgba = 'rgba(220, 38, 38, 1)'; // red-600
+                        chipFg = 'var(--danger)'; chipBg = 'var(--danger-soft)'; okBg = 'var(--danger)';
                         break;
                     case 'warning':
                         iconClass = 'fa-exclamation-triangle';
-                        iconColor = isDark ? 'text-yellow-500' : 'text-yellow-600';
-                        borderColorRgba = 'rgba(202, 138, 4, 1)'; // yellow-600
+                        chipFg = 'var(--warning)'; chipBg = 'var(--warning-soft)'; okBg = 'var(--warning)';
                         break;
                     case 'info':
                         iconClass = 'fa-info-circle';
-                        iconColor = isDark ? 'text-blue-500' : 'text-blue-600';
-                        borderColorRgba = 'rgba(37, 99, 235, 1)'; // blue-600
+                        chipFg = 'var(--accent)'; chipBg = 'var(--accent-soft)'; okBg = 'var(--accent)';
                         break;
                     default:
                         iconClass = 'fa-question-circle';
-                        iconColor = isDark ? 'text-gray-400' : 'text-gray-600';
-                        borderColorRgba = isDark ? 'rgba(75, 85, 99, 1)' : 'rgba(75, 85, 99, 1)'; // gray-600
+                        chipFg = 'var(--text-secondary)'; chipBg = 'var(--bg-surface-2)'; okBg = 'var(--accent)';
                 }
-                
+
                 modal.innerHTML = `
-                    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full mx-4 border-2" onclick="event.stopPropagation()" style="background-color: ${bgColorRgba} !important; border-color: ${borderColorRgba} !important; opacity: 1 !important; --tw-bg-opacity: 1 !important;">
-                        <div class="p-4" style="background-color: transparent !important; opacity: 1 !important;">
-                            <div class="flex items-start space-x-3">
-                                <i class="fas ${iconClass} ${iconColor} text-2xl mt-0.5"></i>
-                                <div class="flex-1">
-                                    <h3 class="text-sm font-semibold text-gray-900 dark:text-white mb-2">${title}</h3>
-                                    <div class="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-line">${message}</div>
-                                </div>
+                    <div onclick="event.stopPropagation()" style="background: var(--bg-surface); border-radius: 18px; max-width: 400px; width: 100%; box-shadow: var(--shadow-card); border: 1px solid var(--border); padding: 22px; display: flex; flex-direction: column; gap: 14px;">
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <div style="width: 38px; height: 38px; border-radius: 11px; background: ${chipBg}; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                                <i class="fas ${iconClass}" style="color: ${chipFg}; font-size: 15px;"></i>
                             </div>
-                            <div class="flex justify-end space-x-2 mt-4">
-                                <button id="confirmCancelBtn" class="px-4 py-2 text-xs border border-gray-300 dark:border-gray-600 rounded text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">
-                                    ${cancelText}
-                                </button>
-                                <button id="confirmOkBtn" class="px-4 py-2 text-xs ${type === 'danger' ? 'bg-red-600 hover:bg-red-700' : type === 'warning' ? 'bg-yellow-600 hover:bg-yellow-700' : 'bg-blue-600 hover:bg-blue-700'} text-white rounded">
-                                    ${confirmText}
-                                </button>
-                            </div>
+                            <h3 style="margin: 0; font-size: 15px; font-weight: 800; color: var(--text-primary);">${title}</h3>
+                        </div>
+                        <div style="margin: 0; font-size: 13px; color: var(--text-secondary); line-height: 1.5; white-space: pre-line;">${message}</div>
+                        <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px;">
+                            <button id="confirmCancelBtn" style="padding: 9px 16px; border-radius: 10px; border: 1px solid var(--border); background: transparent; color: var(--text-secondary); font-size: 12.5px; font-weight: 600; cursor: pointer;">
+                                ${cancelText}
+                            </button>
+                            <button id="confirmOkBtn" style="padding: 9px 16px; border-radius: 10px; border: none; background: ${okBg}; color: white; font-size: 12.5px; font-weight: 700; cursor: pointer;">
+                                ${confirmText}
+                            </button>
                         </div>
                     </div>
                 `;
-                
+
                 document.body.appendChild(modal);
-                
+
                 const cancelBtn = modal.querySelector('#confirmCancelBtn');
                 const okBtn = modal.querySelector('#confirmOkBtn');
-                
+
                 const cleanup = () => {
                     modal.style.opacity = '0';
                     modal.style.transition = 'opacity 0.2s';
                     setTimeout(() => modal.remove(), 200);
                 };
-                
+
                 cancelBtn.onclick = () => {
                     cleanup();
                     resolve(false);
                 };
-                
+
                 okBtn.onclick = () => {
                     cleanup();
                     resolve(true);
                 };
-                
+
                 // Close on backdrop click
                 modal.onclick = (e) => {
                     if (e.target === modal) {
@@ -823,7 +892,7 @@
                         resolve(false);
                     }
                 };
-                
+
                 // Close on Escape key
                 const escapeHandler = (e) => {
                     if (e.key === 'Escape') {
@@ -841,22 +910,22 @@
                 method: method,
                 credentials: 'same-origin'  // Use same-origin credentials instead of manual auth
             };
-            
+
             // Add auth headers from localStorage
             const token = localStorage.getItem('auth_token');
             const username = localStorage.getItem('auth_username');
             const password = localStorage.getItem('auth_password');
-            
+
             if (!options.headers) {
                 options.headers = {};
             }
-            
+
             if (token) {
                 options.headers['Authorization'] = `Bearer ${token}`;
             } else if (username && password) {
                 options.headers['Authorization'] = 'Basic ' + btoa(username + ':' + password);
             }
-            
+
             if (data && method !== 'GET') {
                 if (data instanceof FormData) {
                     options.body = data;
@@ -865,9 +934,9 @@
                     options.body = JSON.stringify(data);
                 }
             }
-            
+
             const response = await fetch(url, options);
-            
+
             // Check if response is JSON before parsing
             const contentType = response.headers.get('content-type') || '';
             if (contentType.includes('application/json')) {
@@ -887,37 +956,37 @@
                 return Promise.reject(new Error('Authentication required'));
             }
         }
-        
-        // Chart theme colors
+
+        // Chart theme colors — redesign OKLCH palette (sRGB equivalents)
         function getChartColors() {
             const isDark = document.documentElement.classList.contains('dark');
-            
+
             return {
-                primary: isDark ? '#60a5fa' : '#3b82f6',
-                secondary: isDark ? '#34d399' : '#10b981',
-                tertiary: isDark ? '#fbbf24' : '#f59e0b',
-                quaternary: isDark ? '#f87171' : '#ef4444',
-                quinary: isDark ? '#a78bfa' : '#8b5cf6',
-                text: isDark ? '#f3f4f6' : '#374151',
-                grid: isDark ? '#374151' : '#e5e7eb',
-                background: isDark ? '#1f2937' : '#ffffff'
+                primary: isDark ? '#5fa7ff' : '#468de5',    // accent (blue)
+                secondary: isDark ? '#5ac576' : '#2e9e52',  // accent-2 (green)
+                tertiary: isDark ? '#b88fe6' : '#8e62bc',   // accent-3 (purple)
+                quaternary: isDark ? '#e3ad4b' : '#cf9a35', // accent-4 (gold)
+                quinary: isDark ? '#54b66e' : '#429c5a',    // success
+                text: isDark ? '#a3a8ae' : '#73665f',
+                grid: isDark ? '#2a2e33' : '#e6e0d9',
+                background: isDark ? '#16191b' : '#fefcf9'
             };
         }
-        
+
         // Sidebar toggle functionality
         function initSidebar() {
             const sidebar = document.getElementById('sidebar');
             const savedState = localStorage.getItem('sidebarMinimized');
-            
+
             if (savedState === 'true') {
                 sidebar.classList.add('sidebar-minimized');
             }
         }
-        
+
         function toggleSidebar() {
             const sidebar = document.getElementById('sidebar');
             const isMinimized = sidebar.classList.contains('sidebar-minimized');
-            
+
             if (isMinimized) {
                 sidebar.classList.remove('sidebar-minimized');
                 localStorage.setItem('sidebarMinimized', 'false');
@@ -926,36 +995,50 @@
                 localStorage.setItem('sidebarMinimized', 'true');
             }
         }
-        
+
         // Initialize sidebar state on page load
         document.addEventListener('DOMContentLoaded', function() {
             initSidebar();
         });
-        
+
         // User menu dropdown functionality
         function toggleUserMenu() {
             const dropdown = document.getElementById('userMenuDropdown');
             dropdown.classList.toggle('hidden');
         }
-        
+
         // Close dropdown when clicking outside
         document.addEventListener('click', function(event) {
             const menuButton = document.getElementById('userMenuButton');
             const dropdown = document.getElementById('userMenuDropdown');
-            
+
             if (!menuButton.contains(event.target) && !dropdown.contains(event.target)) {
                 dropdown.classList.add('hidden');
             }
         });
-        
+
+        // Logout confirm dialog (design: confirm before logging out)
+        async function confirmLogout(event) {
+            event.preventDefault();
+            const dropdown = document.getElementById('userMenuDropdown');
+            if (dropdown) dropdown.classList.add('hidden');
+            const confirmed = await showConfirm(
+                'Are you sure you want to log out of the Mate dashboard?',
+                'Logout', 'Log out', 'Cancel', 'warning'
+            );
+            if (confirmed) {
+                await handleLogout(event);
+            }
+        }
+
         // Logout functionality
         async function handleLogout(event) {
             event.preventDefault();
-            
+
             const token = localStorage.getItem('auth_token');
             const username = localStorage.getItem('auth_username');
             const password = localStorage.getItem('auth_password');
-            
+
             // Build auth header - prefer token, fall back to basic auth
             let authHeader = null;
             if (token) {
@@ -963,7 +1046,7 @@
             } else if (username && password) {
                 authHeader = 'Basic ' + btoa(username + ':' + password);
             }
-            
+
             // Prepare headers
             const headers = {
                 'Content-Type': 'application/json'
@@ -971,7 +1054,7 @@
             if (authHeader) {
                 headers['Authorization'] = authHeader;
             }
-            
+
             // Send credentials in body so server can mark basic auth as logged out
             // even when Bearer token is used
             const body = {};
@@ -979,7 +1062,7 @@
                 body.username = username;
                 body.password = password;
             }
-            
+
             // Try to revoke token and invalidate basic auth on server
             try {
                 await fetch('/auth/logout', {
@@ -991,47 +1074,47 @@
             } catch (error) {
                 console.error('Logout error:', error);
             }
-            
+
             // Clear localStorage IMMEDIATELY before redirect
             localStorage.removeItem('auth_token');
             localStorage.removeItem('auth_username');
             localStorage.removeItem('auth_password');
-            
+
             // Clear auth cookies
             document.cookie = 'auth_token=; path=/; max-age=0; SameSite=Lax';
             document.cookie = 'auth_username=; path=/; max-age=0; SameSite=Lax';
             document.cookie = 'auth_password=; path=/; max-age=0; SameSite=Lax';
-            
+
             // Force redirect to login with cache-busting
             window.location.replace('/login?logout=1');
         }
 
         // ---------- Personal Access Token Modal JS Functions ----------
-        
+
         async function showTokensModal(event) {
             if (event) event.preventDefault();
-            
+
             // Hide user menu dropdown
             const dropdown = document.getElementById('userMenuDropdown');
             if (dropdown) dropdown.classList.add('hidden');
-            
+
             // Clear new token creation inputs & alerts
             document.getElementById('newTokenName').value = '';
             document.getElementById('newTokenExpiry').value = '30';
             document.getElementById('generatedTokenWrapper').classList.add('hidden');
             document.getElementById('generatedTokenVal').value = '';
-            
+
             // Show modal
             document.getElementById('tokensModal').classList.remove('hidden');
-            
+
             // Fetch existing tokens
             await loadActiveTokens();
         }
-        
+
         function closeTokensModal() {
             document.getElementById('tokensModal').classList.add('hidden');
         }
-        
+
         function formatTokenDate(isoStr) {
             if (!isoStr) return 'Never';
             try {
@@ -1041,17 +1124,17 @@
                 return isoStr;
             }
         }
-        
+
         function esc(s) {
             return String(s ?? '')
                 .replace(/&/g, '&amp;').replace(/</g, '&lt;')
                 .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
         }
-        
+
         async function loadActiveTokens() {
             const tbody = document.getElementById('tokensTableBody');
             tbody.innerHTML = `<tr><td colspan="6" class="px-4 py-6 text-center text-gray-500 dark:text-gray-400"><i class="fas fa-spinner fa-spin mr-1.5"></i>Loading tokens...</td></tr>`;
-            
+
             try {
                 const data = await apiCall('/dashboard/api/tokens');
                 if (data.success && data.tokens) {
@@ -1059,15 +1142,15 @@
                         tbody.innerHTML = `<tr><td colspan="6" class="px-4 py-6 text-center text-gray-500 dark:text-gray-400">No active tokens found. Create one above to get started.</td></tr>`;
                         return;
                     }
-                    
+
                     tbody.innerHTML = data.tokens.map(t => {
                         const isExpired = t.expires_at && new Date(t.expires_at) < new Date();
-                        const statusBadge = isExpired 
-                            ? `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400"><span class="w-1.5 h-1.5 rounded-full bg-red-500 mr-1.5"></span>Expired</span>`
-                            : `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"><span class="w-1.5 h-1.5 rounded-full bg-green-500 mr-1.5"></span>Active</span>`;
-                        
+                        const statusBadge = isExpired
+                            ? `<span style="display: inline-flex; align-items: center; font-size: 10px; font-weight: 700; padding: 3px 9px; border-radius: 999px; background: var(--danger-soft); color: var(--danger);">Expired</span>`
+                            : `<span style="display: inline-flex; align-items: center; font-size: 10px; font-weight: 700; padding: 3px 9px; border-radius: 999px; background: var(--success-soft); color: var(--success);">Active</span>`;
+
                         const expiresVal = isExpired ? 'Expired' : formatTokenDate(t.expires_at);
-                        
+
                         return `
                             <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/20 transition-colors">
                                 <td class="px-4 py-3 font-semibold text-gray-900 dark:text-white truncate max-w-[150px]" title="${esc(t.name)}">${esc(t.name)}</td>
@@ -1090,31 +1173,31 @@
                 tbody.innerHTML = `<tr><td colspan="6" class="px-4 py-6 text-center text-red-500 dark:text-red-400">Error fetching tokens.</td></tr>`;
             }
         }
-        
+
         async function generateToken() {
             const nameInput = document.getElementById('newTokenName');
             const expirySelect = document.getElementById('newTokenExpiry');
             const name = nameInput.value.trim() || 'Unnamed Token';
             const expiry = expirySelect.value ? parseInt(expirySelect.value) : null;
-            
+
             try {
                 const res = await apiCall('/dashboard/api/tokens', 'POST', {
                     name: name,
                     expires_in_days: expiry
                 });
-                
+
                 if (res.success && res.token) {
                     // Show the newly generated token
                     const wrapper = document.getElementById('generatedTokenWrapper');
                     const valInput = document.getElementById('generatedTokenVal');
                     valInput.value = res.token;
                     wrapper.classList.remove('hidden');
-                    
+
                     showNotification('Token generated successfully.');
-                    
+
                     // Clear the form
                     nameInput.value = '';
-                    
+
                     // Reload active list
                     await loadActiveTokens();
                 } else {
@@ -1124,11 +1207,11 @@
                 showNotification('Error generating token', 'error');
             }
         }
-        
+
         async function revokeToken(tokenId, tokenName) {
             const confirmed = await showConfirm(`Are you sure you want to revoke the token "${tokenName}"?\nAny external clients using this token will lose access to the MATE API immediately.`, 'Revoke Token', 'Revoke', 'Cancel', 'danger');
             if (!confirmed) return;
-            
+
             try {
                 const res = await apiCall(`/dashboard/api/tokens/${tokenId}`, 'DELETE');
                 if (res.success) {
@@ -1141,7 +1224,7 @@
                 showNotification('Error revoking token', 'error');
             }
         }
-        
+
         function copyGeneratedToken() {
             const valInput = document.getElementById('generatedTokenVal');
             valInput.select();
@@ -1152,8 +1235,7 @@
             });
         }
     </script>
-    
+
     {% block scripts %}{% endblock %}
 </body>
 </html>
-

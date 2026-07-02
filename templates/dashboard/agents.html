@@ -21,8 +21,8 @@
             <!-- Header -->
             <div class="flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-center agents-page-header">
                 <div class="min-w-0">
-                    <h2 class="text-xl font-bold text-gray-900 dark:text-white">Agent Management</h2>
-                    <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">Manage agent configurations and settings
+                    <h2 style="margin: 0; font-size: 22px; font-weight: 800; color: var(--text-primary);">Agents</h2>
+                    <p style="margin: 4px 0 0; font-size: 13px; color: var(--text-secondary);">Manage agent configurations and settings
                     </p>
                     {% if selected_project_id %}
                     {% set selected_project = (projects | selectattr('id', 'equalto', selected_project_id) | list |

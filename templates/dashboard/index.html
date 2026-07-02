@@ -3,102 +3,102 @@
 {% block title %}Platform Overview - MATE{% endblock %}
 
 {% block content %}
-<div class="space-y-4">
+<div class="space-y-4" style="display: flex; flex-direction: column; gap: 18px;">
     <!-- Header -->
-    <div class="flex items-center justify-between">
+    <div class="flex items-center justify-between flex-wrap gap-2.5">
         <div>
-            <h2 class="text-xl font-bold text-gray-900 dark:text-white">Platform Overview</h2>
-            <p class="text-sm text-gray-500 dark:text-gray-400 mt-0.5">MATE Multi-Agent Engine</p>
+            <h2 style="margin: 0; font-size: 22px; font-weight: 800; color: var(--text-primary);">Platform Overview</h2>
+            <p style="margin: 4px 0 0; font-size: 13px; color: var(--text-secondary);">MATE Multi-Agent Engine</p>
         </div>
-        <button onclick="refreshSystemStatus()" class="flex items-center gap-1.5 px-3 py-1.5 text-xs text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
-            <i class="fas fa-sync-alt"></i> Refresh
+        <button onclick="refreshOverview()" class="flex items-center gap-1.5" style="padding: 8px 14px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg-surface); color: var(--text-secondary); font-size: 12.5px; font-weight: 600; cursor: pointer;">
+            <i class="fas fa-sync-alt" id="overviewRefreshIcon"></i> Refresh
         </button>
     </div>
 
     <!-- Stats Cards -->
-    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 p-4">
-            <div class="flex items-center justify-between mb-2">
-                <span class="text-xs font-medium text-gray-500 dark:text-gray-400">LLM Requests</span>
-                <div class="w-7 h-7 rounded-lg bg-blue-50 dark:bg-blue-900/40 flex items-center justify-center">
-                    <i class="fas fa-chart-line text-xs text-blue-600 dark:text-blue-400"></i>
+    <div class="grid gap-3.5" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px;">
+        <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: 20px; padding: 18px; box-shadow: var(--shadow-card);">
+            <div class="flex items-center justify-between" style="margin-bottom: 12px;">
+                <span style="font-size: 12px; font-weight: 600; color: var(--text-secondary);">LLM Requests</span>
+                <div style="width: 32px; height: 32px; border-radius: 10px; background: var(--accent-soft); display: flex; align-items: center; justify-content: center;">
+                    <i class="fas fa-chart-line" style="font-size: 13px; color: var(--accent);"></i>
                 </div>
             </div>
-            <p class="text-2xl font-bold text-gray-900 dark:text-white">{{ stats.total_requests }}</p>
-            <p class="text-xs text-gray-400 dark:text-gray-500 mt-0.5">via ADK</p>
+            <p style="margin: 0; font-size: 26px; font-weight: 800; color: var(--text-primary);">{{ stats.total_requests }}</p>
+            <p style="margin: 4px 0 0; font-size: 11.5px; color: var(--text-tertiary);">via ADK</p>
         </div>
 
-        <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 p-4">
-            <div class="flex items-center justify-between mb-2">
-                <span class="text-xs font-medium text-gray-500 dark:text-gray-400">Total Tokens</span>
-                <div class="w-7 h-7 rounded-lg bg-green-50 dark:bg-green-900/40 flex items-center justify-center">
-                    <i class="fas fa-coins text-xs text-green-600 dark:text-green-400"></i>
+        <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: 20px; padding: 18px; box-shadow: var(--shadow-card);">
+            <div class="flex items-center justify-between" style="margin-bottom: 12px;">
+                <span style="font-size: 12px; font-weight: 600; color: var(--text-secondary);">Total Tokens</span>
+                <div style="width: 32px; height: 32px; border-radius: 10px; background: var(--accent-2-soft); display: flex; align-items: center; justify-content: center;">
+                    <i class="fas fa-coins" style="font-size: 13px; color: var(--accent-2);"></i>
                 </div>
             </div>
-            <p class="text-2xl font-bold text-gray-900 dark:text-white">{{ "{:,}".format(stats.total_prompt_tokens + stats.total_response_tokens) }}</p>
-            <p class="text-xs text-gray-400 dark:text-gray-500 mt-0.5">prompt + response</p>
+            <p style="margin: 0; font-size: 26px; font-weight: 800; color: var(--text-primary);">{{ "{:,}".format(stats.total_prompt_tokens + stats.total_response_tokens) }}</p>
+            <p style="margin: 4px 0 0; font-size: 11.5px; color: var(--text-tertiary);">prompt + response</p>
         </div>
 
-        <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 p-4">
-            <div class="flex items-center justify-between mb-2">
-                <span class="text-xs font-medium text-gray-500 dark:text-gray-400">Active Users</span>
-                <div class="w-7 h-7 rounded-lg bg-purple-50 dark:bg-purple-900/40 flex items-center justify-center">
-                    <i class="fas fa-users text-xs text-purple-600 dark:text-purple-400"></i>
+        <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: 20px; padding: 18px; box-shadow: var(--shadow-card);">
+            <div class="flex items-center justify-between" style="margin-bottom: 12px;">
+                <span style="font-size: 12px; font-weight: 600; color: var(--text-secondary);">Active Users</span>
+                <div style="width: 32px; height: 32px; border-radius: 10px; background: var(--accent-3-soft); display: flex; align-items: center; justify-content: center;">
+                    <i class="fas fa-users" style="font-size: 13px; color: var(--accent-3);"></i>
                 </div>
             </div>
-            <p class="text-2xl font-bold text-gray-900 dark:text-white">{{ stats.unique_users }}</p>
-            <p class="text-xs text-gray-400 dark:text-gray-500 mt-0.5">unique callers</p>
+            <p style="margin: 0; font-size: 26px; font-weight: 800; color: var(--text-primary);">{{ stats.unique_users }}</p>
+            <p style="margin: 4px 0 0; font-size: 11.5px; color: var(--text-tertiary);">unique callers</p>
         </div>
 
-        <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 p-4">
-            <div class="flex items-center justify-between mb-2">
-                <span class="text-xs font-medium text-gray-500 dark:text-gray-400">Published Agents</span>
-                <div class="w-7 h-7 rounded-lg bg-orange-50 dark:bg-orange-900/40 flex items-center justify-center">
-                    <i class="fas fa-robot text-xs text-orange-600 dark:text-orange-400"></i>
+        <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: 20px; padding: 18px; box-shadow: var(--shadow-card);">
+            <div class="flex items-center justify-between" style="margin-bottom: 12px;">
+                <span style="font-size: 12px; font-weight: 600; color: var(--text-secondary);">Published Agents</span>
+                <div style="width: 32px; height: 32px; border-radius: 10px; background: var(--accent-4-soft); display: flex; align-items: center; justify-content: center;">
+                    <i class="fas fa-robot" style="font-size: 13px; color: var(--accent-4);"></i>
                 </div>
             </div>
-            <p class="text-2xl font-bold text-gray-900 dark:text-white">{{ stats.unique_agents }}</p>
-            <p class="text-xs text-gray-400 dark:text-gray-500 mt-0.5">total deployed</p>
+            <p style="margin: 0; font-size: 26px; font-weight: 800; color: var(--text-primary);">{{ stats.unique_agents }}</p>
+            <p style="margin: 4px 0 0; font-size: 11.5px; color: var(--text-tertiary);">total deployed</p>
         </div>
     </div>
 
     <!-- Charts Row -->
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 p-4">
-            <h3 class="text-sm font-semibold text-gray-900 dark:text-white mb-3">Daily Usage — Last 7 Days</h3>
-            <div style="height: 200px;">
+    <div class="grid grid-cols-1 lg:grid-cols-[1.3fr_1fr]" style="gap: 14px;">
+        <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: 20px; padding: 18px; box-shadow: var(--shadow-card); min-width: 0;">
+            <h3 style="margin: 0 0 12px; font-size: 14px; font-weight: 700; color: var(--text-primary);">Daily Usage — Last 7 Days</h3>
+            <div style="height: 220px;">
                 <canvas id="dailyUsageChart"></canvas>
             </div>
         </div>
-        <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 p-4">
-            <h3 class="text-sm font-semibold text-gray-900 dark:text-white mb-3">Top Agents by Requests</h3>
-            <div style="height: 200px;">
+        <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: 20px; padding: 18px; box-shadow: var(--shadow-card); min-width: 0;">
+            <h3 style="margin: 0 0 12px; font-size: 14px; font-weight: 700; color: var(--text-primary);">Top Agents by Requests</h3>
+            <div style="height: 220px;">
                 <canvas id="topAgentsChart"></canvas>
             </div>
         </div>
     </div>
 
     <!-- Service Health -->
-    <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700">
-        <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-700">
-            <h3 class="text-sm font-semibold text-gray-900 dark:text-white">Service Health</h3>
-            <span id="healthBadge" class="text-xs font-medium px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400">
+    <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: 20px; box-shadow: var(--shadow-card); overflow: hidden;">
+        <div class="flex items-center justify-between" style="padding: 14px 18px; border-bottom: 1px solid var(--border);">
+            <h3 style="margin: 0; font-size: 14px; font-weight: 700; color: var(--text-primary);">Service Health</h3>
+            <span id="healthBadge" style="font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 999px; background: var(--bg-surface-2); color: var(--text-secondary);">
                 checking…
             </span>
         </div>
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-px bg-gray-100 dark:bg-gray-700">
-            <div class="bg-white dark:bg-gray-800 px-4 py-3 flex items-center gap-2">
-                <span id="healthDotAdk" class="inline-block w-2 h-2 rounded-full bg-gray-300 dark:bg-gray-600 flex-shrink-0"></span>
+        <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));">
+            <div style="padding: 14px 18px; display: flex; align-items: center; gap: 10px; border-top: 1px solid var(--border);">
+                <span id="healthDotAdk" style="display: inline-block; width: 9px; height: 9px; border-radius: 999px; background: var(--border-strong); flex-shrink: 0;"></span>
                 <div>
-                    <p class="text-xs font-medium text-gray-700 dark:text-gray-300">ADK Server</p>
-                    <p id="healthTextAdk" class="text-xs text-gray-400 dark:text-gray-500">Checking…</p>
+                    <p style="margin: 0; font-size: 12.5px; font-weight: 600; color: var(--text-primary);">ADK Server</p>
+                    <p id="healthTextAdk" style="margin: 2px 0 0; font-size: 11px; color: var(--text-tertiary);">Checking…</p>
                 </div>
             </div>
-            <div class="bg-white dark:bg-gray-800 px-4 py-3 flex items-center gap-2">
-                <span class="inline-block w-2 h-2 rounded-full bg-green-400 flex-shrink-0"></span>
+            <div style="padding: 14px 18px; display: flex; align-items: center; gap: 10px; border-top: 1px solid var(--border);">
+                <span style="display: inline-block; width: 9px; height: 9px; border-radius: 999px; background: var(--success); flex-shrink: 0;"></span>
                 <div>
-                    <p class="text-xs font-medium text-gray-700 dark:text-gray-300">Database</p>
-                    <p class="text-xs text-gray-400 dark:text-gray-500">
+                    <p style="margin: 0; font-size: 12.5px; font-weight: 600; color: var(--text-primary);">Database</p>
+                    <p style="margin: 2px 0 0; font-size: 11px; color: var(--text-tertiary);">
                         {% if stats.database_info.type == 'SQLITE' %}SQLite
                         {% elif stats.database_info.type == 'POSTGRESQL' %}PostgreSQL
                         {% elif stats.database_info.type == 'MYSQL' %}MySQL
@@ -106,31 +106,31 @@
                     </p>
                 </div>
             </div>
-            <div class="bg-white dark:bg-gray-800 px-4 py-3 flex items-center gap-2">
-                <span class="inline-block w-2 h-2 rounded-full bg-green-400 flex-shrink-0"></span>
+            <div style="padding: 14px 18px; display: flex; align-items: center; gap: 10px; border-top: 1px solid var(--border);">
+                <span style="display: inline-block; width: 9px; height: 9px; border-radius: 999px; background: var(--success); flex-shrink: 0;"></span>
                 <div>
-                    <p class="text-xs font-medium text-gray-700 dark:text-gray-300">Authentication</p>
-                    <p class="text-xs text-gray-400 dark:text-gray-500">Active</p>
+                    <p style="margin: 0; font-size: 12.5px; font-weight: 600; color: var(--text-primary);">Authentication</p>
+                    <p style="margin: 2px 0 0; font-size: 11px; color: var(--text-tertiary);">Active</p>
                 </div>
             </div>
-            <div class="bg-white dark:bg-gray-800 px-4 py-3 flex items-center gap-2">
-                <span class="inline-block w-2 h-2 rounded-full bg-green-400 flex-shrink-0"></span>
+            <div style="padding: 14px 18px; display: flex; align-items: center; gap: 10px; border-top: 1px solid var(--border);">
+                <span style="display: inline-block; width: 9px; height: 9px; border-radius: 999px; background: var(--success); flex-shrink: 0;"></span>
                 <div>
-                    <p class="text-xs font-medium text-gray-700 dark:text-gray-300">Rate Limiter</p>
-                    <p class="text-xs text-gray-400 dark:text-gray-500">Active</p>
+                    <p style="margin: 0; font-size: 12.5px; font-weight: 600; color: var(--text-primary);">Rate Limiter</p>
+                    <p style="margin: 2px 0 0; font-size: 11px; color: var(--text-tertiary);">Active</p>
                 </div>
             </div>
         </div>
     </div>
 
     <!-- Recent Activity -->
-    <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700">
-        <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-700">
-            <h3 class="text-sm font-semibold text-gray-900 dark:text-white">Recent Activity</h3>
-            <a href="/dashboard/audit-logs" class="text-xs text-blue-600 dark:text-blue-400 hover:underline">View all →</a>
+    <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: 20px; box-shadow: var(--shadow-card); overflow: hidden;">
+        <div class="flex items-center justify-between" style="padding: 14px 18px; border-bottom: 1px solid var(--border);">
+            <h3 style="margin: 0; font-size: 14px; font-weight: 700; color: var(--text-primary);">Recent Activity</h3>
+            <a href="/dashboard/audit-logs" style="font-size: 12px; color: var(--accent); font-weight: 600; text-decoration: none;">View all →</a>
         </div>
-        <div id="recentActivityList" class="divide-y divide-gray-50 dark:divide-gray-700/50">
-            <div class="px-4 py-3 text-xs text-gray-400 dark:text-gray-500">Loading…</div>
+        <div id="recentActivityList">
+            <div style="padding: 11px 18px; font-size: 12px; color: var(--text-tertiary);">Loading…</div>
         </div>
     </div>
 </div>
@@ -145,6 +145,8 @@
         const dailyData = {{ stats.daily_usage | tojson }};
         const agentsData = {{ stats.top_agents | tojson }};
 
+        const chartFont = { family: "'Plus Jakarta Sans', sans-serif" };
+
         const dailyCtx = document.getElementById('dailyUsageChart').getContext('2d');
         dailyChart = new Chart(dailyCtx, {
             type: 'line',
@@ -154,14 +156,14 @@
                     label: 'Requests',
                     data: dailyData.map(d => d.requests),
                     borderColor: colors.primary,
-                    backgroundColor: colors.primary + '20',
+                    backgroundColor: colors.primary + '33',
                     tension: 0.4,
                     fill: true
                 }, {
                     label: 'Tokens',
                     data: dailyData.map(d => d.tokens),
-                    borderColor: colors.secondary,
-                    backgroundColor: colors.secondary + '20',
+                    borderColor: colors.tertiary,
+                    backgroundColor: colors.tertiary + '33',
                     tension: 0.4,
                     fill: true,
                     yAxisID: 'y1'
@@ -171,11 +173,11 @@
                 responsive: true,
                 maintainAspectRatio: false,
                 scales: {
-                    y: { beginAtZero: true, position: 'left', title: { display: true, text: 'Requests', color: colors.text }, ticks: { color: colors.text }, grid: { color: colors.grid } },
-                    y1: { type: 'linear', display: true, position: 'right', title: { display: true, text: 'Tokens', color: colors.text }, ticks: { color: colors.text }, grid: { drawOnChartArea: false } },
-                    x: { ticks: { color: colors.text }, grid: { color: colors.grid } }
+                    y: { beginAtZero: true, position: 'left', title: { display: true, text: 'Requests', color: colors.text }, ticks: { color: colors.text, font: chartFont }, grid: { color: colors.grid } },
+                    y1: { type: 'linear', display: true, position: 'right', title: { display: true, text: 'Tokens', color: colors.text }, ticks: { color: colors.text, font: chartFont }, grid: { drawOnChartArea: false } },
+                    x: { ticks: { color: colors.text, font: chartFont }, grid: { color: colors.grid } }
                 },
-                plugins: { legend: { position: 'top', labels: { color: colors.text } } }
+                plugins: { legend: { position: 'top', labels: { color: colors.text, boxWidth: 10, font: chartFont } } }
             }
         });
 
@@ -194,7 +196,7 @@
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                plugins: { legend: { position: 'bottom', labels: { color: colors.text } } }
+                plugins: { legend: { position: 'bottom', labels: { color: colors.text, boxWidth: 10, padding: 10, font: chartFont } } }
             }
         });
     }
@@ -203,9 +205,9 @@
         if (!dailyChart || !agentsChart) return;
         const colors = getChartColors();
         dailyChart.data.datasets[0].borderColor = colors.primary;
-        dailyChart.data.datasets[0].backgroundColor = colors.primary + '20';
-        dailyChart.data.datasets[1].borderColor = colors.secondary;
-        dailyChart.data.datasets[1].backgroundColor = colors.secondary + '20';
+        dailyChart.data.datasets[0].backgroundColor = colors.primary + '33';
+        dailyChart.data.datasets[1].borderColor = colors.tertiary;
+        dailyChart.data.datasets[1].backgroundColor = colors.tertiary + '33';
         dailyChart.options.scales.y.title.color = colors.text;
         dailyChart.options.scales.y.ticks.color = colors.text;
         dailyChart.options.scales.y.grid.color = colors.grid;
@@ -221,27 +223,39 @@
         agentsChart.update();
     }
 
+    function refreshOverview() {
+        const icon = document.getElementById('overviewRefreshIcon');
+        if (icon) {
+            icon.style.animation = 'mate-spin 0.7s linear';
+            setTimeout(() => { icon.style.animation = ''; }, 700);
+        }
+        refreshSystemStatus();
+        loadRecentActivity();
+    }
+
     function refreshSystemStatus() {
         const dot = document.getElementById('healthDotAdk');
         const text = document.getElementById('healthTextAdk');
         const badge = document.getElementById('healthBadge');
-        dot.className = 'inline-block w-2 h-2 rounded-full bg-gray-300 dark:bg-gray-600 flex-shrink-0';
+        dot.style.background = 'var(--border-strong)';
         text.textContent = 'Checking…';
 
         apiCall('/dashboard/api/server/status')
             .then(data => {
                 const running = data.status === 'running';
-                dot.className = `inline-block w-2 h-2 rounded-full flex-shrink-0 ${running ? 'bg-green-400' : 'bg-red-400'}`;
+                dot.style.background = running ? 'var(--success)' : 'var(--danger)';
                 text.textContent = running ? 'Running' : 'Stopped';
                 const healthy = running ? 4 : 3;
-                badge.textContent = `${healthy}/4 healthy`;
-                badge.className = `text-xs font-medium px-2 py-0.5 rounded-full ${healthy === 4 ? 'bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-400' : 'bg-yellow-50 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400'}`;
+                badge.textContent = `${healthy}/4 OK`;
+                badge.style.background = healthy === 4 ? 'var(--success-soft)' : 'var(--warning-soft)';
+                badge.style.color = healthy === 4 ? 'var(--success)' : 'var(--warning)';
             })
             .catch(() => {
-                dot.className = 'inline-block w-2 h-2 rounded-full bg-red-400 flex-shrink-0';
+                dot.style.background = 'var(--danger)';
                 text.textContent = 'Unreachable';
-                badge.textContent = '3/4 healthy';
-                badge.className = 'text-xs font-medium px-2 py-0.5 rounded-full bg-yellow-50 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400';
+                badge.textContent = '3/4 OK';
+                badge.style.background = 'var(--warning-soft)';
+                badge.style.color = 'var(--warning)';
             });
     }
 
@@ -251,19 +265,19 @@
             .then(data => {
                 const entries = data.logs || data.items || (Array.isArray(data) ? data : []);
                 if (!entries.length) {
-                    list.innerHTML = '<div class="px-4 py-3 text-xs text-gray-400 dark:text-gray-500">No recent activity.</div>';
+                    list.innerHTML = '<div style="padding: 11px 18px; font-size: 12px; color: var(--text-tertiary);">No recent activity.</div>';
                     return;
                 }
                 const typeColors = {
-                    create: 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400',
-                    update: 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400',
-                    delete: 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-400',
-                    login:  'bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-400',
+                    create: 'background: var(--success-soft); color: var(--success);',
+                    update: 'background: var(--accent-3-soft); color: var(--accent-3);',
+                    delete: 'background: var(--danger-soft); color: var(--danger);',
+                    login:  'background: var(--accent-4-soft); color: var(--accent-4);',
                 };
                 list.innerHTML = entries.slice(0, 5).map(e => {
                     const action = (e.action || e.event_type || e.event || 'event').toLowerCase();
                     const colorKey = Object.keys(typeColors).find(k => action.includes(k));
-                    const badgeClass = colorKey ? typeColors[colorKey] : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400';
+                    const badgeStyle = colorKey ? typeColors[colorKey] : 'background: var(--bg-surface-2); color: var(--text-secondary);';
                     const ts = e.timestamp || e.created_at || '';
                     let relTime = '';
                     if (ts) {
@@ -273,15 +287,15 @@
                     const user = e.actor || 'system';
                     const resource = e.resource_type ? `${e.resource_type}${e.resource_id ? ' #' + e.resource_id : ''}` : '';
                     return `
-                        <div class="flex items-center gap-3 px-4 py-2.5">
-                            <span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium ${badgeClass} flex-shrink-0">${action}</span>
-                            <span class="text-xs text-gray-700 dark:text-gray-300 flex-1 truncate">${user}${resource ? ' — ' + resource : ''}</span>
-                            <span class="text-xs text-gray-400 dark:text-gray-500 flex-shrink-0">${relTime}</span>
+                        <div style="display: flex; align-items: center; gap: 12px; padding: 11px 18px; border-top: 1px solid var(--border);">
+                            <span style="font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 7px; text-transform: uppercase; flex-shrink: 0; ${badgeStyle}">${action}</span>
+                            <span style="flex: 1; font-size: 12.5px; color: var(--text-secondary); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${user}${resource ? ' — ' + resource : ''}</span>
+                            <span style="font-size: 11.5px; color: var(--text-tertiary); flex-shrink: 0;">${relTime}</span>
                         </div>`;
                 }).join('');
             })
             .catch(() => {
-                list.innerHTML = '<div class="px-4 py-3 text-xs text-gray-400 dark:text-gray-500">Could not load activity.</div>';
+                list.innerHTML = '<div style="padding: 11px 18px; font-size: 12px; color: var(--text-tertiary);">Could not load activity.</div>';
             });
     }
 

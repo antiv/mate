@@ -6,11 +6,11 @@
 <link rel="stylesheet" href="/static/css/widget/chat.css?v=5">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.6/ace.min.js" defer></script>
 <style>
-    /* ── Work Room layout ─────────────────────────────────── */
+    /* ── Work Room layout (redesign tokens) ───────────────── */
     .wr-root {
         display: flex;
         flex-direction: column;
-        height: calc(100vh - 5.5rem);
+        height: calc(100vh - 108px);
         min-height: 400px;
     }
 
@@ -21,111 +21,86 @@
         flex-direction: column;
         align-items: center;
         justify-content: flex-start;
-        padding: 3rem 1rem 1rem;
+        padding: 24px 0 8px;
         overflow-y: auto;
+        text-align: center;
     }
     .wr-welcome-icon {
-        width: 4rem;
-        height: 4rem;
-        border-radius: 1rem;
-        background: linear-gradient(135deg, rgba(99,102,241,0.15) 0%, rgba(59,130,246,0.15) 100%);
+        width: 56px;
+        height: 56px;
+        border-radius: 16px;
+        background: var(--accent-soft);
         display: flex;
         align-items: center;
         justify-content: center;
-        margin-bottom: 1.25rem;
-        font-size: 1.5rem;
+        margin-bottom: 8px;
     }
-    .dark .wr-welcome-icon {
-        background: linear-gradient(135deg, rgba(99,102,241,0.25) 0%, rgba(59,130,246,0.25) 100%);
+    .wr-welcome-icon i {
+        font-size: 22px !important;
+        color: var(--accent) !important;
     }
 
     /* Agent cards grid */
     .wr-agents-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-        gap: 0.75rem;
+        grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+        gap: 14px;
         width: 100%;
-        max-width: 760px;
-        margin-top: 2rem;
+        margin-top: 18px;
+        text-align: left;
     }
     .wr-agent-card {
-        background: #fff;
-        border: 1px solid #e5e7eb;
-        border-radius: 1rem;
-        padding: 1.25rem;
+        background: var(--bg-surface);
+        border: 1px solid var(--border);
+        border-radius: 18px;
+        padding: 16px;
+        box-shadow: var(--shadow-card);
         cursor: pointer;
         transition: all 0.2s ease;
         text-decoration: none;
-        display: block;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
         position: relative;
         overflow: hidden;
     }
-    .wr-agent-card::before {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        height: 3px;
-        background: linear-gradient(90deg, #6366f1, #3b82f6);
-        opacity: 0;
-        transition: opacity 0.2s ease;
-    }
     .wr-agent-card:hover {
-        border-color: #c7d2fe;
-        box-shadow: 0 4px 20px rgba(99,102,241,0.1);
+        border-color: var(--border-strong);
         transform: translateY(-2px);
     }
-    .wr-agent-card:hover::before {
-        opacity: 1;
-    }
-    .dark .wr-agent-card {
-        background: #1e293b;
-        border-color: #334155;
-    }
-    .dark .wr-agent-card:hover {
-        border-color: #818cf8;
-        box-shadow: 0 4px 20px rgba(99,102,241,0.15);
-    }
     .wr-agent-avatar {
-        width: 2.5rem;
-        height: 2.5rem;
-        border-radius: 0.75rem;
-        background: linear-gradient(135deg, #6366f1 0%, #3b82f6 100%);
+        width: 36px;
+        height: 36px;
+        border-radius: 10px;
+        background: linear-gradient(135deg, var(--accent), var(--accent-3));
         display: flex;
         align-items: center;
         justify-content: center;
-        margin-bottom: 0.75rem;
-        font-size: 1rem;
+        font-size: 13px;
         color: #fff;
-        box-shadow: 0 2px 8px rgba(99,102,241,0.25);
     }
     .wr-agent-name {
-        font-size: 0.85rem;
-        font-weight: 600;
-        color: #0f172a;
-        margin-bottom: 0.25rem;
+        font-size: 13.5px;
+        font-weight: 700;
+        color: var(--text-primary);
     }
-    .dark .wr-agent-name { color: #f1f5f9; }
     .wr-agent-desc {
-        font-size: 0.75rem;
-        color: #64748b;
+        font-size: 12px;
+        color: var(--text-secondary);
         line-height: 1.5;
         display: -webkit-box;
         -webkit-line-clamp: 2;
         -webkit-box-orient: vertical;
         overflow: hidden;
+        margin: 0;
     }
-    .dark .wr-agent-desc { color: #94a3b8; }
     .wr-agent-type {
-        font-size: 0.6rem;
-        font-weight: 600;
-        color: #6366f1;
+        font-size: 10px;
+        font-weight: 700;
+        color: var(--accent);
         text-transform: uppercase;
         letter-spacing: 0.06em;
-        margin-top: 0.5rem;
     }
-    .dark .wr-agent-type { color: #818cf8; }
 
     /* ── Chat state ───────────────────────────────────────── */
     .wr-chat-root {
@@ -142,43 +117,53 @@
     .wr-agent-bar {
         display: flex;
         align-items: center;
-        gap: 0.625rem;
-        padding: 0.625rem 1rem;
-        background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
-        border: 1px solid #e2e8f0;
-        border-radius: 1rem 1rem 0 0;
+        gap: 10px;
+        padding: 10px 16px;
+        background: var(--bg-surface-2);
+        border: 1px solid var(--border);
+        border-radius: 16px 16px 0 0;
         flex-shrink: 0;
     }
-    .dark .wr-agent-bar {
-        background: linear-gradient(135deg, #1e293b 0%, #1a2332 100%);
-        border-color: #334155;
-    }
     .wr-agent-bar-avatar {
-        width: 2rem;
-        height: 2rem;
-        border-radius: 0.5rem;
-        background: linear-gradient(135deg, #6366f1 0%, #3b82f6 100%);
+        width: 30px;
+        height: 30px;
+        border-radius: 9px;
+        background: linear-gradient(135deg, var(--accent), var(--accent-3));
         display: flex;
         align-items: center;
         justify-content: center;
         color: #fff;
-        font-size: 0.7rem;
+        font-size: 12px;
         flex-shrink: 0;
-        box-shadow: 0 2px 6px rgba(99,102,241,0.3);
     }
     .wr-agent-bar-name {
-        font-size: 0.875rem;
-        font-weight: 600;
-        color: #0f172a;
+        font-size: 13.5px;
+        font-weight: 700;
+        color: var(--text-primary);
         flex: 1;
     }
-    .dark .wr-agent-bar-name { color: #f1f5f9; }
+    .wr-canvas-toggle-label {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 11.5px;
+        color: var(--text-secondary);
+        font-weight: 500;
+        cursor: pointer;
+        margin-right: 8px;
+        margin-left: auto;
+    }
+    .wr-canvas-toggle-label input { cursor: pointer; accent-color: var(--accent); }
 
     .wr-agent-bar .wr-bar-action {
-        font-size: 0.75rem;
-        color: #94a3b8;
-        padding: 0.375rem 0.625rem;
-        border-radius: 0.5rem;
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 11.5px;
+        font-weight: 600;
+        color: var(--text-secondary);
+        padding: 5px 8px;
+        border-radius: 8px;
         transition: all 0.15s ease;
         text-decoration: none;
         border: none;
@@ -186,50 +171,39 @@
         cursor: pointer;
     }
     .wr-agent-bar .wr-bar-action:hover {
-        color: #475569;
-        background: rgba(0,0,0,0.05);
-    }
-    .dark .wr-agent-bar .wr-bar-action:hover {
-        color: #cbd5e1;
-        background: rgba(255,255,255,0.05);
+        color: var(--text-primary);
+        background: var(--bg-surface);
     }
 
     /* Override widget-container to fit inside wr-chat-root */
     .wr-chat-root .widget-container {
-        border-radius: 0 0 1rem 1rem;
-        border: 1px solid #e2e8f0;
+        border-radius: 0 0 16px 16px;
+        border: 1px solid var(--border);
         border-top: none;
         flex: 1;
         display: flex;
         flex-direction: column;
         min-height: 0;
         overflow: hidden;
-        background: #fafbfc;
-    }
-    .dark .wr-chat-root .widget-container {
-        border-color: #334155;
-        background: #0f172a;
+        background: var(--bg-surface);
     }
     .wr-chat-root .widget-header { display: none; } /* we use wr-agent-bar instead */
     .wr-chat-root .widget-messages {
         flex: 1;
         overflow-y: auto;
         min-height: 0;
-        padding: 1.5rem 1.5rem;
+        padding: 18px;
+        background: var(--bg-surface);
     }
     .wr-chat-root .widget-input-area {
         flex-shrink: 0;
-        border-top: 1px solid #e2e8f0;
-        padding: 0.875rem 1rem;
-        background: #fff;
-        border-radius: 0 0 1rem 1rem;
-    }
-    .dark .wr-chat-root .widget-input-area {
-        border-top-color: #334155;
-        background: #1e293b;
+        border-top: 1px solid var(--border);
+        padding: 14px;
+        background: var(--bg-surface);
+        border-radius: 0 0 16px 16px;
     }
 
-    /* Override message bubble styles for modern look inside workroom */
+    /* Override message bubble styles for redesign look inside workroom */
     .wr-chat-root .widget-message-wrapper {
         display: flex;
         align-items: flex-start;
@@ -261,75 +235,63 @@
 
     .wr-chat-root .widget-message {
         max-width: 80%;
-        border-radius: 1.25rem;
-        padding: 0.75rem 1rem;
-        font-size: 0.875rem;
+        border-radius: 14px;
+        padding: 10px 14px;
+        font-size: 13px;
         line-height: 1.6;
     }
     .wr-chat-root .widget-message.user {
-        background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
-        color: #fff;
-        border-bottom-right-radius: 0.375rem;
-        box-shadow: 0 2px 8px rgba(99,102,241,0.2);
+        background: var(--accent-soft);
+        color: var(--text-primary);
+        border-radius: 14px 14px 4px 14px;
+        box-shadow: none;
     }
     .wr-chat-root .widget-message.agent {
-        background: #fff;
-        border: 1px solid #e2e8f0;
-        color: #1e293b;
-        border-bottom-left-radius: 0.375rem;
-        box-shadow: 0 1px 4px rgba(0,0,0,0.03);
-    }
-    .dark .wr-chat-root .widget-message.agent {
-        background: #1e293b;
-        border-color: #334155;
-        color: #e2e8f0;
+        background: var(--bg-surface-2);
+        border: 1px solid var(--border);
+        color: var(--text-primary);
+        border-radius: 14px 14px 14px 4px;
+        box-shadow: none;
     }
 
     /* Override greeting */
     .wr-chat-root .widget-greeting {
-        color: #94a3b8;
+        color: var(--text-tertiary);
         font-size: 0.9rem;
         padding: 3rem 1rem;
     }
 
     /* Override input styling */
     .wr-chat-root .widget-input {
-        border-radius: 0.75rem;
-        border: 1px solid #e2e8f0;
-        padding: 0.625rem 0.875rem;
-        font-size: 0.875rem;
-        background: #f8fafc;
-        color: #0f172a;
+        border-radius: 12px;
+        border: 1px solid var(--border);
+        padding: 11px 14px;
+        font-size: 13px;
+        background: var(--bg-surface-2);
+        color: var(--text-primary);
+        font-family: inherit;
         transition: all 0.15s ease;
     }
     .wr-chat-root .widget-input:focus {
-        border-color: #6366f1;
-        background: #fff;
-        box-shadow: 0 0 0 3px rgba(99,102,241,0.1);
-    }
-    .dark .wr-chat-root .widget-input {
-        background: #0f172a;
-        border-color: #334155;
-        color: #e2e8f0;
-    }
-    .dark .wr-chat-root .widget-input:focus {
-        border-color: #818cf8;
-        background: #1e293b;
-        box-shadow: 0 0 0 3px rgba(129,140,248,0.1);
+        border-color: var(--accent);
+        background: var(--bg-surface);
+        box-shadow: 0 0 0 3px var(--accent-soft);
     }
 
     /* Override send button */
     .wr-chat-root .widget-send-btn {
-        background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
-        border-radius: 0.75rem;
-        padding: 0.5rem 1.25rem;
-        font-weight: 600;
-        font-size: 0.8rem;
-        box-shadow: 0 2px 6px rgba(99,102,241,0.25);
+        background: var(--accent);
+        color: #fff;
+        border-radius: 12px;
+        padding: 0 18px;
+        font-weight: 700;
+        font-size: 13px;
+        font-family: inherit;
+        box-shadow: none;
         transition: all 0.15s ease;
     }
     .wr-chat-root .widget-send-btn:hover {
-        box-shadow: 0 4px 12px rgba(99,102,241,0.35);
+        background: var(--accent-hover);
         transform: translateY(-1px);
     }
     .wr-chat-root .widget-send-btn:disabled {
@@ -340,11 +302,9 @@
 
     /* Override attach button */
     .wr-chat-root .widget-attach-btn {
-        border-radius: 0.75rem;
-        border-color: #e2e8f0;
-    }
-    .dark .wr-chat-root .widget-attach-btn {
-        border-color: #334155;
+        border-radius: 12px;
+        border-color: var(--border);
+        background: var(--bg-surface-2);
     }
 
     /* ── Chat + Canvas row ─────────────────────────────────── */
@@ -385,17 +345,14 @@
         width: 2px;
         height: 36px;
         border-radius: 2px;
-        background: #e2e8f0;
+        background: var(--border-strong);
         transition: background 0.15s, height 0.15s;
     }
     .wr-resizer:hover::after,
     .wr-resizer.is-dragging::after {
-        background: #6366f1;
+        background: var(--accent);
         height: 56px;
     }
-    .dark .wr-resizer::after { background: #334155; }
-    .dark .wr-resizer:hover::after,
-    .dark .wr-resizer.is-dragging::after { background: #818cf8; }
 
     /* ── Canvas panel ──────────────────────────────────────── */
     .wr-canvas-panel {
@@ -403,76 +360,55 @@
         min-width: 0;
         display: flex;
         flex-direction: column;
-        background: #fff;
-        border: 1px solid #e2e8f0;
-        border-radius: 0 0 1rem 0;
+        background: var(--bg-page);
+        border: 1px solid var(--border);
+        border-radius: 0 0 16px 0;
         overflow: hidden;
         font-size: 0.8125rem;
-    }
-    .dark .wr-canvas-panel {
-        background: #0f172a;
-        border-color: #334155;
     }
     .wr-canvas-header {
         display: flex;
         align-items: center;
-        gap: 0.5rem;
-        padding: 0.5rem 0.875rem;
-        border-bottom: 1px solid #e2e8f0;
+        gap: 8px;
+        padding: 8px 12px;
+        border-bottom: 1px solid var(--border);
         flex-shrink: 0;
-        background: #f8fafc;
-    }
-    .dark .wr-canvas-header {
-        background: #1e293b;
-        border-bottom-color: #334155;
+        background: var(--bg-surface);
     }
     .wr-canvas-lang-badge {
-        font-size: 0.65rem;
+        font-size: 10px;
         font-weight: 700;
         text-transform: uppercase;
-        letter-spacing: 0.06em;
-        color: #6366f1;
-        background: rgba(99,102,241,0.08);
-        padding: 0.15rem 0.45rem;
-        border-radius: 0.375rem;
+        letter-spacing: 0.05em;
+        color: var(--accent);
+        background: var(--accent-soft);
+        padding: 3px 8px;
+        border-radius: 6px;
     }
-    .dark .wr-canvas-lang-badge { color: #818cf8; background: rgba(129,140,248,0.12); }
     .wr-canvas-action-btn {
         font-size: 0.7rem;
         font-weight: 500;
-        color: #64748b;
-        background: none;
-        border: 1px solid #e2e8f0;
-        border-radius: 0.375rem;
-        padding: 0.25rem 0.625rem;
+        color: var(--text-secondary);
+        background: var(--bg-surface-2);
+        border: none;
+        border-radius: 6px;
+        padding: 4px 10px;
         cursor: pointer;
         transition: all 0.15s;
     }
     .wr-canvas-action-btn:hover {
-        background: #f1f5f9;
-        color: #0f172a;
-        border-color: #cbd5e1;
-    }
-    .dark .wr-canvas-action-btn {
-        color: #94a3b8;
-        border-color: #334155;
-    }
-    .dark .wr-canvas-action-btn:hover {
-        background: #1e293b;
-        color: #e2e8f0;
-        border-color: #475569;
+        background: var(--border);
+        color: var(--text-primary);
     }
     .wr-canvas-run-btn {
-        color: #16a34a;
-        border-color: #bbf7d0;
-        background: rgba(22,163,74,0.05);
+        color: var(--success);
+        background: var(--success-soft);
     }
     .wr-canvas-run-btn:hover {
-        background: rgba(22,163,74,0.1);
-        border-color: #86efac;
-        color: #15803d;
+        background: var(--success-soft);
+        color: var(--success);
+        filter: brightness(0.96);
     }
-    .dark .wr-canvas-run-btn { color: #4ade80; border-color: rgba(74,222,128,0.2); }
     .wr-canvas-body {
         flex: 1;
         position: relative;
@@ -500,7 +436,7 @@
     /* ── Code blocks inside chat messages ─────────────────── */
     .mate-code-block {
         margin: 0.5rem 0;
-        border-radius: 0.375rem;
+        border-radius: 8px;
         overflow: hidden;
         /* No outer border — message bubble is already a container */
         background: rgba(0,0,0,0.03);
@@ -523,13 +459,12 @@
         font-weight: 700;
         text-transform: uppercase;
         letter-spacing: 0.05em;
-        color: #64748b;
+        color: var(--text-secondary);
     }
-    .dark .mate-code-lang { color: #94a3b8; }
     .mate-canvas-btn {
         font-size: 0.65rem;
         font-weight: 500;
-        color: #6366f1;
+        color: var(--accent);
         background: none;
         border: none;
         cursor: pointer;
@@ -537,8 +472,7 @@
         border-radius: 0.25rem;
         transition: background 0.15s;
     }
-    .mate-canvas-btn:hover { background: rgba(99,102,241,0.1); }
-    .dark .mate-canvas-btn { color: #818cf8; }
+    .mate-canvas-btn:hover { background: var(--accent-soft); }
     .mate-code-block pre {
         margin: 0;
         padding: 0.625rem 0.875rem;
@@ -559,15 +493,14 @@
     .mate-canvas-indicator {
         display: none;
         font-size: 0.62rem;
-        color: #6366f1;
+        color: var(--accent);
         font-style: italic;
     }
-    .dark .mate-canvas-indicator { color: #818cf8; }
     .mate-code-block.canvas-active .mate-canvas-indicator { display: inline; }
 
     /* Back-to-code button variant */
     .wr-canvas-back-btn {
-        color: #64748b;
+        color: var(--text-secondary);
     }
 
     /* ── Python output pane ───────────────────────────────────── */
@@ -580,12 +513,10 @@
         box-sizing: border-box;
         overflow: auto;
     }
-    .wr-py-stdout { margin: 0; white-space: pre-wrap; color: #1e293b; }
-    .dark .wr-py-stdout { color: #e2e8f0; }
-    .wr-py-stderr { margin: 0; white-space: pre-wrap; color: #dc2626; }
-    .dark .wr-py-stderr { color: #f87171; }
-    .wr-py-loading { color: #94a3b8; animation: wr-blink 1.2s steps(1) infinite; }
-    .wr-py-empty   { color: #22c55e; }
+    .wr-py-stdout { margin: 0; white-space: pre-wrap; color: var(--text-primary); }
+    .wr-py-stderr { margin: 0; white-space: pre-wrap; color: var(--danger); }
+    .wr-py-loading { color: var(--text-tertiary); animation: wr-blink 1.2s steps(1) infinite; }
+    .wr-py-empty   { color: var(--success); }
     @keyframes wr-blink { 50% { opacity: 0.4; } }
 
     /* ── Code-in-canvas pill (replaces code block in chat) ─── */
@@ -595,17 +526,12 @@
         gap: 0.375rem;
         margin: 0.375rem 0;
         padding: 0.25rem 0.625rem 0.25rem 0.5rem;
-        background: rgba(99,102,241,0.07);
-        border: 1px solid rgba(99,102,241,0.18);
+        background: var(--accent-soft);
+        border: 1px solid var(--border);
         border-radius: 99px;
         font-size: 0.7rem;
-        color: #6366f1;
+        color: var(--accent);
         cursor: default;
-    }
-    .dark .mate-code-pill {
-        background: rgba(129,140,248,0.1);
-        border-color: rgba(129,140,248,0.2);
-        color: #818cf8;
     }
     .mate-code-pill i { font-size: 0.65rem; }
     .mate-pill-btn {
@@ -639,14 +565,13 @@
     <!-- ── DEFAULT: Welcome screen ───────────────────────── -->
     <div class="wr-welcome">
         <div class="wr-welcome-icon">
-            <i class="fas fa-comments text-blue-500 dark:text-blue-400 text-xl"></i>
+            <i class="fas fa-comments"></i>
         </div>
-        <h2 class="text-xl font-bold text-gray-900 dark:text-white">Work Room</h2>
-        <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Select an agent to start chatting</p>
+        <h2 style="margin: 6px 0 0; font-size: 20px; font-weight: 800; color: var(--text-primary);">Work Room</h2>
+        <p style="margin: 0; font-size: 13px; color: var(--text-secondary);">Select an agent to start chatting</p>
 
         {% if agents %}
-        <div style="width:100%;max-width:760px;margin-top:1.5rem;">
-            <p class="text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2">Featured Agents</p>
+        <div style="width:100%;">
             <div class="wr-agents-grid">
                 {% for agent in agents %}
                 <a href="/dashboard/workroom?agent={{ agent.name | urlencode }}" class="wr-agent-card">
@@ -681,21 +606,21 @@
         <div class="wr-agent-bar">
             <div class="wr-agent-bar-avatar"><i class="fas fa-robot"></i></div>
             <span class="wr-agent-bar-name">{{ selected_agent }}</span>
-            <label class="flex items-center gap-1.5 mr-4 text-xs text-gray-600 dark:text-gray-400 cursor-pointer" style="display: inline-flex; align-items: center; gap: 0.375rem; font-size: 0.75rem; margin-right: 1.5rem; color: #94a3b8; font-weight: 500; margin-left: auto;">
-                <input type="checkbox" id="wrCanvasToggle" checked style="cursor: pointer; accent-color: #6366f1;">
-                <span>Show Code Editor</span>
+            <label class="wr-canvas-toggle-label">
+                <input type="checkbox" id="wrCanvasToggle" checked>
+                <span>Coding panel</span>
             </label>
 
-            <a href="/dashboard/workroom" class="wr-bar-action">
-                <i class="fas fa-exchange-alt mr-1"></i>Change
-            </a>
+            <button id="wrOpenBrowserBtn" type="button" class="wr-bar-action">
+                <i class="fas fa-globe"></i>Browser panel
+            </button>
             <!-- New chat reloads the same URL, chat.js will start fresh -->
             <button id="widgetNewChat" type="button" class="wr-bar-action">
-                <i class="fas fa-plus mr-1"></i>New
+                <i class="fas fa-plus"></i>New
             </button>
-            <button id="wrOpenBrowserBtn" type="button" class="wr-bar-action">
-                <i class="fas fa-globe mr-1"></i>Live Browser
-            </button>
+            <a href="/dashboard/workroom" class="wr-bar-action">
+                <i class="fas fa-exchange-alt"></i>Change
+            </a>
         </div>
 
         <!-- Body: chat + canvas side by side -->
@@ -730,12 +655,12 @@
                 <div class="wr-canvas-header">
                     <span class="wr-canvas-lang-badge" id="wrCanvasLang">code</span>
                     <div style="flex:1"></div>
-                    <button class="wr-canvas-action-btn" id="wrCanvasCopyBtn">Copy</button>
+                    <button class="wr-canvas-action-btn" id="wrCanvasCopyBtn" title="Copy">Copy</button>
                     <button class="wr-canvas-action-btn" id="wrCanvasDownloadBtn" title="Download">&#8595; Download</button>
                     <button class="wr-canvas-action-btn" id="wrCanvasNewTabBtn" title="Open in new tab">&#8599; New Tab</button>
-                    <button class="wr-canvas-action-btn wr-canvas-run-btn" id="wrCanvasRunBtn" hidden>&#9654; Run</button>
-                    <button class="wr-canvas-action-btn wr-canvas-back-btn" id="wrCanvasBackBtn" hidden>&#8592; Code</button>
-                    <button class="wr-canvas-action-btn" id="wrCanvasRefreshBtn" hidden>&#8635;</button>
+                    <button class="wr-canvas-action-btn wr-canvas-run-btn" id="wrCanvasRunBtn" hidden title="Run">&#9654; Run</button>
+                    <button class="wr-canvas-action-btn wr-canvas-back-btn" id="wrCanvasBackBtn" hidden title="Back to code">&#8592; Code</button>
+                    <button class="wr-canvas-action-btn" id="wrCanvasRefreshBtn" hidden title="Refresh">&#8635;</button>
                     <button class="wr-canvas-action-btn" id="wrCanvasCloseBtn" title="Close">&#x2715;</button>
                 </div>
                 <div class="wr-canvas-body" id="wrCanvasBody"></div>
@@ -745,70 +670,70 @@
         <!-- Live Browser Modal -->
         <div id="wrBrowserModal" class="fixed inset-0 z-[150] hidden items-center justify-center p-4">
             <!-- Backdrop -->
-            <div class="absolute inset-0 bg-slate-950/60 backdrop-blur-sm" onclick="closeBrowserModal()"></div>
-            
+            <div class="absolute inset-0" style="background: rgba(20,15,10,0.55);" onclick="closeBrowserModal()"></div>
+
             <!-- Modal Container -->
-            <div class="relative w-full max-w-5xl h-[85vh] bg-white dark:bg-slate-900 rounded-xl shadow-2xl flex flex-col border border-slate-200 dark:border-slate-800 z-10 overflow-hidden">
+            <div class="relative w-full flex flex-col z-10 overflow-hidden" style="max-width: 900px; height: 80vh; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 18px; box-shadow: var(--shadow-card);">
                 <!-- Header -->
-                <div class="px-4 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800 flex items-center gap-3 flex-shrink-0">
-                    <div class="flex items-center gap-1.5 mr-2">
-                        <div class="w-3 h-3 rounded-full bg-rose-500"></div>
-                        <div class="w-3 h-3 rounded-full bg-amber-500"></div>
-                        <div class="w-3 h-3 rounded-full bg-emerald-500"></div>
+                <div class="flex items-center flex-shrink-0" style="gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--border); background: var(--bg-surface-2);">
+                    <div class="flex items-center" style="gap: 5px; margin-right: 6px;">
+                        <span style="width: 10px; height: 10px; border-radius: 999px; background: var(--danger);"></span>
+                        <span style="width: 10px; height: 10px; border-radius: 999px; background: var(--warning);"></span>
+                        <span style="width: 10px; height: 10px; border-radius: 999px; background: var(--success);"></span>
                     </div>
-                    
-                    <i class="fas fa-globe text-slate-400 dark:text-slate-500"></i>
-                    <span class="text-sm font-semibold text-slate-800 dark:text-slate-200">MATE Live Browser</span>
+
+                    <i class="fas fa-globe" style="color: var(--text-tertiary); font-size: 12px;"></i>
+                    <span style="font-size: 13px; font-weight: 700; color: var(--text-primary);">MATE Live Browser</span>
                     <span id="wrBrowserStatus" class="text-[10px] bg-amber-500/10 text-amber-500 px-2 py-0.5 rounded-full font-medium">Idle</span>
-                    
+
                     <div style="flex: 1"></div>
-                    
-                    <button class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition" onclick="closeBrowserModal()">
-                        <i class="fas fa-times text-lg"></i>
+
+                    <button style="width: 28px; height: 28px; border-radius: 8px; border: none; background: var(--bg-surface); color: var(--text-secondary); cursor: pointer;" onclick="closeBrowserModal()">
+                        <i class="fas fa-times"></i>
                     </button>
                 </div>
-                
+
                 <!-- Navigation Bar -->
-                <div class="px-4 py-2 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex items-center gap-2 flex-shrink-0">
+                <div class="flex items-center flex-shrink-0" style="gap: 8px; padding: 10px 16px; border-bottom: 1px solid var(--border);">
                     <!-- Address bar -->
-                    <div class="flex-1 flex items-center gap-2 px-3 py-1 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg">
-                        <span class="text-xs text-slate-400"><i class="fas fa-lock"></i></span>
-                        <input id="wrBrowserUrlInput" type="text" class="w-full bg-transparent border-none text-xs text-slate-800 dark:text-slate-200 focus:outline-none" placeholder="Enter URL (e.g. google.com)">
+                    <div class="flex-1 flex items-center" style="gap: 8px; padding: 7px 12px; border-radius: 10px; background: var(--bg-surface-2); border: 1px solid var(--border);">
+                        <span style="font-size: 10px; color: var(--text-tertiary);"><i class="fas fa-lock"></i></span>
+                        <input id="wrBrowserUrlInput" type="text" class="w-full bg-transparent border-none focus:outline-none" style="font-size: 12px; color: var(--text-primary);" placeholder="Enter URL (e.g. google.com)">
                     </div>
-                    
-                    <button id="wrBrowserGoBtn" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold transition">
+
+                    <button id="wrBrowserGoBtn" style="padding: 7px 16px; border-radius: 10px; border: none; background: var(--accent); color: white; font-size: 12px; font-weight: 700; cursor: pointer;">
                         Go
                     </button>
-                    <button id="wrBrowserRefreshBtn" class="p-1.5 text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 rounded hover:bg-slate-100 dark:hover:bg-slate-800" title="Refresh Page">
+                    <button id="wrBrowserRefreshBtn" style="width: 32px; height: 32px; border-radius: 9px; border: 1px solid var(--border); background: var(--bg-surface); color: var(--text-secondary); cursor: pointer;" title="Refresh Page">
                         <i class="fas fa-sync-alt"></i>
                     </button>
-                    <div class="h-4 w-px bg-slate-200 dark:bg-slate-800 mx-1"></div>
-                    <button id="wrBrowserClearSiteBtn" class="p-1.5 text-amber-600 hover:text-amber-700 hover:bg-slate-100 dark:hover:bg-slate-800 rounded flex items-center gap-1 text-xs font-medium transition" title="Clear cookies and storage for the current website">
+                    <div style="height: 16px; width: 1px; background: var(--border); margin: 0 4px;"></div>
+                    <button id="wrBrowserClearSiteBtn" class="flex items-center" style="gap: 4px; padding: 6px 8px; border-radius: 8px; border: none; background: transparent; color: var(--warning); font-size: 12px; font-weight: 500; cursor: pointer;" title="Clear cookies and storage for the current website">
                         <i class="fas fa-cookie-bite"></i> Clear Site
                     </button>
-                    <button id="wrBrowserResetBtn" class="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-slate-100 dark:hover:bg-slate-800 rounded flex items-center gap-1 text-xs font-medium transition" title="Delete all browser data and log out of all websites">
+                    <button id="wrBrowserResetBtn" class="flex items-center" style="gap: 4px; padding: 6px 8px; border-radius: 8px; border: none; background: transparent; color: var(--danger); font-size: 12px; font-weight: 500; cursor: pointer;" title="Delete all browser data and log out of all websites">
                         <i class="fas fa-trash-alt"></i> Reset Profile
                     </button>
                 </div>
-                
+
                 <!-- Browser Viewport Canvas Container -->
-                <div class="flex-1 bg-slate-100 dark:bg-slate-950 overflow-auto flex items-center justify-center relative select-none">
+                <div class="flex-1 overflow-auto flex items-center justify-center relative select-none" style="min-height: 0; background: repeating-linear-gradient(45deg, var(--bg-surface-2), var(--bg-surface-2) 12px, var(--bg-page) 12px, var(--bg-page) 24px);">
                     <!-- Loading Indicator -->
-                    <div id="wrBrowserLoading" class="absolute inset-0 bg-slate-950/40 backdrop-blur-xs flex flex-col items-center justify-center z-20 hidden">
-                        <div class="animate-spin rounded-full h-10 w-10 border-2 border-indigo-500 border-t-transparent mb-3"></div>
+                    <div id="wrBrowserLoading" class="absolute inset-0 flex flex-col items-center justify-center z-20 hidden" style="background: rgba(20,15,10,0.4);">
+                        <div class="animate-spin rounded-full h-10 w-10 mb-3" style="border: 2px solid var(--accent); border-top-color: transparent;"></div>
                         <span class="text-xs font-medium text-white">Connecting browser...</span>
                     </div>
-                    
+
                     <!-- Canvas -->
-                    <div class="shadow-lg bg-white relative max-w-full overflow-hidden" id="wrBrowserCanvasWrapper">
+                    <div class="relative max-w-full overflow-hidden" style="background: #fff; box-shadow: var(--shadow-card);" id="wrBrowserCanvasWrapper">
                         <canvas id="wrBrowserCanvas" class="block cursor-crosshair max-w-full" width="1280" height="800" tabindex="0"></canvas>
                     </div>
                 </div>
-                
+
                 <!-- Footer / Controls Hint -->
-                <div class="px-4 py-2 bg-slate-50 dark:bg-slate-800/30 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-400 dark:text-slate-500 flex-shrink-0">
+                <div class="flex items-center justify-between flex-shrink-0" style="padding: 8px 16px; border-top: 1px solid var(--border); font-size: 11px; color: var(--text-tertiary);">
                     <span>Click to interact. Type to send keyboard input. Use mouse wheel to scroll.</span>
-                    <span>Viewport: 1280x800</span>
+                    <span>Viewport: 1280×800</span>
                 </div>
             </div>
         </div>
