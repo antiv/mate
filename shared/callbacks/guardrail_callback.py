@@ -34,13 +34,21 @@ def _extract_user_text_from_request(llm_request: LlmRequest) -> str:
 
 
 def _extract_text_from_response(llm_response: LlmResponse) -> str:
-    """Extract text from an LLM response."""
+    """Extract user-visible text from an LLM response.
+
+    Skips reasoning ("thought") parts: they are internal, never rendered to the
+    user, and including them would let output guardrails trigger on the model's
+    private reasoning — and the block/redact paths rebuild the response as plain
+    text, which would leak that reasoning into the visible message.
+    """
     if not llm_response.content:
         return ""
     if not llm_response.content.parts:
         return ""
     texts = []
     for part in llm_response.content.parts:
+        if getattr(part, "thought", False):
+            continue
         if hasattr(part, "text") and part.text:
             texts.append(part.text)
     return "\n".join(texts)

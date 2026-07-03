@@ -519,6 +519,9 @@
         }
 
         for (var j = 0; j < parts.length; j++) {
+          // Skip model reasoning ("thought") parts — internal, never shown to the user
+          if (parts[j].thought) continue;
+
           // Handle inline image data (generated artifacts)
           var inlineData = parts[j].inline_data || parts[j].inlineData;
           if (inlineData && inlineData.mime_type && inlineData.mime_type.indexOf('image/') === 0) {
@@ -526,7 +529,7 @@
             _ensureBubble();
             var cleanBase64 = inlineData.data.replace(/\s+/g, '').replace(/-/g, '+').replace(/_/g, '/');
             var imgSrc = 'data:' + inlineData.mime_type + ';base64,' + cleanBase64;
-            
+
             var exists = activeAgentImages.some(function(img) { return img.src === imgSrc; });
             if (!exists) {
               var imgHtml = '<img src="' + imgSrc + '" class="widget-msg-image widget-generated-image" alt="Generated image">';

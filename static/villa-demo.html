@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="sr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ubistvo u vili „Perunika" — MATE demo</title>
+  <style>
+    :root { --gold: #c9a227; --ink: #e8e2d0; --muted: #9a917a; }
+    body { font-family: Georgia, "Times New Roman", serif; margin: 0; min-height: 100vh;
+           background: radial-gradient(ellipse at 50% -10%, #2a2320 0%, #16120f 55%, #0b0908 100%);
+           color: var(--ink); }
+    .lang { position: absolute; top: 16px; right: 20px; font-size: 12px; letter-spacing: 1px; }
+    .lang a { color: var(--muted); text-decoration: none; padding: 4px 8px; }
+    .lang a.active { color: var(--gold); border: 1px solid var(--gold); border-radius: 999px; }
+    .hero { max-width: 760px; margin: 0 auto; padding: 64px 24px 32px; text-align: center; }
+    .badge { display: inline-block; border: 1px solid var(--gold); color: var(--gold); letter-spacing: 3px;
+             font-size: 11px; padding: 6px 14px; border-radius: 999px; text-transform: uppercase; }
+    h1 { font-size: 2.6rem; margin: 18px 0 6px; color: var(--gold); font-weight: normal; letter-spacing: 1px; }
+    .sub { color: var(--muted); font-style: italic; margin: 0 0 28px; }
+    .lead { max-width: 560px; margin: 0 auto; line-height: 1.7; font-size: 1.02rem; }
+    .divider { width: 120px; height: 1px; background: linear-gradient(90deg, transparent, var(--gold), transparent);
+               margin: 32px auto; }
+    .cast { max-width: 720px; margin: 0 auto; padding: 0 24px 40px; display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; }
+    .suspect { border: 1px solid #3a322a; border-radius: 10px; padding: 14px 12px; text-align: center;
+               background: rgba(255,255,255,0.02); }
+    .suspect b { display: block; color: var(--ink); font-size: 14px; margin-bottom: 3px; }
+    .suspect span { color: var(--muted); font-size: 12px; font-style: italic; }
+    .hint { max-width: 560px; margin: 0 auto 70px; padding: 0 24px; text-align: center; color: var(--muted);
+            font-size: 13px; line-height: 1.6; }
+    .hint em { color: var(--gold); }
+    .setup { max-width: 560px; margin: 0 auto 70px; padding: 20px 24px; border: 1px dashed #5a4e3a;
+             border-radius: 10px; font-size: 14px; line-height: 1.8; color: var(--muted); }
+    .setup code { font-family: ui-monospace, Menlo, monospace; color: var(--ink); font-size: 12px;
+                  background: rgba(255,255,255,0.06); padding: 2px 6px; border-radius: 4px; }
+    .footer { text-align: center; color: #5a5244; font-size: 11px; padding: 0 24px 28px; }
+  </style>
+</head>
+<body>
+  <div class="lang">
+    <a id="langSr" href="#">SR</a>
+    <a id="langEn" href="#">EN</a>
+  </div>
+
+  <div class="hero">
+    <span class="badge" data-i18n="badge"></span>
+    <h1 data-i18n="title"></h1>
+    <p class="sub" data-i18n="sub"></p>
+    <p class="lead" data-i18n-html="lead"></p>
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="cast">
+    <div class="suspect"><b>Žarko Obradović</b><span data-i18n="butler"></span></div>
+    <div class="suspect"><b>Milena Kovač</b><span data-i18n="wife"></span></div>
+    <div class="suspect"><b>Viktor Radan</b><span data-i18n="partner"></span></div>
+    <div class="suspect"><b>dr Ana Simić</b><span data-i18n="doctor"></span></div>
+  </div>
+
+  <p class="hint" data-i18n-html="hint"></p>
+
+  <div class="setup" id="setup" style="display:none">
+    <strong style="color:var(--ink)" data-i18n="setupTitle"></strong><br>
+    <span data-i18n-html="setupBody"></span>
+    <code id="exampleUrl"></code>
+  </div>
+
+  <div class="footer" data-i18n="footer"></div>
+
+  <script>
+    var I18N = {
+      sr: {
+        badge: "Interaktivna misterija",
+        title: "Ubistvo u vili „Perunika“",
+        sub: "Fruška gora, subota, 23:15 — pronađeno telo",
+        lead: "Industrijalac <strong>Petar Kovač</strong> pronađen je mrtav u svojoj biblioteci. " +
+              "Prvi nalaz kaže: srčani udar. Inspektor Vetrov sumnja na trovanje. " +
+              "Četvoro ukućana ima šta da krije — a samo jedno od njih je ubica. " +
+              "Vi vodite ispitivanja. Otvorite razgovor u donjem desnom uglu i recite inspektoru da ste spremni.",
+        butler: "batler", wife: "supruga žrtve", partner: "poslovni partner", doctor: "porodična lekarka",
+        hint: "Ispitujte osumnjičene, tražite od inspektora <em>uviđaj</em>, <em>toksikologiju</em> i " +
+              "<em>pretres radnog stola</em>, suočavajte iskaze. Kad ste sigurni, recite: <em>„Optužujem…“</em><br>" +
+              "Svaki osumnjičeni je zaseban AI agent sa sopstvenim tajnama i zaštitama — slobodno pokušajte da ih " +
+              "nadmudrite da odaju ubicu. Nećete uspeti. Verovatno.",
+        setupTitle: "Podešavanje demo stranice",
+        setupBody: "1. U MATE dashboardu importujte template <code>Ubistvo u vili</code> (Template Gallery; za englesku igru <code>Murder at the Villa</code>).<br>" +
+                   "2. Napravite Widget API ključ za root agenta igre (<code>Widget Keys</code>).<br>" +
+                   "3. Otvorite ovu stranicu sa ključem: ",
+        footer: "Pokreće MATE — svaki lik je zaseban agent (različit LLM), tajne su memory blocks, " +
+                "a priznanja sprečavaju guardrails. Demonstracija embeddable widget integracije.",
+        button: "🔎 Započni istragu"
+      },
+      en: {
+        badge: "An interactive mystery",
+        title: "Murder at Villa “Perunika”",
+        sub: "Fruška Gora, Saturday, 11:15 PM — a body is found",
+        lead: "Industrialist <strong>Petar Kovač</strong> has been found dead in his library. " +
+              "The initial report says: heart attack. Inspector Vetrov suspects poisoning. " +
+              "Four residents each have something to hide — and only one of them is the murderer. " +
+              "You lead the interrogations. Open the chat in the bottom-right corner and tell the inspector you are ready.",
+        butler: "the butler", wife: "the victim's wife", partner: "business partner", doctor: "family physician",
+        hint: "Interrogate the suspects, ask the inspector for the <em>crime scene</em>, the <em>toxicology report</em> and " +
+              "the <em>desk search</em>, and play their statements against each other. When you are sure, say: <em>“I accuse…”</em><br>" +
+              "Every suspect is a separate AI agent with its own secrets and safeguards — feel free to try to " +
+              "trick them into naming the killer. You won't succeed. Probably.",
+        setupTitle: "Demo page setup",
+        setupBody: "1. In the MATE dashboard, import the <code>Murder at the Villa</code> template (Template Gallery; for the Serbian game use <code>Ubistvo u vili</code>).<br>" +
+                   "2. Create a Widget API key pointing to the game's root agent (<code>Widget Keys</code>).<br>" +
+                   "3. Open this page with the key: ",
+        footer: "Powered by MATE — every character is a separate agent (different LLM), the secrets are memory blocks, " +
+                "and confessions are stopped by guardrails. A demonstration of the embeddable widget integration.",
+        button: "🔎 Start the investigation"
+      }
+    };
+
+    var params = new URLSearchParams(window.location.search);
+    var lang = params.get("lang") === "en" ? "en" : "sr";
+    var t = I18N[lang];
+
+    document.documentElement.lang = lang;
+    document.title = t.title + " — MATE demo";
+    document.querySelectorAll("[data-i18n]").forEach(function (el) { el.textContent = t[el.getAttribute("data-i18n")]; });
+    document.querySelectorAll("[data-i18n-html]").forEach(function (el) { el.innerHTML = t[el.getAttribute("data-i18n-html")]; });
+
+    function langUrl(l) {
+      var p = new URLSearchParams(window.location.search);
+      p.set("lang", l);
+      return window.location.pathname + "?" + p.toString();
+    }
+    var sr = document.getElementById("langSr"), en = document.getElementById("langEn");
+    sr.href = langUrl("sr"); en.href = langUrl("en");
+    (lang === "en" ? en : sr).classList.add("active");
+
+    var key = params.get("key");
+    if (key) {
+      var s = document.createElement("script");
+      s.src = window.location.origin + "/widget/mate-widget.js";
+      s.setAttribute("data-key", key);
+      s.setAttribute("data-server", window.location.origin);
+      s.setAttribute("data-theme", "dark");
+      s.setAttribute("data-button-color", "#c9a227");
+      s.setAttribute("data-button-text", t.button);
+      document.body.appendChild(s);
+    } else {
+      document.getElementById("setup").style.display = "block";
+      document.getElementById("exampleUrl").textContent =
+        window.location.origin + window.location.pathname + "?key=wk_..." + (lang === "en" ? "&lang=en" : "");
+    }
+  </script>
+</body>
+</html>

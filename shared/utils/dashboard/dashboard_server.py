@@ -5235,6 +5235,113 @@ class DashboardServer:
             finally:
                 session.close()
 
+        @self.app.get("/dashboard/api/system-jobs", tags=["Dashboard - Triggers"])
+        async def list_system_jobs(
+            request: Request,
+            username: str = Depends(self._get_auth_user_dependency),
+        ):
+            """List all active programmatically-registered system cron jobs."""
+            if not self._get_is_admin(request):
+                from fastapi import HTTPException
+                raise HTTPException(status_code=403, detail="Forbidden")
+            
+            try:
+                from shared.utils.trigger_runner import get_trigger_runner
+                runner = get_trigger_runner()
+                scheduler = runner._scheduler
+                
+                result = []
+                if scheduler and scheduler.running:
+                    jobs = scheduler.get_jobs()
+                    for job in jobs:
+                        result.append({
+                            "id": job.id,
+                            "name": job.name,
+                            "next_run_time": job.next_run_time.isoformat() if job.next_run_time else None,
+                            "trigger": str(job.trigger)
+                        })
+                return {"jobs": result}
+            except Exception as e:
+                from fastapi import HTTPException
+                raise HTTPException(status_code=500, detail=str(e))
+
+        @self.app.post("/dashboard/api/system-jobs/{job_id}/toggle", tags=["Dashboard - Triggers"])
+        async def toggle_system_job(
+            job_id: str,
+            request: Request,
+            username: str = Depends(self._get_auth_user_dependency)
+        ):
+            """Pause or resume a system background job."""
+            if not self._get_is_admin(request):
+                from fastapi import HTTPException
+                raise HTTPException(status_code=403, detail="Forbidden")
+            
+            try:
+                from shared.utils.trigger_runner import get_trigger_runner
+                runner = get_trigger_runner()
+                scheduler = runner._scheduler
+                if not scheduler or not scheduler.running:
+                    return {"success": False, "error": "Scheduler is not running"}
+                
+                job = scheduler.get_job(job_id)
+                if not job:
+                    return {"success": False, "error": "Job not found"}
+                
+                if job.next_run_time is None:
+                    scheduler.resume_job(job_id)
+                    status = "enabled"
+                else:
+                    scheduler.pause_job(job_id)
+                    status = "disabled"
+                
+                return {"success": True, "status": status}
+            except Exception as e:
+                return {"success": False, "error": str(e)}
+
+        @self.app.post("/dashboard/api/system-jobs/{job_id}/reschedule", tags=["Dashboard - Triggers"])
+        async def reschedule_system_job(
+            job_id: str,
+            request: Request,
+            username: str = Depends(self._get_auth_user_dependency)
+        ):
+            """Reschedule a system background job using a standard cron expression."""
+            if not self._get_is_admin(request):
+                from fastapi import HTTPException
+                raise HTTPException(status_code=403, detail="Forbidden")
+            
+            try:
+                body = await request.json()
+                cron_expr = body.get("cron_expression")
+                if not cron_expr:
+                    return {"success": False, "error": "Missing cron_expression"}
+                
+                from shared.utils.trigger_runner import get_trigger_runner
+                from apscheduler.triggers.cron import CronTrigger
+                runner = get_trigger_runner()
+                scheduler = runner._scheduler
+                if not scheduler or not scheduler.running:
+                    return {"success": False, "error": "Scheduler is not running"}
+                
+                job = scheduler.get_job(job_id)
+                if not job:
+                    return {"success": False, "error": "Job not found"}
+                
+                try:
+                    trigger = CronTrigger.from_crontab(cron_expr, timezone="UTC")
+                except Exception as pe:
+                    return {"success": False, "error": f"Invalid cron expression: {pe}"}
+                
+                scheduler.reschedule_job(job_id, trigger=trigger)
+                updated_job = scheduler.get_job(job_id)
+                
+                return {
+                    "success": True,
+                    "next_run_time": updated_job.next_run_time.isoformat() if updated_job.next_run_time else None,
+                    "trigger": str(updated_job.trigger)
+                }
+            except Exception as e:
+                return {"success": False, "error": str(e)}
+
         @self.app.post("/dashboard/api/triggers", tags=["Dashboard - Triggers"])
         async def create_trigger(
             request: Request,

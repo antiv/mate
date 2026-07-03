@@ -175,5 +175,17 @@ class TestGuardrailEngine(unittest.TestCase):
         self.assertIn("block", [r.action.value for r in summary.triggered_results])
 
 
+class TestGuardrailCallbackTextExtraction(unittest.TestCase):
+    def test_thought_parts_excluded_from_output_text(self):
+        from google.genai import types
+        from google.adk.models.llm_response import LlmResponse
+        from shared.callbacks.guardrail_callback import _extract_text_from_response
+
+        thought = types.Part(text="Internal reasoning with banned content.", thought=True)
+        visible = types.Part(text="A clean visible answer.")
+        resp = LlmResponse(content=types.Content(role="model", parts=[thought, visible]))
+        self.assertEqual(_extract_text_from_response(resp), "A clean visible answer.")
+
+
 if __name__ == "__main__":
     unittest.main()

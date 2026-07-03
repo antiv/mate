@@ -46,6 +46,60 @@ class TestAgentTemplatesFeature(unittest.TestCase):
         self.assertIsNotNone(tester_agent)
         self.assertFalse(tester_agent.get("expose_as_model", False))
 
+    def test_load_murder_mystery_templates(self):
+        # Serbian and English editions share the same structure
+        for template_id in ("murder-mystery", "murder-mystery-en"):
+            with self.subTest(template_id=template_id):
+                self._check_murder_mystery_template(template_id)
+
+    def _check_murder_mystery_template(self, template_id):
+        project_root = Path(__file__).parent.parent.parent
+        template_service = TemplateService(project_root=project_root)
+
+        template = template_service.get_template(template_id)
+        self.assertIsNotNone(template)
+
+        # Verify metadata
+        meta = template.get("template_meta", {})
+        self.assertEqual(meta.get("id"), template_id)
+        self.assertEqual(meta.get("category"), "demo")
+        self.assertEqual(meta.get("root_agent"), "villa_gm_root")
+
+        # Root + 4 suspects
+        agents = template.get("agents", [])
+        self.assertEqual(len(agents), 5)
+
+        # Root reads case blocks via memory_blocks tools
+        root_agent = next((a for a in agents if a["name"] == "villa_gm_root"), None)
+        self.assertIsNotNone(root_agent)
+        self.assertEqual(root_agent.get("parent_agents"), [])
+        self.assertTrue(json.loads(root_agent["tool_config"]).get("memory_blocks"))
+
+        # Suspects: children of root, no tools (secret isolation), valid guardrails
+        suspects = [a for a in agents if a["name"] != "villa_gm_root"]
+        models = set()
+        for suspect in suspects:
+            self.assertEqual(suspect.get("parent_agents"), ["villa_gm_root"])
+            self.assertIsNone(suspect.get("tool_config"))
+            models.add(suspect.get("model_name"))
+            guardrails = json.loads(suspect["guardrail_config"])["guardrails"]
+            types = {g["type"] for g in guardrails if g.get("enabled")}
+            self.assertIn("prompt_injection", types)
+            self.assertIn("content_policy", types)
+        # Multi-LLM: every suspect on a different model
+        self.assertEqual(len(models), 4)
+
+        # Culprit additionally has a redact content policy
+        culprit = next(a for a in agents if a["name"] == "villa_doktorka")
+        actions = [g["action"] for g in json.loads(culprit["guardrail_config"])["guardrails"]]
+        self.assertIn("redact", actions)
+
+        # Case blocks present
+        labels = {b["label"] for b in template.get("memory_blocks", [])}
+        self.assertIn("case_dossier", labels)
+        self.assertIn("case_solution", labels)
+        self.assertTrue(any(l.startswith("evidence_") for l in labels))
+
     @patch('shared.utils.database_client.get_database_client')
     def test_import_template_expose_as_model(self, mock_get_db):
         from shared.utils.dashboard.dashboard_server import DashboardServer

@@ -414,6 +414,9 @@
         }
 
         for (var j = 0; j < parts.length; j++) {
+          // Skip model reasoning ("thought") parts — internal, never shown to the user
+          if (parts[j].thought) continue;
+
           // Handle inline image data (generated artifacts)
           var inlineData = parts[j].inline_data || parts[j].inlineData;
           if (inlineData && inlineData.mime_type && inlineData.mime_type.indexOf('image/') === 0) {

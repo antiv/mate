@@ -58,6 +58,43 @@
         </table>
     </div>
 
+    <!-- System Background Tasks -->
+    <div class="mt-8 pt-4 border-t border-gray-200 dark:border-gray-700">
+        <div class="flex flex-col md:flex-row md:justify-between md:items-start gap-4">
+            <div>
+                <h3 class="text-sm font-bold text-gray-900 dark:text-white">System Background Tasks</h3>
+                <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Internal maintenance processes registered programmatically on startup</p>
+            </div>
+            <!-- Uptime-Only Persistence Warning -->
+            <div class="bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 rounded px-3 py-1.5 text-xs max-w-md">
+                <i class="fas fa-info-circle mr-1 text-blue-500"></i>
+                Promene na sistemskim zadacima važe samo do ponovnog pokretanja servera. Za trajne izmene, ažurirajte <code>.env</code> konfiguraciju.
+            </div>
+        </div>
+        
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-x-auto mt-3">
+            <table class="w-full text-xs">
+                <thead>
+                    <tr class="text-left text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
+                        <th class="px-4 py-2 font-medium w-[20%]">Job ID</th>
+                        <th class="px-4 py-2 font-medium w-[20%]">Job Name</th>
+                        <th class="px-4 py-2 font-medium w-[25%]">Schedule (Trigger)</th>
+                        <th class="px-4 py-2 font-medium text-center w-[10%]">Enabled</th>
+                        <th class="px-4 py-2 font-medium w-[15%]">Next Run Time</th>
+                        <th class="px-4 py-2 font-medium text-right w-[10%]">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="systemJobsTableBody">
+                    <tr>
+                        <td colspan="6" class="px-4 py-6 text-center text-gray-400 dark:text-gray-500">
+                            <i class="fas fa-spinner fa-spin mr-1"></i>Loading system tasks…
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
 </div>
 
 <!-- Fire Key Banner (shown once after creating a webhook trigger) -->
@@ -86,8 +123,117 @@
         projects: {{ projects | tojson }},
         agents: {{ agents | tojson }},
     };
+
+    async function loadSystemJobs() {
+        const tbody = document.getElementById('systemJobsTableBody');
+        if (!tbody) return;
+        try {
+            const resp = await fetch('/dashboard/api/system-jobs', { credentials: 'same-origin' });
+            if (!resp.ok) throw new Error('Failed to load system jobs');
+            const data = await resp.json();
+            const jobs = data.jobs || [];
+
+            if (!jobs.length) {
+                tbody.innerHTML = `<tr><td colspan="6" class="px-4 py-4 text-center text-gray-400 dark:text-gray-500">No active system background tasks found.</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = jobs.map(j => {
+                let nextRun = '<span class="text-gray-400 font-mono">Paused / Static</span>';
+                if (j.next_run_time) {
+                    const d = new Date(j.next_run_time);
+                    nextRun = d.toLocaleString();
+                }
+
+                const isEnabled = j.next_run_time !== null;
+                const enabledToggle = `
+                    <button onclick="toggleSystemJob('${j.id}')" title="${isEnabled ? 'Pause Task' : 'Resume Task'}"
+                        class="relative inline-flex items-center h-4 rounded-full w-7 transition-colors focus:outline-none ${isEnabled ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-600'}">
+                        <span class="inline-block w-3 h-3 transform bg-white rounded-full transition-transform shadow ${isEnabled ? 'translate-x-3.5' : 'translate-x-0.5'}"></span>
+                    </button>`;
+
+                const actions = `
+                    <div class="flex items-center justify-end gap-2">
+                        <button onclick="rescheduleSystemJob('${j.id}')" title="Edit Schedule (Cron)" class="text-blue-600 dark:text-blue-400 hover:text-blue-800">
+                            <i class="fas fa-edit text-xs"></i>
+                        </button>
+                    </div>`;
+
+                return `<tr class="border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                    <td class="px-4 py-2 font-medium text-gray-900 dark:text-white font-mono">${j.id}</td>
+                    <td class="px-4 py-2 text-gray-700 dark:text-gray-300">${j.name}</td>
+                    <td class="px-4 py-2 text-gray-600 dark:text-gray-400 font-mono text-xs">${j.trigger}</td>
+                    <td class="px-4 py-2 text-center">${enabledToggle}</td>
+                    <td class="px-4 py-2 text-gray-500 dark:text-gray-400 font-mono">${nextRun}</td>
+                    <td class="px-4 py-2 text-right">${actions}</td>
+                </tr>`;
+            }).join('');
+        } catch (err) {
+            tbody.innerHTML = `<tr><td colspan="6" class="px-4 py-4 text-center text-red-500">Error loading system tasks: ${err.message}</td></tr>`;
+        }
+    }
+
+    window.toggleSystemJob = async function(jobId) {
+        try {
+            const resp = await fetch(`/dashboard/api/system-jobs/${jobId}/toggle`, {
+                method: 'POST',
+                credentials: 'same-origin'
+            });
+            const res = await resp.json();
+            if (res.success) {
+                if (typeof showNotification === 'function') {
+                    showNotification(`Task status updated: ${res.status}`);
+                }
+                loadSystemJobs();
+            } else {
+                if (typeof showNotification === 'function') {
+                    showNotification(res.error || 'Failed to toggle task status', 'error');
+                }
+            }
+        } catch (err) {
+            if (typeof showNotification === 'function') {
+                showNotification('Error toggling task status: ' + err.message, 'error');
+            }
+        }
+    };
+
+    window.rescheduleSystemJob = async function(jobId) {
+        const expr = prompt(`Enter new cron expression for "${jobId}" (format: "minute hour day-of-month month day-of-week", e.g. "30 3 * * *"):`, "30 3 * * *");
+        if (expr === null) return;
+        if (!expr.trim()) {
+            if (typeof showNotification === 'function') {
+                showNotification('Cron expression cannot be empty', 'error');
+            }
+            return;
+        }
+        try {
+            const resp = await fetch(`/dashboard/api/system-jobs/${jobId}/reschedule`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ cron_expression: expr.trim() }),
+                credentials: 'same-origin'
+            });
+            const res = await resp.json();
+            if (res.success) {
+                if (typeof showNotification === 'function') {
+                    showNotification('Schedule updated successfully');
+                }
+                loadSystemJobs();
+            } else {
+                if (typeof showNotification === 'function') {
+                    showNotification(res.error || 'Failed to update schedule', 'error');
+                }
+            }
+        } catch (err) {
+            if (typeof showNotification === 'function') {
+                showNotification('Error updating schedule: ' + err.message, 'error');
+            }
+        }
+    };
+
     document.addEventListener('DOMContentLoaded', function() {
         TriggerPage.init();
+        loadSystemJobs();
     });
 </script>
 {% endblock %}
