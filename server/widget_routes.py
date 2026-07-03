@@ -169,8 +169,12 @@ async def serve_widget_js():
     js_path = project_root / "static" / "js" / "widget" / "mate-widget.js"
     if not js_path.exists():
         raise HTTPException(status_code=404, detail="Widget JS not found")
+    # no-cache = the browser revalidates on every load (cheap 304 via ETag when
+    # unchanged) instead of pinning a stale copy for an hour. The loader carries
+    # the panel/button CSS, so a stale copy would keep applying old layout after
+    # a deploy. FileResponse adds ETag + Last-Modified for the conditional check.
     return FileResponse(js_path, media_type="application/javascript",
-                        headers={"Cache-Control": "public, max-age=3600"})
+                        headers={"Cache-Control": "no-cache"})
 
 
 @router.get("/chat", response_class=HTMLResponse, include_in_schema=False)

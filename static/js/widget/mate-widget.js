@@ -89,7 +89,7 @@
 
   function _sendLang(lang) {
     if (!iframe || !iframe.contentWindow) return;
-    try { iframe.contentWindow.postMessage({ type: "mate-lang", lang: lang }, "*"); } catch (_) {}
+    try { iframe.contentWindow.postMessage({ type: "mate-lang", lang: lang }, "*"); } catch (_) { }
   }
 
   // --- Styles ----------------------------------------------------------
@@ -135,8 +135,11 @@
       "}",
       "@media (max-width: 480px) {",
       "  #mate-widget-container {",
-      "    width: calc(100vw - 16px); height: calc(100vh - 80px);",
-      "    bottom: 8px; left: 8px; right: 8px; border-radius: 12px;",
+      // Anchor to all four edges instead of computing height from vh/dvh —
+      // avoids the mobile URL-bar bug where the panel bottom hides behind chrome.
+      "    top: 60px; right: 8px; left: 8px;",
+      "    width: auto; height: auto; max-width: none; max-height: none;",
+      "    border-radius: 12px;",
       "  }",
       "  #mate-widget-btn { bottom: 12px; }",
       "}",
@@ -198,7 +201,7 @@
       }
       _currentLang = _detectLang();
       setTimeout(function () {
-        try { iframe.contentWindow.postMessage({ type: "mate-theme", theme: t }, "*"); } catch (_) {}
+        try { iframe.contentWindow.postMessage({ type: "mate-theme", theme: t }, "*"); } catch (_) { }
         try {
           var metaDesc = document.querySelector('meta[name="description"]');
           iframe.contentWindow.postMessage({
@@ -208,7 +211,7 @@
             description: metaDesc ? (metaDesc.getAttribute("content") || "") : "",
             lang: _currentLang,
           }, "*");
-        } catch (_) {}
+        } catch (_) { }
         _sendLang(_currentLang);
       }, 300);
     }
@@ -269,7 +272,7 @@
           updateButtonIcon(cfg.icon_url);
         }
       })
-      .catch(function () {});
+      .catch(function () { });
 
     // Watch <html lang="..."> for changes — catches all i18n libraries
     // (i18next, vue-i18n, WordPress WPML, Django i18n, etc.)

@@ -109,6 +109,7 @@
   const sendBtn = document.getElementById("widgetSendBtn");
   const typingEl = document.getElementById("widgetTyping");
   const newChatBtn = document.getElementById("widgetNewChat");
+  const minimizeBtn = document.getElementById("widgetMinimize");
   const endConfirm = document.getElementById("widgetEndConfirm");
   const endConfirmText = document.getElementById("widgetEndConfirmText");
   const endConfirmYes = document.getElementById("widgetEndConfirmYes");
@@ -188,6 +189,16 @@
     newChatBtn.addEventListener("click", function () {
       if (endConfirm) endConfirm.style.display = "flex";
     });
+    if (minimizeBtn) {
+      if (window.parent === window) {
+        // Not embedded in the launcher iframe — nothing to minimize
+        minimizeBtn.style.display = "none";
+      } else {
+        minimizeBtn.addEventListener("click", function () {
+          try { window.parent.postMessage({ type: "mate-close" }, "*"); } catch (_) {}
+        });
+      }
+    }
     if (endConfirmNo) endConfirmNo.addEventListener("click", function () {
       if (endConfirm) endConfirm.style.display = "none";
     });
