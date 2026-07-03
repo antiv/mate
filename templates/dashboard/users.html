@@ -10,10 +10,16 @@
             <h2 class="text-xl font-bold text-gray-900 dark:text-white">User Management</h2>
             <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">Manage users and their roles</p>
         </div>
-        <button onclick="showCreateUserModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 text-sm rounded-lg flex items-center">
-            <i class="fas fa-plus mr-1.5 text-xs"></i>
-            Add User
-        </button>
+        <div class="flex items-center gap-2">
+            <button onclick="triggerCleanup()" class="border border-red-500 text-red-500 hover:bg-red-50 dark:hover:bg-red-950 px-3 py-1.5 text-sm rounded-lg flex items-center transition-colors">
+                <i class="fas fa-trash-alt mr-1.5 text-xs"></i>
+                Clean Up Inactive Users
+            </button>
+            <button onclick="showCreateUserModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 text-sm rounded-lg flex items-center">
+                <i class="fas fa-plus mr-1.5 text-xs"></i>
+                Add User
+            </button>
+        </div>
     </div>
 
     <!-- Filters -->
@@ -374,6 +380,39 @@
             if (res.success) { showNotification('User deleted successfully'); location.reload(); }
             else showNotification(res.message || 'Failed to delete user', 'error');
         } catch { showNotification('Error deleting user', 'error'); }
+    };
+
+    window.triggerCleanup = async function () {
+        const ttlDays = prompt("Enter TTL in days for temporary users (empty to use system default, e.g. 5):", "5");
+        if (ttlDays === null) return;
+        
+        let url = '/dashboard/api/users/cleanup';
+        if (ttlDays.trim()) {
+            const parsed = parseInt(ttlDays.trim());
+            if (isNaN(parsed) || parsed < 0) {
+                showNotification('Invalid number of days', 'error');
+                return;
+            }
+            url += `?ttl_days=${parsed}`;
+        }
+        
+        if (!confirm('Are you sure you want to clean up inactive temporary users?')) return;
+        
+        try {
+            showNotification('Running user cleanup...', 'info');
+            const r = await fetch(url, {
+                method: 'POST', credentials: 'same-origin'
+            });
+            const res = await r.json();
+            if (res.success) {
+                showNotification(`Cleanup successful. Removed ${res.removed_users} inactive users.`);
+                setTimeout(() => location.reload(), 1500);
+            } else {
+                showNotification(res.error || 'Failed to run cleanup', 'error');
+            }
+        } catch (err) {
+            showNotification('Error triggering cleanup', 'error');
+        }
     };
 
     // ── Form submissions ──────────────────────────────────────────────────────

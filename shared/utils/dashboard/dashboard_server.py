@@ -2899,6 +2899,23 @@ class DashboardServer:
                 audit_service.log(username, audit_service.ACTION_USER_DELETE, audit_service.RESOURCE_USER, resource_id=user_id, request=request)
             return {"success": success, "message": "User deleted successfully" if success else "Failed to delete user"}
 
+        @self.app.post("/dashboard/api/users/cleanup", tags=["Dashboard - Users"])
+        async def trigger_user_cleanup(request: Request, username: str = Depends(self._get_auth_user_dependency)):
+            """Manually trigger temporary user cleanup."""
+            if not self._get_is_admin(request):
+                from fastapi import HTTPException
+                raise HTTPException(status_code=403, detail="Forbidden")
+            from shared.utils.user_cleanup import cleanup_inactive_users
+            try:
+                ttl_param = request.query_params.get("ttl_days")
+                ttl_days = int(ttl_param) if ttl_param else None
+                result = cleanup_inactive_users(ttl_days=ttl_days)
+                if "error" in result:
+                    return {"success": False, "error": result["error"]}
+                return {"success": True, "removed_users": result["removed_users"]}
+            except Exception as e:
+                return {"success": False, "error": str(e)}
+
         # ---------- Personal Access Tokens API ----------
         @self.app.get("/dashboard/api/tokens", tags=["Dashboard - Users"])
         async def list_user_tokens(

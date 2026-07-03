@@ -81,6 +81,7 @@ class TriggerRunner:
 
         self.sync_cron_jobs()
         self._register_wizard_cleanup()
+        self._register_user_cleanup()
 
     def _register_wizard_cleanup(self) -> None:
         """Register a daily job that removes expired Agent Builder Wizard trial agents."""
@@ -101,6 +102,26 @@ class TriggerRunner:
             logger.info("TriggerRunner: registered daily wizard trial cleanup job")
         except Exception as exc:
             logger.warning("Could not register wizard cleanup job: %s", exc)
+
+    def _register_user_cleanup(self) -> None:
+        """Register a daily job that cleans up inactive temporary users."""
+        if os.getenv("CLEANUP_USER_ENABLED", "true").lower() not in ("1", "true", "yes"):
+            return
+        try:
+            from apscheduler.triggers.cron import CronTrigger as APSCronTrigger
+            from shared.utils.user_cleanup import cleanup_inactive_users
+            with self._scheduler_lock:
+                if not self._scheduler:
+                    return
+                self._scheduler.add_job(
+                    cleanup_inactive_users,
+                    trigger=APSCronTrigger(hour=3, minute=30),  # daily 03:30 UTC
+                    id="user_cleanup",
+                    replace_existing=True,
+                )
+            logger.info("TriggerRunner: registered daily temporary user cleanup job")
+        except Exception as exc:
+            logger.warning("Could not register user cleanup job: %s", exc)
 
     def shutdown(self) -> None:
         """Stop the APScheduler gracefully."""
