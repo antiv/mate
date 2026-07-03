@@ -924,11 +924,14 @@
   function getAgentInitials(agentName) {
     if (!agentName) return "A";
     var clean = agentName.replace(/^ant_/, "");
-    var parts = clean.split(/[_-]/);
-    if (parts.length > 1) {
-      return (parts[0].charAt(0) + parts[1].charAt(0)).toUpperCase();
-    }
-    return clean.charAt(0).toUpperCase();
+    var parts = clean.split(/[_-]/).filter(Boolean);
+    // Use the last meaningful segment so agents that share a project prefix
+    // (e.g. mystery_evening_doktorka vs …_udovica) get distinct initials
+    // instead of collapsing to the shared prefix ("ME").
+    var GENERIC = { root: 1, agent: 1, bot: 1, main: 1 };
+    while (parts.length > 1 && GENERIC[parts[parts.length - 1].toLowerCase()]) parts.pop();
+    var last = parts.length ? parts[parts.length - 1] : clean;
+    return last.slice(0, 2).toUpperCase();
   }
 
   function _generateId() {

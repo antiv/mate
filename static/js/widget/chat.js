@@ -40,23 +40,23 @@
 
   // UI string translations — placeholder, send button, new-chat button, stop button, interrupted message
   const UI_STRINGS = {
-    en: { placeholder: "Type a message…", send: "Send", newChat: "New Chat", stop: "Stop", interrupted: "Response interrupted", copy: "Copy", copied: "Copied!", download: "Download", access_denied: "You don't have permission to use this agent. Please contact the administrator.", error_occurred: "Something went wrong. Please try again.", endChat: "End chat", endConfirm: "End this conversation? Your chat will be cleared.", endYes: "Yes, end", endNo: "No" },
-    sr: { placeholder: "Unesite poruku…", send: "Pošalji", newChat: "Nov razgovor", stop: "Prekini", interrupted: "Odgovor je prekinut", copy: "Kopiraj", copied: "Kopirano!", download: "Preuzmi", access_denied: "Nemate pristup ovom agentu. Molimo kontaktirajte administratora.", error_occurred: "Nešto nije u redu. Molimo pokušajte ponovo.", endChat: "Završi", endConfirm: "Završiti razgovor? Vaš chat će biti obrisan.", endYes: "Da, završi", endNo: "Ne" },
-    hr: { placeholder: "Unesite poruku…", send: "Pošalji", newChat: "Novi razgovor", stop: "Prekini", interrupted: "Odgovor je prekinut", copy: "Kopiraj", copied: "Kopirano!", download: "Preuzmi", access_denied: "Nemate pristup ovom agentu. Kontaktirajte administratora.", error_occurred: "Nešto je pošlo po krivu. Pokušajte ponovo." },
-    bs: { placeholder: "Unesite poruku…", send: "Pošalji", newChat: "Novi razgovor", stop: "Prekini", interrupted: "Odgovor je prekinut", copy: "Kopiraj", copied: "Kopirano!", download: "Preuzmi", access_denied: "Nemate pristup ovom agentu. Kontaktirajte administratora.", error_occurred: "Nešto nije u redu. Pokušajte ponovo." },
-    de: { placeholder: "Nachricht eingeben…", send: "Senden", newChat: "Neuer Chat", stop: "Stoppen", interrupted: "Antwort unterbrochen", copy: "Kopieren", copied: "Kopiert!", download: "Herunterladen", access_denied: "Sie haben keinen Zugriff auf diesen Agenten. Bitte kontaktieren Sie den Administrator.", error_occurred: "Etwas ist schiefgelaufen. Bitte versuchen Sie es erneut." },
-    fr: { placeholder: "Écrivez un message…", send: "Envoyer", newChat: "Nouveau chat", stop: "Arrêter", interrupted: "Réponse interrompue", copy: "Copier", copied: "Copié !", download: "Télécharger", access_denied: "Vous n'avez pas accès à cet agent. Veuillez contacter l'administrateur.", error_occurred: "Une erreur s'est produite. Veuillez réessayer." },
-    es: { placeholder: "Escribe un mensaje…", send: "Enviar", newChat: "Nueva conversación", stop: "Detener", interrupted: "Respuesta interrumpida", access_denied: "No tienes permiso para usar este agente. Contacta al administrador.", error_occurred: "Algo salió mal. Por favor, inténtalo de nuevo." },
-    it: { placeholder: "Scrivi un messaggio…", send: "Invia", newChat: "Nuova chat", stop: "Interrompi", interrupted: "Risposta interrotta", access_denied: "Non hai accesso a questo agente. Contatta l'amministratore.", error_occurred: "Qualcosa è andato storto. Riprova." },
-    pt: { placeholder: "Escreva uma mensagem…", send: "Enviar", newChat: "Nova conversa", stop: "Parar", interrupted: "Resposta interrompida", access_denied: "Você não tem acesso a este agente. Contacte o administrador.", error_occurred: "Algo correu mal. Por favor, tente novamente." },
-    nl: { placeholder: "Typ een bericht…", send: "Versturen", newChat: "Nieuw gesprek", stop: "Stoppen", interrupted: "Reactie onderbroken", access_denied: "U heeft geen toegang tot deze agent. Neem contact op met de beheerder.", error_occurred: "Er is iets misgegaan. Probeer het opnieuw." },
-    pl: { placeholder: "Wpisz wiadomość…", send: "Wyślij", newChat: "Nowy czat", stop: "Zatrzymaj", interrupted: "Odpowiedź przerwana", access_denied: "Nie masz dostępu do tego agenta. Skontaktuj się z administratorem.", error_occurred: "Coś poszło nie tak. Spróbuj ponownie." },
-    ru: { placeholder: "Введите сообщение…", send: "Отправить", newChat: "Новый чат", stop: "Остановить", interrupted: "Ответ прерван", access_denied: "У вас нет доступа к этому агенту. Свяжитесь с администратором.", error_occurred: "Что-то пошло не так. Пожалуйста, попробуйте снова." },
-    zh: { placeholder: "输入消息…", send: "发送", newChat: "新对话", stop: "停止", interrupted: "回答被中断", access_denied: "您没有访问此代理的权限。请联系管理员。", error_occurred: "出现了问题。请重试。" },
-    ja: { placeholder: "メッセージを入力…", send: "送信", newChat: "新しいチャット", stop: "停止", interrupted: "回答が中断されました", access_denied: "このエージェントへのアクセス権がありません。管理者にお問い合わせください。", error_occurred: "エラーが発生しました。もう一度お試しください。" },
-    ar: { placeholder: "اكتب رسالة…", send: "إرسال", newChat: "محادثة جديدة", stop: "إيقاف", interrupted: "تم مقاطعة الإجابة", access_denied: "ليس لديك صلاحية الوصول إلى هذا الوكيل. يرجى التواصل مع المسؤول.", error_occurred: "حدث خطأ ما. يرجى المحاولة مرة أخرى." },
-    he: { placeholder: "כתוב הודעה…", send: "שלח", newChat: "שיחה חדשה", stop: "עצור", interrupted: "התשובה הופסקה", access_denied: "אין לך הרשאה לשימוש בסוכן זה. אנא פנה למנהל המערכת.", error_occurred: "אירעה שגיאה. אנא נסה שוב." },
-    tr: { placeholder: "Mesaj yazın…", send: "Gönder", newChat: "Yeni Sohbet", stop: "Durdur", interrupted: "Yanıt yarıda kesildi", access_denied: "Bu ajana erişim izniniz yok. Lütfen yönetici ile iletişime geçin.", error_occurred: "Bir şeyler ters gitti. Lütfen tekrar deneyin." },
+    en: { placeholder: "Type a message…", send: "Send", newChat: "New Chat", stop: "Stop", interrupted: "Response interrupted", copy: "Copy", copied: "Copied!", download: "Download", access_denied: "You don't have permission to use this agent. Please contact the administrator.", error_occurred: "Hmm, I couldn't quite process that. Could you say it again?", endChat: "End chat", endConfirm: "End this conversation? Your chat will be cleared.", endYes: "Yes, end", endNo: "No" },
+    sr: { placeholder: "Unesite poruku…", send: "Pošalji", newChat: "Nov razgovor", stop: "Prekini", interrupted: "Odgovor je prekinut", copy: "Kopiraj", copied: "Kopirano!", download: "Preuzmi", access_denied: "Nemate pristup ovom agentu. Molimo kontaktirajte administratora.", error_occurred: "Hm, nisam uspeo to da obradim. Možete li da ponovite?", endChat: "Završi", endConfirm: "Završiti razgovor? Vaš chat će biti obrisan.", endYes: "Da, završi", endNo: "Ne" },
+    hr: { placeholder: "Unesite poruku…", send: "Pošalji", newChat: "Novi razgovor", stop: "Prekini", interrupted: "Odgovor je prekinut", copy: "Kopiraj", copied: "Kopirano!", download: "Preuzmi", access_denied: "Nemate pristup ovom agentu. Kontaktirajte administratora.", error_occurred: "Hm, nisam uspio to obraditi. Možete li ponoviti?" },
+    bs: { placeholder: "Unesite poruku…", send: "Pošalji", newChat: "Novi razgovor", stop: "Prekini", interrupted: "Odgovor je prekinut", copy: "Kopiraj", copied: "Kopirano!", download: "Preuzmi", access_denied: "Nemate pristup ovom agentu. Kontaktirajte administratora.", error_occurred: "Hm, nisam uspio to obraditi. Možete li ponoviti?" },
+    de: { placeholder: "Nachricht eingeben…", send: "Senden", newChat: "Neuer Chat", stop: "Stoppen", interrupted: "Antwort unterbrochen", copy: "Kopieren", copied: "Kopiert!", download: "Herunterladen", access_denied: "Sie haben keinen Zugriff auf diesen Agenten. Bitte kontaktieren Sie den Administrator.", error_occurred: "Hmm, das konnte ich nicht verarbeiten. Können Sie es wiederholen?" },
+    fr: { placeholder: "Écrivez un message…", send: "Envoyer", newChat: "Nouveau chat", stop: "Arrêter", interrupted: "Réponse interrompue", copy: "Copier", copied: "Copié !", download: "Télécharger", access_denied: "Vous n'avez pas accès à cet agent. Veuillez contacter l'administrateur.", error_occurred: "Hmm, je n'ai pas réussi à traiter cela. Pouvez-vous répéter ?" },
+    es: { placeholder: "Escribe un mensaje…", send: "Enviar", newChat: "Nueva conversación", stop: "Detener", interrupted: "Respuesta interrumpida", access_denied: "No tienes permiso para usar este agente. Contacta al administrador.", error_occurred: "Mmm, no pude procesar eso. ¿Puedes repetirlo?" },
+    it: { placeholder: "Scrivi un messaggio…", send: "Invia", newChat: "Nuova chat", stop: "Interrompi", interrupted: "Risposta interrotta", access_denied: "Non hai accesso a questo agente. Contatta l'amministratore.", error_occurred: "Hmm, non sono riuscito a elaborarlo. Puoi ripetere?" },
+    pt: { placeholder: "Escreva uma mensagem…", send: "Enviar", newChat: "Nova conversa", stop: "Parar", interrupted: "Resposta interrompida", access_denied: "Você não tem acesso a este agente. Contacte o administrador.", error_occurred: "Hmm, não consegui processar isso. Pode repetir?" },
+    nl: { placeholder: "Typ een bericht…", send: "Versturen", newChat: "Nieuw gesprek", stop: "Stoppen", interrupted: "Reactie onderbroken", access_denied: "U heeft geen toegang tot deze agent. Neem contact op met de beheerder.", error_occurred: "Hmm, ik kon dat niet verwerken. Kunt u het herhalen?" },
+    pl: { placeholder: "Wpisz wiadomość…", send: "Wyślij", newChat: "Nowy czat", stop: "Zatrzymaj", interrupted: "Odpowiedź przerwana", access_denied: "Nie masz dostępu do tego agenta. Skontaktuj się z administratorem.", error_occurred: "Hmm, nie udało mi się tego przetworzyć. Czy możesz powtórzyć?" },
+    ru: { placeholder: "Введите сообщение…", send: "Отправить", newChat: "Новый чат", stop: "Остановить", interrupted: "Ответ прерван", access_denied: "У вас нет доступа к этому агенту. Свяжитесь с администратором.", error_occurred: "Хм, мне не удалось это обработать. Пожалуйста, повторите." },
+    zh: { placeholder: "输入消息…", send: "发送", newChat: "新对话", stop: "停止", interrupted: "回答被中断", access_denied: "您没有访问此代理的权限。请联系管理员。", error_occurred: "嗯，我没能理解那条信息。能再说一遍吗？" },
+    ja: { placeholder: "メッセージを入力…", send: "送信", newChat: "新しいチャット", stop: "停止", interrupted: "回答が中断されました", access_denied: "このエージェントへのアクセス権がありません。管理者にお問い合わせください。", error_occurred: "うーん、うまく処理できませんでした。もう一度お願いできますか？" },
+    ar: { placeholder: "اكتب رسالة…", send: "إرسال", newChat: "محادثة جديدة", stop: "إيقاف", interrupted: "تم مقاطعة الإجابة", access_denied: "ليس لديك صلاحية الوصول إلى هذا الوكيل. يرجى التواصل مع المسؤول.", error_occurred: "لم أتمكن من معالجة ذلك. هل يمكنك تكرارها؟" },
+    he: { placeholder: "כתוב הודעה…", send: "שלח", newChat: "שיחה חדשה", stop: "עצור", interrupted: "התשובה הופסקה", access_denied: "אין לך הרשאה לשימוש בסוכן זה. אנא פנה למנהל המערכת.", error_occurred: "לא הצלחתי לעבד את זה. תוכל לחזור על כך?" },
+    tr: { placeholder: "Mesaj yazın…", send: "Gönder", newChat: "Yeni Sohbet", stop: "Durdur", interrupted: "Yanıt yarıda kesildi", access_denied: "Bu ajana erişim izniniz yok. Lütfen yönetici ile iletişime geçin.", error_occurred: "Hmm, bunu işleyemedim. Tekrar eder misiniz?" },
   };
   const RTL_LANGS = ["ar", "he", "fa", "ur"];
 
@@ -1071,11 +1071,14 @@
   function getAgentInitials(agentName) {
     if (!agentName) return "A";
     var clean = agentName.replace(/^ant_/, "");
-    var parts = clean.split(/[_-]/);
-    if (parts.length > 1) {
-      return (parts[0].charAt(0) + parts[1].charAt(0)).toUpperCase();
-    }
-    return clean.charAt(0).toUpperCase();
+    var parts = clean.split(/[_-]/).filter(Boolean);
+    // Use the last meaningful segment so agents that share a project prefix
+    // (e.g. mystery_evening_doktorka vs …_udovica) get distinct initials
+    // instead of collapsing to the shared prefix ("ME").
+    var GENERIC = { root: 1, agent: 1, bot: 1, main: 1 };
+    while (parts.length > 1 && GENERIC[parts[parts.length - 1].toLowerCase()]) parts.pop();
+    var last = parts.length ? parts[parts.length - 1] : clean;
+    return last.slice(0, 2).toUpperCase();
   }
 
   function _generateId() {
