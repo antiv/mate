@@ -626,6 +626,57 @@ class WidgetApiKey(Base):
         }
 
 
+class ChannelIntegration(Base):
+    """Links an external chat platform (Slack, Discord, ...) to a MATE root agent."""
+
+    __tablename__ = 'channel_integrations'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    platform = Column(String(30), nullable=False, default='slack')  # slack|discord|teams|whatsapp|viber
+    project_id = Column(Integer, ForeignKey('projects.id'), nullable=False)
+    agent_name = Column(String(255), nullable=False)
+    label = Column(String(255), nullable=True)
+    team_id = Column(String(64), nullable=True, index=True)  # Slack team/workspace id
+    bot_token = Column(String(255), nullable=True)  # xoxb-... token used to post replies
+    signing_secret = Column(String(255), nullable=True)  # verifies inbound request signatures
+    config = Column(Text, nullable=True)  # JSON: mention_only, reply_in_thread, ...
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc),
+                        onupdate=lambda: datetime.now(timezone.utc), nullable=False)
+
+    project = relationship("Project")
+
+    def get_config(self) -> dict:
+        if not self.config:
+            return {}
+        try:
+            return json.loads(self.config)
+        except json.JSONDecodeError:
+            return {}
+
+    def set_config(self, config: dict):
+        self.config = json.dumps(config) if config else None
+
+    def to_dict(self, include_secrets: bool = False) -> dict:
+        data = {
+            'id': self.id,
+            'platform': self.platform,
+            'project_id': self.project_id,
+            'agent_name': self.agent_name,
+            'label': self.label,
+            'team_id': self.team_id,
+            'config': self.get_config(),
+            'is_active': self.is_active,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+        }
+        if include_secrets:
+            data['bot_token'] = self.bot_token
+            data['signing_secret'] = self.signing_secret
+        return data
+
+
 class WizardSession(Base):
     """Tracks a public Agent Builder Wizard run and the trial it provisioned."""
 

@@ -1,0 +1,343 @@
+{% extends "base.html" %}
+
+{% block title %}Integrations - MATE{% endblock %}
+
+{% block content %}
+<div class="space-y-4">
+
+    <!-- Header -->
+    <div class="flex flex-col gap-4 md:flex-row md:justify-between md:items-center">
+        <div>
+            <h2 class="text-xl font-bold text-gray-900 dark:text-white">Chat Integrations</h2>
+            <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">Connect an agent to external chat platforms so it can reply inside Slack, Discord, and more</p>
+        </div>
+        <button onclick="IntegrationsPage.openCreateModal()" class="px-3 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center space-x-1">
+            <i class="fas fa-plus mr-1"></i>New Integration
+        </button>
+    </div>
+
+    <!-- Slack request URL hint -->
+    <div class="bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 rounded px-3 py-2 text-xs">
+        <i class="fas fa-info-circle mr-1 text-blue-500"></i>
+        Slack Event Request URL: <code id="slackRequestUrl" class="bg-white/60 dark:bg-black/30 px-1 rounded font-mono"></code>
+        <button onclick="IntegrationsPage.copyRequestUrl()" class="ml-1 text-blue-600 dark:text-blue-300 hover:underline"><i class="fas fa-copy"></i> copy</button>
+        — paste this under <strong>Event Subscriptions</strong> in your Slack app, subscribe to <code>app_mention</code>.
+    </div>
+
+    <!-- Integrations table -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-x-auto">
+        <table class="w-full text-xs">
+            <thead>
+                <tr class="text-left text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
+                    <th class="px-4 py-2 font-medium">Platform</th>
+                    <th class="px-4 py-2 font-medium">Label</th>
+                    <th class="px-4 py-2 font-medium">Agent</th>
+                    <th class="px-4 py-2 font-medium">Workspace / Team ID</th>
+                    <th class="px-4 py-2 font-medium text-center">Active</th>
+                    <th class="px-4 py-2 font-medium text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody id="integrationTableBody">
+                <tr>
+                    <td colspan="6" class="px-4 py-6 text-center text-gray-400 dark:text-gray-500">
+                        <i class="fas fa-spinner fa-spin mr-1"></i>Loading…
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Integration Modal -->
+<div id="integrationModal" class="fixed inset-0 bg-gray-600 bg-opacity-60 hidden z-[80] dashboard-modal">
+    <div class="flex items-center justify-center min-h-screen p-4">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div class="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                <h3 id="integrationModalTitle" class="text-sm font-semibold text-gray-900 dark:text-white">New Integration</h3>
+                <button onclick="IntegrationsPage.closeModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+                    <i class="fas fa-times text-sm"></i>
+                </button>
+            </div>
+
+            <div class="px-4 py-4 space-y-4">
+                <input type="hidden" id="integrationFormId">
+
+                <!-- Platform + Label -->
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label for="integrationPlatform" class="block text-xs font-medium text-gray-700 dark:text-gray-300">Platform *</label>
+                        <select id="integrationPlatform"
+                            class="mt-1 block w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500">
+                            <option value="slack">Slack</option>
+                            <option value="discord" disabled>Discord (soon)</option>
+                            <option value="teams" disabled>Microsoft Teams (soon)</option>
+                            <option value="whatsapp" disabled>WhatsApp (soon)</option>
+                            <option value="viber" disabled>Viber (soon)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="integrationLabel" class="block text-xs font-medium text-gray-700 dark:text-gray-300">Label</label>
+                        <input type="text" id="integrationLabel" placeholder="Support bot"
+                            class="mt-1 block w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500">
+                    </div>
+                </div>
+
+                <!-- Project + Agent -->
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label for="integrationProject" class="block text-xs font-medium text-gray-700 dark:text-gray-300">Project *</label>
+                        <select id="integrationProject" onchange="IntegrationsPage.onProjectChange()"
+                            class="mt-1 block w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500">
+                            <option value="">— select project —</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="integrationAgent" class="block text-xs font-medium text-gray-700 dark:text-gray-300">Root Agent *</label>
+                        <select id="integrationAgent"
+                            class="mt-1 block w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500">
+                            <option value="">— select project first —</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Team ID -->
+                <div>
+                    <label for="integrationTeamId" class="block text-xs font-medium text-gray-700 dark:text-gray-300">Slack Workspace / Team ID *</label>
+                    <input type="text" id="integrationTeamId" placeholder="T01234567"
+                        class="mt-1 block w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-blue-500">
+                    <p class="mt-0.5 text-xs text-gray-400">Found in Slack app settings, or the <code>team_id</code> of an incoming event</p>
+                </div>
+
+                <!-- Bot token -->
+                <div>
+                    <label for="integrationBotToken" class="block text-xs font-medium text-gray-700 dark:text-gray-300">Bot User OAuth Token *</label>
+                    <input type="password" id="integrationBotToken" autocomplete="off" placeholder="xoxb-…"
+                        class="mt-1 block w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-blue-500">
+                    <p class="mt-0.5 text-xs text-gray-400">Used to post replies. Needs <code>chat:write</code> scope.</p>
+                </div>
+
+                <!-- Signing secret -->
+                <div>
+                    <label for="integrationSigningSecret" class="block text-xs font-medium text-gray-700 dark:text-gray-300">Signing Secret *</label>
+                    <input type="password" id="integrationSigningSecret" autocomplete="off" placeholder="Slack app signing secret"
+                        class="mt-1 block w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-blue-500">
+                    <p class="mt-0.5 text-xs text-gray-400">Verifies inbound requests. Leave secret fields blank when editing to keep the current values.</p>
+                </div>
+
+                <!-- Options -->
+                <div class="flex flex-wrap gap-4 border-t border-gray-200 dark:border-gray-700 pt-3">
+                    <label class="flex items-center gap-2 text-xs text-gray-700 dark:text-gray-300">
+                        <input type="checkbox" id="integrationMentionOnly" checked class="rounded border-gray-300 dark:border-gray-600">
+                        Mention-only (reply only when @mentioned)
+                    </label>
+                    <label class="flex items-center gap-2 text-xs text-gray-700 dark:text-gray-300">
+                        <input type="checkbox" id="integrationActive" checked class="rounded border-gray-300 dark:border-gray-600">
+                        Active
+                    </label>
+                </div>
+
+                <!-- Footer -->
+                <div class="flex justify-end gap-2 pt-2 border-t border-gray-200 dark:border-gray-700">
+                    <button type="button" onclick="IntegrationsPage.closeModal()"
+                        class="px-3 py-1.5 text-xs text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700">
+                        Cancel
+                    </button>
+                    <button type="button" id="integrationSubmitBtn" onclick="IntegrationsPage.submitForm()"
+                        class="px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded flex items-center gap-1">
+                        <i id="integrationSubmitLoader" class="fas fa-spinner fa-spin hidden"></i>
+                        <span id="integrationSubmitText">Create</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+window._integrationsPageData = {
+    projects: {{ projects | tojson }},
+    agents: {{ agents | tojson }},
+};
+
+const IntegrationsPage = {
+    notify(msg, type) {
+        if (typeof showNotification === 'function') showNotification(msg, type);
+    },
+
+    init() {
+        document.getElementById('slackRequestUrl').textContent =
+            window.location.origin + '/integrations/slack/events';
+        this.loadIntegrations();
+    },
+
+    copyRequestUrl() {
+        const url = window.location.origin + '/integrations/slack/events';
+        navigator.clipboard.writeText(url).then(() => this.notify('Request URL copied'));
+    },
+
+    async loadIntegrations() {
+        const tbody = document.getElementById('integrationTableBody');
+        try {
+            const resp = await fetch('/dashboard/api/channel-integrations', { credentials: 'same-origin' });
+            const data = await resp.json();
+            const rows = data.integrations || [];
+            if (!rows.length) {
+                tbody.innerHTML = `<tr><td colspan="6" class="px-4 py-6 text-center text-gray-400 dark:text-gray-500">No integrations yet. Click "New Integration" to connect a chat platform.</td></tr>`;
+                return;
+            }
+            tbody.innerHTML = rows.map(r => {
+                const active = r.is_active
+                    ? '<span class="inline-flex items-center gap-1 text-green-600 dark:text-green-400"><i class="fas fa-circle text-[6px]"></i>Yes</span>'
+                    : '<span class="inline-flex items-center gap-1 text-gray-400"><i class="fas fa-circle text-[6px]"></i>No</span>';
+                return `<tr class="border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                    <td class="px-4 py-2 font-medium text-gray-900 dark:text-white capitalize">${r.platform}</td>
+                    <td class="px-4 py-2 text-gray-700 dark:text-gray-300">${r.label || '<span class="text-gray-400">—</span>'}</td>
+                    <td class="px-4 py-2 text-gray-600 dark:text-gray-400 font-mono">${r.agent_name}</td>
+                    <td class="px-4 py-2 text-gray-500 dark:text-gray-400 font-mono">${r.team_id || '<span class="text-gray-400">—</span>'}</td>
+                    <td class="px-4 py-2 text-center">${active}</td>
+                    <td class="px-4 py-2 text-right">
+                        <div class="flex items-center justify-end gap-3">
+                            <button onclick='IntegrationsPage.openEditModal(${JSON.stringify(r)})' title="Edit" class="text-blue-600 dark:text-blue-400 hover:text-blue-800"><i class="fas fa-edit"></i></button>
+                            <button onclick="IntegrationsPage.deleteIntegration(${r.id})" title="Delete" class="text-red-600 dark:text-red-400 hover:text-red-800"><i class="fas fa-trash"></i></button>
+                        </div>
+                    </td>
+                </tr>`;
+            }).join('');
+        } catch (err) {
+            tbody.innerHTML = `<tr><td colspan="6" class="px-4 py-4 text-center text-red-500">Error: ${err.message}</td></tr>`;
+        }
+    },
+
+    populateProjects() {
+        const sel = document.getElementById('integrationProject');
+        sel.innerHTML = '<option value="">— select project —</option>' +
+            window._integrationsPageData.projects.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+    },
+
+    onProjectChange() {
+        const projectId = document.getElementById('integrationProject').value;
+        const sel = document.getElementById('integrationAgent');
+        if (!projectId) {
+            sel.innerHTML = '<option value="">— select project first —</option>';
+            return;
+        }
+        // Root agents only (no parents), scoped to the selected project.
+        const agents = window._integrationsPageData.agents.filter(a =>
+            String(a.project_id) === String(projectId) &&
+            (!a.parent_agents || a.parent_agents.length === 0));
+        sel.innerHTML = agents.length
+            ? agents.map(a => `<option value="${a.name}">${a.name}</option>`).join('')
+            : '<option value="">— no root agents in project —</option>';
+    },
+
+    openCreateModal() {
+        this.populateProjects();
+        document.getElementById('integrationModalTitle').textContent = 'New Integration';
+        document.getElementById('integrationSubmitText').textContent = 'Create';
+        document.getElementById('integrationFormId').value = '';
+        document.getElementById('integrationLabel').value = '';
+        document.getElementById('integrationPlatform').value = 'slack';
+        document.getElementById('integrationProject').value = '';
+        document.getElementById('integrationAgent').innerHTML = '<option value="">— select project first —</option>';
+        document.getElementById('integrationTeamId').value = '';
+        document.getElementById('integrationBotToken').value = '';
+        document.getElementById('integrationSigningSecret').value = '';
+        document.getElementById('integrationMentionOnly').checked = true;
+        document.getElementById('integrationActive').checked = true;
+        document.getElementById('integrationModal').classList.remove('hidden');
+    },
+
+    openEditModal(row) {
+        this.populateProjects();
+        document.getElementById('integrationModalTitle').textContent = 'Edit Integration';
+        document.getElementById('integrationSubmitText').textContent = 'Save';
+        document.getElementById('integrationFormId').value = row.id;
+        document.getElementById('integrationLabel').value = row.label || '';
+        document.getElementById('integrationPlatform').value = row.platform || 'slack';
+        document.getElementById('integrationProject').value = row.project_id || '';
+        this.onProjectChange();
+        document.getElementById('integrationAgent').value = row.agent_name || '';
+        document.getElementById('integrationTeamId').value = row.team_id || '';
+        document.getElementById('integrationBotToken').value = '';
+        document.getElementById('integrationBotToken').placeholder = '•••••• (unchanged)';
+        document.getElementById('integrationSigningSecret').value = '';
+        document.getElementById('integrationSigningSecret').placeholder = '•••••• (unchanged)';
+        const cfg = row.config || {};
+        document.getElementById('integrationMentionOnly').checked = cfg.mention_only !== false;
+        document.getElementById('integrationActive').checked = !!row.is_active;
+        document.getElementById('integrationModal').classList.remove('hidden');
+    },
+
+    closeModal() {
+        document.getElementById('integrationModal').classList.add('hidden');
+        document.getElementById('integrationBotToken').placeholder = 'xoxb-…';
+        document.getElementById('integrationSigningSecret').placeholder = 'Slack app signing secret';
+    },
+
+    async submitForm() {
+        const id = document.getElementById('integrationFormId').value;
+        const isEdit = !!id;
+        const project_id = document.getElementById('integrationProject').value;
+        const agent_name = document.getElementById('integrationAgent').value;
+        const team_id = document.getElementById('integrationTeamId').value.trim();
+        const bot_token = document.getElementById('integrationBotToken').value.trim();
+        const signing_secret = document.getElementById('integrationSigningSecret').value.trim();
+
+        if (!project_id || !agent_name) { this.notify('Project and agent are required', 'error'); return; }
+        if (!team_id) { this.notify('Team ID is required', 'error'); return; }
+        if (!isEdit && (!bot_token || !signing_secret)) { this.notify('Bot token and signing secret are required', 'error'); return; }
+
+        const payload = {
+            platform: document.getElementById('integrationPlatform').value,
+            project_id: parseInt(project_id, 10),
+            agent_name,
+            label: document.getElementById('integrationLabel').value.trim(),
+            team_id,
+            is_active: document.getElementById('integrationActive').checked,
+            config: { mention_only: document.getElementById('integrationMentionOnly').checked },
+        };
+        // Only send secrets when provided (blank on edit = keep existing).
+        if (bot_token) payload.bot_token = bot_token;
+        if (signing_secret) payload.signing_secret = signing_secret;
+
+        const loader = document.getElementById('integrationSubmitLoader');
+        loader.classList.remove('hidden');
+        try {
+            const url = isEdit ? `/dashboard/api/channel-integrations/${id}` : '/dashboard/api/channel-integrations';
+            const resp = await fetch(url, {
+                method: isEdit ? 'PUT' : 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'same-origin',
+                body: JSON.stringify(payload),
+            });
+            const res = await resp.json();
+            if (!resp.ok || res.success === false) throw new Error(res.detail || 'Save failed');
+            this.notify(isEdit ? 'Integration updated' : 'Integration created');
+            this.closeModal();
+            this.loadIntegrations();
+        } catch (err) {
+            this.notify(err.message, 'error');
+        } finally {
+            loader.classList.add('hidden');
+        }
+    },
+
+    async deleteIntegration(id) {
+        if (!confirm('Delete this integration? Slack messages will no longer reach the agent.')) return;
+        try {
+            const resp = await fetch(`/dashboard/api/channel-integrations/${id}`, {
+                method: 'DELETE', credentials: 'same-origin',
+            });
+            const res = await resp.json();
+            if (!resp.ok || res.success === false) throw new Error(res.detail || 'Delete failed');
+            this.notify('Integration deleted');
+            this.loadIntegrations();
+        } catch (err) {
+            this.notify(err.message, 'error');
+        }
+    },
+};
+
+document.addEventListener('DOMContentLoaded', () => IntegrationsPage.init());
+</script>
+{% endblock %}

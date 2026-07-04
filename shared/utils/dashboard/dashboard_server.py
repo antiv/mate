@@ -5118,6 +5118,23 @@ class DashboardServer:
                 "is_admin": True,
             })
 
+        # ── Chat Integrations ─────────────────────────────────────────────────
+
+        @self.app.get("/dashboard/integrations", response_class=HTMLResponse, tags=["Dashboard - Pages"])
+        async def dashboard_integrations(request: Request, username: str = Depends(self._get_auth_user_dependency)):
+            if not self._get_is_admin(request):
+                return RedirectResponse(url="/dashboard/workroom", status_code=302)
+            projects = self._get_all_projects()
+            agents = self._get_all_agent_configs()
+            return self.templates.TemplateResponse(request, "dashboard/integrations.html", {
+                "request": request,
+                "page_title": "Integrations",
+                "username": username,
+                "projects": projects,
+                "agents": [{"name": a.get("name", ""), "type": a.get("type", ""), "project_id": a.get("project_id"), "parent_agents": a.get("parent_agents") or []} for a in agents],
+                "is_admin": True,
+            })
+
         @self.app.get("/dashboard/workroom", response_class=HTMLResponse, tags=["Dashboard - Pages"])
         async def dashboard_workroom(request: Request, agent: Optional[str] = None, session: Optional[str] = None, username: str = Depends(self._get_auth_user_dependency)):
             is_admin = self._get_is_admin(request)

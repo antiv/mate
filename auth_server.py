@@ -334,6 +334,7 @@ from server.widget_routes import (
     public_artifacts_router,
 )
 from server.wizard_routes import router as wizard_router
+from server.slack_routes import router as slack_router, dashboard_router as slack_dashboard_router
 
 configure_widget_proxy(ADK_HOST, ADK_PORT)
 
@@ -344,6 +345,8 @@ app.include_router(widget_router)
 app.include_router(widget_admin_api_router)
 app.include_router(dashboard_widget_router)
 app.include_router(wizard_router)
+app.include_router(slack_router)
+app.include_router(slack_dashboard_router)
 app.include_router(public_artifacts_router)
 app.include_router(proxy_router)
 app.include_router(browser_router)
