@@ -104,6 +104,31 @@ Each Slack thread maps to its own persistent MATE conversation
 
 ---
 
+## Interactive cards (buttons)
+
+Some agents emit **rich cards** — e.g. the murder-mystery agent shows each
+suspect as a card with an *"🔍 Ispitaj"* button. In the web chat these render as
+interactive cards; MATE automatically translates them into Slack **Block Kit**
+messages (a section per card plus buttons), so Slack users see the same cards
+instead of raw `[[CARD]]{…}` text.
+
+For the **buttons to work**, enable Slack interactivity:
+
+1. Slack app → **Interactivity & Shortcuts** → toggle **Interactivity** on.
+2. **Request URL**: `https://<your-mate-host>/integrations/slack/interactions`
+   (same host as the events URL, but the `/interactions` path).
+3. **Save Changes**.
+
+When a user clicks a card button, Slack calls that URL; MATE runs the agent with
+the button's value (as if the user had typed it) and posts the reply in the same
+thread/DM. No extra scopes are required — it reuses the same signing secret and
+bot token.
+
+> Buttons that open a link (`kind: "link"`) work without any callback. Calendar
+> download buttons (`kind: "ics"`) are web-only and are omitted in Slack.
+
+---
+
 ## Local development
 
 Slack must reach your MATE server over public HTTPS. For local testing, tunnel
@@ -164,6 +189,8 @@ By default the bot only sees messages that mention it. To let the agent read
 |---|---|
 | Can't type a message to the bot (no input box in its DM) | Messages Tab is off. Enable it in **App Home** and check "Allow users to send… messages from the messages tab" — see [Enabling direct messages](#enabling-direct-messages). |
 | Bot replies to mentions but ignores DMs | Missing `message.im` event subscription and/or `im:history` scope. Add both and reinstall the app. |
+| Card buttons do nothing when clicked | Interactivity not enabled, or wrong path. Set the Request URL to `…/integrations/slack/interactions` under **Interactivity & Shortcuts**. |
+| Cards show as raw `[[CARD]]{…}` text | You're on an old build — the Slack layer now translates cards to Block Kit automatically. Ensure the message is coming through `/integrations/slack/events`. |
 | Request URL won't verify | MATE not reachable over HTTPS, or wrong path. URL must end with `/integrations/slack/events`. |
 | `No active Slack integration for team_id=T…` in logs | No integration row for that workspace, or it's inactive. Create/enable it with the correct Team ID. |
 | Slack signature `401` in logs | Signing Secret in MATE doesn't match the app's. Re-copy it from **Basic Information**. |
