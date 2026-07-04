@@ -198,6 +198,105 @@
             }
         });
 
+        /* ── Workflow routing (graph agents with planner_config.edges) ── */
+        agentsByName.forEach(function (agent, agentName) {
+            if ((agent.type || '').toLowerCase() !== 'graph') return;
+            var plannerCfg;
+            try {
+                plannerCfg = typeof agent.planner_config === 'string'
+                    ? JSON.parse(agent.planner_config || '{}')
+                    : (agent.planner_config || {});
+            } catch (e) { plannerCfg = {}; }
+            var wfEdges = Array.isArray(plannerCfg.edges) ? plannerCfg.edges : [];
+            if (!wfEdges.length) return;
+
+            var agentPos = positionByName.get(agentName) || { x: 0, y: 0 };
+            var routerNames = (Array.isArray(plannerCfg.router_nodes) ? plannerCfg.router_nodes : [])
+                .map(function (r) { return r && r.name; })
+                .filter(Boolean);
+            var joinNames = Array.isArray(plannerCfg.join_nodes) ? plannerCfg.join_nodes : [];
+
+            /* Normalize edges to {from, to, route} pairs (list chains and dict form) */
+            var pairs = [];
+            wfEdges.forEach(function (edge) {
+                if (Array.isArray(edge)) {
+                    for (var i = 0; i < edge.length - 1; i++) {
+                        pairs.push({ from: edge[i], to: edge[i + 1], route: null });
+                    }
+                } else if (edge && typeof edge === 'object' && edge.from && edge.to) {
+                    var targets = Array.isArray(edge.to) ? edge.to : [edge.to];
+                    targets.forEach(function (t) {
+                        pairs.push({ from: edge.from, to: t, route: edge.route != null ? String(edge.route) : null });
+                    });
+                }
+            });
+
+            /* Router/join pill nodes (auto-detect join names used in edges, matching backend) */
+            var specialNames = routerNames.concat(joinNames.filter(function (n) { return routerNames.indexOf(n) === -1; }));
+            pairs.forEach(function (p) {
+                [p.from, p.to].forEach(function (n) {
+                    if (n !== 'START' && !agentsByName.has(n) && specialNames.indexOf(n) === -1
+                        && String(n).toLowerCase().indexOf('join') !== -1) {
+                        specialNames.push(n);
+                    }
+                });
+            });
+
+            var specialNodeIds = {};
+            specialNames.forEach(function (name, i) {
+                var nodeId = '__wf__' + agentName + '__' + name;
+                specialNodeIds[name] = nodeId;
+                /* Place below the node routing into it, else below the graph agent */
+                var incoming = pairs.filter(function (p) { return p.to === name; })[0];
+                var basePos = agentPos;
+                if (incoming && incoming.from !== 'START' && agentsByName.has(incoming.from)) {
+                    basePos = positionByName.get(incoming.from) || agentPos;
+                }
+                nodes.push({
+                    id: nodeId,
+                    type: 'workflow',
+                    position: { x: basePos.x + 90, y: basePos.y + 150 + i * 40 },
+                    data: {
+                        label: name,
+                        kind: routerNames.indexOf(name) !== -1 ? 'router' : 'join',
+                        agentName: agentName,
+                    },
+                    draggable: true,
+                });
+            });
+
+            function workflowNodeId(name) {
+                if (name === 'START') return agentName; /* graph agent acts as entry */
+                if (specialNodeIds[name]) return specialNodeIds[name];
+                if (agentsByName.has(name)) return name;
+                return null;
+            }
+
+            var ROUTE_COLOR = '#14b8a6';
+            pairs.forEach(function (p, i) {
+                var sourceId = workflowNodeId(p.from);
+                var targetId = workflowNodeId(p.to);
+                if (!sourceId || !targetId) return;
+                edges.push({
+                    id: '__wfedge__' + agentName + '__' + i,
+                    source: sourceId,
+                    target: targetId,
+                    type: 'smoothstep',
+                    animated: !!p.route,
+                    label: p.route || undefined,
+                    labelStyle: { fill: ROUTE_COLOR, fontWeight: 700, fontSize: 10 },
+                    labelBgStyle: { fill: '#042f2e', fillOpacity: 0.9 },
+                    style: { stroke: ROUTE_COLOR, strokeWidth: 1.8, strokeDasharray: '6 4' },
+                    markerEnd: {
+                        type: MarkerType.ArrowClosed,
+                        color: ROUTE_COLOR,
+                        width: 18,
+                        height: 18,
+                    },
+                });
+            });
+        });
+
         /* ── Tool & MCP child nodes (below agents, centered) ── */
         agentsByName.forEach(function (agent, agentName) {
             var agentPos = positionByName.get(agentName) || { x: 0, y: 0 };
@@ -616,6 +715,28 @@
             },
             React.createElement(Handle, { type: 'target', position: Position.Top, style: { background: '#818cf8', width: 6, height: 6 } }),
             '⬡ ' + data.label,
+        );
+    }
+
+    function WorkflowNode(props) {
+        var data = props.data || {};
+        var isRouter = data.kind === 'router';
+        var color = isRouter ? '#14b8a6' : '#2dd4bf';
+        return React.createElement(
+            'div',
+            {
+                style: {
+                    padding: '4px 10px', borderRadius: 20,
+                    border: '1.5px dashed ' + color,
+                    backgroundColor: '#042f2e',
+                    color: '#5eead4', fontSize: 10, fontWeight: 600,
+                    fontFamily: "'Inter', sans-serif", whiteSpace: 'nowrap',
+                    transition: 'all 0.15s ease',
+                },
+            },
+            React.createElement(Handle, { type: 'target', position: Position.Top, style: { background: color, width: 6, height: 6 } }),
+            (isRouter ? '⑂ ' : '⧉ ') + data.label,
+            React.createElement(Handle, { type: 'source', position: Position.Bottom, style: { background: color, width: 6, height: 6, bottom: -4 } }),
         );
     }
 
@@ -1336,6 +1457,7 @@
         default: DefaultAgentNode,
         tool: ToolNode,
         mcp: McpNode,
+        workflow: WorkflowNode,
     };
 
     function AgentsVisualBuilderApp(props) {

@@ -9,6 +9,7 @@ This module handles:
 
 import json
 import logging
+import os
 from typing import Dict, List, Optional, Any, Type
 from google.adk.planners import BuiltInPlanner, PlanReActPlanner
 from google.adk import Workflow
@@ -289,6 +290,20 @@ class AgentManager:
             self.last_error = err_msg
             return None
     
+    def _create_retry_config(self, retry_dict: Optional[dict]) -> Optional[Any]:
+        """
+        Create an ADK RetryConfig from a config dict, e.g.
+        {"max_attempts": 3, "initial_delay": 1.0, "backoff_factor": 2.0}.
+        """
+        if not retry_dict or not isinstance(retry_dict, dict):
+            return None
+        try:
+            from google.adk.workflow import RetryConfig
+            return RetryConfig(**retry_dict)
+        except Exception as e:
+            logger.error(f"Invalid retry_config {retry_dict}: {e}")
+            return None
+
     def _create_planner(self, planner_config: dict) -> Optional[Any]:
         """
         Create a planner instance based on configuration.
@@ -410,10 +425,11 @@ class AgentManager:
             
             # Create agent based on type
             if agent_type in ['graph']:
-                from google.adk.workflow import START
-                
+                from google.adk.workflow import START, Edge, FunctionNode
+
                 # Resolve edges from planner_config
                 edges_config = None
+                router_nodes_config = []
                 planner_config = config.get('planner_config', {})
                 if planner_config:
                     if isinstance(planner_config, str):
@@ -422,10 +438,11 @@ class AgentManager:
                         except json.JSONDecodeError:
                             logger.error(f"Failed to parse planner_config JSON for graph agent {agent_name}: {planner_config}")
                             planner_config = {}
-                    
+
                     if isinstance(planner_config, dict):
                         edges_config = planner_config.get('edges')
-                
+                        router_nodes_config = planner_config.get('router_nodes', [])
+
                 # Map subagents by name to their instances
                 subagent_map = {}
                 for sa in sub_agents or []:
@@ -434,15 +451,53 @@ class AgentManager:
                         parts = sa.name.rsplit('_', 1)
                         if len(parts) > 1:
                             subagent_map[parts[0]] = sa
-                
+
+                # Build declarative router nodes: read a session state key and emit a route
+                def make_router(router_name: str, state_key: str, routes: list, default_route):
+                    def router(ctx):
+                        value = ctx.state.get(state_key)
+                        if value is None:
+                            # LLM subagent outputs land in state under "<agent_name>_output"
+                            value = ctx.state.get(f"{state_key}_output")
+                        text = str(value).strip().lower() if value is not None else ""
+                        chosen = next(
+                            (r for r in routes if text == str(r).strip().lower()),
+                            None
+                        )
+                        if chosen is None:
+                            chosen = next(
+                                (r for r in routes if str(r).strip().lower() in text),
+                                None
+                            )
+                        if chosen is None:
+                            chosen = default_route
+                        logger.info(f"Router {router_name}: state[{state_key}]={text!r} -> route {chosen!r}")
+                        if chosen is not None:
+                            ctx.route = chosen
+                    router.__name__ = router_name
+                    return router
+
+                router_map = {}
+                for rn in router_nodes_config:
+                    rn_name = rn.get('name')
+                    rn_state_key = rn.get('state_key')
+                    if not rn_name or not rn_state_key:
+                        raise ValueError(f"router_nodes entries require 'name' and 'state_key' (graph agent {agent_name})")
+                    router_map[rn_name] = FunctionNode(
+                        func=make_router(rn_name, rn_state_key, rn.get('routes', []), rn.get('default_route')),
+                        name=rn_name
+                    )
+
                 def resolve_node(node_name: str):
                     if node_name == "START":
                         return START
+                    if node_name in router_map:
+                        return router_map[node_name]
                     if node_name in subagent_map:
                         return subagent_map[node_name]
                     if node_name in self.initialized_agents:
                         return self.initialized_agents[node_name]
-                    
+
                     is_join = False
                     if isinstance(planner_config, dict):
                         join_nodes = planner_config.get('join_nodes', [])
@@ -450,17 +505,42 @@ class AgentManager:
                             is_join = True
                     if "join" in node_name.lower():
                         is_join = True
-                        
+
                     if is_join:
                         from google.adk.workflow import JoinNode
                         return JoinNode(name=node_name)
-                        
+
                     raise ValueError(f"Could not resolve node '{node_name}' in subagents or initialized agents")
-                
+
+                # Per-node retry: {"node_retry": {"node_name": {"max_attempts": 3, ...}}}
+                if isinstance(planner_config, dict):
+                    node_retry = planner_config.get('node_retry', {})
+                    for node_name, retry_dict in (node_retry or {}).items():
+                        retry_config = self._create_retry_config(retry_dict)
+                        if retry_config is None:
+                            continue
+                        try:
+                            resolve_node(node_name).retry_config = retry_config
+                            logger.info(f"Applied retry_config to node {node_name} (graph agent {agent_name})")
+                        except ValueError as e:
+                            logger.warning(f"Cannot apply retry_config: {e}")
+
                 resolved_edges = []
                 if edges_config:
                     for edge in edges_config:
-                        if isinstance(edge, (list, tuple)):
+                        if isinstance(edge, dict):
+                            # Conditional edge: {"from": ..., "to": ... | [...], "route": ...}
+                            if 'from' not in edge or 'to' not in edge:
+                                raise ValueError(f"Edge dict requires 'from' and 'to' keys (graph agent {agent_name}): {edge}")
+                            from_node = resolve_node(edge['from'])
+                            targets = edge['to'] if isinstance(edge['to'], list) else [edge['to']]
+                            for target in targets:
+                                resolved_edges.append(Edge(
+                                    from_node=from_node,
+                                    to_node=resolve_node(target),
+                                    route=edge.get('route')
+                                ))
+                        elif isinstance(edge, (list, tuple)):
                             resolved_edge = tuple(resolve_node(n) for n in edge)
                             resolved_edges.append(resolved_edge)
                         else:
@@ -471,15 +551,21 @@ class AgentManager:
                         logger.info(f"No edges configured for graph agent {agent_name}. Defaulting to sequential chain.")
                     else:
                         raise ValueError(f"No edges or subagents configured for graph agent {agent_name}")
-                
-                agent = GraphWorkflow(
-                    name=agent_name,
-                    edges=resolved_edges,
-                    description=description,
-                    sub_agents=sub_agents or [],
-                    input_schema=input_schema,
-                    output_schema=output_schema
-                )
+
+                graph_kwargs = {
+                    'name': agent_name,
+                    'edges': resolved_edges,
+                    'description': description,
+                    'sub_agents': (sub_agents or []) + list(router_map.values()),
+                    'input_schema': input_schema,
+                    'output_schema': output_schema,
+                }
+                if isinstance(planner_config, dict):
+                    workflow_retry = self._create_retry_config(planner_config.get('retry_config'))
+                    if workflow_retry is not None:
+                        graph_kwargs['retry_config'] = workflow_retry
+                        logger.info(f"Applied retry_config to graph agent {agent_name}")
+                agent = GraphWorkflow(**graph_kwargs)
             elif agent_type in ['loop']:
                 max_iterations = config.get('max_iterations')  # Use None as default
                 if not sub_agents:
@@ -533,8 +619,22 @@ class AgentManager:
                 )
             else:
                 # Default to standard Agent for llm type
+                # When the app-wide MATE plugin is enabled, model callbacks run at the
+                # App level (shared/callbacks/mate_plugin.py) — skip per-agent wiring
+                # to avoid double execution
+                plugins_enabled = os.getenv("MATE_PLUGINS_ENABLED", "false").lower() == "true"
+                if plugins_enabled:
+                    try:
+                        from ..callbacks.mate_plugin import MatePlugin  # noqa: F401
+                    except Exception as e:
+                        logger.error(f"MATE plugin unavailable ({e}); keeping per-agent callbacks")
+                        plugins_enabled = False
+
                 # For sub-agents of graph agents, use simpler callbacks to avoid TaskGroup issues
-                if parent_agent_type == 'graph':
+                if plugins_enabled:
+                    before_callback = None
+                    after_callback = None
+                elif parent_agent_type == 'graph':
                     before_callback = capture_model_name_callback
                     after_callback = log_token_usage_callback
                 else:
@@ -602,10 +702,19 @@ class AgentManager:
                     'tools': tools,
                     'sub_agents': sub_agents or [],
                     'output_key': output_key,
-                    'before_model_callback': before_callback,
-                    'after_model_callback': after_callback
                 }
+                if before_callback is not None:
+                    agent_params['before_model_callback'] = before_callback
+                if after_callback is not None:
+                    agent_params['after_model_callback'] = after_callback
                 
+                # Framework-level retry for this agent node (ADK 2.x BaseNode.retry_config)
+                if isinstance(planner_config, dict):
+                    retry_config = self._create_retry_config(planner_config.get('retry_config'))
+                    if retry_config is not None:
+                        agent_params['retry_config'] = retry_config
+                        logger.info(f"Applied retry_config to agent {agent_name}")
+
                 # Add optional parameters if present
                 if planner:
                     agent_params['planner'] = planner
