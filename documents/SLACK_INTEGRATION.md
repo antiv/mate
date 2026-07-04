@@ -39,7 +39,7 @@ You need three values from Slack to fill in the MATE form:
 2. Under **Scopes → Bot Token Scopes**, add:
    - `app_mentions:read` — receive mention events
    - `chat:write` — post replies
-   - *(optional, for DMs)* `im:history`, `im:write`
+   - *(for direct messages)* `im:history` — see [Enabling direct messages](#enabling-direct-messages)
 3. Do **not** add `channels:history` unless you intentionally want full-channel
    reading (see below).
 
@@ -119,6 +119,29 @@ Use the tunnel's HTTPS URL as the Request URL in Step 6, e.g.
 
 ---
 
+## Enabling direct messages
+
+By default a fresh Slack app can be mentioned in channels but **cannot be
+DMed** — the Messages tab is off and the DM events aren't subscribed. MATE
+already handles incoming DMs; you just need to switch them on in Slack:
+
+1. **App Home** (left sidebar) → **Show Tabs** → enable the **Messages Tab**, and
+   check **"Allow users to send Slash commands and messages from the messages
+   tab."** Without this, Slack hides the message box on the bot's DM.
+2. **OAuth & Permissions** → add the `im:history` bot scope (keep `chat:write`).
+3. **Event Subscriptions** → under *Subscribe to bot events*, add **`message.im`**.
+4. **Save**, then **reinstall the app** when Slack prompts (scope change).
+
+Now open a DM with the bot and just type — no mention needed. Each DM channel is
+one continuous conversation (MATE keys it to `session_id = slack_<team>_<channel>`,
+so the agent remembers context across messages), and replies land inline rather
+than in a thread.
+
+> The bot only sees DMs sent **to it**; `message.im` does not expose other DMs.
+> Messages the bot itself sends, and edits/deletes, are ignored to avoid loops.
+
+---
+
 ## Reading whole channels (optional)
 
 By default the bot only sees messages that mention it. To let the agent read
@@ -139,6 +162,8 @@ By default the bot only sees messages that mention it. To let the agent read
 
 | Symptom | Cause / fix |
 |---|---|
+| Can't type a message to the bot (no input box in its DM) | Messages Tab is off. Enable it in **App Home** and check "Allow users to send… messages from the messages tab" — see [Enabling direct messages](#enabling-direct-messages). |
+| Bot replies to mentions but ignores DMs | Missing `message.im` event subscription and/or `im:history` scope. Add both and reinstall the app. |
 | Request URL won't verify | MATE not reachable over HTTPS, or wrong path. URL must end with `/integrations/slack/events`. |
 | `No active Slack integration for team_id=T…` in logs | No integration row for that workspace, or it's inactive. Create/enable it with the correct Team ID. |
 | Slack signature `401` in logs | Signing Secret in MATE doesn't match the app's. Re-copy it from **Basic Information**. |

@@ -111,13 +111,20 @@ async def _handle_event(integration_dict: dict, event: dict) -> None:
     if not channel or not user_text:
         return
 
-    # Slack threading: reply under the parent message so the conversation stays
-    # in one thread. Fall back to the message ts itself for top-level messages.
-    thread_ts = event.get("thread_ts") or event.get("ts")
     team_id = integration_dict.get("team_id") or "t"
-    session_id = f"slack_{team_id}_{channel}_{thread_ts}"
     slack_user = event.get("user") or "unknown"
     user_id = f"slack_{slack_user}"
+
+    if event.get("channel_type") == "im":
+        # Direct message: one stable conversation per DM channel; reply inline
+        # (not threaded) so it reads like a normal chat.
+        session_id = f"slack_{team_id}_{channel}"
+        reply_thread = None
+    else:
+        # Channel mention: keep the exchange in one thread so each thread is its
+        # own conversation. Fall back to the message ts for top-level mentions.
+        reply_thread = event.get("thread_ts") or event.get("ts")
+        session_id = f"slack_{team_id}_{channel}_{reply_thread}"
 
     try:
         reply = await run_agent_message(
@@ -131,7 +138,7 @@ async def _handle_event(integration_dict: dict, event: dict) -> None:
         reply = "Sorry — I hit an error while processing that."
 
     if reply:
-        await _post_reply(integration_dict["bot_token"], channel, reply, thread_ts)
+        await _post_reply(integration_dict["bot_token"], channel, reply, reply_thread)
 
 
 @router.post("/events")
@@ -166,8 +173,13 @@ async def slack_events(request: Request, background_tasks: BackgroundTasks):
         return Response(status_code=200)
 
     event = payload.get("event") or {}
-    # MVP: mention-only. Ignore the bot's own messages to avoid loops.
-    if event.get("type") != "app_mention" or event.get("bot_id"):
+    # Accept channel mentions and direct messages to the bot.
+    is_mention = event.get("type") == "app_mention"
+    is_direct_message = event.get("type") == "message" and event.get("channel_type") == "im"
+    if not (is_mention or is_direct_message):
+        return Response(status_code=200)
+    # Ignore the bot's own messages and edit/delete/system subtypes to avoid loops.
+    if event.get("bot_id") or event.get("subtype"):
         return Response(status_code=200)
 
     # Snapshot the fields the background task needs (detached from the DB session).
