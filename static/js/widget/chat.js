@@ -40,8 +40,8 @@
 
   // UI string translations — placeholder, send button, new-chat button, stop button, interrupted message
   const UI_STRINGS = {
-    en: { placeholder: "Type a message…", send: "Send", newChat: "New Chat", stop: "Stop", interrupted: "Response interrupted", copy: "Copy", copied: "Copied!", download: "Download", access_denied: "You don't have permission to use this agent. Please contact the administrator.", error_occurred: "Hmm, I couldn't quite process that. Could you say it again?", endChat: "End chat", endConfirm: "End this conversation? Your chat will be cleared.", endYes: "Yes, end", endNo: "No" },
-    sr: { placeholder: "Unesite poruku…", send: "Pošalji", newChat: "Nov razgovor", stop: "Prekini", interrupted: "Odgovor je prekinut", copy: "Kopiraj", copied: "Kopirano!", download: "Preuzmi", access_denied: "Nemate pristup ovom agentu. Molimo kontaktirajte administratora.", error_occurred: "Hm, nisam uspeo to da obradim. Možete li da ponovite?", endChat: "Završi", endConfirm: "Završiti razgovor? Vaš chat će biti obrisan.", endYes: "Da, završi", endNo: "Ne" },
+    en: { placeholder: "Type a message…", send: "Send", newChat: "New Chat", stop: "Stop", interrupted: "Response interrupted", copy: "Copy", copied: "Copied!", download: "Download", access_denied: "You don't have permission to use this agent. Please contact the administrator.", error_occurred: "Hmm, I couldn't quite process that. Could you say it again?", endChat: "End chat", endConfirm: "End this conversation? Your chat will be cleared.", endYes: "Yes, end", endNo: "No", confirmTitle: "Approval required", confirmApprove: "Approve", confirmReject: "Reject", confirmApproved: "Approved", confirmRejected: "Rejected" },
+    sr: { placeholder: "Unesite poruku…", send: "Pošalji", newChat: "Nov razgovor", stop: "Prekini", interrupted: "Odgovor je prekinut", copy: "Kopiraj", copied: "Kopirano!", download: "Preuzmi", access_denied: "Nemate pristup ovom agentu. Molimo kontaktirajte administratora.", error_occurred: "Hm, nisam uspeo to da obradim. Možete li da ponovite?", endChat: "Završi", endConfirm: "Završiti razgovor? Vaš chat će biti obrisan.", endYes: "Da, završi", endNo: "Ne", confirmTitle: "Potrebna je potvrda", confirmApprove: "Potvrdi", confirmReject: "Odbaci", confirmApproved: "Potvrđeno", confirmRejected: "Odbačeno" },
     hr: { placeholder: "Unesite poruku…", send: "Pošalji", newChat: "Novi razgovor", stop: "Prekini", interrupted: "Odgovor je prekinut", copy: "Kopiraj", copied: "Kopirano!", download: "Preuzmi", access_denied: "Nemate pristup ovom agentu. Kontaktirajte administratora.", error_occurred: "Hm, nisam uspio to obraditi. Možete li ponoviti?" },
     bs: { placeholder: "Unesite poruku…", send: "Pošalji", newChat: "Novi razgovor", stop: "Prekini", interrupted: "Odgovor je prekinut", copy: "Kopiraj", copied: "Kopirano!", download: "Preuzmi", access_denied: "Nemate pristup ovom agentu. Kontaktirajte administratora.", error_occurred: "Hm, nisam uspio to obraditi. Možete li ponoviti?" },
     de: { placeholder: "Nachricht eingeben…", send: "Senden", newChat: "Neuer Chat", stop: "Stoppen", interrupted: "Antwort unterbrochen", copy: "Kopieren", copied: "Kopiert!", download: "Herunterladen", access_denied: "Sie haben keinen Zugriff auf diesen Agenten. Bitte kontaktieren Sie den Administrator.", error_occurred: "Hmm, das konnte ich nicht verarbeiten. Können Sie es wiederholen?" },
@@ -129,6 +129,14 @@
   // Delegated handler for card actions (book a slot, add to cart, download .ics, ...).
   if (messagesEl) {
     messagesEl.addEventListener("click", function (e) {
+      // Human-in-the-loop tool confirmation buttons
+      var cbtn = e.target.closest ? e.target.closest(".mate-confirm-act") : null;
+      if (cbtn && !cbtn.disabled) {
+        var card = cbtn.closest(".mate-confirm-card");
+        var fcId = card ? card.getAttribute("data-fc-id") : null;
+        if (fcId) _sendConfirmation(fcId, cbtn.getAttribute("data-confirmed") === "1", card);
+        return;
+      }
       var btn = e.target.closest ? e.target.closest(".wz-card-act") : null;
       if (!btn) return;
       var kind = btn.getAttribute("data-kind");
@@ -383,6 +391,96 @@
       });
   }
 
+  // --- Human-in-the-loop tool confirmation ------------------------------
+  // ADK pauses a require_confirmation tool by emitting a functionCall named
+  // "adk_request_confirmation". We render an approve/reject card; the answer
+  // goes back as a functionResponse with the same id and {confirmed: bool}.
+  function _confirmationCardHtml(fc) {
+    function esc(s) { return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
+    var args = fc.args || {};
+    var orig = args.originalFunctionCall || args.original_function_call || {};
+    var conf = args.toolConfirmation || args.tool_confirmation || {};
+    var s = UI_STRINGS[currentLang] || UI_STRINGS.en;
+    var en = UI_STRINGS.en;
+    var argsJson = "";
+    try { argsJson = JSON.stringify(orig.args || {}); } catch (e) { argsJson = ""; }
+    if (argsJson.length > 220) argsJson = argsJson.slice(0, 220) + "…";
+    var html = '<div class="mate-confirm-card" data-fc-id="' + esc(fc.id) + '" style="border:1px solid #f59e0b;border-radius:12px;padding:12px;background:#fffbeb">';
+    html += '<div style="font-size:12px;color:#b45309;font-weight:700">⚠ ' + esc(s.confirmTitle || en.confirmTitle) + '</div>';
+    html += '<div style="font-weight:600;margin-top:4px;color:#0f172a;font-family:monospace;font-size:13px">' + esc(orig.name || "tool") + '</div>';
+    if (conf.hint) html += '<div style="font-size:13px;color:#475569;margin-top:2px">' + esc(conf.hint) + '</div>';
+    if (argsJson && argsJson !== "{}") html += '<div style="font-size:12px;color:#64748b;margin-top:4px;font-family:monospace;word-break:break-all">' + esc(argsJson) + '</div>';
+    html += '<div style="display:flex;gap:10px;margin-top:10px">';
+    html += '<button type="button" class="mate-confirm-act" data-confirmed="1" style="background:#16a34a;color:#fff;border:0;border-radius:8px;padding:6px 14px;font-size:13px;cursor:pointer;font-weight:600">' + esc(s.confirmApprove || en.confirmApprove) + '</button>';
+    html += '<button type="button" class="mate-confirm-act" data-confirmed="0" style="background:#dc2626;color:#fff;border:0;border-radius:8px;padding:6px 14px;font-size:13px;cursor:pointer;font-weight:600">' + esc(s.confirmReject || en.confirmReject) + '</button>';
+    html += '</div></div>';
+    return html;
+  }
+
+  function _lockConfirmationCard(cardEl, confirmed) {
+    var btns = cardEl.querySelectorAll(".mate-confirm-act");
+    for (var i = 0; i < btns.length; i++) {
+      btns[i].disabled = true;
+      btns[i].style.opacity = "0.5";
+      btns[i].style.cursor = "default";
+    }
+    var s = UI_STRINGS[currentLang] || UI_STRINGS.en;
+    var en = UI_STRINGS.en;
+    var status = document.createElement("div");
+    status.style.cssText = "font-size:12px;margin-top:8px;font-weight:600;color:" + (confirmed ? "#16a34a" : "#dc2626");
+    status.textContent = confirmed ? (s.confirmApproved || en.confirmApproved) : (s.confirmRejected || en.confirmRejected);
+    cardEl.appendChild(status);
+  }
+
+  function _sendConfirmation(fcId, confirmed, cardEl) {
+    if (sending || !sessionId) return;
+    if (cardEl) _lockConfirmationCard(cardEl, confirmed);
+    sending = true;
+    _updateSendBtnState();
+    _showTyping(true);
+    abortController = new AbortController();
+
+    var payload = {
+      message: "",
+      parts: [{
+        function_response: {
+          id: fcId,
+          name: "adk_request_confirmation",
+          response: { confirmed: !!confirmed },
+        },
+      }],
+      user_id: userId,
+      session_id: sessionId,
+      new_session: false,
+    };
+
+    fetch(`${BASE}/widget/api/chat`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Widget-Key": API_KEY,
+      },
+      body: JSON.stringify(payload),
+      signal: abortController.signal
+    })
+      .then(function (res) {
+        if (!res.ok) throw new Error("Confirmation request failed: " + res.status);
+        return _readSSE(res);
+      })
+      .catch(function (err) {
+        _showTyping(false);
+        if (err.name === "AbortError") return;
+        var s = UI_STRINGS[currentLang] || UI_STRINGS["en"];
+        _appendMessage("agent", s.error_occurred || UI_STRINGS["en"].error_occurred, false, null, "agent");
+        console.error("Confirmation error:", err);
+      })
+      .finally(function () {
+        sending = false;
+        abortController = null;
+        _updateSendBtnState();
+      });
+  }
+
   // --- Read SSE stream -------------------------------------------------
   // ADK streams events from every agent in the chain. Events contain:
   //   author        — which agent produced this event
@@ -403,6 +501,7 @@
     var decoder = new TextDecoder();
     var buffer = "";
     var segmentText = "";
+    var confirmationShown = false;
     activeAgentText = "";
     activeAgentEl = null;
     activeAgentAuthor = "";
@@ -514,6 +613,22 @@
         var parts = (evt.content && evt.content.parts) || [];
         if (!parts.length) return;
 
+        // Human-in-the-loop: tool confirmation request → approve/reject card
+        for (var ci = 0; ci < parts.length; ci++) {
+          var cfc = parts[ci].functionCall || parts[ci].function_call;
+          if (cfc && cfc.name === "adk_request_confirmation") {
+            _showTyping(false);
+            _ensureBubble();
+            activeAgentEl.innerHTML = _confirmationCardHtml(cfc);
+            confirmationShown = true;
+            activeAgentEl = null;
+            activeAgentText = "";
+            segmentText = "";
+            _scrollToBottom();
+            return;
+          }
+        }
+
         var hasToolPart = false;
         for (var i = 0; i < parts.length; i++) {
           if (parts[i].functionCall || parts[i].functionResponse ||
@@ -578,10 +693,10 @@
     return reader.read().then(function pump(result) {
       if (result.done) {
         _showTyping(false);
-        if (!activeAgentText && activeAgentEl) {
+        if (!activeAgentText && activeAgentEl && !confirmationShown) {
           activeAgentEl.innerHTML = _renderMarkdown("(no response)");
           _addMessageActions(activeAgentEl);
-        } else if (!activeAgentText && !activeAgentEl) {
+        } else if (!activeAgentText && !activeAgentEl && !confirmationShown) {
           _appendMessage("agent", "(no response)", false, null, "agent");
         } else if (activeAgentEl) {
           _addMessageActions(activeAgentEl);

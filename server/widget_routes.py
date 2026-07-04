@@ -250,9 +250,16 @@ async def widget_chat(request: Request, wk: WidgetApiKey = Depends(verify_widget
     else:
         message_parts = [{"text": message_text}]
 
+    # Tool-confirmation responses (HITL approve/reject) must stay a pure
+    # function_response message — no context prefix injection
+    has_function_response = any(
+        isinstance(p, dict) and ("function_response" in p or "functionResponse" in p)
+        for p in message_parts
+    )
+
     # Inject page context and language as a prefix when enabled in widget config
     cfg = wk.get_widget_config()
-    if cfg.get("context_injection"):
+    if cfg.get("context_injection") and not has_function_response:
         prefix_lines = []
         if page_context and isinstance(page_context, dict):
             ctx_url = str(page_context.get("url", ""))[:500]

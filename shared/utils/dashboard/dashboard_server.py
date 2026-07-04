@@ -2359,6 +2359,18 @@ class DashboardServer:
                 "is_admin": True,
             })
 
+        @self.app.get("/dashboard/guardrail-logs", response_class=HTMLResponse, tags=["Dashboard - Pages"])
+        async def dashboard_guardrail_logs(request: Request, username: str = Depends(self._get_auth_user_dependency)):
+            """Dashboard guardrail trigger log viewer."""
+            if not self._get_is_admin(request):
+                return RedirectResponse(url="/dashboard/workroom", status_code=302)
+            return self.templates.TemplateResponse(request, "dashboard/guardrail_logs.html", {
+                "request": request,
+                "page_title": "Guardrail Logs",
+                "username": username,
+                "is_admin": True,
+            })
+
         @self.app.get("/dashboard/wizard-leads", response_class=HTMLResponse, tags=["Dashboard - Pages"])
         async def dashboard_wizard_leads(request: Request, username: str = Depends(self._get_auth_user_dependency)):
             """Dashboard page listing leads captured by the public Agent Builder Wizard."""
@@ -4437,6 +4449,7 @@ class DashboardServer:
             agent_name: str = None,
             guardrail_type: str = None,
             action_taken: str = None,
+            phase: str = None,
             limit: int = 100,
             offset: int = 0,
         ):
@@ -4455,6 +4468,8 @@ class DashboardServer:
                     query = query.filter(self.GuardrailLog.guardrail_type == guardrail_type)
                 if action_taken:
                     query = query.filter(self.GuardrailLog.action_taken == action_taken)
+                if phase:
+                    query = query.filter(self.GuardrailLog.phase == phase)
                 total = query.count()
                 logs = (
                     query.order_by(self.GuardrailLog.timestamp.desc())

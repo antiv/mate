@@ -20,6 +20,33 @@ from ...utils.utils import reload_agent_cache
 logger = logging.getLogger(__name__)
 
 
+def _create_root_agent_folder(agent_name: str) -> Dict[str, Any]:
+    """
+    Copy shared/template_agent → agents/<agent_name>/ so a newly created root
+    agent is loadable immediately (same template the dashboard and server
+    startup use).
+    """
+    import shutil
+    from pathlib import Path
+
+    try:
+        project_root = Path(__file__).resolve().parents[3]
+        template_path = project_root / "shared" / "template_agent"
+        dest_path = project_root / "agents" / agent_name
+
+        if not template_path.exists():
+            return {"success": False, "message": f"Template agent folder not found at {template_path}"}
+        if dest_path.exists():
+            return {"success": True, "message": f"Agent folder '{agent_name}' already exists"}
+
+        dest_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copytree(template_path, dest_path)
+        logger.info(f"Created agent folder for root agent '{agent_name}' at {dest_path}")
+        return {"success": True, "message": f"Agent folder '{agent_name}' created"}
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+
+
 def _get_user_id_from_context(tool_context: ToolContext) -> Optional[str]:
     """Extract user_id from tool context using the standard ADK pattern."""
     if not tool_context:
@@ -117,19 +144,22 @@ def create_agent(
     - Use the same model as the current agent (if model not specified)
     - Be in the same project as the current agent
     - Inherit the same memory tools configuration (memory_blocks) if the current agent uses them
-    - Be a root agent (if parent_agent not specified) or a subagent of the specified parent
-    
+    - Be a subagent of the CURRENT agent by default (if parent_agent not specified);
+      pass parent_agent="ROOT" to create a standalone top-level agent instead
+
     Required fields: name, description, instruction
     Type is always set to 'llm'
-    
+
     Args:
         name: Name of the new agent (required, must be unique)
         description: Description of the new agent (required)
         instruction: Instruction/prompt for the new agent (required)
         model: Model name for the new agent (optional, uses current agent's model if not specified)
-        parent_agent: Name of parent agent (optional, creates root agent if not specified)
+        parent_agent: Name of parent agent. Defaults to the current agent, so the new
+            agent immediately becomes part of the current agent tree. Pass "ROOT" to
+            create a standalone top-level agent.
         tool_context: Tool context to get current agent information (automatically provided)
-        
+
     Returns:
         Dict with status, message, and agent details:
         - status: "success" or "error"
@@ -232,22 +262,29 @@ def create_agent(
             if memory_tools_config:
                 tool_config.update(memory_tools_config)
             
-            # Determine parent agents
+            # Determine parent agents. Default: the creating agent, so the new agent
+            # is immediately reachable in the current tree. "ROOT" makes it top-level.
+            requested_parent = (parent_agent or "").strip()
+            if not requested_parent:
+                requested_parent = current_agent_name
+
             parent_agents = []
-            if parent_agent and parent_agent.strip():
-                parent_agent_name = parent_agent.strip()
+            if requested_parent.upper() not in ("ROOT", "NONE"):
                 # Verify parent agent exists
                 parent_exists = session.query(AgentConfig).filter(
-                    AgentConfig.name == parent_agent_name
+                    AgentConfig.name == requested_parent
                 ).first()
-                
+
                 if not parent_exists:
-                    return {
-                        "status": "error",
-                        "error_message": f"Parent agent '{parent_agent_name}' does not exist"
-                    }
-                
-                parent_agents = [parent_agent_name]
+                    if parent_agent and parent_agent.strip():
+                        return {
+                            "status": "error",
+                            "error_message": f"Parent agent '{requested_parent}' does not exist"
+                        }
+                    # Creating agent is not DB-configured (e.g. hardcoded) — fall back to root
+                    logger.info(f"Creator '{current_agent_name}' not found in DB; creating '{name}' as root agent")
+                else:
+                    parent_agents = [requested_parent]
             
             # Create agent configuration
             config_data = {
@@ -273,7 +310,7 @@ def create_agent(
             session.commit()
             
             logger.info(f"Created new agent '{name}' by agent '{current_agent_name}'")
-            
+
             # Reload parent agent(s) if this is a subagent
             reload_success = True
             if parent_agents:
@@ -282,7 +319,14 @@ def create_agent(
                     reload_success = reload_result.get("success", False)
                     if not reload_success:
                         logger.warning(f"Failed to reload parent agent '{parent_agent_name}' after creating subagent '{name}': {reload_result.get('message', 'Unknown error')}")
-            
+            else:
+                # Root agent: materialize agents/<name>/ from the template so the
+                # AgentLoader can serve it immediately (otherwise it only appears
+                # after a server restart, when startup scans DB root agents)
+                folder_result = _create_root_agent_folder(name.strip())
+                if not folder_result.get("success"):
+                    logger.warning(f"Agent '{name}' created in DB but folder creation failed: {folder_result.get('message')}")
+
             return {
                 "status": "success",
                 "message": f"Agent '{name}' created successfully" + (f". Parent agent(s) reloaded." if parent_agents and reload_success else ""),

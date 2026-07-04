@@ -140,22 +140,39 @@ function syncPlannerConfigToJson(prefix = '') {
     const plannerType = document.getElementById(prefix + 'PlannerType').value;
     const thinkingMode = document.getElementById(prefix + 'ThinkingMode').value;
     const maxIterations = document.getElementById(prefix + 'PlannerMaxIterations').value;
-    
+
+    const textarea = document.getElementById(prefix + 'PlannerConfig');
+
+    // Merge into the existing JSON: planner_config also carries workflow keys
+    // (edges, router_nodes, join_nodes, retry_config, node_retry) that the
+    // planner dropdowns must not wipe out
     let config = {};
-    
+    try {
+        config = JSON.parse(textarea.value || '{}') || {};
+    } catch (e) {
+        config = {};
+    }
+
     if (plannerType) {
         config.type = plannerType;
-        
+
         if (plannerType === 'BuiltInPlanner' && thinkingMode && thinkingMode !== 'default') {
             config.thinking_mode = thinkingMode;
+        } else {
+            delete config.thinking_mode;
         }
-        
+
         if (maxIterations && maxIterations !== '10') {
             config.max_iterations = parseInt(maxIterations);
+        } else {
+            delete config.max_iterations;
         }
+    } else {
+        delete config.type;
+        delete config.thinking_mode;
+        delete config.max_iterations;
     }
-    
-    const textarea = document.getElementById(prefix + 'PlannerConfig');
+
     textarea.value = JSON.stringify(config, null, 2);
     if (typeof updatePlannerConfigSummary === 'function') {
         updatePlannerConfigSummary(prefix);

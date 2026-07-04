@@ -37,10 +37,10 @@
 
   // UI string translations
   var UI_STRINGS = {
-    en: { placeholder: "Type a message…", send: "Send", newChat: "New Chat", stop: "Stop", interrupted: "Response interrupted", copy: "Copy", copied: "Copied!", download: "Download" },
-    sr: { placeholder: "Unesite poruku…", send: "Pošalji", newChat: "Nov razgovor", stop: "Prekini", interrupted: "Odgovor je prekinut", copy: "Kopiraj", copied: "Kopirano!", download: "Preuzmi" },
-    hr: { placeholder: "Unesite poruku…", send: "Pošalji", newChat: "Novi razgovor", stop: "Prekini", interrupted: "Odgovor je prekinut", copy: "Kopiraj", copied: "Kopirano!", download: "Preuzmi" },
-    bs: { placeholder: "Unesite poruku…", send: "Pošalji", newChat: "Novi razgovor", stop: "Prekini", interrupted: "Odgovor je prekinut", copy: "Kopiraj", copied: "Kopirano!", download: "Preuzmi" },
+    en: { placeholder: "Type a message…", send: "Send", newChat: "New Chat", stop: "Stop", interrupted: "Response interrupted", copy: "Copy", copied: "Copied!", download: "Download", confirmTitle: "Approval required", confirmApprove: "Approve", confirmReject: "Reject", confirmApproved: "Approved", confirmRejected: "Rejected" },
+    sr: { placeholder: "Unesite poruku…", send: "Pošalji", newChat: "Nov razgovor", stop: "Prekini", interrupted: "Odgovor je prekinut", copy: "Kopiraj", copied: "Kopirano!", download: "Preuzmi", confirmTitle: "Potrebna je potvrda", confirmApprove: "Potvrdi", confirmReject: "Odbaci", confirmApproved: "Potvrđeno", confirmRejected: "Odbačeno" },
+    hr: { placeholder: "Unesite poruku…", send: "Pošalji", newChat: "Novi razgovor", stop: "Prekini", interrupted: "Odgovor je prekinut", copy: "Kopiraj", copied: "Kopirano!", download: "Preuzmi", confirmTitle: "Potrebna je potvrda", confirmApprove: "Potvrdi", confirmReject: "Odbaci", confirmApproved: "Potvrđeno", confirmRejected: "Odbačeno" },
+    bs: { placeholder: "Unesite poruku…", send: "Pošalji", newChat: "Novi razgovor", stop: "Prekini", interrupted: "Odgovor je prekinut", copy: "Kopiraj", copied: "Kopirano!", download: "Preuzmi", confirmTitle: "Potrebna je potvrda", confirmApprove: "Potvrdi", confirmReject: "Odbaci", confirmApproved: "Potvrđeno", confirmRejected: "Odbačeno" },
     de: { placeholder: "Nachricht eingeben…", send: "Senden", newChat: "Neuer Chat", stop: "Stoppen", interrupted: "Antwort unterbrochen", copy: "Kopieren", copied: "Kopiert!", download: "Herunterladen" },
     fr: { placeholder: "Écrivez un message…", send: "Envoyer", newChat: "Nouveau chat", stop: "Arrêter", interrupted: "Réponse interrompue", copy: "Copier", copied: "Copié !", download: "Télécharger" },
     es: { placeholder: "Escribe un mensaje…", send: "Enviar", newChat: "Nueva conversación", stop: "Detener", interrupted: "Respuesta interrumpida" },
@@ -67,6 +67,14 @@
   // Delegated handler for card actions (book a slot, add to cart, download .ics, ...).
   if (messagesEl) {
     messagesEl.addEventListener("click", function (e) {
+      // Human-in-the-loop tool confirmation buttons
+      var cbtn = e.target.closest ? e.target.closest(".mate-confirm-act") : null;
+      if (cbtn && !cbtn.disabled) {
+        var card = cbtn.closest(".mate-confirm-card");
+        var fcId = card ? card.getAttribute("data-fc-id") : null;
+        if (fcId) _sendConfirmation(fcId, cbtn.getAttribute("data-confirmed") === "1", card);
+        return;
+      }
       var btn = e.target.closest ? e.target.closest(".wz-card-act") : null;
       if (!btn) return;
       var kind = btn.getAttribute("data-kind");
@@ -297,12 +305,102 @@
       });
   }
 
+  // --- Human-in-the-loop tool confirmation ------------------------------
+  // ADK pauses a require_confirmation tool by emitting a functionCall named
+  // "adk_request_confirmation". We render an approve/reject card; the answer
+  // goes back as a functionResponse with the same id and {confirmed: bool}.
+  function _confirmationCardHtml(fc) {
+    function esc(s) { return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
+    var args = fc.args || {};
+    var orig = args.originalFunctionCall || args.original_function_call || {};
+    var conf = args.toolConfirmation || args.tool_confirmation || {};
+    var s = UI_STRINGS[currentLang] || UI_STRINGS.en;
+    var en = UI_STRINGS.en;
+    var argsJson = "";
+    try { argsJson = JSON.stringify(orig.args || {}); } catch (e) { argsJson = ""; }
+    if (argsJson.length > 220) argsJson = argsJson.slice(0, 220) + "…";
+    var html = '<div class="mate-confirm-card" data-fc-id="' + esc(fc.id) + '" style="border:1px solid #f59e0b;border-radius:12px;padding:12px;background:#fffbeb">';
+    html += '<div style="font-size:12px;color:#b45309;font-weight:700">⚠ ' + esc(s.confirmTitle || en.confirmTitle) + '</div>';
+    html += '<div style="font-weight:600;margin-top:4px;color:#0f172a;font-family:monospace;font-size:13px">' + esc(orig.name || "tool") + '</div>';
+    if (conf.hint) html += '<div style="font-size:13px;color:#475569;margin-top:2px">' + esc(conf.hint) + '</div>';
+    if (argsJson && argsJson !== "{}") html += '<div style="font-size:12px;color:#64748b;margin-top:4px;font-family:monospace;word-break:break-all">' + esc(argsJson) + '</div>';
+    html += '<div style="display:flex;gap:10px;margin-top:10px">';
+    html += '<button type="button" class="mate-confirm-act" data-confirmed="1" style="background:#16a34a;color:#fff;border:0;border-radius:8px;padding:6px 14px;font-size:13px;cursor:pointer;font-weight:600">' + esc(s.confirmApprove || en.confirmApprove) + '</button>';
+    html += '<button type="button" class="mate-confirm-act" data-confirmed="0" style="background:#dc2626;color:#fff;border:0;border-radius:8px;padding:6px 14px;font-size:13px;cursor:pointer;font-weight:600">' + esc(s.confirmReject || en.confirmReject) + '</button>';
+    html += '</div></div>';
+    return html;
+  }
+
+  function _lockConfirmationCard(cardEl, confirmed) {
+    var btns = cardEl.querySelectorAll(".mate-confirm-act");
+    for (var i = 0; i < btns.length; i++) {
+      btns[i].disabled = true;
+      btns[i].style.opacity = "0.5";
+      btns[i].style.cursor = "default";
+    }
+    var s = UI_STRINGS[currentLang] || UI_STRINGS.en;
+    var en = UI_STRINGS.en;
+    var status = document.createElement("div");
+    status.style.cssText = "font-size:12px;margin-top:8px;font-weight:600;color:" + (confirmed ? "#16a34a" : "#dc2626");
+    status.textContent = confirmed ? (s.confirmApproved || en.confirmApproved) : (s.confirmRejected || en.confirmRejected);
+    cardEl.appendChild(status);
+  }
+
+  function _sendConfirmation(fcId, confirmed, cardEl) {
+    if (sending || !sessionId) return;
+    if (cardEl) _lockConfirmationCard(cardEl, confirmed);
+    sending = true;
+    _updateSendBtnState();
+    _showTyping(true);
+    abortController = new AbortController();
+
+    var payload = {
+      app_name: AGENT_NAME,
+      user_id: userId,
+      session_id: sessionId,
+      new_message: {
+        role: "user",
+        parts: [{
+          function_response: {
+            id: fcId,
+            name: "adk_request_confirmation",
+            response: { confirmed: !!confirmed },
+          },
+        }],
+      },
+      streaming: true,
+    };
+
+    fetch(BASE + "/run_sse", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
+      body: JSON.stringify(payload),
+      signal: abortController.signal
+    })
+      .then(function (res) {
+        if (!res.ok) throw new Error("Confirmation request failed: " + res.status);
+        return _readSSE(res);
+      })
+      .catch(function (err) {
+        _showTyping(false);
+        if (err.name === "AbortError") return;
+        _appendMessage("agent", err.message || "Sorry, something went wrong. Please try again.", false, null, "agent");
+        console.error("Confirmation error:", err);
+      })
+      .finally(function () {
+        sending = false;
+        abortController = null;
+        _updateSendBtnState();
+      });
+  }
+
   // --- Read SSE stream -------------------------------------------------
   function _readSSE(response) {
     var reader = response.body.getReader();
     var decoder = new TextDecoder();
     var buffer = "";
     var segmentText = "";
+    var confirmationShown = false;
     activeAgentText = "";
     activeAgentEl = null;
     activeAgentAuthor = "";
@@ -394,6 +492,22 @@
         var parts = (evt.content && evt.content.parts) || [];
         if (!parts.length) return;
 
+        // Human-in-the-loop: tool confirmation request → approve/reject card
+        for (var ci = 0; ci < parts.length; ci++) {
+          var cfc = parts[ci].functionCall || parts[ci].function_call;
+          if (cfc && cfc.name === "adk_request_confirmation") {
+            _showTyping(false);
+            _ensureBubble();
+            activeAgentEl.innerHTML = _confirmationCardHtml(cfc);
+            confirmationShown = true;
+            activeAgentEl = null;
+            activeAgentText = "";
+            segmentText = "";
+            _scrollToBottom();
+            return;
+          }
+        }
+
         var hasToolPart = false;
         for (var i = 0; i < parts.length; i++) {
           if (
@@ -462,10 +576,10 @@
     return reader.read().then(function pump(result) {
       if (result.done) {
         _showTyping(false);
-        if (!activeAgentText && activeAgentEl) {
+        if (!activeAgentText && activeAgentEl && !confirmationShown) {
           activeAgentEl.innerHTML = _renderMarkdown("(no response)");
           _addMessageActions(activeAgentEl);
-        } else if (!activeAgentText && !activeAgentEl) {
+        } else if (!activeAgentText && !activeAgentEl && !confirmationShown) {
           _appendMessage("agent", "(no response)", false, null, "agent");
         } else if (activeAgentEl) {
           _addMessageActions(activeAgentEl);

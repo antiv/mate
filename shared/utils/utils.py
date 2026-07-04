@@ -20,6 +20,13 @@ except ImportError:
     ContextCacheConfig = None
 
 try:
+    from google.adk.apps.app import ResumabilityConfig
+    RESUMABILITY_AVAILABLE = True
+except ImportError:
+    RESUMABILITY_AVAILABLE = False
+    ResumabilityConfig = None
+
+try:
     from google.adk.apps.app import EventsCompactionConfig
     from google.adk.apps.llm_event_summarizer import LlmEventSummarizer
     CONTEXT_COMPACTION_AVAILABLE = True
@@ -455,9 +462,28 @@ def create_app_with_context_caching(
             logger.info(f"App '{effective_app_name}' context compaction: "
                         f"interval={effective_interval}, overlap={effective_overlap}")
     
+    # Configure resumability (pause/resume of invocations, e.g. human-in-the-loop
+    # approval on long-running tool calls) if available
+    if RESUMABILITY_AVAILABLE:
+        resumability_enabled = os.getenv("RESUMABILITY_ENABLED", "false").lower() == "true"
+        if resumability_enabled:
+            app_kwargs['resumability_config'] = ResumabilityConfig(is_resumable=True)
+            logger.info(f"App '{effective_app_name}' resumability enabled")
+
+    # Register app-wide MATE plugin (RBAC/guardrails/token tracking for all agents,
+    # including agents created at runtime). agent_manager skips per-agent model
+    # callbacks when this is enabled.
+    if os.getenv("MATE_PLUGINS_ENABLED", "false").lower() == "true":
+        try:
+            from shared.callbacks.mate_plugin import MatePlugin
+            app_kwargs['plugins'] = [MatePlugin()]
+            logger.info(f"App '{effective_app_name}' MATE plugin registered (app-wide callbacks)")
+        except Exception as e:
+            logger.error(f"Failed to register MATE plugin: {e}. Falling back to per-agent callbacks.")
+
     # Create and return App instance
     app = App(**app_kwargs)
-    
+
     return app
 
 

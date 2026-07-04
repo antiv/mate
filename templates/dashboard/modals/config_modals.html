@@ -321,7 +321,10 @@
                             style="display: none; height: 180px; border: 1px solid #d1d5db; border-radius: 0.25rem;"
                             class="mt-0.5"></div>
                         <p class="text-xs text-gray-500 dark:text-gray-400">Use planner presets and optionally override
-                            <code>thinking_mode</code> or <code>max_iterations</code>.
+                            <code>thinking_mode</code> or <code>max_iterations</code>. Custom JSON keys are preserved —
+                            graph agents also configure the workflow here: <code>edges</code>, <code>router_nodes</code>,
+                            <code>join_nodes</code>, <code>retry_config</code>, <code>node_retry</code>
+                            (see <code>documents/WORKFLOWS.md</code>).
                         </p>
                     </div>
                 </div>
