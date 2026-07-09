@@ -17,6 +17,7 @@ import time
 from collections import deque
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 from typing import Optional, Dict, Any, List, Tuple
 
 import httpx
@@ -251,61 +252,59 @@ class RateLimitService:
             tokens_this_request=tokens_this_request,
         )
 
-    async def check_request_limit(
+    def _collect_limit_data_sync(
         self,
         user_id: str,
-        agent_name: Optional[str] = None,
-        project_id: Optional[int] = None,
-        auth_username: Optional[str] = None,
-    ) -> Tuple[RateLimitResult, Optional[UsageSnapshot]]:
+        agent_name: Optional[str],
+        project_id: Optional[int],
+        auth_username: Optional[str],
+    ) -> Optional[Tuple[List[Tuple[str, str, SimpleNamespace]], Tuple[int, int, int]]]:
         """
-        Check if request is allowed. Returns (result, usage_snapshot).
-        Call _record_request after allowing.
+        Blocking DB work for check_request_limit — run via asyncio.to_thread.
+        Returns (configs, (tokens_last_hour, tokens_last_day, tokens_last_month))
+        with plain values (no ORM objects), or None when no DB is available.
         """
         session = self._get_session()
         if not session:
-            return (
-                RateLimitResult(allowed=True, action="warn", message="Rate limit check skipped (no DB)"),
-                None,
-            )
+            return None
 
         try:
             # Collect configs for user, agent, project
-            configs: List[Tuple[str, str, RateLimitConfig]] = []
+            configs: List[Tuple[str, str, SimpleNamespace]] = []
+
+            def _plain(cfg: RateLimitConfig) -> SimpleNamespace:
+                return SimpleNamespace(
+                    requests_per_minute=cfg.requests_per_minute,
+                    tokens_per_hour=cfg.tokens_per_hour,
+                    tokens_per_day=cfg.tokens_per_day,
+                    tokens_per_month=cfg.tokens_per_month,
+                    action_on_limit=cfg.action_on_limit,
+                )
+
             user_cfg = _get_config(session, "user", user_id)
             if user_cfg:
-                configs.append(("user", user_id, user_cfg))
+                configs.append(("user", user_id, _plain(user_cfg)))
 
             if agent_name:
                 agent_cfg = _get_config(session, "agent", agent_name)
                 if agent_cfg:
-                    configs.append(("agent", agent_name, agent_cfg))
+                    configs.append(("agent", agent_name, _plain(agent_cfg)))
 
             if project_id is None and agent_name:
                 project_id = _get_agent_project_id(session, agent_name)
             if project_id is not None:
                 proj_cfg = _get_config(session, "project", str(project_id))
                 if proj_cfg:
-                    configs.append(("project", str(project_id), proj_cfg))
+                    configs.append(("project", str(project_id), _plain(proj_cfg)))
 
             # Fallback: rate limit by auth user if no user-specific config
             if not configs and auth_username:
                 auth_cfg = _get_config(session, "user", auth_username)
                 if auth_cfg:
-                    configs.append(("user", auth_username, auth_cfg))
+                    configs.append(("user", auth_username, _plain(auth_cfg)))
 
             if not configs:
-                return (
-                    RateLimitResult(allowed=True, action="warn", message="No rate limits configured"),
-                    None,
-                )
-
-            # Request key for in-memory tracking
-            req_key = f"user:{user_id}"
-            if agent_name:
-                req_key += f":agent:{agent_name}"
-
-            requests_last_min = await _request_count_last_minute(req_key)
+                return ([], (0, 0, 0))
 
             now = datetime.now(timezone.utc)
             tokens_last_hour = self.token_service.get_user_tokens_since(
@@ -333,98 +332,135 @@ class RateLimitService:
                     ),
                 )
 
-            usage = UsageSnapshot(
-                requests_last_min=requests_last_min,
-                tokens_last_hour=tokens_last_hour,
-                tokens_last_day=tokens_last_day,
-                tokens_last_month=tokens_last_month,
-                tokens_this_request=None,
-            )
-
-            # Check each config
-            for scope, sid, cfg in configs:
-                action = cfg.action_on_limit
-
-                # Requests per minute
-                if cfg.requests_per_minute is not None:
-                    if requests_last_min >= cfg.requests_per_minute:
-                        if action == "block":
-                            return (
-                                RateLimitResult(
-                                    allowed=False,
-                                    action="block",
-                                    message=f"Rate limit exceeded: {requests_last_min} requests per minute (limit: {cfg.requests_per_minute})",
-                                    retry_after_seconds=60.0,
-                                ),
-                                usage,
-                            )
-                        if action == "throttle":
-                            await asyncio.sleep(60.0 / max(1, cfg.requests_per_minute))
-                        logger.warning(
-                            "[RATE_LIMIT] %s %s: requests/min %s/%s (action=warn)",
-                            scope, sid, requests_last_min, cfg.requests_per_minute,
-                        )
-
-                # Tokens per hour (user)
-                if cfg.tokens_per_hour is not None and scope == "user":
-                    if usage.tokens_last_hour >= cfg.tokens_per_hour:
-                        if action == "block":
-                            return (
-                                RateLimitResult(
-                                    allowed=False,
-                                    action="block",
-                                    message=f"Token budget exceeded: {usage.tokens_last_hour} tokens this hour (limit: {cfg.tokens_per_hour})",
-                                    retry_after_seconds=3600.0,
-                                ),
-                                usage,
-                            )
-                        logger.warning(
-                            "[RATE_LIMIT] user %s: tokens/hour %s/%s (action=warn)",
-                            sid, usage.tokens_last_hour, cfg.tokens_per_hour,
-                        )
-
-                # Tokens per day
-                if cfg.tokens_per_day is not None:
-                    if usage.tokens_last_day >= cfg.tokens_per_day:
-                        if action == "block":
-                            return (
-                                RateLimitResult(
-                                    allowed=False,
-                                    action="block",
-                                    message=f"Token budget exceeded: {usage.tokens_last_day} tokens today (limit: {cfg.tokens_per_day})",
-                                    retry_after_seconds=86400.0,
-                                ),
-                                usage,
-                            )
-                        logger.warning(
-                            "[RATE_LIMIT] %s %s: tokens/day %s/%s (action=warn)",
-                            scope, sid, usage.tokens_last_day, cfg.tokens_per_day,
-                        )
-
-                # Tokens per month (project)
-                if cfg.tokens_per_month is not None and scope == "project":
-                    if usage.tokens_last_month >= cfg.tokens_per_month:
-                        if action == "block":
-                            return (
-                                RateLimitResult(
-                                    allowed=False,
-                                    action="block",
-                                    message=f"Project budget exceeded: {usage.tokens_last_month} tokens this month (limit: {cfg.tokens_per_month})",
-                                    retry_after_seconds=86400.0,
-                                ),
-                                usage,
-                            )
-                        logger.warning(
-                            "[RATE_LIMIT] project %s: tokens/month %s/%s (action=warn)",
-                            sid, usage.tokens_last_month, cfg.tokens_per_month,
-                        )
-
-            return (
-                RateLimitResult(allowed=True, action="warn", message="OK"),
-                usage,
-            )
+            return (configs, (tokens_last_hour, tokens_last_day, tokens_last_month))
         finally:
             session.close()
+
+    async def check_request_limit(
+        self,
+        user_id: str,
+        agent_name: Optional[str] = None,
+        project_id: Optional[int] = None,
+        auth_username: Optional[str] = None,
+    ) -> Tuple[RateLimitResult, Optional[UsageSnapshot]]:
+        """
+        Check if request is allowed. Returns (result, usage_snapshot).
+        Call _record_request after allowing.
+        """
+        # Blocking DB queries run in a worker thread so they don't stall the event loop
+        data = await asyncio.to_thread(
+            self._collect_limit_data_sync, user_id, agent_name, project_id, auth_username
+        )
+        if data is None:
+            return (
+                RateLimitResult(allowed=True, action="warn", message="Rate limit check skipped (no DB)"),
+                None,
+            )
+
+        configs, (tokens_last_hour, tokens_last_day, tokens_last_month) = data
+        if not configs:
+            return (
+                RateLimitResult(allowed=True, action="warn", message="No rate limits configured"),
+                None,
+            )
+
+        # Request key for in-memory tracking
+        req_key = f"user:{user_id}"
+        if agent_name:
+            req_key += f":agent:{agent_name}"
+
+        requests_last_min = await _request_count_last_minute(req_key)
+
+        usage = UsageSnapshot(
+            requests_last_min=requests_last_min,
+            tokens_last_hour=tokens_last_hour,
+            tokens_last_day=tokens_last_day,
+            tokens_last_month=tokens_last_month,
+            tokens_this_request=None,
+        )
+
+        # Check each config
+        for scope, sid, cfg in configs:
+            action = cfg.action_on_limit
+
+            # Requests per minute
+            if cfg.requests_per_minute is not None:
+                if requests_last_min >= cfg.requests_per_minute:
+                    if action == "block":
+                        return (
+                            RateLimitResult(
+                                allowed=False,
+                                action="block",
+                                message=f"Rate limit exceeded: {requests_last_min} requests per minute (limit: {cfg.requests_per_minute})",
+                                retry_after_seconds=60.0,
+                            ),
+                            usage,
+                        )
+                    if action == "throttle":
+                        await asyncio.sleep(60.0 / max(1, cfg.requests_per_minute))
+                    logger.warning(
+                        "[RATE_LIMIT] %s %s: requests/min %s/%s (action=warn)",
+                        scope, sid, requests_last_min, cfg.requests_per_minute,
+                    )
+
+            # Tokens per hour (user)
+            if cfg.tokens_per_hour is not None and scope == "user":
+                if usage.tokens_last_hour >= cfg.tokens_per_hour:
+                    if action == "block":
+                        return (
+                            RateLimitResult(
+                                allowed=False,
+                                action="block",
+                                message=f"Token budget exceeded: {usage.tokens_last_hour} tokens this hour (limit: {cfg.tokens_per_hour})",
+                                retry_after_seconds=3600.0,
+                            ),
+                            usage,
+                        )
+                    logger.warning(
+                        "[RATE_LIMIT] user %s: tokens/hour %s/%s (action=warn)",
+                        sid, usage.tokens_last_hour, cfg.tokens_per_hour,
+                    )
+
+            # Tokens per day
+            if cfg.tokens_per_day is not None:
+                if usage.tokens_last_day >= cfg.tokens_per_day:
+                    if action == "block":
+                        return (
+                            RateLimitResult(
+                                allowed=False,
+                                action="block",
+                                message=f"Token budget exceeded: {usage.tokens_last_day} tokens today (limit: {cfg.tokens_per_day})",
+                                retry_after_seconds=86400.0,
+                            ),
+                            usage,
+                        )
+                    logger.warning(
+                        "[RATE_LIMIT] %s %s: tokens/day %s/%s (action=warn)",
+                        scope, sid, usage.tokens_last_day, cfg.tokens_per_day,
+                    )
+
+            # Tokens per month (project)
+            if cfg.tokens_per_month is not None and scope == "project":
+                if usage.tokens_last_month >= cfg.tokens_per_month:
+                    if action == "block":
+                        return (
+                            RateLimitResult(
+                                allowed=False,
+                                action="block",
+                                message=f"Project budget exceeded: {usage.tokens_last_month} tokens this month (limit: {cfg.tokens_per_month})",
+                                retry_after_seconds=86400.0,
+                            ),
+                            usage,
+                        )
+                    logger.warning(
+                        "[RATE_LIMIT] project %s: tokens/month %s/%s (action=warn)",
+                        sid, usage.tokens_last_month, cfg.tokens_per_month,
+                    )
+
+        return (
+            RateLimitResult(allowed=True, action="warn", message="OK"),
+            usage,
+        )
 
     async def record_request(self, user_id: str, agent_name: Optional[str] = None):
         """Record a request for rate limiting (call after allowing)."""

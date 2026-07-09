@@ -126,6 +126,13 @@ class ToolFactory:
         except Exception as e:
             logger.debug("Tool tracing wrap skipped: %s", e)
 
+        # Offload sync tools to worker threads so they don't block the event loop
+        try:
+            from .async_tool_adapter import to_thread_tool
+            tools = [to_thread_tool(t) for t in tools]
+        except Exception as e:
+            logger.warning("Sync-tool thread offload skipped: %s", e)
+
         # Wrap named tools with ADK confirmation (human-in-the-loop approval)
         tools = self._apply_confirmation_wrapping(tools, config)
 

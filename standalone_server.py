@@ -207,6 +207,7 @@ def setup_services():
     from google.adk.evaluation.local_eval_set_results_manager import LocalEvalSetResultsManager
     from google.adk.evaluation.local_eval_sets_manager import LocalEvalSetsManager
     from google.adk.memory.in_memory_memory_service import InMemoryMemoryService
+    from google.adk.sessions.database_session_service import DatabaseSessionService
     from google.adk.sessions.in_memory_session_service import InMemorySessionService
 
     # Register custom services
@@ -222,15 +223,19 @@ def setup_services():
     agents_dir = str(BASE_DIR / "agents")
     agent_loader = AgentLoader(agents_dir)
 
-    # Use lightweight in-memory services for standalone
-    session_service = InMemorySessionService()
+    # DB-backed sessions so conversations (and pending tool confirmations)
+    # survive a server restart. Relative default resolves next to the app DB.
+    session_db_url = os.getenv("SESSION_DB_URL", "sqlite+aiosqlite:///standalone_session.db")
+    session_service = DatabaseSessionService(db_url=session_db_url)
+
+    # Lightweight in-memory services for the rest
     artifact_service = InMemoryArtifactService()
     memory_service = InMemoryMemoryService()
     credential_service = InMemoryCredentialService()
     eval_sets_manager = LocalEvalSetsManager(agents_dir=agents_dir)
     eval_set_results_manager = LocalEvalSetResultsManager(agents_dir=agents_dir)
 
-    print(f"✅ Services initialized (in-memory mode)")
+    print(f"✅ Services initialized (sessions: {session_db_url}, artifacts/memory: in-memory)")
 
     # Create ADK web server
     adk_web_server = AdkWebServer(

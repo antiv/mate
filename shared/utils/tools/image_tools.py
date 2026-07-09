@@ -4,6 +4,7 @@ Image generation tools for agents.
 This module provides image generation capabilities using various APIs.
 """
 
+import asyncio
 import os
 import base64
 import time
@@ -326,8 +327,9 @@ async def _generate_image_internal(prompt: str, tool_context: ToolContext = None
         # Configure model-specific parameters
         config = get_model_config(model, model_config)
         
-        # Generate the image
-        response = client.images.generate(
+        # Generate the image (sync SDK call — run in a worker thread to keep the event loop free)
+        response = await asyncio.to_thread(
+            client.images.generate,
             model=model,
             prompt=prompt,
             **config
@@ -348,8 +350,9 @@ async def _generate_image_internal(prompt: str, tool_context: ToolContext = None
                     image_bytes = base64.b64decode(image_b64)
                 elif image_url:
                     # Model returns URL, download the image
-                    import requests
-                    image_response = requests.get(image_url)
+                    import httpx
+                    async with httpx.AsyncClient(follow_redirects=True) as ac:
+                        image_response = await ac.get(image_url, timeout=30)
                     image_response.raise_for_status()
                     image_bytes = image_response.content
                     
@@ -626,7 +629,9 @@ async def generate_image_nano_banana(prompt: str, tool_context: ToolContext = No
                     api_model_name = model_name.replace("openrouter/", "")
                 
                 # Use chat completions API for image generation via OpenRouter
-                response = client.chat.completions.create(
+                # (sync SDK call — run in a worker thread to keep the event loop free)
+                response = await asyncio.to_thread(
+                    client.chat.completions.create,
                     model=api_model_name,
                     messages=[
                         {
@@ -817,92 +822,98 @@ async def generate_image_nano_banana(prompt: str, tool_context: ToolContext = No
             # Create unique filename for the artifact
             timestamp = int(time.time())
             artifact_filename = f"nano_banana_image_{timestamp}.png"
-            
-            # Generate content stream
-            for chunk in client.models.generate_content_stream(
-                model=model_name,
-                contents=[prompt],
-            ):
-                if (
-                    chunk.candidates is None
-                    or chunk.candidates[0].content is None
-                    or chunk.candidates[0].content.parts is None
+
+            # Consume the sync content stream in a worker thread so it doesn't
+            # block the event loop; return the first inline image data found.
+            def _consume_stream():
+                for chunk in client.models.generate_content_stream(
+                    model=model_name,
+                    contents=[prompt],
                 ):
-                    continue
-                    
-                if chunk.candidates[0].content.parts[0].inline_data and chunk.candidates[0].content.parts[0].inline_data.data:
-                    inline_data = chunk.candidates[0].content.parts[0].inline_data
-                    
-                    # Create a Part object from the inline data to save as artifact
-                    image_part = types.Part(inline_data=inline_data)
-                    
-                    try:
-                        if tool_context is not None:
-                            # Save the image as an artifact
-                            version = await tool_context.save_artifact(
-                                filename=artifact_filename, 
-                                artifact=image_part
-                            )
-                            
-                            # Construct ADK artifact path and public URL
-                            artifact_path = None
-                            public_url = None
-                            try:
-                                app_name, user_id, session_id = _get_context_values(tool_context)
-                                # ADK artifact path pattern
-                                artifact_path = f"/apps/{app_name}/users/{user_id}/sessions/{session_id}/artifacts/{artifact_filename}/versions/{version}"
-                                # Public URL based on artifact service
-                                public_url = _construct_public_url(app_name, user_id, session_id, artifact_filename, version)
-                                logger.debug(f"Generated ADK artifact path: {artifact_path}")
-                                logger.debug(f"Generated public URL: {public_url}")
-                            except Exception as url_err:
-                                logger.warning(f"Could not generate artifact URLs: {url_err}")
-                            
-                            # NOTE: Do NOT modify tool_context.state here.
-                            # Setting state inside a tool causes a session save race condition
-                            # with ADK's own session update, triggering 'stale session' errors
-                            # and infinite retry loops.
-                            
-                            logger.info(f"Saved generated image as artifact '{artifact_filename}' (version {version})")
-                            
-                            return {
-                                "prompt": prompt,
-                                "artifact": {
-                                    "filename": artifact_filename,
-                                    "version": version,
-                                    "mime_type": "image/png",
-                                    "artifact_path": artifact_path,
-                                    "public_url": public_url
-                                },
-                                "model": model_name,
-                                "success": True,
-                                "status": "COMPLETE",
-                                "note": "Image generation is DONE. Do NOT call this tool again for the same request. Present the result to the user.",
-                                "image_access": f"Image generated successfully! Saved as artifact: {artifact_filename} (version {version} of {asset_name})"
-                            }
-                        else:
-                            # If no tool context, we can't save the image
-                            # NEVER return inline_data - it breaks context length
-                            return {
-                                "prompt": prompt,
-                                "model": model_name,
-                                "success": True,
-                                "image_access": "Image generated successfully but could not be saved (no tool context available)"
-                            }
-                            
-                    except Exception as e:
-                        logger.error(f"Error saving artifact: {e}")
+                    if (
+                        chunk.candidates is None
+                        or chunk.candidates[0].content is None
+                        or chunk.candidates[0].content.parts is None
+                    ):
+                        continue
+
+                    if chunk.candidates[0].content.parts[0].inline_data and chunk.candidates[0].content.parts[0].inline_data.data:
+                        return chunk.candidates[0].content.parts[0].inline_data
+                    else:
+                        # Log any text content (though this shouldn't happen for image generation)
+                        if hasattr(chunk.candidates[0].content.parts[0], 'text') and chunk.candidates[0].content.parts[0].text:
+                            logger.info(f"Text content from stream: {chunk.candidates[0].content.parts[0].text}")
+                return None
+
+            inline_data = await asyncio.to_thread(_consume_stream)
+
+            if inline_data is not None:
+                # Create a Part object from the inline data to save as artifact
+                image_part = types.Part(inline_data=inline_data)
+
+                try:
+                    if tool_context is not None:
+                        # Save the image as an artifact
+                        version = await tool_context.save_artifact(
+                            filename=artifact_filename,
+                            artifact=image_part
+                        )
+
+                        # Construct ADK artifact path and public URL
+                        artifact_path = None
+                        public_url = None
+                        try:
+                            app_name, user_id, session_id = _get_context_values(tool_context)
+                            # ADK artifact path pattern
+                            artifact_path = f"/apps/{app_name}/users/{user_id}/sessions/{session_id}/artifacts/{artifact_filename}/versions/{version}"
+                            # Public URL based on artifact service
+                            public_url = _construct_public_url(app_name, user_id, session_id, artifact_filename, version)
+                            logger.debug(f"Generated ADK artifact path: {artifact_path}")
+                            logger.debug(f"Generated public URL: {public_url}")
+                        except Exception as url_err:
+                            logger.warning(f"Could not generate artifact URLs: {url_err}")
+
+                        # NOTE: Do NOT modify tool_context.state here.
+                        # Setting state inside a tool causes a session save race condition
+                        # with ADK's own session update, triggering 'stale session' errors
+                        # and infinite retry loops.
+
+                        logger.info(f"Saved generated image as artifact '{artifact_filename}' (version {version})")
+
                         return {
-                            "error": f"Error saving generated image as artifact: {e}",
                             "prompt": prompt,
-                            "error_type": "artifact_save_error",
-                            "success": False
+                            "artifact": {
+                                "filename": artifact_filename,
+                                "version": version,
+                                "mime_type": "image/png",
+                                "artifact_path": artifact_path,
+                                "public_url": public_url
+                            },
+                            "model": model_name,
+                            "success": True,
+                            "status": "COMPLETE",
+                            "note": "Image generation is DONE. Do NOT call this tool again for the same request. Present the result to the user.",
+                            "image_access": f"Image generated successfully! Saved as artifact: {artifact_filename} (version {version} of {asset_name})"
                         }
-                else:
-                    # Log any text content (though this shouldn't happen for image generation)
-                    if hasattr(chunk.candidates[0].content.parts[0], 'text') and chunk.candidates[0].content.parts[0].text:
-                        logger.info(f"Text content from stream: {chunk.candidates[0].content.parts[0].text}")
-                    
+                    else:
+                        # If no tool context, we can't save the image
+                        # NEVER return inline_data - it breaks context length
+                        return {
+                            "prompt": prompt,
+                            "model": model_name,
+                            "success": True,
+                            "image_access": "Image generated successfully but could not be saved (no tool context available)"
+                        }
+
+                except Exception as e:
+                    logger.error(f"Error saving artifact: {e}")
+                    return {
+                        "error": f"Error saving generated image as artifact: {e}",
+                        "prompt": prompt,
+                        "error_type": "artifact_save_error",
+                        "success": False
+                    }
+
             return {
                 "error": "No image was generated",
                 "prompt": prompt,
@@ -1121,19 +1132,19 @@ async def _extract_data_from_image_internal(
         if provider in ("ollama_chat", "ollama") and not image_url.startswith("data:"):
             try:
                 import base64
-                import time
                 import httpx
                 dl_headers = {
                     "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
                 }
                 logger.info(f"Downloading image for Ollama base64 encoding: {image_url[:100]}...")
-                resp = httpx.get(image_url, timeout=30, follow_redirects=True, headers=dl_headers)
-                # Retry once on 429 rate limit
-                if resp.status_code == 429:
-                    retry_after = int(resp.headers.get("Retry-After", "2"))
-                    logger.warning(f"Rate limited (429), retrying after {retry_after}s...")
-                    time.sleep(min(retry_after, 5))
-                    resp = httpx.get(image_url, timeout=30, follow_redirects=True, headers=dl_headers)
+                async with httpx.AsyncClient(follow_redirects=True) as ac:
+                    resp = await ac.get(image_url, timeout=30, headers=dl_headers)
+                    # Retry once on 429 rate limit
+                    if resp.status_code == 429:
+                        retry_after = int(resp.headers.get("Retry-After", "2"))
+                        logger.warning(f"Rate limited (429), retrying after {retry_after}s...")
+                        await asyncio.sleep(min(retry_after, 5))
+                        resp = await ac.get(image_url, timeout=30, headers=dl_headers)
                 resp.raise_for_status()
                 content_type = resp.headers.get("content-type", "image/png").split(";")[0].strip()
                 b64_data = base64.b64encode(resp.content).decode("utf-8")
@@ -1154,7 +1165,9 @@ async def _extract_data_from_image_internal(
             {"type": "text", "text": extraction_prompt},
         ]
 
-        response = client.chat.completions.create(
+        # Sync SDK call — run in a worker thread to keep the event loop free
+        response = await asyncio.to_thread(
+            client.chat.completions.create,
             model=api_model,
             messages=[
                 {

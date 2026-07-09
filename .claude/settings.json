@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(.venv/bin/python -m py_compile shared/utils/tools/image_tools.py shared/utils/tools/async_tool_adapter.py shared/utils/tools/tool_factory.py)",
+      "Bash(.venv/bin/python -m unittest shared.test.test_image_data_extraction -v)",
+      "Bash(.venv/bin/python -m py_compile shared/utils/rate_limit_service.py)",
+      "Bash(.venv/bin/python -m unittest shared.test.test_rate_limits -v)",
+      "Bash(.venv/bin/python -m py_compile standalone_server.py)",
+      "Bash(.venv/bin/python -c \"import aiosqlite; print\\('aiosqlite OK'\\)\")",
+      "Bash(.venv/bin/python -m unittest shared.test.test_async_tool_adapter -v)",
+      "Bash(/Users/ivanantonijevic/development/bt/adk/mate/.venv/bin/python smoke_loop.py)",
+      "Bash(/Users/ivanantonijevic/development/bt/adk/mate/.venv/bin/python smoke_persist.py create)",
+      "Bash(/Users/ivanantonijevic/development/bt/adk/mate/.venv/bin/python smoke_persist.py check)"
+    ]
+  }
+}
