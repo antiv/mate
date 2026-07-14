@@ -25,7 +25,8 @@
       "Bash(break)",
       "Bash(.venv/bin/python /private/tmp/claude-501/-Users-ivanantonijevic-development-bt-adk-mate/7afe3c8d-c52d-4b77-9e56-e31ffa2b6617/scratchpad/mobile_check.py)",
       "Bash(lsof -i :8000 -i :8001 -sTCP:LISTEN)",
-      "Bash(pkill -f \"adk_main\")"
+      "Bash(pkill -f \"adk_main\")",
+      "Bash(pip show *)"
     ]
   }
 }

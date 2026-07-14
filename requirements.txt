@@ -1,5 +1,6 @@
 google-adk==2.3.0
 litellm
+orjson  # Required by litellm 1.81+ completion path (imports proxy utils)
 python-dotenv
 requests
 fastapi
