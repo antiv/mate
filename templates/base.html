@@ -321,12 +321,45 @@
             animation: mate-slide-in 0.3s ease-out;
         }
 
+        /* Mobile space tabs (Work Room / Studio / Control Room) */
+        .mate-mobile-tabs { display: none; }
+
         /* Mobile sidebar - drawer overlay */
         @media (max-width: 767px) {
             nav.dashboard-nav {
                 position: sticky;
                 z-index: 40;
             }
+            .mate-mobile-tabs {
+                display: flex;
+                position: sticky;
+                top: 64px;
+                z-index: 35;
+                background: var(--bg-surface);
+                border-bottom: 1px solid var(--border);
+            }
+            .mate-mobile-tab {
+                flex: 1;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                gap: 6px;
+                min-height: 44px;
+                padding: 10px 4px;
+                font-size: 12px;
+                font-weight: 600;
+                color: var(--text-secondary);
+                text-decoration: none;
+                white-space: nowrap;
+                border-bottom: 2px solid transparent;
+            }
+            .mate-mobile-tab i { font-size: 11px; }
+            .mate-mobile-tab.active {
+                color: var(--accent);
+                border-bottom-color: var(--accent);
+                background: var(--accent-soft);
+            }
+            main.dashboard-main { padding: 14px !important; }
             #sidebar {
                 position: fixed;
                 top: 0;
@@ -441,6 +474,21 @@
             </div>
         </div>
     </nav>
+
+    <!-- Space tabs — mobile only — admin only -->
+    {% if is_admin is not defined or is_admin %}
+    <div class="mate-mobile-tabs md:hidden">
+        <a href="/dashboard/workroom" class="mate-mobile-tab {% if active_space == 'workroom' %}active{% endif %}">
+            <i class="fas fa-comments"></i><span>Work Room</span>
+        </a>
+        <a href="/dashboard/agents" class="mate-mobile-tab {% if active_space == 'studio' %}active{% endif %}">
+            <i class="fas fa-robot"></i><span>Studio</span>
+        </a>
+        <a href="/dashboard/overview" class="mate-mobile-tab {% if active_space == 'control_room' %}active{% endif %}">
+            <i class="fas fa-tachometer-alt"></i><span>Control Room</span>
+        </a>
+    </div>
+    {% endif %}
 
     <div class="flex">
         <!-- Sidebar -->
@@ -613,7 +661,7 @@
         </aside>
 
         <!-- Main Content -->
-        <main class="flex-1 min-w-0" style="padding: 22px; background: var(--bg-page);">
+        <main class="flex-1 min-w-0 dashboard-main" style="padding: 22px; background: var(--bg-page);">
             {% block content %}{% endblock %}
         </main>
     </div>
