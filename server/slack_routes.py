@@ -103,7 +103,7 @@ def _verify_signature(secret: str, timestamp: str, raw_body: bytes, signature: s
 # static/js/widget/chat.js.
 # --------------------------------------------------------------------------- #
 
-_CARD_RE = re.compile(r"\[\[(CARD|APPOINTMENT)\]\][ \t]*\n?[ \t]*(?:```(?:json|JSON)?[ \t]*\n?)?\{")
+_CARD_RE = re.compile(r"\[\[(CARD|APPOINTMENT)\]\]\s*(?:```(?:json|JSON)?\s*)?\{")
 
 
 def _balanced_end(text: str, start: int) -> int:
@@ -131,6 +131,31 @@ def _balanced_end(text: str, start: int) -> int:
     return -1
 
 
+def _repair_card_json(s: str) -> str:
+    """Fix near-JSON the models sometimes emit: \\' escapes and unescaped
+    double quotes inside string values. Mirrors _repairCardJson in
+    static/js/widget/chat.js."""
+    s = s.replace("\\'", "'")
+    out, in_str, esc = [], False, False
+    for i, ch in enumerate(s):
+        if in_str:
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == '"':
+                # A quote only closes the string if followed by a structural char.
+                if re.match(r'\s*[,:\}\]]', s[i + 1:]):
+                    in_str = False
+                else:
+                    out.append('\\"')
+                    continue
+        elif ch == '"':
+            in_str = True
+        out.append(ch)
+    return "".join(out)
+
+
 def _extract_cards(text: str):
     """Return (cleaned_text, [card_dicts]) by stripping [[CARD]] markers."""
     cards, ranges = [], []
@@ -139,10 +164,14 @@ def _extract_cards(text: str):
         end = _balanced_end(text, brace_start)
         if end == -1:
             continue
+        raw = text[brace_start:end + 1]
         try:
-            data = json.loads(text[brace_start:end + 1])
+            data = json.loads(raw)
         except json.JSONDecodeError:
-            continue
+            try:
+                data = json.loads(_repair_card_json(raw))
+            except json.JSONDecodeError:
+                continue
         cards.append(data)
         end_ext = end + 1
         fence = re.match(r"[ \t]*\n?[ \t]*```[ \t]*\n?", text[end + 1:])

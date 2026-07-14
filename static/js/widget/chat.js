@@ -148,6 +148,8 @@
       } else if (kind === "message") {
         var v = btn.getAttribute("data-value");
         if (v) _sendText(v);
+      } else if (kind === "new_session") {
+        _newChat();
       }
     });
   }
@@ -312,6 +314,9 @@
     }
     if (_locked) return;
     const text = inputEl.value.trim();
+    // Local slash commands — handled in the widget, never sent to the agent.
+    if (text === "/clear" || text === "/new") { inputEl.value = ""; _newChat(); return; }
+    if (text === "/exit" || text === "/close") { inputEl.value = ""; _endConversation(); return; }
     const files = pendingFiles.slice();
     if (!text && !files.length) return;
 
@@ -596,7 +601,7 @@
                 var imgHtml = '<img class="widget-msg-image widget-generated-image art-lazy-load" data-art-url="' + publicUrl + '" alt="' + artFilename + '">';
                 activeAgentImages.push({ url: publicUrl, html: imgHtml });
               }
-              _updateMessage(activeAgentEl, activeAgentText);
+              _updateMessage(activeAgentEl, activeAgentText, true);
             }
           }
         }
@@ -661,7 +666,7 @@
               var imgHtml = '<img src="' + imgSrc + '" class="widget-msg-image widget-generated-image" alt="Generated image">';
               activeAgentImages.push({ type: "inline", src: imgSrc, html: imgHtml });
             }
-            _updateMessage(activeAgentEl, activeAgentText);
+            _updateMessage(activeAgentEl, activeAgentText, true);
             continue;
           }
 
@@ -684,7 +689,7 @@
 
           if (delta) {
             activeAgentText += delta;
-            _updateMessage(activeAgentEl, activeAgentText);
+            _updateMessage(activeAgentEl, activeAgentText, true);
           }
         }
       } catch (_) {}
@@ -699,6 +704,7 @@
         } else if (!activeAgentText && !activeAgentEl && !confirmationShown) {
           _appendMessage("agent", "(no response)", false, null, "agent");
         } else if (activeAgentEl) {
+          _updateMessage(activeAgentEl, activeAgentText);
           _addMessageActions(activeAgentEl);
         }
         _saveHistory();
@@ -942,9 +948,9 @@
     return el;
   }
 
-  function _updateMessage(el, text) {
+  function _updateMessage(el, text, streaming) {
     el._rawMarkdown = text;
-    var html = _renderMessageHtml(text);
+    var html = _renderMessageHtml(text, streaming);
     if (activeAgentImages && activeAgentImages.length) {
       activeAgentImages.forEach(function(img) {
         if (img.type === "inline") {
@@ -964,7 +970,7 @@
   // --- Generic rich cards in chat (any agent) --------------------------
   // Agents emit one or more markers: [[CARD]]{...} (generic) or [[APPOINTMENT]]{...} (shortcut).
   // A card: {type, badge, title, subtitle, lines:[...], image, location, ics:{...},
-  //          actions:[{label, kind:"message"|"link"|"ics", value}]}.
+  //          actions:[{label, kind:"message"|"link"|"ics"|"new_session", value}]}.
   function _balancedEnd(text, start) {
     var depth = 0, inStr = false, esc = false;
     for (var i = start; i < text.length; i++) {
@@ -989,16 +995,37 @@
     };
   }
 
+  function _repairCardJson(s) {
+    // Models sometimes emit near-JSON: \' escapes or unescaped " inside string values.
+    s = s.replace(/\\'/g, "'");
+    var out = "", inStr = false, esc = false;
+    for (var i = 0; i < s.length; i++) {
+      var ch = s[i];
+      if (inStr) {
+        if (esc) esc = false;
+        else if (ch === "\\") esc = true;
+        else if (ch === '"') {
+          // A quote only closes the string if followed by a structural char.
+          if (/^\s*[,:\}\]]/.test(s.slice(i + 1))) inStr = false;
+          else { out += '\\"'; continue; }
+        }
+      } else if (ch === '"') inStr = true;
+      out += ch;
+    }
+    return out;
+  }
+
   function _extractCards(text) {
     // Regex handles normal: [[APPOINTMENT]]{"..."} and code-fenced: [[APPOINTMENT]]\n```json\n{...}
     var cards = [], ranges = [],
-      re = /\[\[(CARD|APPOINTMENT)\]\][ \t]*\n?[ \t]*(?:```(?:json|JSON)?[ \t]*\n?)?\{/g, m;
+      re = /\[\[(CARD|APPOINTMENT)\]\]\s*(?:```(?:json|JSON)?\s*)?\{/g, m;
     while ((m = re.exec(text)) !== null) {
       var braceStart = text.indexOf("{", m.index);
       var end = _balancedEnd(text, braceStart);
       if (end === -1) continue;
-      var data;
-      try { data = JSON.parse(text.slice(braceStart, end + 1)); } catch (e) { continue; }
+      var raw = text.slice(braceStart, end + 1), data;
+      try { data = JSON.parse(raw); }
+      catch (e) { try { data = JSON.parse(_repairCardJson(raw)); } catch (e2) { continue; } }
       cards.push(m[1] === "APPOINTMENT" ? _appointmentToCard(data) : data);
       // Extend range to also swallow a closing code fence (```) immediately after the JSON.
       var endExtended = end + 1;
@@ -1012,10 +1039,16 @@
     return { cleaned: cleaned.trim(), cards: cards };
   }
 
-  function _renderMessageHtml(text) {
+  function _renderMessageHtml(text, streaming) {
     var ext = _extractCards(text);
-    if (!ext.cards.length) return _renderMarkdown(text);
-    var html = _renderMarkdown(ext.cleaned);
+    var body = ext.cards.length ? ext.cleaned : text;
+    if (streaming) {
+      // Hide a card whose JSON is still arriving (or a half-typed marker) until it completes.
+      var pending = body.search(/\[\[(CARD|APPOINTMENT)\]\]|\[\[[A-Z]{0,11}$/);
+      if (pending !== -1) body = body.slice(0, pending);
+    }
+    if (!ext.cards.length && body === text) return _renderMarkdown(text);
+    var html = _renderMarkdown(body);
     ext.cards.forEach(function (c) { html += _cardHtml(c); });
     return html;
   }

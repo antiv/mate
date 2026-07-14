@@ -59,6 +59,7 @@
   // Render the launcher icon based on open state: X when open, else custom icon / text / chat glyph.
   function _renderButtonIcon() {
     if (!button) return;
+    button.classList.remove("mate-btn-text");
     if (isOpen) {
       button.innerHTML = CLOSE_ICON_SVG;
       button.style.padding = "";
@@ -72,6 +73,7 @@
     } else if (CONFIG.buttonText) {
       button.innerHTML = '<span style="font-size:14px;font-weight:600">' + _escapeHtml(CONFIG.buttonText) + '</span>';
       button.style.padding = "";
+      button.classList.add("mate-btn-text");
     } else {
       button.innerHTML = CHAT_ICON_SVG;
       button.style.padding = "";
@@ -113,6 +115,10 @@
       "  display: flex; align-items: center; justify-content: center;",
       "  transition: transform 0.2s, box-shadow 0.2s;",
       "  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;",
+      "}",
+      "#mate-widget-btn.mate-btn-text {",
+      "  width: auto; min-width: 56px; height: 48px;",
+      "  border-radius: 24px; padding: 0 18px; white-space: nowrap;",
       "}",
       "#mate-widget-btn:hover { transform: scale(1.05); box-shadow: 0 6px 20px rgba(0,0,0,0.2); }",
       "#mate-widget-btn svg { width: 28px; height: 28px; fill: currentColor; }",

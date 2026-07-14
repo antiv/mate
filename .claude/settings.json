@@ -10,7 +10,13 @@
       "Bash(.venv/bin/python -m unittest shared.test.test_async_tool_adapter -v)",
       "Bash(/Users/ivanantonijevic/development/bt/adk/mate/.venv/bin/python smoke_loop.py)",
       "Bash(/Users/ivanantonijevic/development/bt/adk/mate/.venv/bin/python smoke_persist.py create)",
-      "Bash(/Users/ivanantonijevic/development/bt/adk/mate/.venv/bin/python smoke_persist.py check)"
+      "Bash(/Users/ivanantonijevic/development/bt/adk/mate/.venv/bin/python smoke_persist.py check)",
+      "Bash(python3 /private/tmp/claude-501/-Users-ivanantonijevic-development-bt-adk-mate/a1810f43-d83a-4001-b64c-5201c4bdca64/scratchpad/update_template.py)",
+      "Bash(git -C /Users/ivanantonijevic/development/bt/adk/mate diff --stat templates/agent_templates/murder-mystery.json)",
+      "Bash(python3 -c ' *)",
+      "Bash(node /private/tmp/claude-501/-Users-ivanantonijevic-development-bt-adk-mate/a1810f43-d83a-4001-b64c-5201c4bdca64/scratchpad/test_cards.js)",
+      "Bash(python3 /private/tmp/claude-501/-Users-ivanantonijevic-development-bt-adk-mate/a1810f43-d83a-4001-b64c-5201c4bdca64/scratchpad/update_template_en.py)",
+      "Bash(python3 /private/tmp/claude-501/-Users-ivanantonijevic-development-bt-adk-mate/a1810f43-d83a-4001-b64c-5201c4bdca64/scratchpad/update_templates_2.py)"
     ]
   }
 }

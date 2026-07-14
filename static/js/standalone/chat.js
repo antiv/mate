@@ -84,6 +84,8 @@
       } else if (kind === "message") {
         var v = btn.getAttribute("data-value");
         if (v) _sendText(v);
+      } else if (kind === "new_session") {
+        _newChat();
       }
     });
   }
@@ -175,6 +177,8 @@
       return;
     }
     var text = inputEl.value.trim();
+    // Local slash commands — handled in the chat, never sent to the agent.
+    if (text === "/clear" || text === "/new") { inputEl.value = ""; _newChat(); return; }
     var files = pendingFiles.slice();
     var canvasCtx = window.mateGetCanvasCode && window.mateGetCanvasCode();
     if ((!text && !files.length && !canvasCtx)) return;
@@ -859,12 +863,33 @@
       subtitle: _fmtRange(d.start, d.end), location: d.location,
       ics: { summary: d.summary, start: d.start, end: d.end, description: d.description, location: d.location }, actions: actions };
   }
+  function _repairCardJson(s) {
+    // Models sometimes emit near-JSON: \' escapes or unescaped " inside string values.
+    s = s.replace(/\\'/g, "'");
+    var out = "", inStr = false, esc = false;
+    for (var i = 0; i < s.length; i++) {
+      var ch = s[i];
+      if (inStr) {
+        if (esc) esc = false;
+        else if (ch === "\\") esc = true;
+        else if (ch === '"') {
+          // A quote only closes the string if followed by a structural char.
+          if (/^\s*[,:\}\]]/.test(s.slice(i + 1))) inStr = false;
+          else { out += '\\"'; continue; }
+        }
+      } else if (ch === '"') inStr = true;
+      out += ch;
+    }
+    return out;
+  }
   function _extractCards(text) {
     var cards = [], ranges = [], re = /\[\[(CARD|APPOINTMENT)\]\]\s*\{/g, m;
     while ((m = re.exec(text)) !== null) {
       var bs = text.indexOf("{", m.index), end = _balancedEnd(text, bs);
       if (end === -1) continue;
-      var data; try { data = JSON.parse(text.slice(bs, end + 1)); } catch (e) { continue; }
+      var raw = text.slice(bs, end + 1), data;
+      try { data = JSON.parse(raw); }
+      catch (e) { try { data = JSON.parse(_repairCardJson(raw)); } catch (e2) { continue; } }
       cards.push(m[1] === "APPOINTMENT" ? _appointmentToCard(data) : data);
       ranges.push([m.index, end + 1]); re.lastIndex = end + 1;
     }
