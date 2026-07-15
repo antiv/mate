@@ -33,17 +33,20 @@ function updateServerStatus(status) {
     if (startBtn) startBtn.classList.add('hidden');
     if (stopBtn) stopBtn.classList.add('hidden');
     if (restartBtn) restartBtn.classList.add('hidden');
-    
+
+    // Framework label (ADK / LangGraph) comes from the status payload
+    const framework = status.framework_label || 'ADK';
+
     if (status.status === 'running') {
         // Update header elements
         if (indicator) indicator.className = 'w-2 h-2 bg-green-400 rounded-full';
         if (statusText) {
-            statusText.textContent = 'Online';
+            statusText.textContent = `${framework} Online`;
             statusText.className = 'text-sm text-green-600 dark:text-green-400';
         }
         if (stopBtn) stopBtn.classList.remove('hidden');
         if (restartBtn) restartBtn.classList.remove('hidden');
-        
+
         // Update overview elements
         if (overviewIndicator) overviewIndicator.className = 'w-3 h-3 bg-green-400 rounded-full mr-3';
         if (overviewStatusText) {
@@ -54,11 +57,11 @@ function updateServerStatus(status) {
         // Update header elements
         if (indicator) indicator.className = 'w-2 h-2 bg-red-400 rounded-full';
         if (statusText) {
-            statusText.textContent = 'Offline';
+            statusText.textContent = `${framework} Offline`;
             statusText.className = 'text-sm text-red-600 dark:text-red-400';
         }
         if (startBtn) startBtn.classList.remove('hidden');
-        
+
         // Update overview elements
         if (overviewIndicator) overviewIndicator.className = 'w-3 h-3 bg-red-400 rounded-full mr-3';
         if (overviewStatusText) {

@@ -90,7 +90,7 @@
             <div style="padding: 14px 18px; display: flex; align-items: center; gap: 10px; border-top: 1px solid var(--border);">
                 <span id="healthDotAdk" style="display: inline-block; width: 9px; height: 9px; border-radius: 999px; background: var(--border-strong); flex-shrink: 0;"></span>
                 <div>
-                    <p style="margin: 0; font-size: 12.5px; font-weight: 600; color: var(--text-primary);">ADK Server</p>
+                    <p id="healthTitleAgent" style="margin: 0; font-size: 12.5px; font-weight: 600; color: var(--text-primary);">Agent Server</p>
                     <p id="healthTextAdk" style="margin: 2px 0 0; font-size: 11px; color: var(--text-tertiary);">Checking…</p>
                 </div>
             </div>
@@ -230,12 +230,16 @@
             setTimeout(() => { icon.style.animation = ''; }, 700);
         }
         refreshSystemStatus();
+        refreshServerHealth();
         loadRecentActivity();
     }
 
-    function refreshSystemStatus() {
+    // NOTE: must not be named refreshSystemStatus — that would override the global
+    // function from server-control.js that drives the header status pill.
+    function refreshServerHealth() {
         const dot = document.getElementById('healthDotAdk');
         const text = document.getElementById('healthTextAdk');
+        const title = document.getElementById('healthTitleAgent');
         const badge = document.getElementById('healthBadge');
         dot.style.background = 'var(--border-strong)';
         text.textContent = 'Checking…';
@@ -243,6 +247,7 @@
         apiCall('/dashboard/api/server/status')
             .then(data => {
                 const running = data.status === 'running';
+                if (title) title.textContent = `${data.framework_label || 'Agent'} Server`;
                 dot.style.background = running ? 'var(--success)' : 'var(--danger)';
                 text.textContent = running ? 'Running' : 'Stopped';
                 const healthy = running ? 4 : 3;
@@ -301,7 +306,7 @@
 
     document.addEventListener('DOMContentLoaded', function () {
         initCharts();
-        refreshSystemStatus();
+        refreshServerHealth();
         loadRecentActivity();
     });
 </script>

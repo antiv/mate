@@ -22,7 +22,7 @@ python auth_server.py
 docker-compose up
 ```
 
-Two servers run: **Auth Server** (port 8000, FastAPI with HTTP Basic Auth) proxies authenticated requests to the **ADK Server** (port 8001, Google ADK runtime).
+Two servers run: **Auth Server** (port 8000, FastAPI with HTTP Basic Auth) proxies authenticated requests to the **Agent Server** (port 8001). The agent server framework is selectable via `AGENT_FRAMEWORK`: `adk` (Google ADK runtime, `adk_main.py`, default) or `langgraph` (LangGraph runtime, `langgraph_main.py`, emulates ADK's HTTP/SSE wire contract — see `documents/LANGGRAPH_RUNTIME.md`).
 
 ## Testing
 
@@ -54,8 +54,9 @@ Migrations auto-apply on server startup. Per-database migration files are in `sh
 ## Architecture
 
 ### Dual-Server Design
-- `auth_server.py` — FastAPI server handling auth, dashboard routes, and proxying to ADK
+- `auth_server.py` — FastAPI server handling auth, dashboard routes, and proxying to the agent server
 - `adk_main.py` — Google ADK web server with agent runtime (internal, not exposed directly)
+- `langgraph_main.py` + `shared/utils/langgraph/` — alternative LangGraph agent runtime behind the same wire contract (`AGENT_FRAMEWORK=langgraph`)
 - `server/` — Auth, proxy, widget, and rate-limit middleware
 
 ### Agent System
@@ -84,6 +85,7 @@ Follow PEP 8 with type hints on all function signatures. Use f-strings for forma
 
 | Variable | Purpose |
 |---|---|
+| `AGENT_FRAMEWORK` | Agent runtime: `adk` (default) or `langgraph` |
 | `GOOGLE_API_KEY` | Google Gemini (primary LLM) |
 | `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, etc. | Additional LLM providers via LiteLLM |
 | `DB_TYPE` | `sqlite` (default), `postgresql`, `mysql` |
@@ -91,13 +93,14 @@ Follow PEP 8 with type hints on all function signatures. Use f-strings for forma
 | `ADK_HOST` / `ADK_PORT` | ADK server address (default `127.0.0.1:8001`) |
 | `ARTIFACT_SERVICE` | `local_folder`, `supabase`, or `s3` |
 | `RATE_LIMIT_ENABLED` | Enable per-user/agent/project budgets |
-| `OTEL_TRACING_ENABLED` | OpenTelemetry distributed tracing |
+| `OTEL_TRACING_ENABLED` | OpenTelemetry distributed tracing (ADK runtime) |
+| `LANGSMITH_TRACING` / `LANGSMITH_API_KEY` | LangSmith run tracing (langgraph runtime) |
 | `AUDIT_RETENTION_DAYS` | EU AI Act audit log retention |
 
 ## Important Documentation
 
 - `AGENTS.md` — Architecture patterns and development guidelines (read before adding new agents or tools)
-- `documents/` — Feature-specific docs: `MCP_SERVERS.md`, `RATE_LIMITS.md`, `TRACING.md`, `WIDGET_INTEGRATION.md`, `TEMPLATE_LIBRARY.md`, `AGENT_WIZARD.md`
+- `documents/` — Feature-specific docs: `MCP_SERVERS.md`, `RATE_LIMITS.md`, `TRACING.md`, `WIDGET_INTEGRATION.md`, `TEMPLATE_LIBRARY.md`, `AGENT_WIZARD.md`, `LANGGRAPH_RUNTIME.md`
 - `shared/sql/README.md` — Database schema reference
 
 

@@ -17,6 +17,14 @@ prometheus-client
 prometheus-fastapi-instrumentator
 # langchain-community
 tavily-python
+# LangGraph runtime (AGENT_FRAMEWORK=langgraph)
+langgraph
+langchain-core
+langchain-litellm
+langchain-mcp-adapters
+langgraph-checkpoint-sqlite
+# langgraph-checkpoint-postgres  # For PostgreSQL checkpointing (DB_TYPE=postgresql)
+# langgraph-cli[inmem]  # Dev only: LangGraph Studio bridge (langgraph dev --allow-blocking)
 google-genai
 psutil
 # MCP dependencies for MCP servers

@@ -1,0 +1,7 @@
+{
+  "dependencies": ["."],
+  "graphs": {
+    "mate": "./shared/utils/langgraph/studio_graph.py:make_graph"
+  },
+  "env": ".env"
+}

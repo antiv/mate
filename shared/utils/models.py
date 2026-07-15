@@ -1134,3 +1134,79 @@ class AgentTrigger(Base):
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
         }
+
+
+class LangGraphSession(Base):
+    """Session metadata for the LangGraph runtime (AGENT_FRAMEWORK=langgraph).
+
+    Graph state lives in the LangGraph checkpointer tables; this table exists to
+    serve the ADK-compatible session HTTP contract (list/get/delete, state dict).
+    """
+
+    __tablename__ = 'lg_sessions'
+
+    id = Column(String(255), primary_key=True)  # session id (uuid or client-provided)
+    app_name = Column(String(255), nullable=False, index=True)
+    user_id = Column(String(255), nullable=False, index=True)
+    state = Column(Text, nullable=True)  # JSON dict of session state (tool state_delta flushes)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc),
+                        onupdate=lambda: datetime.now(timezone.utc), nullable=False)
+
+    events = relationship("LangGraphEvent", back_populates="session", cascade="all, delete-orphan")
+
+    def get_state(self) -> dict:
+        try:
+            return json.loads(self.state) if self.state else {}
+        except json.JSONDecodeError:
+            return {}
+
+    def set_state(self, state: dict) -> None:
+        self.state = json.dumps(state) if state else None
+
+
+class LangGraphEvent(Base):
+    """Completed events for a LangGraph session, stored in ADK Event wire shape.
+
+    Exists purely to serve GET /apps/{app}/users/{uid}/sessions/{sid} history;
+    only complete events are persisted (no streaming partials).
+    """
+
+    __tablename__ = 'lg_events'
+
+    id = Column(String(255), primary_key=True)  # event id (uuid)
+    session_id = Column(String(255), ForeignKey('lg_sessions.id', ondelete='CASCADE'), nullable=False, index=True)
+    author = Column(String(255), nullable=True)
+    invocation_id = Column(String(255), nullable=True)
+    content = Column(Text, nullable=True)  # JSON: {role, parts:[...]}
+    actions = Column(Text, nullable=True)  # JSON: {transfer_to_agent, escalate, artifact_delta, state_delta}
+    usage_metadata = Column(Text, nullable=True)  # JSON: {prompt_token_count, candidates_token_count, total_token_count}
+    timestamp = Column(Float, nullable=False, default=lambda: datetime.now(timezone.utc).timestamp())
+
+    session = relationship("LangGraphSession", back_populates="events")
+
+    def to_adk_event(self) -> dict:
+        """Serialize to the ADK Event JSON shape the dashboard/widget parse."""
+        event = {
+            'id': self.id,
+            'author': self.author,
+            'invocationId': self.invocation_id,
+            'timestamp': self.timestamp,
+        }
+        try:
+            event['content'] = json.loads(self.content) if self.content else None
+        except json.JSONDecodeError:
+            event['content'] = None
+        try:
+            actions = json.loads(self.actions) if self.actions else None
+        except json.JSONDecodeError:
+            actions = None
+        if actions:
+            event['actions'] = actions
+        try:
+            usage = json.loads(self.usage_metadata) if self.usage_metadata else None
+        except json.JSONDecodeError:
+            usage = None
+        if usage:
+            event['usageMetadata'] = usage
+        return event

@@ -262,7 +262,7 @@
                 const statusCard = document.getElementById('docsStatusCard');
                 const statusMessage = document.getElementById('docsStatusMessage');
                 statusCard.classList.remove('hidden');
-                statusMessage.textContent = `ADK server is ${status.status}: ${status.message}`;
+                statusMessage.textContent = `${status.framework_label || 'ADK'} server is ${status.status}: ${status.message}`;
                 showNotification('ADK server is not running. Please start the server first.', 'error');
             }
         } catch (error) {
@@ -291,7 +291,7 @@
                 const statusCard = document.getElementById('docsStatusCard');
                 const statusMessage = document.getElementById('docsStatusMessage');
                 statusCard.classList.remove('hidden');
-                statusMessage.textContent = `ADK server is ${status.status}: ${status.message}`;
+                statusMessage.textContent = `${status.framework_label || 'ADK'} server is ${status.status}: ${status.message}`;
             }
         } catch (error) {
             console.error('Error checking server status:', error);
