@@ -165,7 +165,8 @@ register_custom_services()
 
 AGENT_DIR = os.path.dirname(os.path.abspath(__file__))+ "/agents"
 ALLOWED_ORIGINS = ["http://localhost", "http://localhost:8000", "*"]
-SERVE_WEB_INTERFACE = True
+# ADK dev UI (Angular app at /dev-ui); set ADK_DEV_UI=false to serve the API only
+SERVE_WEB_INTERFACE = os.getenv("ADK_DEV_UI", "true").lower() != "false"
 
 # initialize Agent Loader
 agent_loader = AgentLoader(AGENT_DIR)
@@ -291,6 +292,8 @@ try:
         except Exception as e:
             print(f"⚠️  Error checking for browser assets: {e}")
             print(f"⚠️  API will work, but web UI will not be available")
+    else:
+        print(f"ℹ️  ADK dev UI disabled (ADK_DEV_UI=false) — serving API only")
 
     print(f"🚀 Creating FastAPI app...")
     print(f"Extra FastAPI args: {list(extra_fast_api_args.keys())}")

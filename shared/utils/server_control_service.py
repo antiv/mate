@@ -34,26 +34,37 @@ class ServerControlService:
         from pathlib import Path
         self.project_root = Path(__file__).parent.parent.parent
     
+    def _get_framework(self) -> str:
+        """The configured agent runtime framework: 'adk' or 'langgraph'."""
+        return os.getenv("AGENT_FRAMEWORK", "adk").lower()
+
+    def _get_framework_label(self) -> str:
+        """Human-readable framework name for UI labels and messages."""
+        return "LangGraph" if self._get_framework() == "langgraph" else "ADK"
+
     def get_adk_status(self) -> Dict[str, Any]:
-        """Check if ADK server is running."""
+        """Check if the agent server is running."""
+        framework = self._get_framework()
+        label = self._get_framework_label()
+        base = {"framework": framework, "framework_label": label}
         try:
             with httpx.Client(timeout=5.0) as client:
-                # Use the /list-apps endpoint to check if ADK server is running
+                # Use the /list-apps endpoint to check if the agent server is running
                 response = client.get(f"http://{self.adk_host}:{self.adk_port}/list-apps")
-                
+
                 if response.status_code == 200:
                     # Try to get some info about the response
                     try:
                         data = response.json()
                         app_count = len(data) if isinstance(data, list) else "unknown"
-                        return {"status": "running", "message": f"ADK server responding ({app_count} apps)"}
+                        return {**base, "status": "running", "message": f"{label} server responding ({app_count} apps)"}
                     except:
-                        return {"status": "running", "message": "ADK server is responding"}
+                        return {**base, "status": "running", "message": f"{label} server is responding"}
                 else:
-                    return {"status": "stopped", "message": f"ADK server responded with status {response.status_code}"}
-                    
+                    return {**base, "status": "stopped", "message": f"{label} server responded with status {response.status_code}"}
+
         except Exception as e:
-            return {"status": "stopped", "message": f"ADK server not responding: {str(e)}"}
+            return {**base, "status": "stopped", "message": f"{label} server not responding: {str(e)}"}
     
     def _initialize_agent_folders(self):
         """Create agent folders for all top-level agents (without parent agents) from template."""
@@ -131,10 +142,11 @@ class ServerControlService:
             print(f"⚠️  Agent folder initialization error: {e}")
     
     def start_adk_server(self) -> Dict[str, Any]:
-        """Start ADK server."""
+        """Start the agent server (ADK or LangGraph, per AGENT_FRAMEWORK)."""
+        label = self._get_framework_label()
         try:
             if self.get_adk_status()["status"] == "running":
-                return {"success": False, "message": "ADK server is already running"}
+                return {"success": False, "message": f"{label} server is already running"}
             
             # Initialize agent folders before starting server
             self._initialize_agent_folders()
@@ -149,10 +161,12 @@ class ServerControlService:
             # Set PORT for adk_main.py to read from environment
             env['PORT'] = str(self.adk_port)
             
-            # Run adk_main.py script instead of adk CLI
-            adk_script_path = os.path.join(self.project_root, "adk_main.py")
-            print(f"🚀 Starting ADK server from project root: {self.project_root}")
-            print(f"🚀 ADK script path: {adk_script_path}")
+            # Pick the runtime script: adk_main.py (default) or langgraph_main.py
+            framework = os.getenv("AGENT_FRAMEWORK", "adk").lower()
+            script_name = "langgraph_main.py" if framework == "langgraph" else "adk_main.py"
+            adk_script_path = os.path.join(self.project_root, script_name)
+            print(f"🚀 Starting agent server ({framework}) from project root: {self.project_root}")
+            print(f"🚀 Script path: {adk_script_path}")
             print(f"🚀 ADK host: {self.adk_host}, port: {self.adk_port}")
             print(f"🚀 Session DB URL: {self.session_service_uri}")
             
@@ -165,32 +179,33 @@ class ServerControlService:
             # Check if process started successfully (not terminated immediately)
             time.sleep(1)
             if adk_process.poll() is not None:
-                print(f"⚠️  ADK server process terminated immediately (exit code: {adk_process.returncode})")
+                print(f"⚠️  {label} server process terminated immediately (exit code: {adk_process.returncode})")
                 print(f"⚠️  Check logs above for error details")
-                return {"success": False, "message": f"ADK server process terminated immediately (exit code: {adk_process.returncode})"}
-            
-            print(f"✅ ADK server process started (PID: {adk_process.pid})")
-            
+                return {"success": False, "message": f"{label} server process terminated immediately (exit code: {adk_process.returncode})"}
+
+            print(f"✅ {label} server process started (PID: {adk_process.pid})")
+
             # Give it more time to start up and check multiple times
             for attempt in range(10):  # Try for up to 10 seconds
                 time.sleep(1)
                 status = self.get_adk_status()
                 if status["status"] == "running":
-                    print(f"✅ ADK server is responding")
-                    return {"success": True, "message": "ADK server started successfully"}
-            
+                    print(f"✅ {label} server is responding")
+                    return {"success": True, "message": f"{label} server started successfully"}
+
             # If we get here, server started but isn't responding yet
-            print(f"⚠️  ADK server started but not responding yet")
-            return {"success": True, "message": "ADK server started (may still be initializing)"}
-                
+            print(f"⚠️  {label} server started but not responding yet")
+            return {"success": True, "message": f"{label} server started (may still be initializing)"}
+
         except Exception as e:
-            print(f"⚠️  Error starting ADK server: {str(e)}")
+            print(f"⚠️  Error starting {label} server: {str(e)}")
             import traceback
             traceback.print_exc()
-            return {"success": False, "message": f"Error starting ADK server: {str(e)}"}
+            return {"success": False, "message": f"Error starting {label} server: {str(e)}"}
     
     def stop_adk_server(self) -> Dict[str, Any]:
-        """Stop ADK server."""
+        """Stop the agent server (ADK or LangGraph)."""
+        label = self._get_framework_label()
         try:
             import psutil
             import signal
@@ -203,8 +218,8 @@ class ServerControlService:
                         cmdline = proc.info.get('cmdline')
                         if cmdline:
                             cmdline_str = ' '.join(cmdline)
-                            # Look for processes matching "adk_main.py" or legacy "adk web" in the command line
-                            if 'adk_main.py' in cmdline_str or ('adk' in cmdline_str.lower() and 'web' in cmdline_str.lower()):
+                            # Look for processes matching "adk_main.py", "langgraph_main.py" or legacy "adk web" in the command line
+                            if 'adk_main.py' in cmdline_str or 'langgraph_main.py' in cmdline_str or ('adk' in cmdline_str.lower() and 'web' in cmdline_str.lower()):
                                 proc.send_signal(signal.SIGTERM)
                                 killed_count += 1
                     except (psutil.NoSuchProcess, psutil.AccessDenied):
@@ -217,17 +232,17 @@ class ServerControlService:
                     # Check if it's actually stopped
                     status = self.get_adk_status()
                     if status["status"] == "stopped":
-                        return {"success": True, "message": f"ADK server stopped successfully ({killed_count} process(es) terminated)"}
+                        return {"success": True, "message": f"{label} server stopped successfully ({killed_count} process(es) terminated)"}
                     else:
-                        return {"success": False, "message": "ADK server may still be running"}
+                        return {"success": False, "message": f"{label} server may still be running"}
                 else:
-                    return {"success": False, "message": "No ADK server processes found to stop"}
-                    
+                    return {"success": False, "message": f"No {label} server processes found to stop"}
+
             except Exception as e:
-                return {"success": False, "message": f"Error stopping ADK server: {str(e)}"}
-                
+                return {"success": False, "message": f"Error stopping {label} server: {str(e)}"}
+
         except Exception as e:
-            return {"success": False, "message": f"Error stopping ADK server: {str(e)}"}
+            return {"success": False, "message": f"Error stopping {label} server: {str(e)}"}
     
     def restart_adk_server(self) -> Dict[str, Any]:
         """Restart ADK server."""

@@ -26,7 +26,28 @@
       "Bash(.venv/bin/python /private/tmp/claude-501/-Users-ivanantonijevic-development-bt-adk-mate/7afe3c8d-c52d-4b77-9e56-e31ffa2b6617/scratchpad/mobile_check.py)",
       "Bash(lsof -i :8000 -i :8001 -sTCP:LISTEN)",
       "Bash(pkill -f \"adk_main\")",
-      "Bash(pip show *)"
+      "Bash(pip show *)",
+      "Bash(pkill -f \"langgraph_main.py\")",
+      "Bash(pkill -f langgraph_main.py)",
+      "Bash(curl -s -o /dev/null -m 2 http://127.0.0.1:8001/list-apps)",
+      "Bash(grep -n 'ADK server is \\\\${status.status}' templates/dashboard/docs.html)",
+      "Bash(ps -p 70929 -o pid,etime,command)",
+      "Bash(xargs -I{} ps -p {} -o pid,command)",
+      "Bash(pkill -f \"langgraph_main.py --host 127.0.0.1\")",
+      "Bash(curl -s -o /dev/null -m 2 http://127.0.0.1:2024/info)",
+      "Bash(curl -s http://127.0.0.1:2024/info)",
+      "Bash(curl -s -w '\\\\nHTTP %{http_code}\\\\n' http://127.0.0.1:2024/assistants/f09821a9-50a2-5e05-b4fa-20531b58f228/graph)",
+      "Bash(curl -s __TRACKED_VAR__/assistants/__TRACKED_VAR__/graph)",
+      "Bash(curl -s -w '\\\\nHTTP %{http_code}' http://127.0.0.1:2024/assistants/f09821a9-50a2-5e05-b4fa-20531b58f228/graph)",
+      "Bash(curl -s http://127.0.0.1:2024/threads/019f66d9-b0da-7fa3-a443-05e9653a75cb/state)",
+      "Bash(xargs -I{} ps -p {} -o pid,etime,command)",
+      "Bash(curl -s -o /dev/null -m 2 http://127.0.0.1:8902/list-apps)",
+      "Bash(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8902/dev-ui/)",
+      "Bash(echo \"dev-ui: $\\(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8902/dev-ui/\\)\")",
+      "Bash(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8902/list-apps)",
+      "Bash(echo \"list-apps: $\\(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8902/list-apps\\)\")",
+      "Bash(pkill -f \"adk_main.py --host 127.0.0.1\")",
+      "Bash(git check-ignore *)"
     ]
   }
 }

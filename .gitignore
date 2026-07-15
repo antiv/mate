@@ -1,6 +1,11 @@
 # Database files
 my_agent_data.db
 my_agent_data.db-*
+lg_checkpoints.db
+lg_checkpoints.db-*
+
+# LangGraph Studio dev server state (langgraph dev)
+.langgraph_api/
 
 # Environment files (real secrets – do not commit)
 .env
