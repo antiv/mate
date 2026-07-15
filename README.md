@@ -5,6 +5,7 @@
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-green.svg)](LICENSE)
 [![Google ADK](https://img.shields.io/badge/Google-ADK-orange.svg)](https://github.com/google/adk-python)
+[![LangGraph](https://img.shields.io/badge/LangGraph-supported-1C3C3C.svg)](https://github.com/langchain-ai/langgraph)
 [![LiteLLM](https://img.shields.io/badge/LiteLLM-50%2B%20providers-purple.svg)](https://github.com/BerriAI/litellm)
 [![MCP](https://img.shields.io/badge/MCP-compatible-brightgreen.svg)](https://modelcontextprotocol.io/)
 
@@ -14,7 +15,7 @@ You built an agent. Now you need to tune the prompt. Swap the model. Restrict ac
 
 Without a control layer, every one of those is a code change, a commit, and a redeploy.
 
-**MATE is that control layer.** Built on Google ADK, it adds everything production needs — live configuration, RBAC, cost tracking, regression testing, and an embeddable chat widget — without touching your agent code.
+**MATE is that control layer.** It adds everything production needs — live configuration, RBAC, cost tracking, regression testing, and an embeddable chat widget — without touching your agent code. Runs on **Google ADK** or **LangGraph**, switchable with one env var — same agents, same dashboard, same widget either way.
 
 ---
 
