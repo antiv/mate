@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+
+{% block title %}Session Tracking - MATE{% endblock %}
+
+{% block content %}
+<div class="space-y-4">
+    <!-- Header -->
+    <div class="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center">
+        <div class="min-w-0">
+            <h2 class="text-xl font-bold text-gray-900 dark:text-white">Session Tracking</h2>
+            <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                Inspect and debug all agent prompts, reasoning, tool calls, and model responses across <span class="font-semibold text-indigo-600 dark:text-indigo-400">ADK</span> and <span class="font-semibold text-emerald-600 dark:text-emerald-400">LangGraph</span> runtimes.
+            </p>
+        </div>
+        <div class="flex flex-wrap gap-2 items-center flex-shrink-0">
+            <button type="button" onclick="window.sessionsApp.loadSessions(1)" class="px-3.5 py-2 text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center shadow-sm min-h-[44px] touch-target transition-all">
+                <i class="fas fa-sync-alt mr-1.5"></i>Refresh Sessions
+            </button>
+        </div>
+    </div>
+
+    <!-- Filters Card -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4">
+        <h3 class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">Filter Sessions</h3>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <div>
+                <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Runtime</label>
+                <select id="filterRuntime" onchange="window.sessionsApp.loadSessions(1)" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-md px-2.5 py-1.5 text-xs focus:ring-2 focus:ring-blue-500">
+                    <option value="all">All Runtimes (ADK &amp; LangGraph)</option>
+                    <option value="adk">ADK Only</option>
+                    <option value="langgraph">LangGraph Only</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">App / Agent Name</label>
+                <input type="text" id="filterAppName" placeholder="e.g. chess_mate" onkeyup="if(event.key==='Enter') window.sessionsApp.loadSessions(1)" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-md px-2.5 py-1.5 text-xs focus:ring-2 focus:ring-blue-500">
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">User ID</label>
+                <input type="text" id="filterUserId" placeholder="e.g. admin" onkeyup="if(event.key==='Enter') window.sessionsApp.loadSessions(1)" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-md px-2.5 py-1.5 text-xs focus:ring-2 focus:ring-blue-500">
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Search Keywords / Session ID</label>
+                <input type="text" id="filterSearch" placeholder="Search prompt text or ID..." onkeyup="if(event.key==='Enter') window.sessionsApp.loadSessions(1)" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-md px-2.5 py-1.5 text-xs focus:ring-2 focus:ring-blue-500">
+            </div>
+        </div>
+        <div class="mt-3 flex justify-end space-x-2">
+            <button type="button" onclick="document.getElementById('filterAppName').value=''; document.getElementById('filterUserId').value=''; document.getElementById('filterSearch').value=''; document.getElementById('filterRuntime').value='all'; window.sessionsApp.loadSessions(1)" class="px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-md">
+                Reset
+            </button>
+            <button type="button" onclick="window.sessionsApp.loadSessions(1)" class="px-3 py-1.5 text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white rounded-md shadow-sm">
+                Apply Filters
+            </button>
+        </div>
+    </div>
+
+    <!-- Sessions Table Card -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+        <div class="overflow-x-auto overflow-y-auto max-h-[calc(100vh-280px)] table-responsive">
+            <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                <thead class="bg-gray-50 dark:bg-gray-700/60">
+                    <tr>
+                        <th class="px-3 py-3 text-left text-xs font-bold text-gray-500 dark:text-gray-300 uppercase tracking-wider">Session ID</th>
+                        <th class="px-3 py-3 text-left text-xs font-bold text-gray-500 dark:text-gray-300 uppercase tracking-wider">App / Agent</th>
+                        <th class="px-3 py-3 text-left text-xs font-bold text-gray-500 dark:text-gray-300 uppercase tracking-wider">User ID</th>
+                        <th class="px-3 py-3 text-left text-xs font-bold text-gray-500 dark:text-gray-300 uppercase tracking-wider">Runtime</th>
+                        <th class="px-3 py-3 text-left text-xs font-bold text-gray-500 dark:text-gray-300 uppercase tracking-wider">Turns</th>
+                        <th class="px-3 py-3 text-left text-xs font-bold text-gray-500 dark:text-gray-300 uppercase tracking-wider">Last Updated</th>
+                        <th class="px-3 py-3 text-right text-xs font-bold text-gray-500 dark:text-gray-300 uppercase tracking-wider">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="sessionTableBody" class="divide-y divide-gray-200 dark:divide-gray-700 bg-white dark:bg-gray-800">
+                    <tr>
+                        <td colspan="7" class="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+                            <i class="fas fa-circle-notch fa-spin mr-2"></i>Loading sessions...
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <!-- Table Footer / Pagination -->
+        <div class="px-4 py-3 bg-gray-50 dark:bg-gray-700/50 border-t border-gray-200 dark:border-gray-700 flex flex-col sm:flex-row items-center justify-between text-xs text-gray-600 dark:text-gray-400 gap-2">
+            <div>
+                Total Sessions: <span id="totalCount" class="font-bold text-gray-900 dark:text-white">0</span>
+            </div>
+            <div id="paginationArea" class="flex items-center space-x-2">
+                <span id="pageInfo">Page 1 of 1</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Session Inspector Modal -->
+<div id="sessionInspectorModal" class="fixed inset-0 bg-gray-900/60 backdrop-blur-sm hidden z-50 overflow-y-auto" onclick="if (event.target === this) window.sessionsApp.closeSessionInspector()">
+    <div class="relative top-4 md:top-10 mx-auto p-4 md:p-6 w-full max-w-5xl bg-white dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 flex flex-col max-h-[90vh]" onclick="event.stopPropagation()">
+        <!-- Modal Header -->
+        <div class="flex justify-between items-center pb-3 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
+            <div class="flex items-center space-x-2">
+                <i class="fas fa-search-location text-blue-600 text-lg"></i>
+                <h3 class="text-lg font-bold text-gray-900 dark:text-white">Session Inspector</h3>
+            </div>
+            <button type="button" onclick="window.sessionsApp.closeSessionInspector()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 p-1 rounded-md text-lg">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+
+        <!-- Modal Body Content -->
+        <div id="sessionInspectorContent" class="flex-1 overflow-y-auto pt-4 min-h-0">
+            <!-- Dynamic Content Injected Here -->
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/sessions.js"></script>
+{% endblock %}

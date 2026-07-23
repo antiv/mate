@@ -47,7 +47,8 @@
       "Bash(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8902/list-apps)",
       "Bash(echo \"list-apps: $\\(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8902/list-apps\\)\")",
       "Bash(pkill -f \"adk_main.py --host 127.0.0.1\")",
-      "Bash(git check-ignore *)"
+      "Bash(git check-ignore *)",
+      "Bash(git pull *)"
     ]
   }
 }

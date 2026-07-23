@@ -11,7 +11,7 @@ import shutil
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 from sqlalchemy.exc import IntegrityError
-from fastapi import FastAPI, Request, HTTPException, Depends, Form, File, UploadFile
+from fastapi import FastAPI, Request, HTTPException, Depends, Form, File, UploadFile, Query
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
@@ -2178,6 +2178,294 @@ class DashboardServer:
             return memory_blocks.get('enabled', True) is not False
         return False
 
+    def _get_sessions(self, runtime: str = "all", app_name: Optional[str] = None,
+                      user_id: Optional[str] = None, search: Optional[str] = None,
+                      page: int = 1, limit: int = 50) -> Dict[str, Any]:
+        """Fetch and aggregate active and historical sessions from LangGraph and ADK stores."""
+        import json
+        from datetime import datetime, timezone
+        all_sessions = []
+
+        # 1. Fetch LangGraph sessions from DB
+        if runtime in ("all", "langgraph") and self.db_client:
+            db_session = self.db_client.get_session()
+            if db_session:
+                try:
+                    from shared.utils.models import LangGraphSession, LangGraphEvent
+                    q = db_session.query(LangGraphSession)
+                    if app_name:
+                        q = q.filter(LangGraphSession.app_name.ilike(f"%{app_name}%"))
+                    if user_id:
+                        q = q.filter(LangGraphSession.user_id.ilike(f"%{user_id}%"))
+                    
+                    rows = q.order_by(LangGraphSession.updated_at.desc()).all()
+                    
+                    for r in rows:
+                        events_count = db_session.query(LangGraphEvent.id).filter(LangGraphEvent.session_id == r.id).count()
+                        last_event = db_session.query(LangGraphEvent).filter(LangGraphEvent.session_id == r.id).order_by(LangGraphEvent.timestamp.desc()).first()
+                        
+                        last_preview = ""
+                        if last_event and last_event.content:
+                            try:
+                                content_dict = json.loads(last_event.content)
+                                if isinstance(content_dict, dict) and "parts" in content_dict:
+                                    for part in content_dict["parts"]:
+                                        if isinstance(part, dict) and "text" in part and part["text"]:
+                                            last_preview = part["text"][:120]
+                                            break
+                                        elif isinstance(part, str):
+                                            last_preview = part[:120]
+                                            break
+                            except Exception:
+                                pass
+
+                        session_dict = {
+                            "id": r.id,
+                            "app_name": r.app_name,
+                            "user_id": r.user_id,
+                            "runtime": "langgraph",
+                            "event_count": events_count,
+                            "created_at": r.created_at.isoformat() if r.created_at else None,
+                            "updated_at": r.updated_at.isoformat() if r.updated_at else None,
+                            "last_preview": last_preview
+                        }
+
+                        if search:
+                            s = search.lower()
+                            match = (
+                                s in r.id.lower() or
+                                s in r.app_name.lower() or
+                                s in r.user_id.lower() or
+                                (last_preview and s in last_preview.lower())
+                            )
+                            if match:
+                                all_sessions.append(session_dict)
+                        else:
+                            all_sessions.append(session_dict)
+                except Exception as e:
+                    logger.warning(f"Error querying LangGraph sessions: {e}")
+                finally:
+                    db_session.close()
+
+        # 2. Fetch ADK sessions from ADK DB / session storage
+        if runtime in ("all", "adk"):
+            try:
+                from sqlalchemy import create_engine, text
+                uri = self.session_service_uri
+                if uri.startswith("sqlite+aiosqlite://"):
+                    uri = uri.replace("sqlite+aiosqlite://", "sqlite://")
+                elif uri.startswith("postgresql+asyncpg://"):
+                    uri = uri.replace("postgresql+asyncpg://", "postgresql://")
+                elif uri.startswith("mysql+aiomysql://"):
+                    uri = uri.replace("mysql+aiomysql://", "mysql://")
+                
+                if uri.startswith("sqlite:///") and not uri.startswith("sqlite:////"):
+                    rel_path = uri.replace("sqlite:///", "")
+                    abs_path = str((self.project_root / rel_path).resolve())
+                    uri = f"sqlite:///{abs_path}"
+
+                engine = create_engine(uri)
+                with engine.connect() as conn:
+                    query_str = "SELECT id, app_name, user_id, create_time, update_time FROM sessions"
+                    params = {}
+                    conditions = []
+                    if app_name:
+                        conditions.append("app_name LIKE :app_name")
+                        params["app_name"] = f"%{app_name}%"
+                    if user_id:
+                        conditions.append("user_id LIKE :user_id")
+                        params["user_id"] = f"%{user_id}%"
+                    if conditions:
+                        query_str += " WHERE " + " AND ".join(conditions)
+                    query_str += " ORDER BY update_time DESC"
+
+                    rows = conn.execute(text(query_str), params).fetchall()
+                    for r in rows:
+                        s_id, s_app, s_user, c_time, u_time = r[0], r[1], r[2], r[3], r[4]
+                        
+                        evt_count_res = conn.execute(text("SELECT COUNT(*) FROM events WHERE session_id = :sid"), {"sid": s_id}).fetchone()
+                        events_count = evt_count_res[0] if evt_count_res else 0
+                        
+                        last_evt = conn.execute(text("SELECT event_data FROM events WHERE session_id = :sid ORDER BY timestamp DESC LIMIT 1"), {"sid": s_id}).fetchone()
+                        last_preview = ""
+                        if last_evt and last_evt[0]:
+                            try:
+                                evt_data = json.loads(last_evt[0]) if isinstance(last_evt[0], str) else last_evt[0]
+                                if isinstance(evt_data, dict) and "content" in evt_data and evt_data["content"]:
+                                    parts = evt_data["content"].get("parts", [])
+                                    for p in parts:
+                                        if isinstance(p, dict) and p.get("text"):
+                                            last_preview = p["text"][:120]
+                                            break
+                                        elif isinstance(p, str):
+                                            last_preview = p[:120]
+                                            break
+                            except Exception:
+                                pass
+
+                        created_str = datetime.fromtimestamp(c_time, tz=timezone.utc).isoformat() if isinstance(c_time, (int, float)) else str(c_time)
+                        updated_str = datetime.fromtimestamp(u_time, tz=timezone.utc).isoformat() if isinstance(u_time, (int, float)) else str(u_time)
+
+                        session_dict = {
+                            "id": s_id,
+                            "app_name": s_app,
+                            "user_id": s_user,
+                            "runtime": "adk",
+                            "event_count": events_count,
+                            "created_at": created_str,
+                            "updated_at": updated_str,
+                            "last_preview": last_preview
+                        }
+
+                        if search:
+                            s = search.lower()
+                            match = (
+                                s in s_id.lower() or
+                                s in s_app.lower() or
+                                s in s_user.lower() or
+                                (last_preview and s in last_preview.lower())
+                            )
+                            if match:
+                                all_sessions.append(session_dict)
+                        else:
+                            all_sessions.append(session_dict)
+            except Exception as e:
+                pass
+
+        all_sessions.sort(key=lambda x: x.get("updated_at") or "", reverse=True)
+
+        total = len(all_sessions)
+        offset = (page - 1) * limit
+        paginated_sessions = all_sessions[offset:offset + limit]
+
+        import math
+        return {
+            "sessions": paginated_sessions,
+            "total": total,
+            "page": page,
+            "pages": math.ceil(total / limit) if total > 0 else 1,
+            "limit": limit
+        }
+
+    def _get_session_detail(self, runtime: str, app_name: str, user_id: str, session_id: str) -> Optional[Dict[str, Any]]:
+        """Fetch full details and events for a specific session."""
+        import json
+        from datetime import datetime, timezone
+
+        if runtime in ("langgraph", "auto"):
+            from shared.utils.langgraph.session_store import get_session_store
+            try:
+                lg_session = get_session_store().get_session(app_name, user_id, session_id)
+                if lg_session:
+                    lg_session["runtime"] = "langgraph"
+                    return lg_session
+            except Exception as e:
+                logger.warning(f"Error fetching LangGraph session detail: {e}")
+
+        if runtime in ("adk", "auto"):
+            try:
+                from sqlalchemy import create_engine, text
+                uri = self.session_service_uri
+                if uri.startswith("sqlite+aiosqlite://"):
+                    uri = uri.replace("sqlite+aiosqlite://", "sqlite://")
+                elif uri.startswith("postgresql+asyncpg://"):
+                    uri = uri.replace("postgresql+asyncpg://", "postgresql://")
+                elif uri.startswith("mysql+aiomysql://"):
+                    uri = uri.replace("mysql+aiomysql://", "mysql://")
+                
+                if uri.startswith("sqlite:///") and not uri.startswith("sqlite:////"):
+                    rel_path = uri.replace("sqlite:///", "")
+                    abs_path = str((self.project_root / rel_path).resolve())
+                    uri = f"sqlite:///{abs_path}"
+
+                engine = create_engine(uri)
+                with engine.connect() as conn:
+                    s_row = conn.execute(
+                        text("SELECT id, app_name, user_id, state, create_time, update_time FROM sessions WHERE id = :sid"),
+                        {"sid": session_id}
+                    ).fetchone()
+
+                    if s_row:
+                        state_val = s_row[3]
+                        state_dict = {}
+                        if state_val:
+                            try:
+                                state_dict = json.loads(state_val) if isinstance(state_val, str) else state_val
+                            except Exception:
+                                pass
+                        
+                        e_rows = conn.execute(
+                            text("SELECT id, event_data, timestamp FROM events WHERE session_id = :sid ORDER BY timestamp ASC"),
+                            {"sid": session_id}
+                        ).fetchall()
+
+                        events = []
+                        for er in e_rows:
+                            evt_data = er[1]
+                            if evt_data:
+                                try:
+                                    parsed_evt = json.loads(evt_data) if isinstance(evt_data, str) else evt_data
+                                    events.append(parsed_evt)
+                                except Exception:
+                                    pass
+
+                        c_time, u_time = s_row[4], s_row[5]
+                        created_str = datetime.fromtimestamp(c_time, tz=timezone.utc).isoformat() if isinstance(c_time, (int, float)) else str(c_time)
+                        updated_str = datetime.fromtimestamp(u_time, tz=timezone.utc).isoformat() if isinstance(u_time, (int, float)) else str(u_time)
+
+                        return {
+                            "id": s_row[0],
+                            "app_name": s_row[1],
+                            "user_id": s_row[2],
+                            "runtime": "adk",
+                            "state": state_dict,
+                            "events": events,
+                            "created_at": created_str,
+                            "updated_at": updated_str,
+                        }
+            except Exception as e:
+                logger.warning(f"Error fetching ADK session detail: {e}")
+
+        return None
+
+    def _delete_session(self, runtime: str, app_name: str, user_id: str, session_id: str) -> bool:
+        """Delete a session from LangGraph or ADK session storage."""
+        success = False
+        if runtime in ("langgraph", "auto"):
+            from shared.utils.langgraph.session_store import get_session_store
+            try:
+                if get_session_store().delete_session(app_name, user_id, session_id):
+                    success = True
+            except Exception as e:
+                logger.warning(f"Error deleting LangGraph session: {e}")
+
+        if runtime in ("adk", "auto"):
+            try:
+                from sqlalchemy import create_engine, text
+                uri = self.session_service_uri
+                if uri.startswith("sqlite+aiosqlite://"):
+                    uri = uri.replace("sqlite+aiosqlite://", "sqlite://")
+                elif uri.startswith("postgresql+asyncpg://"):
+                    uri = uri.replace("postgresql+asyncpg://", "postgresql://")
+                elif uri.startswith("mysql+aiomysql://"):
+                    uri = uri.replace("mysql+aiomysql://", "mysql://")
+                
+                if uri.startswith("sqlite:///") and not uri.startswith("sqlite:////"):
+                    rel_path = uri.replace("sqlite:///", "")
+                    abs_path = str((self.project_root / rel_path).resolve())
+                    uri = f"sqlite:///{abs_path}"
+
+                engine = create_engine(uri)
+                with engine.begin() as conn:
+                    conn.execute(text("DELETE FROM events WHERE session_id = :sid"), {"sid": session_id})
+                    res = conn.execute(text("DELETE FROM sessions WHERE id = :sid"), {"sid": session_id})
+                    if res.rowcount > 0:
+                        success = True
+            except Exception as e:
+                logger.warning(f"Error deleting ADK session: {e}")
+
+        return success
+
     def _register_endpoints(self):
         """Register all dashboard endpoints"""
         
@@ -2370,6 +2658,69 @@ class DashboardServer:
                 "username": username,
                 "is_admin": True,
             })
+
+        @self.app.get("/dashboard/sessions", response_class=HTMLResponse, tags=["Dashboard - Pages"])
+        async def dashboard_sessions(request: Request, username: str = Depends(self._get_auth_user_dependency)):
+            """Dashboard session tracking page (ADK & LangGraph)."""
+            if not self._get_is_admin(request):
+                return RedirectResponse(url="/dashboard/workroom", status_code=302)
+            return self.templates.TemplateResponse(request, "dashboard/sessions.html", {
+                "request": request,
+                "page_title": "Session Tracking",
+                "username": username,
+                "is_admin": True,
+            })
+
+        @self.app.get("/dashboard/api/sessions", tags=["Dashboard - Sessions"])
+        async def get_sessions_api(
+            request: Request,
+            username: str = Depends(self._get_auth_user_dependency),
+            runtime: str = "all",
+            app_name: Optional[str] = None,
+            user_id: Optional[str] = None,
+            search: Optional[str] = None,
+            page: int = Query(1, ge=1),
+            limit: int = Query(50, ge=1, le=200)
+        ):
+            """Get paginated session list across ADK and LangGraph runtimes."""
+            return self._get_sessions(
+                runtime=runtime,
+                app_name=app_name,
+                user_id=user_id,
+                search=search,
+                page=page,
+                limit=limit
+            )
+
+        @self.app.get("/dashboard/api/sessions/detail", tags=["Dashboard - Sessions"])
+        async def get_session_detail_api(
+            request: Request,
+            session_id: str = Query(...),
+            app_name: str = Query(""),
+            user_id: str = Query(""),
+            runtime: str = Query("auto"),
+            username: str = Depends(self._get_auth_user_dependency)
+        ):
+            """Get complete history of prompts, responses, thoughts, tool calls, and state for a session."""
+            detail = self._get_session_detail(runtime=runtime, app_name=app_name, user_id=user_id, session_id=session_id)
+            if not detail:
+                raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
+            return detail
+
+        @self.app.delete("/dashboard/api/sessions", tags=["Dashboard - Sessions"])
+        async def delete_session_api(
+            request: Request,
+            session_id: str = Query(...),
+            app_name: str = Query(""),
+            user_id: str = Query(""),
+            runtime: str = Query("auto"),
+            username: str = Depends(self._get_auth_user_dependency)
+        ):
+            """Delete a specific session and its associated events."""
+            deleted = self._delete_session(runtime=runtime, app_name=app_name, user_id=user_id, session_id=session_id)
+            if not deleted:
+                raise HTTPException(status_code=404, detail=f"Could not delete session {session_id}")
+            return {"success": True, "message": f"Session {session_id} deleted successfully"}
 
         @self.app.get("/dashboard/wizard-leads", response_class=HTMLResponse, tags=["Dashboard - Pages"])
         async def dashboard_wizard_leads(request: Request, username: str = Depends(self._get_auth_user_dependency)):
