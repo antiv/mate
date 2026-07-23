@@ -2181,73 +2181,57 @@ class DashboardServer:
     def _get_sessions(self, runtime: str = "all", app_name: Optional[str] = None,
                       user_id: Optional[str] = None, search: Optional[str] = None,
                       page: int = 1, limit: int = 50) -> Dict[str, Any]:
-        """Fetch and aggregate active and historical sessions from LangGraph and ADK stores."""
+        """Fetch and aggregate active and historical sessions from LangGraph and ADK stores with optimized pagination."""
         import json
         from datetime import datetime, timezone
-        all_sessions = []
 
-        # 1. Fetch LangGraph sessions from DB
+        raw_items = []  # lightweight metadata dicts: id, app_name, user_id, created_at, updated_at, sort_ts, runtime
+
+        # 1. Collect LangGraph sessions metadata (fast lightweight query)
         if runtime in ("all", "langgraph") and self.db_client:
             db_session = self.db_client.get_session()
             if db_session:
                 try:
-                    from shared.utils.models import LangGraphSession, LangGraphEvent
-                    q = db_session.query(LangGraphSession)
+                    from shared.utils.models import LangGraphSession
+                    q = db_session.query(
+                        LangGraphSession.id,
+                        LangGraphSession.app_name,
+                        LangGraphSession.user_id,
+                        LangGraphSession.created_at,
+                        LangGraphSession.updated_at
+                    )
                     if app_name:
                         q = q.filter(LangGraphSession.app_name.ilike(f"%{app_name}%"))
                     if user_id:
                         q = q.filter(LangGraphSession.user_id.ilike(f"%{user_id}%"))
-                    
-                    rows = q.order_by(LangGraphSession.updated_at.desc()).all()
-                    
-                    for r in rows:
-                        events_count = db_session.query(LangGraphEvent.id).filter(LangGraphEvent.session_id == r.id).count()
-                        last_event = db_session.query(LangGraphEvent).filter(LangGraphEvent.session_id == r.id).order_by(LangGraphEvent.timestamp.desc()).first()
-                        
-                        last_preview = ""
-                        if last_event and last_event.content:
-                            try:
-                                content_dict = json.loads(last_event.content)
-                                if isinstance(content_dict, dict) and "parts" in content_dict:
-                                    for part in content_dict["parts"]:
-                                        if isinstance(part, dict) and "text" in part and part["text"]:
-                                            last_preview = part["text"][:120]
-                                            break
-                                        elif isinstance(part, str):
-                                            last_preview = part[:120]
-                                            break
-                            except Exception:
-                                pass
+                    if search:
+                        s_like = f"%{search.strip()}%"
+                        from sqlalchemy import or_
+                        q = q.filter(or_(
+                            LangGraphSession.id.ilike(s_like),
+                            LangGraphSession.app_name.ilike(s_like),
+                            LangGraphSession.user_id.ilike(s_like)
+                        ))
 
-                        session_dict = {
+                    rows = q.order_by(LangGraphSession.updated_at.desc()).all()
+                    for r in rows:
+                        up_dt = r.updated_at
+                        up_ts = up_dt.timestamp() if up_dt else 0
+                        raw_items.append({
                             "id": r.id,
                             "app_name": r.app_name,
                             "user_id": r.user_id,
                             "runtime": "langgraph",
-                            "event_count": events_count,
                             "created_at": r.created_at.isoformat() if r.created_at else None,
                             "updated_at": r.updated_at.isoformat() if r.updated_at else None,
-                            "last_preview": last_preview
-                        }
-
-                        if search:
-                            s = search.lower()
-                            match = (
-                                s in r.id.lower() or
-                                s in r.app_name.lower() or
-                                s in r.user_id.lower() or
-                                (last_preview and s in last_preview.lower())
-                            )
-                            if match:
-                                all_sessions.append(session_dict)
-                        else:
-                            all_sessions.append(session_dict)
+                            "sort_ts": up_ts
+                        })
                 except Exception as e:
-                    logger.warning(f"Error querying LangGraph sessions: {e}")
+                    logger.warning(f"Error querying LangGraph sessions metadata: {e}")
                 finally:
                     db_session.close()
 
-        # 2. Fetch ADK sessions from ADK DB / session storage
+        # 2. Collect ADK sessions metadata (fast lightweight query)
         if runtime in ("all", "adk"):
             try:
                 from sqlalchemy import create_engine, text
@@ -2275,6 +2259,10 @@ class DashboardServer:
                     if user_id:
                         conditions.append("user_id LIKE :user_id")
                         params["user_id"] = f"%{user_id}%"
+                    if search:
+                        conditions.append("(id LIKE :search OR app_name LIKE :search OR user_id LIKE :search)")
+                        params["search"] = f"%{search.strip()}%"
+
                     if conditions:
                         query_str += " WHERE " + " AND ".join(conditions)
                     query_str += " ORDER BY update_time DESC"
@@ -2282,65 +2270,110 @@ class DashboardServer:
                     rows = conn.execute(text(query_str), params).fetchall()
                     for r in rows:
                         s_id, s_app, s_user, c_time, u_time = r[0], r[1], r[2], r[3], r[4]
-                        
-                        evt_count_res = conn.execute(text("SELECT COUNT(*) FROM events WHERE session_id = :sid"), {"sid": s_id}).fetchone()
-                        events_count = evt_count_res[0] if evt_count_res else 0
-                        
-                        last_evt = conn.execute(text("SELECT event_data FROM events WHERE session_id = :sid ORDER BY timestamp DESC LIMIT 1"), {"sid": s_id}).fetchone()
-                        last_preview = ""
-                        if last_evt and last_evt[0]:
-                            try:
-                                evt_data = json.loads(last_evt[0]) if isinstance(last_evt[0], str) else last_evt[0]
-                                if isinstance(evt_data, dict) and "content" in evt_data and evt_data["content"]:
-                                    parts = evt_data["content"].get("parts", [])
-                                    for p in parts:
-                                        if isinstance(p, dict) and p.get("text"):
-                                            last_preview = p["text"][:120]
-                                            break
-                                        elif isinstance(p, str):
-                                            last_preview = p[:120]
-                                            break
-                            except Exception:
-                                pass
-
+                        u_ts = u_time if isinstance(u_time, (int, float)) else 0
                         created_str = datetime.fromtimestamp(c_time, tz=timezone.utc).isoformat() if isinstance(c_time, (int, float)) else str(c_time)
                         updated_str = datetime.fromtimestamp(u_time, tz=timezone.utc).isoformat() if isinstance(u_time, (int, float)) else str(u_time)
 
-                        session_dict = {
+                        raw_items.append({
                             "id": s_id,
                             "app_name": s_app,
                             "user_id": s_user,
                             "runtime": "adk",
-                            "event_count": events_count,
                             "created_at": created_str,
                             "updated_at": updated_str,
-                            "last_preview": last_preview
-                        }
-
-                        if search:
-                            s = search.lower()
-                            match = (
-                                s in s_id.lower() or
-                                s in s_app.lower() or
-                                s in s_user.lower() or
-                                (last_preview and s in last_preview.lower())
-                            )
-                            if match:
-                                all_sessions.append(session_dict)
-                        else:
-                            all_sessions.append(session_dict)
+                            "sort_ts": u_ts
+                        })
             except Exception as e:
                 pass
 
-        all_sessions.sort(key=lambda x: x.get("updated_at") or "", reverse=True)
+        # Sort all session metadata by last updated timestamp descending
+        raw_items.sort(key=lambda x: x.get("sort_ts") or 0, reverse=True)
 
-        total = len(all_sessions)
+        total = len(raw_items)
         offset = (page - 1) * limit
-        paginated_sessions = all_sessions[offset:offset + limit]
+        page_items = raw_items[offset:offset + limit]
+
+        # 3. Populate event_count and last_preview ONLY for page_items (max 50)
+        final_sessions = []
+        
+        lg_db = self.db_client.get_session() if self.db_client else None
+        adk_conn = None
+        try:
+            from sqlalchemy import create_engine, text
+            uri = self.session_service_uri
+            if uri.startswith("sqlite+aiosqlite://"):
+                uri = uri.replace("sqlite+aiosqlite://", "sqlite://")
+            elif uri.startswith("postgresql+asyncpg://"):
+                uri = uri.replace("postgresql+asyncpg://", "postgresql://")
+            elif uri.startswith("mysql+aiomysql://"):
+                uri = uri.replace("mysql+aiomysql://", "mysql://")
+            if uri.startswith("sqlite:///") and not uri.startswith("sqlite:////"):
+                rel_path = uri.replace("sqlite:///", "")
+                abs_path = str((self.project_root / rel_path).resolve())
+                uri = f"sqlite:///{abs_path}"
+            adk_engine = create_engine(uri)
+            adk_conn = adk_engine.connect()
+        except Exception:
+            pass
+
+        try:
+            for item in page_items:
+                s_id = item["id"]
+                rt = item["runtime"]
+                events_count = 0
+                last_preview = ""
+
+                if rt == "langgraph" and lg_db:
+                    try:
+                        from shared.utils.models import LangGraphEvent
+                        events_count = lg_db.query(LangGraphEvent.id).filter(LangGraphEvent.session_id == s_id).count()
+                        last_event = lg_db.query(LangGraphEvent).filter(LangGraphEvent.session_id == s_id).order_by(LangGraphEvent.timestamp.desc()).first()
+                        if last_event and last_event.content:
+                            content_dict = json.loads(last_event.content)
+                            if isinstance(content_dict, dict) and "parts" in content_dict:
+                                for part in content_dict["parts"]:
+                                    if isinstance(part, dict) and "text" in part and part["text"]:
+                                        last_preview = part["text"][:120]
+                                        break
+                                    elif isinstance(part, str):
+                                        last_preview = part[:120]
+                                        break
+                    except Exception:
+                        pass
+                elif rt == "adk" and adk_conn:
+                    try:
+                        evt_count_res = adk_conn.execute(text("SELECT COUNT(*) FROM events WHERE session_id = :sid"), {"sid": s_id}).fetchone()
+                        events_count = evt_count_res[0] if evt_count_res else 0
+
+                        last_evt = adk_conn.execute(text("SELECT event_data FROM events WHERE session_id = :sid ORDER BY timestamp DESC LIMIT 1"), {"sid": s_id}).fetchone()
+                        if last_evt and last_evt[0]:
+                            evt_data = json.loads(last_evt[0]) if isinstance(last_evt[0], str) else last_evt[0]
+                            if isinstance(evt_data, dict) and "content" in evt_data and evt_data["content"]:
+                                parts = evt_data["content"].get("parts", [])
+                                for p in parts:
+                                    if isinstance(p, dict) and p.get("text"):
+                                        last_preview = p["text"][:120]
+                                        break
+                                    elif isinstance(p, str):
+                                        last_preview = p[:120]
+                                        break
+                    except Exception:
+                        pass
+
+                item_copy = dict(item)
+                item_copy.pop("sort_ts", None)
+                item_copy["event_count"] = events_count
+                item_copy["last_preview"] = last_preview
+                final_sessions.append(item_copy)
+        finally:
+            if lg_db:
+                lg_db.close()
+            if adk_conn:
+                adk_conn.close()
 
         import math
         return {
-            "sessions": paginated_sessions,
+            "sessions": final_sessions,
             "total": total,
             "page": page,
             "pages": math.ceil(total / limit) if total > 0 else 1,
