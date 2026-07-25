@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="sr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Detektivske misterije — MATE demo</title>
+  <style>
+    :root { --gold: #c9a227; --ink: #e8e2d0; --muted: #9a917a; }
+    body { font-family: Georgia, "Times New Roman", serif; margin: 0; min-height: 100vh;
+           background: radial-gradient(ellipse at 50% -10%, #20242a 0%, #101318 55%, #08090b 100%);
+           color: var(--ink); }
+    .lang { position: absolute; top: 16px; right: 20px; font-size: 12px; letter-spacing: 1px; }
+    .lang a { color: var(--muted); text-decoration: none; padding: 4px 8px; }
+    .lang a.active { color: var(--gold); border: 1px solid var(--gold); border-radius: 999px; }
+    .hero { max-width: 760px; margin: 0 auto; padding: 64px 24px 32px; text-align: center; }
+    .badge { display: inline-block; border: 1px solid var(--gold); color: var(--gold); letter-spacing: 3px;
+             font-size: 11px; padding: 6px 14px; border-radius: 999px; text-transform: uppercase; }
+    h1 { font-size: 2.6rem; margin: 18px 0 6px; color: var(--gold); font-weight: normal; letter-spacing: 1px; }
+    .sub { color: var(--muted); font-style: italic; margin: 0 0 28px; }
+    .lead { max-width: 560px; margin: 0 auto; line-height: 1.7; font-size: 1.02rem; }
+    .divider { width: 120px; height: 1px; background: linear-gradient(90deg, transparent, var(--gold), transparent);
+               margin: 32px auto; }
+    .steps { max-width: 720px; margin: 0 auto; padding: 0 24px 40px; display: grid;
+             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; }
+    .step { border: 1px solid #2e3440; border-radius: 10px; padding: 16px 14px; text-align: center;
+            background: rgba(255,255,255,0.02); }
+    .step .num { display: inline-block; width: 26px; height: 26px; line-height: 26px; border-radius: 50%;
+                 border: 1px solid var(--gold); color: var(--gold); font-size: 13px; margin-bottom: 8px; }
+    .step b { display: block; color: var(--ink); font-size: 14px; margin-bottom: 5px; }
+    .step span { color: var(--muted); font-size: 12.5px; line-height: 1.55; display: block; }
+    .hint { max-width: 560px; margin: 0 auto 70px; padding: 0 24px; text-align: center; color: var(--muted);
+            font-size: 13px; line-height: 1.6; }
+    .hint em { color: var(--gold); }
+    .setup { max-width: 560px; margin: 0 auto 70px; padding: 20px 24px; border: 1px dashed #3f4a5a;
+             border-radius: 10px; font-size: 14px; line-height: 1.8; color: var(--muted); }
+    .setup code { font-family: ui-monospace, Menlo, monospace; color: var(--ink); font-size: 12px;
+                  background: rgba(255,255,255,0.06); padding: 2px 6px; border-radius: 4px; }
+    .footer { text-align: center; color: #4d5461; font-size: 11px; padding: 0 24px 28px; }
+  </style>
+</head>
+<body>
+  <div class="lang">
+    <a id="langSr" href="#">SR</a>
+    <a id="langEn" href="#">EN</a>
+  </div>
+
+  <div class="hero">
+    <span class="badge" data-i18n="badge"></span>
+    <h1 data-i18n="title"></h1>
+    <p class="sub" data-i18n="sub"></p>
+    <p class="lead" data-i18n-html="lead"></p>
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="steps">
+    <div class="step"><span class="num">1</span><b data-i18n="step1t"></b><span data-i18n="step1b"></span></div>
+    <div class="step"><span class="num">2</span><b data-i18n="step2t"></b><span data-i18n="step2b"></span></div>
+    <div class="step"><span class="num">3</span><b data-i18n="step3t"></b><span data-i18n="step3b"></span></div>
+  </div>
+
+  <p class="hint" data-i18n-html="hint"></p>
+
+  <div class="setup" id="setup" style="display:none">
+    <strong style="color:var(--ink)" data-i18n="setupTitle"></strong><br>
+    <span data-i18n-html="setupBody"></span>
+    <code id="exampleUrl"></code>
+  </div>
+
+  <div class="footer" data-i18n="footer"></div>
+
+  <script>
+    var I18N = {
+      sr: {
+        badge: "Beskrajne misterije",
+        title: "Detektivska kancelarija „Vetrov“",
+        sub: "Jedan inspektor. Nebrojeno slučajeva.",
+        lead: "Inspektor <strong>Nikola Vetrov</strong> vas čeka sa otvorenim dosijeom. Na početku birate: " +
+              "aktuelni slučaj — <em>„Ubistvo u vili ‚Sova‘“</em> — ili potpuno nova misterija: nov zaplet, " +
+              "nova žrtva i novi osumnjičeni, napisani samo za vas. " +
+              "Otvorite razgovor u donjem desnom uglu, javite se inspektoru i izaberite igru.",
+        step1t: "Istražujte",
+        step1b: "Ispitujte osumnjičene, tražite dokaze od inspektora i suočavajte iskaze.",
+        step2t: "Optužite",
+        step2b: "Kad sklopite sliku, recite „Optužujem…“ — inspektor presuđuje.",
+        step3t: "Nova misterija",
+        step3b: "Recite „Generiši novu misteriju“ — i po želji temu — pa igrajte iznova. Pisanje slučaja traje 20-40 sekundi, budite strpljivi. Vaša igra ne utiče na druge igrače.",
+        hint: "Svaki osumnjičeni je zaseban AI agent sa sopstvenim tajnama i zaštitama — slobodno pokušajte da ih " +
+              "nadmudrite da odaju ubicu. Nećete uspeti. <em>Verovatno.</em>",
+        setupTitle: "Podešavanje demo stranice",
+        setupBody: "1. U MATE dashboardu importujte template <code>Detektivske misterije (generator)</code> (Template Gallery).<br>" +
+                   "2. Napravite Widget API ključ za root agenta igre (<code>Widget Keys</code>).<br>" +
+                   "3. Otvorite ovu stranicu sa ključem: ",
+        footer: "Pokreće MATE — svaki lik je zaseban agent, slučaj živi u session state-u svakog igrača, " +
+                "a nove zaplete piše LLM generator. Demonstracija embeddable widget integracije.",
+        button: "🔎 Započni istragu"
+      },
+      en: {
+        badge: "Endless mysteries",
+        title: "The Vetrov Detective Office",
+        sub: "One inspector. Countless cases.",
+        lead: "Inspector <strong>Nikola Vetrov</strong> is waiting with an open case file. At the start you " +
+              "choose: the featured case — <em>“Murder at Villa ‘Sova’”</em> — or a brand-new mystery: a new " +
+              "plot, a new victim and new suspects, written just for you. " +
+              "Open the chat in the bottom-right corner, greet the inspector and pick your game.",
+        step1t: "Investigate",
+        step1b: "Interrogate the suspects, request evidence from the inspector and play statements against each other.",
+        step2t: "Accuse",
+        step2b: "When the picture fits, say “I accuse…” — the inspector delivers the verdict.",
+        step3t: "New mystery",
+        step3b: "Say “Generate a new mystery” — optionally with a theme — and play again. Writing the case takes 20-40 seconds, so be patient. Your game never affects other players.",
+        hint: "Every suspect is a separate AI agent with its own secrets and safeguards — feel free to try to " +
+              "trick them into naming the killer. You won't succeed. <em>Probably.</em>",
+        setupTitle: "Demo page setup",
+        setupBody: "1. In the MATE dashboard, import the <code>Detektivske misterije (generator)</code> template (Template Gallery).<br>" +
+                   "2. Create a Widget API key pointing to the game's root agent (<code>Widget Keys</code>).<br>" +
+                   "3. Open this page with the key: ",
+        footer: "Powered by MATE — every character is a separate agent, each player's case lives in their own " +
+                "session state, and new plots are written by an LLM generator. A demonstration of the embeddable widget integration.",
+        button: "🔎 Start the investigation"
+      }
+    };
+
+    var params = new URLSearchParams(window.location.search);
+    var lang = params.get("lang") === "en" ? "en" : "sr";
+    var t = I18N[lang];
+
+    document.documentElement.lang = lang;
+    document.title = t.title + " — MATE demo";
+    document.querySelectorAll("[data-i18n]").forEach(function (el) { el.textContent = t[el.getAttribute("data-i18n")]; });
+    document.querySelectorAll("[data-i18n-html]").forEach(function (el) { el.innerHTML = t[el.getAttribute("data-i18n-html")]; });
+
+    function langUrl(l) {
+      var p = new URLSearchParams(window.location.search);
+      p.set("lang", l);
+      return window.location.pathname + "?" + p.toString();
+    }
+    var sr = document.getElementById("langSr"), en = document.getElementById("langEn");
+    sr.href = langUrl("sr"); en.href = langUrl("en");
+    (lang === "en" ? en : sr).classList.add("active");
+
+    var key = params.get("key");
+    if (key) {
+      var s = document.createElement("script");
+      s.src = window.location.origin + "/widget/mate-widget.js";
+      s.setAttribute("data-key", key);
+      s.setAttribute("data-server", window.location.origin);
+      s.setAttribute("data-theme", "dark");
+      s.setAttribute("data-button-color", "#c9a227");
+      s.setAttribute("data-button-text", t.button);
+      document.body.appendChild(s);
+    } else {
+      document.getElementById("setup").style.display = "block";
+      document.getElementById("exampleUrl").textContent =
+        window.location.origin + window.location.pathname + "?key=wk_..." + (lang === "en" ? "&lang=en" : "");
+    }
+  </script>
+</body>
+</html>

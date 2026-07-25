@@ -76,6 +76,25 @@ def extract_text_from_text_base64(base64_data: str) -> str:
     except Exception as e:
         return f"[Error decoding text file: {str(e)}]"
 
+def _build_context_prefix(cfg: dict, page_context: Optional[dict], lang: str) -> str:
+    """Build the bracketed prefix prepended to the visitor's message.
+
+    The language line is always included: agents must answer in the visitor's language,
+    and on a multilingual page the first message (often just a button click) rarely
+    reveals it. The page URL/title stay behind the ``context_injection`` opt-in.
+    """
+    prefix_lines = []
+    if cfg.get("context_injection") and isinstance(page_context, dict):
+        ctx_url = str(page_context.get("url", ""))[:500]
+        ctx_title = str(page_context.get("title", ""))[:200]
+        if ctx_url or ctx_title:
+            prefix_lines.append(f'[Page context: user is visiting "{ctx_title}" at {ctx_url}]')
+    if lang:
+        lang_name = _LANG_NAMES.get(lang[:5].lower(), lang)
+        prefix_lines.append(f'[User language: {lang_name} ({lang})]')
+    return "\n".join(prefix_lines) + "\n\n" if prefix_lines else ""
+
+
 def model_supports_vision(model_name: str) -> bool:
     if not model_name:
         return True
@@ -263,20 +282,10 @@ async def widget_chat(request: Request, wk: WidgetApiKey = Depends(verify_widget
         for p in message_parts
     )
 
-    # Inject page context and language as a prefix when enabled in widget config
     cfg = wk.get_widget_config()
-    if cfg.get("context_injection") and not has_function_response:
-        prefix_lines = []
-        if page_context and isinstance(page_context, dict):
-            ctx_url = str(page_context.get("url", ""))[:500]
-            ctx_title = str(page_context.get("title", ""))[:200]
-            if ctx_url or ctx_title:
-                prefix_lines.append(f'[Page context: user is visiting "{ctx_title}" at {ctx_url}]')
-        if lang:
-            lang_name = _LANG_NAMES.get(lang[:5].lower(), lang)
-            prefix_lines.append(f'[User language: {lang_name} ({lang})]')
-        if prefix_lines:
-            prefix = "\n".join(prefix_lines) + "\n\n"
+    if not has_function_response:
+        prefix = _build_context_prefix(cfg, page_context, lang)
+        if prefix:
             injected = False
             for part in message_parts:
                 if "text" in part:

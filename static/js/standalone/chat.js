@@ -845,11 +845,26 @@
   }
 
   // --- Generic rich cards (markers an agent prints: [[CARD]]{...} / [[APPOINTMENT]]{...}) ----
+  // A quote closes a JSON string only when the next non-space char is structural.
+  // Models emit unescaped " inside values (e.g. "Dragan „Gidra" Pantić"), which would
+  // otherwise flip the in-string state and hide the card's braces from the scan below.
+  function _closesJsonString(text, i) {
+    for (var j = i + 1; j < text.length && j < i + 8; j++) {
+      var c = text[j];
+      if (c === " " || c === "\t" || c === "\n" || c === "\r") continue;
+      return c === "," || c === ":" || c === "}" || c === "]";
+    }
+    return true;
+  }
   function _balancedEnd(text, start) {
     var depth = 0, inStr = false, esc = false;
     for (var i = start; i < text.length; i++) {
       var ch = text[i];
-      if (inStr) { if (esc) esc = false; else if (ch === "\\") esc = true; else if (ch === '"') inStr = false; }
+      if (inStr) {
+        if (esc) esc = false;
+        else if (ch === "\\") esc = true;
+        else if (ch === '"' && _closesJsonString(text, i)) inStr = false;
+      }
       else if (ch === '"') inStr = true;
       else if (ch === "{") depth++;
       else if (ch === "}") { depth--; if (depth === 0) return i; }
@@ -873,8 +888,7 @@
         if (esc) esc = false;
         else if (ch === "\\") esc = true;
         else if (ch === '"') {
-          // A quote only closes the string if followed by a structural char.
-          if (/^\s*[,:\}\]]/.test(s.slice(i + 1))) inStr = false;
+          if (_closesJsonString(s, i)) inStr = false;
           else { out += '\\"'; continue; }
         }
       } else if (ch === '"') inStr = true;

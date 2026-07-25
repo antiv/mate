@@ -1067,6 +1067,8 @@
         { key: 'code_executor', label: 'Code Executor' },
         { key: 'image_data_extraction', label: 'Image Data Extraction' },
         { key: 'shop', label: 'Shop (E-commerce)' },
+        { key: 'mystery_gm', label: 'Mystery Game Master' },
+        { key: 'mystery_character', label: 'Mystery Character' },
     ];
 
     function ConfigPanel(props) {

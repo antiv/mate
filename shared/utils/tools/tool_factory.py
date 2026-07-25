@@ -32,7 +32,9 @@ class ToolFactory:
             'image_data_extraction': self._create_image_data_extraction_tools,
             'browser': self._create_browser_tools,
             'google_calendar': self._create_google_calendar_tools,
-            'shop': self._create_shop_tools
+            'shop': self._create_shop_tools,
+            'mystery_gm': self._create_mystery_gm_tools,
+            'mystery_character': self._create_mystery_character_tools
         }
     
     def create_tools(self, config: Dict[str, Any]) -> List[Any]:
@@ -251,6 +253,16 @@ class ToolFactory:
         """Create native e-commerce shop tools (multi-user, session-scoped cart)."""
         from .shop_tools import create_shop_tools_from_config
         return create_shop_tools_from_config(config)
+
+    def _create_mystery_gm_tools(self, config: Dict[str, Any]) -> List[Any]:
+        """Create mystery-game game-master tools (case brief, evidence, accusation, generation)."""
+        from .mystery_game import create_mystery_gm_tools_from_config
+        return create_mystery_gm_tools_from_config(config)
+
+    def _create_mystery_character_tools(self, config: Dict[str, Any]) -> List[Any]:
+        """Create the mystery-game suspect character-sheet tool."""
+        from .mystery_game import create_mystery_character_tools_from_config
+        return create_mystery_character_tools_from_config(config)
     
     
     def get_available_tool_types(self) -> List[str]:
