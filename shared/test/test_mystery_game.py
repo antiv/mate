@@ -205,6 +205,30 @@ class TestGenerateNewCase(unittest.TestCase):
         self.assertEqual(result["status"], "success")
         self.assertEqual(mock_llm.call_args.kwargs["model"], _default_model())
 
+    def test_setting_and_method_seeds_vary(self):
+        # Without seeding, the model kept writing the same theatre whodunit.
+        seen = set()
+        for _ in range(20):
+            with patch("litellm.completion",
+                       return_value=self._llm_response(json.dumps(copy.deepcopy(DEFAULT_CASE), ensure_ascii=False))) as mock_llm:
+                _gm_tools()["generate_new_case"](language="Serbian", tool_context=_fake_context())
+            prompt = mock_llm.call_args.kwargs["messages"][0]["content"]
+            self.assertIn("Set the case here:", prompt)
+            self.assertIn("The murder method must be:", prompt)
+            seen.add(prompt.split("Set the case here:")[1].split("\n")[0])
+        self.assertGreater(len(seen), 1, "setting never varied")
+
+    def test_theme_replaces_random_setting(self):
+        with patch("litellm.completion",
+                   return_value=self._llm_response(json.dumps(copy.deepcopy(DEFAULT_CASE), ensure_ascii=False))) as mock_llm:
+            _gm_tools()["generate_new_case"](language="Serbian", theme="misterija na moru",
+                                             tool_context=_fake_context())
+        prompt = mock_llm.call_args.kwargs["messages"][0]["content"]
+        self.assertIn("misterija na moru", prompt)
+        self.assertNotIn("Set the case here:", prompt)
+        # The method seed still applies on top of the player's theme
+        self.assertIn("The murder method must be:", prompt)
+
     def test_killer_position_is_randomized(self):
         # Models write the culprit last; generation must shuffle so the last card
         # is not always the killer.

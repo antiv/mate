@@ -355,11 +355,58 @@ def _public_brief(case: Dict[str, Any]) -> Dict[str, Any]:
 # Case generation (LLM)
 # ---------------------------------------------------------------------------
 
+# Left to itself the model keeps writing the same classic whodunit (a theatre on
+# opening night, over and over), so one setting and one method are drawn at random
+# and handed to it. The theatre stays in the pool — just as one option among many.
+_SETTINGS = [
+    "a mountain lodge cut off by a blizzard",
+    "a river cruise boat in the middle of a voyage",
+    "a tech startup office during a late-night product launch",
+    "a family winery in the middle of the harvest",
+    "a natural history museum after closing time",
+    "a hospital ward during the night shift",
+    "a radio station during a live late-night broadcast",
+    "an archaeological dig site out in the countryside",
+    "a ski resort on the last weekend of the season",
+    "a remote monastery hosting a scholarly retreat",
+    "a food festival in a small town",
+    "a football club's training camp",
+    "the set of a reality TV show",
+    "a sleeper train crossing the country overnight",
+    "a university department during exam season",
+    "a shipyard on the eve of a strike",
+    "a spa hotel out of season",
+    "a travelling circus between shows",
+    "a beekeeping estate during the honey harvest",
+    "a chess tournament in a grand old hotel",
+    "a theatre on opening night",
+    "a rooftop bar during a thunderstorm",
+    "a veterinary clinic in a small town",
+    "a lighthouse station during a storm",
+    "a bakery company's head office",
+    "a photography studio during an all-night shoot",
+    "a mountain observatory during a meteor shower",
+    "a rural bus depot at the end of the line",
+]
+
+_METHODS = [
+    "poison hidden in food or drink",
+    "a staged accident (a fall, faulty equipment)",
+    "a blunt-force blow with an object found at the scene",
+    "suffocation made to look like natural causes",
+    "a deliberate overdose of the victim's own medication",
+    "electrocution rigged to look like a fault",
+    "a fire or gas leak set to destroy the evidence",
+    "drowning staged as a mishap",
+    "a fatal allergic reaction triggered on purpose",
+    "hypothermia arranged by locking the victim out or in",
+]
+
 _GENERATION_PROMPT = """You are a master detective-fiction writer creating a fair-play whodunit for an interactive game.
 The player interrogates {suspect_count} suspects (each played by a separate AI) and an inspector reveals evidence on request.
 
 Write the ENTIRE case in this language: {language}.
-{theme_line}
+{seed_lines}
 Return ONLY a JSON object with this exact structure (no markdown fences, no commentary):
 {{
   "title": "evocative case title",
@@ -400,7 +447,7 @@ Hard requirements:
 - The killer's "killer_brief" holds their confidential briefing: what they did, when, why, their cover story, and how they deflect when confronted with each piece of evidence. Their "knowledge" holds only their OFFICIAL story.
 - Exactly 3 evidence items. The case must be solvable: evidence + suspects' testimonies must form a logical chain pointing to the killer, and innocents' alibis must hold.
 - Give every innocent suspect a juicy red-herring secret so everyone seems guilty at first.
-- Vary the crime: do not reuse a poisoning-in-a-villa plot; pick a fresh setting, victim, murder method and cast (no character named Nikola Vetrov).
+- Follow the setting and murder method given above; invent a fresh victim and cast to fit them (no character named Nikola Vetrov).
 - Every text field must be a single JSON string (join bullet lines with newlines inside the string) — NEVER an array of strings.
 - All strings must be plain text (no nested JSON, no markdown)."""
 
@@ -437,11 +484,18 @@ def _generate_case_llm(language: str, theme: str = "", model: Optional[str] = No
     """Call the LLM to write a new case; raises ValueError if the result is invalid."""
     import litellm  # type: ignore
 
-    theme_line = f"The player asked for this theme or wish: {theme.strip()}\n" if theme and theme.strip() else ""
+    # A player's wish outranks the random setting; the method is always drawn so two
+    # cases in the same setting still play differently.
+    if theme and theme.strip():
+        place_line = f"The player asked for this theme or wish: {theme.strip()}"
+    else:
+        place_line = f"Set the case here: {random.choice(_SETTINGS)}."
+    seed_lines = f"{place_line}\nThe murder method must be: {random.choice(_METHODS)}.\n"
+
     prompt = _GENERATION_PROMPT.format(
         suspect_count=SUSPECT_COUNT,
         language=language or "Serbian",
-        theme_line=theme_line,
+        seed_lines=seed_lines,
     )
 
     last_error = "unknown"
