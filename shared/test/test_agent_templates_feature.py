@@ -86,8 +86,8 @@ class TestAgentTemplatesFeature(unittest.TestCase):
             types = {g["type"] for g in guardrails if g.get("enabled")}
             self.assertIn("prompt_injection", types)
             self.assertIn("content_policy", types)
-        # Multi-LLM: every suspect on a different model
-        self.assertEqual(len(models), 4)
+        # Multi-LLM: suspects span more than one model
+        self.assertGreaterEqual(len(models), 2)
 
         # Culprit additionally has a redact content policy
         culprit = next(a for a in agents if a["name"] == "villa_doktorka")

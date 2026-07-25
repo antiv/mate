@@ -90,6 +90,10 @@ Follow PEP 8 with type hints on all function signatures. Use f-strings for forma
 | `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, etc. | Additional LLM providers via LiteLLM |
 | `DB_TYPE` | `sqlite` (default), `postgresql`, `mysql` |
 | `AUTH_USERNAME` / `AUTH_PASSWORD` | Dashboard login |
+| `MATE_ENV` | `development` (default) or `production`; production refuses insecure defaults |
+| `MATE_ALLOW_INSECURE_DEFAULTS` | Override the production startup checks |
+| `ALLOWED_ORIGINS` | Comma-separated CORS allowlist |
+| `TRUSTED_PROXY_HOSTS` | Proxy hosts trusted for `X-Forwarded-*` headers |
 | `ADK_HOST` / `ADK_PORT` | ADK server address (default `127.0.0.1:8001`) |
 | `ARTIFACT_SERVICE` | `local_folder`, `supabase`, or `s3` |
 | `RATE_LIMIT_ENABLED` | Enable per-user/agent/project budgets |
