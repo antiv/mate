@@ -72,6 +72,8 @@ COPY --chown=appuser:appuser shared/ ./shared/
 COPY --chown=appuser:appuser server/ ./server/
 COPY --chown=appuser:appuser auth_server.py ./auth_server.py
 COPY --chown=appuser:appuser adk_main.py ./adk_main.py
+COPY --chown=appuser:appuser langgraph_main.py ./langgraph_main.py
+COPY --chown=appuser:appuser langgraph.json ./langgraph.json
 COPY --chown=appuser:appuser templates/ ./templates/
 COPY --chown=appuser:appuser static/ ./static/
 
@@ -84,6 +86,11 @@ USER appuser
 
 # Expose port for web interface (if needed)
 EXPOSE 8000
+
+# Uses Python rather than curl, which is purged above. The long start period covers
+# migrations and MCP init, which run before uvicorn binds.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=4)"
 
 # Default command: run auth server (same as docker-compose)
 CMD ["python", "auth_server.py"]

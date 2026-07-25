@@ -150,7 +150,6 @@ class TestTracerInitialization(unittest.TestCase):
             from opentelemetry.sdk.trace import TracerProvider
             from opentelemetry.sdk.trace.export import BatchSpanProcessor
             from opentelemetry.sdk.resources import Resource
-            from opentelemetry import trace
 
             exporter = DatabaseSpanExporter()
             with patch.object(exporter, "_get_db_client") as mock_get:
@@ -161,12 +160,12 @@ class TestTracerInitialization(unittest.TestCase):
                 mock_get.return_value = mock_db
                 provider = TracerProvider(resource=Resource.create({"service.name": "mate-test"}))
                 provider.add_span_processor(BatchSpanProcessor(exporter))
-                trace.set_tracer_provider(provider)
-                tracer = trace.get_tracer("mate", "1.0.0")
+                # Take the tracer from the local provider rather than the global one:
+                # the OTel global provider is write-once, and an earlier test in the
+                # suite may already have set it.
+                tracer = provider.get_tracer("mate", "1.0.0")
                 span = tracer.start_span("test.span")
                 span.end()
-                for proc in provider._active_span_processor._span_processors:
-                    if hasattr(proc, "force_flush"):
-                        proc.force_flush(timeout_millis=5000)
+                provider.force_flush(5000)
                 mock_session.commit.assert_called()
                 mock_session.execute.assert_called()

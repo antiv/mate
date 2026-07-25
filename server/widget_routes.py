@@ -20,7 +20,7 @@ from typing import Optional
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, File, Form, UploadFile, Query
-from fastapi.responses import HTMLResponse, StreamingResponse, FileResponse
+from fastapi.responses import HTMLResponse, StreamingResponse, FileResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 
 from shared.utils.database_client import get_database_client
@@ -199,11 +199,17 @@ async def widget_public_config(key: str = Query(...)):
     if wk is None:
         raise HTTPException(status_code=401, detail="Invalid widget key")
     cfg = wk.get_widget_config()
-    return {
-        "button_color": cfg.get("button_color", "#2563eb"),
-        "theme": cfg.get("theme", "auto"),
-        "icon_url": cfg.get("icon_url", ""),
-    }
+    # The widget loader calls this from the embedding site's origin, so it needs a
+    # permissive CORS header of its own now that the app-wide policy is restricted.
+    # Safe to open: unauthenticated, uncredentialed, and cosmetic-only.
+    return JSONResponse(
+        {
+            "button_color": cfg.get("button_color", "#2563eb"),
+            "theme": cfg.get("theme", "auto"),
+            "icon_url": cfg.get("icon_url", ""),
+        },
+        headers={"Access-Control-Allow-Origin": "*"},
+    )
 
 
 @router.get("/admin", response_class=HTMLResponse, include_in_schema=False)

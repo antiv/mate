@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # Playwright browser binaries are intentionally not installed: the tests that
+      # need a real browser skip themselves, and downloading Chromium would add
+      # minutes per run.
+      - name: Run tests
+        run: python -m unittest discover -s shared/test -p "test_*.py" -v
+
+      # test_sessions_api.py is pytest-native (fixtures + bare test functions), so
+      # unittest imports it but collects nothing from it.
+      - name: Run pytest-native tests
+        run: python -m pytest shared/test/test_sessions_api.py -v

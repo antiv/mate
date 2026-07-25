@@ -75,8 +75,20 @@ AUTH_USERNAME = os.getenv("AUTH_USERNAME", "admin")
 AUTH_PASSWORD = os.getenv("AUTH_PASSWORD", "mate")
 SESSION_SERVICE_URI = adk_config["session_service_uri"]
 
+# In production, insecure defaults must fail loudly at startup rather than be
+# logged and forgotten. Set MATE_ALLOW_INSECURE_DEFAULTS=true to override.
+IS_PRODUCTION = os.getenv("MATE_ENV", "development").lower() == "production"
+ALLOW_INSECURE_DEFAULTS = os.getenv("MATE_ALLOW_INSECURE_DEFAULTS", "false").lower() in ("true", "1", "yes")
+_ENFORCE_SECURE = IS_PRODUCTION and not ALLOW_INSECURE_DEFAULTS
+
 _SECRET_KEY = os.getenv("SECRET_KEY")
 if not _SECRET_KEY:
+    if _ENFORCE_SECURE:
+        raise RuntimeError(
+            "SECRET_KEY is not set. A per-process random key breaks sessions on restart "
+            "and breaks multi-worker deployments entirely. Set SECRET_KEY, or set "
+            "MATE_ALLOW_INSECURE_DEFAULTS=true to override."
+        )
     _SECRET_KEY = secrets.token_urlsafe(32)
     logger.warning(
         "SECRET_KEY not set — using a random key. Sessions will not survive restarts. "
@@ -84,6 +96,11 @@ if not _SECRET_KEY:
     )
 
 if AUTH_PASSWORD == "mate":
+    if _ENFORCE_SECURE:
+        raise RuntimeError(
+            "AUTH_PASSWORD is still the default ('mate'). Set AUTH_PASSWORD, or set "
+            "MATE_ALLOW_INSECURE_DEFAULTS=true to override."
+        )
     logger.warning("Using default AUTH_PASSWORD. Set AUTH_PASSWORD env var for production use.")
 
 # Database configuration
@@ -199,24 +216,39 @@ def initialize_agent_folders():
 # ---------- Middleware and Instrumentation ----------
 Instrumentator().instrument(app).expose(app)
 
+# Dashboard and widget traffic is same-origin (the widget chat UI runs inside an
+# iframe served by this server), so no credentialed cross-origin access is needed.
+# The one genuine cross-origin call — GET /widget/public-config — sets its own
+# permissive header, and per-key origin control lives in server/widget_routes.py.
+_allowed_origins = [
+    o.strip() for o in os.getenv(
+        "ALLOWED_ORIGINS", "http://localhost:8000,http://127.0.0.1:8000"
+    ).split(",") if o.strip()
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=_allowed_origins,
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["X-Widget-Key", "Content-Type", "Authorization"],
 )
 
 # Trust X-Forwarded-Proto/Host headers from the reverse proxy so that
 # request.base_url returns https:// when running behind TLS termination.
+# Restrict TRUSTED_PROXY_HOSTS in production: with "*", any client can spoof them.
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
-app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
+_trusted_proxy_hosts = os.getenv("TRUSTED_PROXY_HOSTS", "*")
+if _trusted_proxy_hosts != "*":
+    _trusted_proxy_hosts = [h.strip() for h in _trusted_proxy_hosts.split(",") if h.strip()]
+app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=_trusted_proxy_hosts)
 
 # Encrypted session cookie required by both OAuth PKCE state and the session-based
 # auth check in server/auth.py.  https_only defaults to False so local HTTP dev works;
 # set SESSION_SECURE_COOKIE=true behind TLS in production.
 from starlette.middleware.sessions import SessionMiddleware
 _session_secure = os.getenv("SESSION_SECURE_COOKIE", "false").lower() in ("true", "1", "yes")
+if _ENFORCE_SECURE:
+    _session_secure = True
 app.add_middleware(
     SessionMiddleware,
     secret_key=_SECRET_KEY,
