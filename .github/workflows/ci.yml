@@ -24,7 +24,13 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      # Playwright browser binaries are intentionally not installed: the browser
-      # tool tests use mocks, and downloading Chromium would add minutes per run.
+      # Playwright browser binaries are intentionally not installed: the tests that
+      # need a real browser skip themselves, and downloading Chromium would add
+      # minutes per run.
       - name: Run tests
         run: python -m unittest discover -s shared/test -p "test_*.py" -v
+
+      # test_sessions_api.py is pytest-native (fixtures + bare test functions), so
+      # unittest imports it but collects nothing from it.
+      - name: Run pytest-native tests
+        run: python -m pytest shared/test/test_sessions_api.py -v

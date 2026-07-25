@@ -113,6 +113,21 @@ class TestBrowserTools(unittest.IsolatedAsyncioTestCase):
         except ImportError:
             self.skipTest("Playwright library not available")
 
+        # The library can be installed without the browser binaries (CI skips
+        # `playwright install`), and this test reaches the real network.
+        # Uses the async API because this test runs inside an asyncio loop.
+        try:
+            from playwright.async_api import async_playwright
+            pw = await async_playwright().start()
+            try:
+                chromium_path = pw.chromium.executable_path
+            finally:
+                await pw.stop()
+            if not os.path.exists(chromium_path):
+                self.skipTest("Chromium browser binary not installed")
+        except ImportError as exc:
+            self.skipTest(f"Playwright async API not available: {exc}")
+
         # Configure headless run explicitly
         os.environ["BROWSER_HEADLESS"] = "true"
         os.environ["BROWSER_MODE"] = "headless"
