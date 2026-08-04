@@ -96,6 +96,7 @@ Follow PEP 8 with type hints on all function signatures. Use f-strings for forma
 | `TRUSTED_PROXY_HOSTS` | Proxy hosts trusted for `X-Forwarded-*` headers |
 | `ADK_HOST` / `ADK_PORT` | ADK server address (default `127.0.0.1:8001`) |
 | `ARTIFACT_SERVICE` | `local_folder`, `supabase`, or `s3` |
+| `EMBEDDING_MODEL` | Embedding model for memory block semantic search (litellm format, default `gemini/gemini-embedding-001`) |
 | `RATE_LIMIT_ENABLED` | Enable per-user/agent/project budgets |
 | `OTEL_TRACING_ENABLED` | OpenTelemetry distributed tracing (ADK runtime) |
 | `LANGSMITH_TRACING` / `LANGSMITH_API_KEY` | LangSmith run tracing (langgraph runtime) |

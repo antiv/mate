@@ -500,6 +500,9 @@ class MemoryBlock(Base):
     value = Column(Text, nullable=False, default='')
     description = Column(Text, nullable=True)
     block_metadata = Column('metadata', Text, nullable=True)  # JSON string; 'metadata' reserved in Declarative
+    embedding = Column(Text, nullable=True)  # JSON list of floats for semantic search
+    embedding_model = Column(String(200), nullable=True)
+    embedding_hash = Column(String(64), nullable=True)  # sha256 of the embedded text
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc),
                        onupdate=lambda: datetime.now(timezone.utc), nullable=False)

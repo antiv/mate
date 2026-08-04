@@ -46,6 +46,28 @@ class MemoryBlocksService:
     def _get_session(self):
         return self.db_client.get_session() if self.db_client else None
 
+    def _set_block_embedding(self, row) -> None:
+        """Best-effort: compute and set embedding fields on a block row.
+
+        Never raises — a failed embedding must not break block writes.
+        Skips the API call when the stored embedding is already current.
+        """
+        from shared.utils import embedding_service as emb
+
+        try:
+            text = emb.embedding_text_for_block(row.label, row.description, row.value)
+            new_hash = emb.embedding_hash_for_text(text)
+            model = emb.get_embedding_model()
+            if row.embedding and row.embedding_model == model and row.embedding_hash == new_hash:
+                return
+            vectors = emb.embed_texts([text])
+            if vectors:
+                row.embedding = json.dumps(vectors[0])
+                row.embedding_model = model
+                row.embedding_hash = new_hash
+        except Exception as e:
+            logger.warning(f"Skipping embedding for block '{getattr(row, 'label', '?')}': {e}")
+
     def list_blocks(
         self,
         project_id: int,
@@ -137,6 +159,7 @@ class MemoryBlocksService:
                 )
                 if metadata is not None:
                     block.set_metadata(metadata)
+                self._set_block_embedding(block)
                 session.add(block)
                 session.commit()
                 session.refresh(block)
@@ -189,11 +212,80 @@ class MemoryBlocksService:
                     row.value = value
                 if description is not None:
                     row.description = description
+                self._set_block_embedding(row)
                 session.commit()
                 return {"status": "success", "block_id": str(row.id), "message": f"Modified block {block_id}"}
             except Exception as e:
                 session.rollback()
                 logger.exception("modify_block failed")
+                return {"status": "error", "error_message": str(e)}
+            finally:
+                session.close()
+
+    def semantic_search_blocks(
+        self,
+        project_id: int,
+        query: str,
+        top_k: int = 5,
+    ) -> Optional[Dict[str, Any]]:
+        """Rank project blocks by cosine similarity to the query.
+
+        Returns None when embeddings are unavailable (caller falls back to
+        keyword search). Blocks with missing/stale embeddings are re-embedded
+        in one batch before ranking (lazy backfill).
+        """
+        from shared.utils.models import MemoryBlock
+        from shared.utils import embedding_service as emb
+
+        with _memory_blocks_span("semantic_search"):
+            query_vectors = emb.embed_texts([query])
+            if not query_vectors:
+                return None
+            query_vec = query_vectors[0]
+
+            session = self._get_session()
+            if not session:
+                return {"status": "error", "error_message": "Database session not available"}
+
+            try:
+                rows = session.query(MemoryBlock).filter(MemoryBlock.project_id == project_id).all()
+                model = emb.get_embedding_model()
+
+                stale = []
+                for row in rows:
+                    text = emb.embedding_text_for_block(row.label, row.description, row.value)
+                    text_hash = emb.embedding_hash_for_text(text)
+                    if not row.embedding or row.embedding_model != model or row.embedding_hash != text_hash:
+                        stale.append((row, text, text_hash))
+                if stale:
+                    vectors = emb.embed_texts([text for _, text, _ in stale])
+                    if vectors:
+                        for (row, _, text_hash), vector in zip(stale, vectors):
+                            row.embedding = json.dumps(vector)
+                            row.embedding_model = model
+                            row.embedding_hash = text_hash
+                        session.commit()
+
+                scored = []
+                for row in rows:
+                    if not row.embedding or row.embedding_model != model:
+                        continue
+                    try:
+                        vector = json.loads(row.embedding)
+                    except (json.JSONDecodeError, TypeError):
+                        continue
+                    block = row.to_dict()
+                    value = block.pop("value", "") or ""
+                    block["value_preview"] = value[:200]
+                    block["score"] = round(emb.cosine_similarity(query_vec, vector), 4)
+                    scored.append(block)
+
+                scored.sort(key=lambda b: b["score"], reverse=True)
+                top = scored[:max(1, top_k)]
+                return {"status": "success", "blocks": top, "block_count": len(top)}
+            except Exception as e:
+                session.rollback()
+                logger.exception("semantic_search_blocks failed")
                 return {"status": "error", "error_message": str(e)}
             finally:
                 session.close()

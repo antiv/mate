@@ -50,7 +50,26 @@
       "Bash(git check-ignore *)",
       "Bash(git pull *)",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" https://ai.antonijevic.rs/static/villa-demo.html)",
-      "Bash(curl -s https://openrouter.ai/api/v1/models)"
+      "Bash(curl -s https://openrouter.ai/api/v1/models)",
+      "Bash(sqlite3 my_agent_data.db \"PRAGMA table_info\\(memory_blocks\\);\")",
+      "Read(//private/tmp/**)",
+      "Bash(/Users/ivanantonijevic/development/bt/adk/mate/.venv/bin/python -c \"import hashlib; print\\('sha256 ok:', hashlib.sha256\\(b'x'\\).hexdigest\\(\\)[:8]\\)\")",
+      "Bash(/Users/ivanantonijevic/.pyenv/versions/3.11.11/bin/python -c \"import _blake2\")",
+      "Bash(echo \"--- exit: $?\")",
+      "Bash(/Users/ivanantonijevic/.pyenv/versions/3.11.11/bin/python -c \"import ssl; print\\(ssl.OPENSSL_VERSION\\)\")",
+      "Read(//opt/homebrew/opt/**)",
+      "Bash(brew list *)",
+      "Read(//opt/homebrew/Cellar/**)",
+      "Read(//opt/homebrew/lib/**)",
+      "Bash(brew info *)",
+      "Bash(brew install *)",
+      "Bash(/Users/ivanantonijevic/development/bt/adk/mate/.venv/bin/python -c \"import hashlib; print\\('blake2b ok:', hashlib.blake2b\\(b'x'\\).hexdigest\\(\\)[:8]\\); print\\('sha256 ok:', hashlib.sha256\\(b'x'\\).hexdigest\\(\\)[:8]\\)\")",
+      "Bash(pkill -f \"auth_server.py\")",
+      "Bash(pkill -f \"adk_main.py\")",
+      "Bash(lsof -ti:8000 -ti:8001)",
+      "Bash(docker info *)",
+      "Bash(/Users/ivanantonijevic/development/bt/adk/mate/.venv/bin/python -c ' *)",
+      "Bash(otool -L /Users/ivanantonijevic/.pyenv/versions/3.11.11/lib/python3.11/lib-dynload/_blake2.cpython-311-darwin.so)"
     ]
   }
 }
