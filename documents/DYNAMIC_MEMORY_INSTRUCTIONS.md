@@ -28,6 +28,9 @@ LAZY LOADING PROTOCOL:
 - IF the user asks for "visualization", "frontend data", or "smart object":
 - THEN call `list_shared_blocks(label="smart_object_output_format_json")`.
 - AND use that schema to format your response.
+- IF you need information but do NOT know the exact block label:
+- THEN call `search_shared_blocks(query="<what you are looking for>")` (semantic search by meaning).
+- AND call `get_shared_block(block_id="<label>")` to read the full content of a relevant result.
 
 MEMORY UPDATE PROTOCOL:
 1.  **User Memory (`human_current_user`)**:
@@ -89,6 +92,8 @@ Use a **Namespace Strategy** to separate shared instructions from agent-specific
 ### 3. On-Demand Loading (Lazy Loading)
 
 For large or rarely used instructions (like complex JSON schemas), do NOT load them at startup. Instead, load them only when the user asks for them. Use a distinct prefix like `smart_object_output_format_` to differentiate them from core `system_instruction_` blocks.
+
+When the agent does not know the exact label, it can use `search_shared_blocks(query="...", top_k=5)` — semantic search that ranks blocks by meaning (embeddings via the `EMBEDDING_MODEL` env var, default `gemini/gemini-embedding-001`). Results include a short `value_preview` plus a `search_type` field (`semantic`, or `keyword` when embeddings are unavailable and the tool falls back to LIKE matching); the agent then reads the full block with `get_shared_block`.
 
 **Example Block 4: Smart Object JSON Schema**
 - **Label**: `smart_object_output_format_json`

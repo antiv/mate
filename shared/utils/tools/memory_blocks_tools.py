@@ -85,6 +85,48 @@ def create_memory_blocks_tools_from_config(config: Dict[str, Any]) -> List[Any]:
             value_search=value_search,
         )
 
+    def search_shared_blocks(
+        query: str,
+        top_k: int = 5,
+        tool_context: ToolContext = None,
+        **kwargs,
+    ) -> Dict[str, Any]:
+        """Semantically search memory blocks by meaning, not exact words.
+
+        PREFER this over list_shared_blocks when you need information but do not
+        know the exact block label — instructions, schemas, site content, or
+        domain knowledge. Returns the most relevant blocks with a short
+        value_preview; call get_shared_block(block_id=<label>) to read the full
+        content of a block you need.
+        """
+        if not query or not query.strip():
+            return {"status": "error", "error_message": "query is required"}
+        svc = _get_service()
+        result = svc.semantic_search_blocks(project_id=project_id, query=query, top_k=top_k)
+        if result is not None:
+            if result.get("status") == "success":
+                result["search_type"] = "semantic"
+            return result
+
+        # Embeddings unavailable — fall back to keyword (LIKE) search.
+        blocks: Dict[str, Dict[str, Any]] = {}
+        for kwargs_filter in ({"label_search": query}, {"value_search": query}):
+            partial = svc.list_blocks(project_id=project_id, limit=top_k, **kwargs_filter)
+            if partial.get("status") != "success":
+                continue
+            for block in partial.get("blocks", []):
+                block = dict(block)
+                value = block.pop("value", "") or ""
+                block["value_preview"] = value[:200]
+                blocks.setdefault(block["label"], block)
+        matched = list(blocks.values())[:max(1, top_k)]
+        return {
+            "status": "success",
+            "search_type": "keyword",
+            "blocks": matched,
+            "block_count": len(matched),
+        }
+
     def get_shared_block(
         block_id: Optional[str] = None,
         tool_context: ToolContext = None,
@@ -160,6 +202,7 @@ def create_memory_blocks_tools_from_config(config: Dict[str, Any]) -> List[Any]:
 
     return [
         list_shared_blocks,
+        search_shared_blocks,
         get_shared_block,
         create_shared_block,
         modify_shared_block,
