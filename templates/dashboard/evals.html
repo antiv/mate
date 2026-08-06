@@ -501,7 +501,7 @@ async function openRunModal(testCaseId) {
             const data = await apiCall(`/dashboard/api/evals/agent/${encodeURIComponent(agentName)}/versions-list`);
             const versions = data.versions || [];
             sel.innerHTML = versions.length
-                ? versions.map(v => `<option value="${v.id}">v${v.version_number}${v.tag ? ' — ' + v.tag : ''} (${new Date(v.created_at).toLocaleDateString()})</option>`).join('')
+                ? versions.map(v => `<option value="${v.id}">v${v.version_number}${v.tag ? ' — ' + escHtml(v.tag) : ''} (${new Date(v.created_at).toLocaleDateString()})</option>`).join('')
                 : '<option value="">No versions found</option>';
         } catch (e) {
             sel.innerHTML = '<option value="">Error loading versions</option>';
@@ -532,7 +532,7 @@ async function submitRunEval() {
         resultArea.innerHTML = `
             ${passLabel} &nbsp;Score: <strong>${score}</strong>
             ${r.actual_output ? `<div class="mt-1 text-gray-500">Agent said: <em>${escHtml(r.actual_output.slice(0, 200))}${r.actual_output.length > 200 ? '…' : ''}</em></div>` : ''}
-            ${r.details ? `<div class="text-gray-400">${r.details}</div>` : ''}`;
+            ${r.details ? `<div class="text-gray-400">${escHtml(r.details)}</div>` : ''}`;
         resultArea.classList.remove('hidden');
         if (_selectedAgent) { loadTestCases(_selectedAgent); loadHistory(_selectedAgent); }
     } catch (e) {
@@ -561,7 +561,7 @@ async function runSuite() {
     const versions = versionsData.versions || [];
     const versionSel = document.getElementById('rsSuiteVersion');
     versionSel.innerHTML = versions.length
-        ? versions.map(v => `<option value="${v.id}">v${v.version_number}${v.tag ? ' — ' + v.tag : ''} (${new Date(v.created_at).toLocaleDateString()})</option>`).join('')
+        ? versions.map(v => `<option value="${v.id}">v${v.version_number}${v.tag ? ' — ' + escHtml(v.tag) : ''} (${new Date(v.created_at).toLocaleDateString()})</option>`).join('')
         : '<option value="">No versions found</option>';
 
     const cases = casesData.test_cases || [];

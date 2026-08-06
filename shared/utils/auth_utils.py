@@ -5,13 +5,23 @@ Provides token verification that can be used by both auth_server and dashboard_s
 
 import logging
 import hashlib
+import os
 from datetime import datetime, timedelta
 from typing import Dict, Tuple
 
 logger = logging.getLogger(__name__)
 
-# In-memory token storage (shared across all modules)
-_active_tokens = set()
+# In-memory token storage (shared across all modules): token -> expiry time
+_active_tokens: Dict[str, datetime] = {}
+
+
+def _token_ttl() -> timedelta:
+    """Lifetime of a generated bearer token (TOKEN_TTL_HOURS, default 24h)."""
+    try:
+        hours = float(os.getenv("TOKEN_TTL_HOURS", "24"))
+    except ValueError:
+        hours = 24.0
+    return timedelta(hours=hours)
 
 # Track logged-out basic auth credentials (credential_hash -> logout_time)
 # Credentials are rejected for LOGOUT_EXPIRY_MINUTES after logout
@@ -22,20 +32,25 @@ def generate_token() -> str:
     """Generate a secure random token."""
     import secrets
     token = secrets.token_urlsafe(32)
-    _active_tokens.add(token)
+    _active_tokens[token] = datetime.now() + _token_ttl()
     logger.debug("Token generated, active_tokens count: %d", len(_active_tokens))
     return token
 
 def verify_token(token: str) -> bool:
-    """Verify if a token is valid."""
-    is_valid = token in _active_tokens
-    if not is_valid:
+    """Verify if a token is valid and not expired."""
+    expiry = _active_tokens.get(token)
+    if expiry is None:
         logger.debug("Token verification failed, active_tokens count: %d", len(_active_tokens))
-    return is_valid
+        return False
+    if datetime.now() > expiry:
+        del _active_tokens[token]
+        logger.debug("Token expired")
+        return False
+    return True
 
 def revoke_token(token: str):
     """Revoke a token."""
-    _active_tokens.discard(token)
+    _active_tokens.pop(token, None)
 
 def _hash_credentials(username: str, password: str) -> str:
     """Create a hash of username:password for tracking logged-out sessions."""

@@ -159,6 +159,12 @@ window._integrationsPageData = {
     agents: {{ agents | tojson }},
 };
 
+function escHtml(str) {
+    return (str == null ? '' : String(str))
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
 const IntegrationsPage = {
     notify(msg, type) {
         if (typeof showNotification === 'function') showNotification(msg, type);
@@ -204,14 +210,14 @@ const IntegrationsPage = {
                 </tr>`;
             }).join('');
         } catch (err) {
-            tbody.innerHTML = `<tr><td colspan="6" class="px-4 py-4 text-center text-red-500">Error: ${err.message}</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="6" class="px-4 py-4 text-center text-red-500">Error: ${escHtml(err.message)}</td></tr>`;
         }
     },
 
     populateProjects() {
         const sel = document.getElementById('integrationProject');
         sel.innerHTML = '<option value="">— select project —</option>' +
-            window._integrationsPageData.projects.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+            window._integrationsPageData.projects.map(p => `<option value="${p.id}">${escHtml(p.name)}</option>`).join('');
     },
 
     onProjectChange() {
@@ -226,7 +232,7 @@ const IntegrationsPage = {
             String(a.project_id) === String(projectId) &&
             (!a.parent_agents || a.parent_agents.length === 0));
         sel.innerHTML = agents.length
-            ? agents.map(a => `<option value="${a.name}">${a.name}</option>`).join('')
+            ? agents.map(a => `<option value="${escHtml(a.name)}">${escHtml(a.name)}</option>`).join('')
             : '<option value="">— no root agents in project —</option>';
     },
 

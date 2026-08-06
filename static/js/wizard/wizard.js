@@ -246,6 +246,7 @@
     t4Industry: null,
     t4Goals: [],
     trialWidgetKey: null,
+    trialAdminKey: null,
     leadSubmitted: false,
   };
 
@@ -574,7 +575,8 @@
           instructions: document.getElementById("cfgInstructions").value.trim(),
         });
         state.trialWidgetKey = d.widget_api_key || null;
-        initAppearancePanel(d.widget_api_key);
+        state.trialAdminKey = d.widget_admin_key || null;
+        initAppearancePanel(d.widget_admin_key);
         var iframe = document.getElementById("testChat");
         iframe.src = d.chat_url;
         iframe.addEventListener("load", function () {
@@ -748,9 +750,11 @@
   });
 
   // --- Resume a session after a page refresh ---------------------------
-  function restoreTest(chatUrl, widgetKey) {
+  function restoreTest(chatUrl, widgetKey, adminKey) {
     state.trialWidgetKey = widgetKey || state.trialWidgetKey;
-    if (widgetKey) initAppearancePanel(widgetKey);
+    state.trialAdminKey = adminKey || state.trialAdminKey;
+    // The appearance panel writes widget config, which needs the admin key.
+    if (state.trialAdminKey) initAppearancePanel(state.trialAdminKey);
     show("test");
     state.promptCount = Math.min(parseInt(_getCount() || "0", 10), PROMPT_LIMIT);
     updateCounter();
@@ -797,7 +801,7 @@
 
         var savedStep = ssGet(SS_STEP) || "tier";
         if (savedStep === "test" && d.widget_api_key) {
-          restoreTest(d.chat_url, d.widget_api_key);
+          restoreTest(d.chat_url, d.widget_api_key, d.widget_admin_key);
         } else if (savedStep === "lead") {
           goLead();
         } else if (savedStep === "t4-industry" || savedStep === "t4-goals") {

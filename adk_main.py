@@ -1,6 +1,6 @@
 import os
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Union
 from dotenv import load_dotenv
 from google.adk.artifacts.in_memory_artifact_service import InMemoryArtifactService
 from google.adk.auth.credential_service.in_memory_credential_service import InMemoryCredentialService
@@ -27,7 +27,7 @@ configure_logging()
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--session-db-url", default="sqlite:///session_db.db")
-parser.add_argument("--host", default="0.0.0.0")
+parser.add_argument("--host", default="127.0.0.1")
 parser.add_argument("--a2a", action="store_true", help="Enable A2A (Agent-to-Agent) client support")
 args = parser.parse_args()
 SESSION_DB_URL = args.session_db_url
@@ -165,6 +165,15 @@ register_custom_services()
 
 AGENT_DIR = os.path.dirname(os.path.abspath(__file__))+ "/agents"
 ALLOWED_ORIGINS = ["http://localhost", "http://localhost:8000", "*"]
+
+
+def _resolve_within_agents(*parts: Union[str, Path]) -> Path:
+    """Resolve a builder path, rejecting anything outside the agents directory."""
+    from shared.utils.path_safety import resolve_within_base
+
+    return resolve_within_base(Path.cwd() / AGENT_DIR.split('/')[-1], *parts)
+
+
 # ADK dev UI (Angular app at /dev-ui); set ADK_DEV_UI=false to serve the API only
 SERVE_WEB_INTERFACE = os.getenv("ADK_DEV_UI", "true").lower() != "false"
 
@@ -378,24 +387,26 @@ try:
         files: list[UploadFile], tmp: Optional[bool] = False
     ) -> bool:
         """Save agent files from the builder UI"""
-        base_path = Path.cwd() / AGENT_DIR.split('/')[-1]  # Get agents dir relative to cwd
         for file in files:
             if not file.filename:
                 print("❌ Agent name is missing in the input files")
                 return False
-            agent_name, filename = file.filename.split("/")
-            agent_dir = os.path.join(base_path, agent_name)
+            parts = file.filename.split("/")
+            if len(parts) != 2:
+                print(f"❌ Invalid file name in the input files: {file.filename}")
+                return False
+            agent_name, filename = parts
             try:
                 # File name format: {app_name}/{agent_name}.yaml
                 if tmp:
-                    agent_dir = os.path.join(agent_dir, "tmp/" + agent_name)
+                    agent_dir = _resolve_within_agents(agent_name, "tmp", agent_name)
+                    file_path = _resolve_within_agents(agent_dir, filename)
                     os.makedirs(agent_dir, exist_ok=True)
-                    file_path = os.path.join(agent_dir, filename)
                     with open(file_path, "wb") as buffer:
                         shutil.copyfileobj(file.file, buffer)
                 else:
-                    source_dir = os.path.join(agent_dir, "tmp/" + agent_name)
-                    destination_dir = agent_dir
+                    source_dir = _resolve_within_agents(agent_name, "tmp", agent_name)
+                    destination_dir = _resolve_within_agents(agent_name)
                     for item in os.listdir(source_dir):
                         source_item = os.path.join(source_dir, item)
                         destination_item = os.path.join(destination_dir, item)
@@ -411,9 +422,8 @@ try:
     @app.post("/builder/app/{app_name}/cancel", response_model_exclude_none=True)
     async def builder_cancel(app_name: str) -> bool:
         """Cancel builder changes for an agent"""
-        base_path = Path.cwd() / AGENT_DIR.split('/')[-1]
-        agent_dir = os.path.join(base_path, app_name)
-        destination_dir = os.path.join(agent_dir, "tmp/" + app_name)
+        agent_dir = _resolve_within_agents(app_name)
+        destination_dir = _resolve_within_agents(app_name, "tmp", app_name)
         source_dir = agent_dir
         source_items = set(os.listdir(source_dir))
         try:
@@ -452,13 +462,13 @@ try:
         tmp: Optional[bool] = False,
     ):
         """Get agent files for the builder UI"""
-        base_path = Path.cwd() / AGENT_DIR.split('/')[-1]
-        agent_dir = base_path / app_name
         if tmp:
-            agent_dir = agent_dir / "tmp" / app_name
+            agent_dir = _resolve_within_agents(app_name, "tmp", app_name)
+        else:
+            agent_dir = _resolve_within_agents(app_name)
         if not file_path:
             file_name = "root_agent.yaml"
-            root_file_path = agent_dir / file_name
+            root_file_path = _resolve_within_agents(agent_dir, file_name)
             if not root_file_path.is_file():
                 return ""
             else:
@@ -469,7 +479,7 @@ try:
                     headers={"Cache-Control": "no-store"},
                 )
         else:
-            agent_file_path = agent_dir / file_path
+            agent_file_path = _resolve_within_agents(agent_dir, file_path)
             if not agent_file_path.is_file():
                 return ""
             else:

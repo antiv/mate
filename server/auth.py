@@ -13,6 +13,7 @@ Priority order for dashboard routes:
 
 import logging
 import base64
+import secrets
 from urllib.parse import quote
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPBasic, HTTPBasicCredentials, HTTPBearer, HTTPAuthorizationCredentials
@@ -28,6 +29,14 @@ bearer_scheme = HTTPBearer()
 
 AUTH_USERNAME: str = ""
 AUTH_PASSWORD: str = ""
+
+
+def credentials_match(username: str, password: str) -> bool:
+    """Compare submitted credentials in constant time."""
+    return (
+        secrets.compare_digest(str(username or ""), AUTH_USERNAME) and
+        secrets.compare_digest(str(password or ""), AUTH_PASSWORD)
+    )
 
 
 def configure_auth(username: str, password: str):
@@ -78,19 +87,22 @@ def _is_session_oauth_user(request: Request) -> bool:
     - Not an OAuth session at all (basic-auth / bearer token session)
     - OAuth user whose email/user_id matches AUTH_USERNAME
     - OAuth user who has the 'admin' role in the database
+
+    display_name is deliberately NOT accepted here: it is the provider profile
+    name, which the account holder sets freely, so matching it against
+    AUTH_USERNAME (default "admin") would hand admin to anyone who renames
+    their Google/GitHub profile.  user_id and email are provider-verified.
     """
     try:
         user = request.session.get("user")
         if user and user.get("provider") in ("google", "github", "microsoft", "gitlab"):
             user_id = user.get("user_id", "")
             email = user.get("email", "")
-            display_name = user.get("display_name", "")
 
-            # Allow admin by AUTH_USERNAME match
+            # Allow admin by AUTH_USERNAME match on a provider-verified identity
             if AUTH_USERNAME and (
                 user_id == AUTH_USERNAME or
-                email == AUTH_USERNAME or
-                display_name == AUTH_USERNAME
+                email == AUTH_USERNAME
             ):
                 return False  # treat as admin
 
@@ -129,7 +141,7 @@ def verify_credentials(credentials: HTTPBasicCredentials = Depends(security)):
     login attempts.  Logged-out status only prevents automatic
     browser-sent credentials in get_auth_user / get_dashboard_auth_user.
     """
-    if credentials.username == AUTH_USERNAME and credentials.password == AUTH_PASSWORD:
+    if credentials_match(credentials.username, credentials.password):
         return credentials
     raise HTTPException(
         status_code=401,
@@ -186,7 +198,7 @@ def get_auth_user(request: Request):
                     headers={"WWW-Authenticate": 'Basic realm="MATE"'},
                 )
 
-            if username == AUTH_USERNAME and password == AUTH_PASSWORD:
+            if credentials_match(username, password):
                 return username
         except HTTPException:
             raise
@@ -238,7 +250,7 @@ def get_dashboard_auth_user(request: Request):
                 logger.debug("Dashboard auth: basic auth logged out for %s", username)
                 return None
 
-            if username == AUTH_USERNAME and password == AUTH_PASSWORD:
+            if credentials_match(username, password):
                 return username
         except Exception:
             pass

@@ -233,6 +233,13 @@ async def proxy_adk(request: Request, path: str, username: str = Depends(get_aut
     if path.startswith("dashboard/"):
         raise HTTPException(status_code=404, detail="Not found")
 
+    # Builder endpoints read and write files in the agents directory: admins only.
+    # Covers both MATE's /builder/* and ADK's own /dev/apps/{app}/builder*.
+    if "builder" in path.split("/"):
+        from server.auth import is_admin_user
+        if not is_admin_user(request):
+            raise HTTPException(status_code=403, detail="Admin access required")
+
     target_url = f"http://{ADK_HOST}:{ADK_PORT}/{path}"
     body = await request.body() if request.method in ["POST", "PUT", "PATCH"] else None
 

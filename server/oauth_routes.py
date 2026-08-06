@@ -71,6 +71,32 @@ def _get_oauth():
     return _oauth
 
 
+def _safe_next(next_url: str) -> str:
+    """Keep post-login redirects on this site (blocks //evil.com and absolute URLs)."""
+    if not next_url or not next_url.startswith("/") or next_url.startswith("//"):
+        return "/dashboard"
+    return next_url
+
+
+def _signup_allowed(email: str) -> bool:
+    """Check an OAuth identity against the optional signup allowlists.
+
+    Both env vars are unset by default, which keeps signup open as before.
+    OAUTH_ALLOWED_DOMAINS / OAUTH_ALLOWED_EMAILS are comma-separated.
+    """
+    domains = [d.strip().lower().lstrip("@") for d in _cfg("OAUTH_ALLOWED_DOMAINS").split(",") if d.strip()]
+    emails = [e.strip().lower() for e in _cfg("OAUTH_ALLOWED_EMAILS").split(",") if e.strip()]
+    if not domains and not emails:
+        return True
+
+    email = (email or "").lower()
+    if email and email in emails:
+        return True
+    if email and "@" in email and email.split("@", 1)[1] in domains:
+        return True
+    return False
+
+
 def _upsert_oauth_user(user_id: str, email: str, display_name: str, provider: str) -> None:
     """Create or update the users table row for an OAuth login."""
     from shared.utils.database_client import get_database_client
@@ -179,6 +205,10 @@ async def oauth_callback(provider: str, request: Request):
         logger.error("Failed to fetch OAuth profile (%s): %s", provider, exc)
         return RedirectResponse(url="/login?error=profile_fetch_failed")
 
+    if not _signup_allowed(email):
+        logger.warning("OAuth login rejected by allowlist: %s (%s)", email or user_id, provider)
+        return RedirectResponse(url="/login?error=not_allowed")
+
     _upsert_oauth_user(user_id, email, display_name, provider)
 
     request.session["user"] = {
@@ -194,5 +224,5 @@ async def oauth_callback(provider: str, request: Request):
     except Exception:
         pass
 
-    next_url = request.session.pop("oauth_next", "/dashboard")
+    next_url = _safe_next(request.session.pop("oauth_next", "/dashboard"))
     return RedirectResponse(url=next_url)

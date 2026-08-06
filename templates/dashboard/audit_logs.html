@@ -96,6 +96,12 @@
     let currentOffset = 0;
     let totalCount = 0;
 
+    function esc(s) {
+        return (s == null ? '' : String(s))
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
     function buildQuery() {
         const params = new URLSearchParams();
         params.set('limit', String(LIMIT));
@@ -159,17 +165,17 @@
             tbody.innerHTML = logs.map(function(row) {
                 var time = row.timestamp ? new Date(row.timestamp).toLocaleString() : '—';
                 var details = row.details ? (typeof row.details === 'object' ? JSON.stringify(row.details) : row.details) : '—';
-                var detailsEsc = (details + '').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
                 var resourceId = row.resource_id || '—';
-                var resourceIdEsc = (resourceId + '').replace(/"/g, '&quot;');
+                // Every field below is attacker-influenced (actor names, resource ids,
+                // and ip_address, which comes from the X-Forwarded-For header).
                 return '<tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50">' +
-                    '<td data-label="Time" class="px-3 py-2 text-xs text-gray-900 dark:text-white whitespace-nowrap">' + time + '</td>' +
-                    '<td data-label="Actor" class="px-3 py-2 text-xs text-gray-900 dark:text-white">' + (row.actor || '—') + '</td>' +
-                    '<td data-label="Action" class="px-3 py-2 text-xs text-gray-900 dark:text-white">' + (row.action || '—') + '</td>' +
-                    '<td data-label="Resource" class="px-3 py-2 text-xs text-gray-900 dark:text-white">' + (row.resource_type || '—') + '</td>' +
-                    '<td data-label="ID" class="px-3 py-2 text-xs text-gray-900 dark:text-white max-w-[120px] truncate" title="' + resourceIdEsc + '">' + resourceId + '</td>' +
-                    '<td data-label="IP" class="px-3 py-2 text-xs text-gray-500 dark:text-gray-400">' + (row.ip_address || '—') + '</td>' +
-                    '<td data-label="Details" class="px-3 py-2 text-xs text-gray-600 dark:text-gray-300 max-w-[200px] truncate" title="' + detailsEsc + '">' + details + '</td>' +
+                    '<td data-label="Time" class="px-3 py-2 text-xs text-gray-900 dark:text-white whitespace-nowrap">' + esc(time) + '</td>' +
+                    '<td data-label="Actor" class="px-3 py-2 text-xs text-gray-900 dark:text-white">' + esc(row.actor || '—') + '</td>' +
+                    '<td data-label="Action" class="px-3 py-2 text-xs text-gray-900 dark:text-white">' + esc(row.action || '—') + '</td>' +
+                    '<td data-label="Resource" class="px-3 py-2 text-xs text-gray-900 dark:text-white">' + esc(row.resource_type || '—') + '</td>' +
+                    '<td data-label="ID" class="px-3 py-2 text-xs text-gray-900 dark:text-white max-w-[120px] truncate" title="' + esc(resourceId) + '">' + esc(resourceId) + '</td>' +
+                    '<td data-label="IP" class="px-3 py-2 text-xs text-gray-500 dark:text-gray-400">' + esc(row.ip_address || '—') + '</td>' +
+                    '<td data-label="Details" class="px-3 py-2 text-xs text-gray-600 dark:text-gray-300 max-w-[200px] truncate" title="' + esc(details) + '">' + esc(details) + '</td>' +
                     '</tr>';
             }).join('');
 
@@ -183,7 +189,7 @@
                     '<button onclick="window.auditLogNext()" ' + (nextDisabled ? 'disabled' : '') + ' class="px-2 py-1 text-xs rounded ' + (nextDisabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-200 dark:hover:bg-gray-600') + '">Next</button>';
             }
         } catch (e) {
-            tbody.innerHTML = '<tr><td colspan="7" class="px-3 py-4 text-sm text-red-600 dark:text-red-400">Failed to load: ' + (e.message || 'Unknown error') + '</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="7" class="px-3 py-4 text-sm text-red-600 dark:text-red-400">Failed to load: ' + esc(e.message || 'Unknown error') + '</td></tr>';
             document.getElementById('totalCount').textContent = '0';
             document.getElementById('paginationArea').textContent = '';
         }

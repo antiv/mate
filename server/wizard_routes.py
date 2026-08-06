@@ -108,6 +108,23 @@ def _verify_captcha(token: Optional[str]) -> bool:
     return bool(token)
 
 
+def _admin_key_for(api_key: Optional[str]) -> Optional[str]:
+    """Resolve a trial's widget admin key so the wizard can edit its appearance."""
+    if not api_key:
+        return None
+    from shared.utils.models import WidgetApiKey
+
+    db = get_database_client()
+    session = db.get_session()
+    if not session:
+        return None
+    try:
+        wk = session.query(WidgetApiKey).filter_by(api_key=api_key).first()
+        return wk.admin_key if wk else None
+    finally:
+        session.close()
+
+
 def _get_session(token: str) -> Optional[WizardSession]:
     if not token:
         return None
@@ -207,6 +224,7 @@ async def get_session_state(token: str):
         "status": ws.status,
         "step_data": ws.get_step_data(),
         "widget_api_key": ws.widget_api_key,
+        "widget_admin_key": _admin_key_for(ws.widget_api_key),
         "chat_url": f"/widget/chat?key={ws.widget_api_key}" if ws.widget_api_key else None,
         "root_agent_name": ws.root_agent_name,
     }
@@ -316,6 +334,7 @@ async def provision(request: Request):
             # Already provisioned — return existing trial (idempotent).
             return {
                 "widget_api_key": ws.widget_api_key,
+                "widget_admin_key": _admin_key_for(ws.widget_api_key),
                 "chat_url": f"/widget/chat?key={ws.widget_api_key}",
                 "project_id": ws.trial_project_id,
                 "root_agent_name": ws.root_agent_name,

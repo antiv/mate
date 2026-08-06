@@ -17,6 +17,7 @@ import secrets
 import tempfile
 from pathlib import Path
 from typing import Optional
+from urllib.parse import urlparse
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, File, Form, UploadFile, Query
@@ -27,6 +28,12 @@ from shared.utils.database_client import get_database_client
 from shared.utils.models import WidgetApiKey, AgentConfig, Project
 
 logger = logging.getLogger(__name__)
+
+# Reject origins that do not match a key's allowlist. Off by default so operators
+# can see what would be rejected (logged) before enforcing.
+ORIGIN_STRICT = os.getenv("WIDGET_ORIGIN_STRICT", "false").lower() in ("true", "1", "yes")
+# Transitional: let the public api_key still authorise the /widget/api admin routes.
+LEGACY_ADMIN_KEY = os.getenv("WIDGET_LEGACY_ADMIN_KEY", "false").lower() in ("true", "1", "yes")
 
 router = APIRouter(prefix="/widget", tags=["Widget"])
 admin_api_router = APIRouter(prefix="/widget/api", tags=["Widget - Admin API"])
@@ -143,6 +150,17 @@ def _lookup_widget_key(api_key: str) -> Optional[WidgetApiKey]:
         session.close()
 
 
+def _lookup_widget_admin_key(admin_key: str) -> Optional[WidgetApiKey]:
+    db = get_database_client()
+    session = db.get_session()
+    if not session:
+        return None
+    try:
+        return session.query(WidgetApiKey).filter_by(admin_key=admin_key, is_active=True).first()
+    finally:
+        session.close()
+
+
 def _extract_api_key(request: Request) -> str:
     key = request.headers.get("X-Widget-Key") or request.query_params.get("key")
     if not key:
@@ -150,31 +168,105 @@ def _extract_api_key(request: Request) -> str:
     return key
 
 
-def _check_origin(request: Request, widget_key: WidgetApiKey):
+def _origin_host(value: str) -> Optional[tuple]:
+    """Return (scheme, host, port) for an origin or referer URL, or None."""
+    try:
+        parsed = urlparse(value.strip())
+    except ValueError:
+        return None
+    if not parsed.scheme or not parsed.hostname:
+        return None
+    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    return (parsed.scheme.lower(), parsed.hostname.lower(), port)
+
+
+def _origin_matches(origin: str, allowed_entry: str) -> bool:
+    """Exact scheme+host+port match, with optional *.domain wildcards.
+
+    Prefix matching would let https://victim.com.evil.com pass an allowlist
+    entry of https://victim.com, so hosts are compared as whole labels.
+    """
+    got = _origin_host(origin)
+    if got is None:
+        return False
+
+    entry = allowed_entry.strip().rstrip("/")
+    if entry.startswith("*."):  # bare wildcard domain, e.g. *.example.com
+        suffix = entry[1:].lower()  # ".example.com"
+        return got[1] == suffix[1:] or got[1].endswith(suffix)
+
+    want = _origin_host(entry)
+    if want is None:
+        return False
+    if want[1].startswith("*."):
+        suffix = want[1][1:]
+        host_ok = got[1] == suffix[1:] or got[1].endswith(suffix)
+    else:
+        host_ok = got[1] == want[1]
+    return host_ok and got[0] == want[0] and got[2] == want[2]
+
+
+def _check_origin(request: Request, widget_key: WidgetApiKey, require_origin: bool = False):
     allowed = widget_key.get_allowed_origins()
-    if allowed is None:
-        return
     origin = request.headers.get("origin") or request.headers.get("referer", "")
-    if not origin:
-        return
+
     # Always allow requests originating from the MATE server itself (e.g. admin panel preview)
-    server_origin = str(request.base_url).rstrip("/")
-    if origin.rstrip("/").startswith(server_origin):
+    if origin and _origin_matches(origin, str(request.base_url)):
         return
-    origin_normalised = origin.rstrip("/")
-    for allowed_origin in allowed:
-        if origin_normalised.startswith(allowed_origin.rstrip("/")):
-            return
+
+    if allowed is None:
+        if require_origin and not origin:
+            raise HTTPException(status_code=403, detail="Origin required for this request")
+        return
+
+    if not origin:
+        if require_origin:
+            raise HTTPException(status_code=403, detail="Origin required for this request")
+        return
+
+    if any(_origin_matches(origin, entry) for entry in allowed):
+        return
+
+    if not ORIGIN_STRICT:
+        logger.warning(
+            "Widget origin %s does not match the allowlist for key id=%s; allowed because "
+            "WIDGET_ORIGIN_STRICT is off", origin, widget_key.id,
+        )
+        return
     raise HTTPException(status_code=403, detail="Origin not allowed for this widget key")
 
 
 def verify_widget_key(request: Request) -> WidgetApiKey:
-    """FastAPI dependency: validate widget API key and origin."""
+    """FastAPI dependency: validate the public widget key and origin."""
     api_key = _extract_api_key(request)
     wk = _lookup_widget_key(api_key)
     if wk is None:
         raise HTTPException(status_code=401, detail="Invalid or inactive widget API key")
     _check_origin(request, wk)
+    return wk
+
+
+def verify_widget_admin_key(request: Request) -> WidgetApiKey:
+    """FastAPI dependency for widget management routes.
+
+    The public api_key is embedded in customer pages, so it must not authorise
+    reading the agent config or changing instruction/model/memory/files. Those
+    routes require the separate admin_key.
+    """
+    key = _extract_api_key(request)
+    wk = _lookup_widget_admin_key(key)
+
+    if wk is None and LEGACY_ADMIN_KEY:
+        wk = _lookup_widget_key(key)
+        if wk is not None:
+            logger.warning(
+                "Widget admin route accessed with the public key for key id=%s; allowed because "
+                "WIDGET_LEGACY_ADMIN_KEY is on", wk.id,
+            )
+
+    if wk is None:
+        raise HTTPException(status_code=401, detail="Invalid or inactive widget admin key")
+    _check_origin(request, wk, require_origin=False)
     return wk
 
 
@@ -233,10 +325,12 @@ async def widget_public_config(key: str = Query(...)):
 
 @router.get("/admin", response_class=HTMLResponse, include_in_schema=False)
 async def widget_admin_page(request: Request, key: str = Query(...)):
-    """Serve the widget admin panel page."""
-    wk = _lookup_widget_key(key)
+    """Serve the widget admin panel page (requires the admin key, not the public one)."""
+    wk = _lookup_widget_admin_key(key)
+    if wk is None and LEGACY_ADMIN_KEY:
+        wk = _lookup_widget_key(key)
     if wk is None:
-        return HTMLResponse("<h3>Invalid widget key</h3>", status_code=401)
+        return HTMLResponse("<h3>Invalid widget admin key</h3>", status_code=401)
     return templates.TemplateResponse(request, "widget/admin.html", {
         "request": request,
         "api_key": key,
@@ -450,13 +544,18 @@ _ALLOWED_WIDGET_CONFIG_FIELDS = {
 
 
 @admin_api_router.get("/widget-config")
-async def get_widget_config_admin(wk: WidgetApiKey = Depends(verify_widget_key)):
-    """Return the full widget_config for this key."""
+async def get_widget_config_admin(wk: WidgetApiKey = Depends(verify_widget_admin_key)):
+    """Return the full widget_config for this key.
+
+    The public chat widget reads its appearance from /widget/api/config and
+    /widget/public-config; this route is for the admin panel and the wizard's
+    appearance editor, both of which hold the admin key.
+    """
     return {"success": True, "widget_config": wk.get_widget_config()}
 
 
 @admin_api_router.put("/widget-config")
-async def update_widget_config(request: Request, wk: WidgetApiKey = Depends(verify_widget_key)):
+async def update_widget_config(request: Request, wk: WidgetApiKey = Depends(verify_widget_admin_key)):
     """Update allowed widget appearance/behaviour fields."""
     data = await request.json()
     db = get_database_client()
@@ -487,8 +586,26 @@ async def update_widget_config(request: Request, wk: WidgetApiKey = Depends(veri
 # Widget Admin API — agent settings
 # ---------------------------------------------------------------------------
 
+def _widget_agent_view(agent: AgentConfig) -> dict:
+    """Only the fields the widget admin UI edits.
+
+    Never return mcp_servers_config / tool_config / guardrail_config here —
+    MCP server definitions carry credentials.
+    """
+    return {
+        "id": agent.id,
+        "name": agent.name,
+        "type": agent.type,
+        "model_name": agent.model_name,
+        "description": agent.description,
+        "instruction": agent.instruction,
+        "disabled": agent.disabled,
+        "project_id": agent.project_id,
+    }
+
+
 @admin_api_router.get("/agent")
-async def get_widget_agent(wk: WidgetApiKey = Depends(verify_widget_key)):
+async def get_widget_agent(wk: WidgetApiKey = Depends(verify_widget_admin_key)):
     """Get the agent config scoped to this widget key."""
     db = get_database_client()
     session = db.get_session()
@@ -500,13 +617,13 @@ async def get_widget_agent(wk: WidgetApiKey = Depends(verify_widget_key)):
         ).first()
         if not agent:
             raise HTTPException(status_code=404, detail="Agent not found")
-        return {"success": True, "agent": agent.to_dict()}
+        return {"success": True, "agent": _widget_agent_view(agent)}
     finally:
         session.close()
 
 
 @admin_api_router.put("/agent")
-async def update_widget_agent(request: Request, wk: WidgetApiKey = Depends(verify_widget_key)):
+async def update_widget_agent(request: Request, wk: WidgetApiKey = Depends(verify_widget_admin_key)):
     """Update limited agent fields (instruction, model_name, description)."""
     data = await request.json()
     db = get_database_client()
@@ -523,10 +640,14 @@ async def update_widget_agent(request: Request, wk: WidgetApiKey = Depends(verif
             if field in data:
                 setattr(agent, field, data[field])
         session.commit()
-        return {"success": True, "agent": agent.to_dict()}
-    except Exception as e:
+        return {"success": True, "agent": _widget_agent_view(agent)}
+    except HTTPException:
         session.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
+        raise
+    except Exception:
+        session.rollback()
+        logger.exception("Failed to update agent for widget key id=%s", wk.id)
+        raise HTTPException(status_code=500, detail="Failed to update agent")
     finally:
         session.close()
 
@@ -537,7 +658,7 @@ async def update_widget_agent(request: Request, wk: WidgetApiKey = Depends(verif
 
 @admin_api_router.get("/memory-blocks")
 async def list_widget_memory_blocks(
-    wk: WidgetApiKey = Depends(verify_widget_key),
+    wk: WidgetApiKey = Depends(verify_widget_admin_key),
     label_search: Optional[str] = None,
     value_search: Optional[str] = None,
 ):
@@ -554,7 +675,7 @@ async def list_widget_memory_blocks(
 
 
 @admin_api_router.post("/memory-blocks")
-async def create_widget_memory_block(request: Request, wk: WidgetApiKey = Depends(verify_widget_key)):
+async def create_widget_memory_block(request: Request, wk: WidgetApiKey = Depends(verify_widget_admin_key)):
     data = await request.json()
     from shared.utils.memory_blocks_service import MemoryBlocksService
     db = get_database_client()
@@ -578,7 +699,7 @@ async def create_widget_memory_block(request: Request, wk: WidgetApiKey = Depend
 
 @admin_api_router.put("/memory-blocks/{block_id}")
 async def update_widget_memory_block(
-    block_id: str, request: Request, wk: WidgetApiKey = Depends(verify_widget_key)
+    block_id: str, request: Request, wk: WidgetApiKey = Depends(verify_widget_admin_key)
 ):
     data = await request.json()
     from shared.utils.memory_blocks_service import MemoryBlocksService
@@ -596,7 +717,7 @@ async def update_widget_memory_block(
 
 
 @admin_api_router.delete("/memory-blocks/{block_id}")
-async def delete_widget_memory_block(block_id: str, wk: WidgetApiKey = Depends(verify_widget_key)):
+async def delete_widget_memory_block(block_id: str, wk: WidgetApiKey = Depends(verify_widget_admin_key)):
     from shared.utils.memory_blocks_service import MemoryBlocksService
     db = get_database_client()
     svc = MemoryBlocksService(db)
@@ -611,7 +732,7 @@ async def delete_widget_memory_block(block_id: str, wk: WidgetApiKey = Depends(v
 # ---------------------------------------------------------------------------
 
 @admin_api_router.get("/files")
-async def list_widget_files(wk: WidgetApiKey = Depends(verify_widget_key)):
+async def list_widget_files(wk: WidgetApiKey = Depends(verify_widget_admin_key)):
     """List file search stores and their files for this widget's agent."""
     from shared.utils.file_search_service import FileSearchService
     db = get_database_client()
@@ -626,7 +747,7 @@ async def list_widget_files(wk: WidgetApiKey = Depends(verify_widget_key)):
 
 @admin_api_router.post("/files/upload")
 async def upload_widget_file(
-    wk: WidgetApiKey = Depends(verify_widget_key),
+    wk: WidgetApiKey = Depends(verify_widget_admin_key),
     file: UploadFile = File(...),
     store_name: str = Form(...),
     display_name: str = Form(None),
@@ -663,7 +784,7 @@ async def upload_widget_file(
 
 
 @admin_api_router.delete("/files/{file_id}")
-async def delete_widget_file(file_id: int, wk: WidgetApiKey = Depends(verify_widget_key)):
+async def delete_widget_file(file_id: int, wk: WidgetApiKey = Depends(verify_widget_admin_key)):
     """Delete a file from a file search store."""
     from shared.utils.models import FileSearchDocument, FileSearchStore
     db = get_database_client()
@@ -734,6 +855,7 @@ async def create_widget_key(
         raise HTTPException(status_code=400, detail="project_id and agent_name are required")
 
     api_key = f"wk_{secrets.token_urlsafe(32)}"
+    admin_key = f"wak_{secrets.token_urlsafe(32)}"
 
     db = get_database_client()
     session = db.get_session()
@@ -742,6 +864,7 @@ async def create_widget_key(
     try:
         wk = WidgetApiKey(
             api_key=api_key,
+            admin_key=admin_key,
             project_id=project_id,
             agent_name=agent_name,
             label=label,
@@ -862,7 +985,12 @@ async def get_embed_code(
             f'  data-server="{base_url}"\n'
             f'></script>'
         )
-        return {"success": True, "embed_code": embed_code, "api_key": wk.api_key}
+        return {
+            "success": True,
+            "embed_code": embed_code,
+            "api_key": wk.api_key,
+            "admin_key": wk.admin_key,
+        }
     finally:
         session.close()
 

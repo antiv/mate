@@ -143,7 +143,8 @@ function showWidgetEmbedCode(keyId) {
             if (res.success) {
                 document.getElementById('widgetEmbedCode').textContent = res.embed_code;
                 const baseUrl = window.location.origin;
-                const adminUrl = baseUrl + '/widget/admin?key=' + encodeURIComponent(res.api_key);
+                // The admin panel takes the private admin key, never the embedded public one.
+                const adminUrl = baseUrl + '/widget/admin?key=' + encodeURIComponent(res.admin_key || res.api_key);
                 const adminLink = document.getElementById('widgetAdminLink');
                 adminLink.href = adminUrl;
                 adminLink.textContent = adminUrl;
