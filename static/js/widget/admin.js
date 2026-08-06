@@ -2,12 +2,15 @@
  * MATE Widget Admin Panel — client-side logic.
  *
  * Globals injected by template:
- *   WIDGET_API_KEY, WIDGET_AGENT_NAME, WIDGET_PROJECT_ID
+ *   WIDGET_API_KEY (public, preview widget), WIDGET_ADMIN_KEY (private, API calls),
+ *   WIDGET_AGENT_NAME, WIDGET_PROJECT_ID
  */
 (function () {
   "use strict";
 
-  var API_KEY = window.WIDGET_API_KEY || "";
+  // /widget/api routes require the admin key; the public key only serves the
+  // embedded preview widget at the bottom of this page.
+  var API_KEY = window.WIDGET_ADMIN_KEY || "";
   var BASE = window.location.origin;
 
   // --- Helpers ---------------------------------------------------------

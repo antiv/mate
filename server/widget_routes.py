@@ -331,9 +331,12 @@ async def widget_admin_page(request: Request, key: str = Query(...)):
         wk = _lookup_widget_key(key)
     if wk is None:
         return HTMLResponse("<h3>Invalid widget admin key</h3>", status_code=401)
+    # Two distinct keys on this page: admin_key authorises the /widget/api calls,
+    # api_key is the public one the embedded preview widget needs.
     return templates.TemplateResponse(request, "widget/admin.html", {
         "request": request,
-        "api_key": key,
+        "admin_key": wk.admin_key or key,
+        "api_key": wk.api_key,
         "agent_name": wk.agent_name,
         "project_id": wk.project_id,
     })

@@ -243,7 +243,8 @@
   </div>
 
   <script>
-    window.WIDGET_API_KEY = "{{ api_key }}";
+    window.WIDGET_API_KEY = "{{ api_key }}";       // public key — preview widget only
+    window.WIDGET_ADMIN_KEY = "{{ admin_key }}";   // private key — /widget/api calls
     window.WIDGET_AGENT_NAME = "{{ agent_name }}";
     window.WIDGET_PROJECT_ID = {{ project_id }};
 
@@ -268,6 +269,6 @@
       document.body.appendChild(s);
     })();
   </script>
-  <script src="/static/js/widget/admin.js"></script>
+  <script src="/static/js/widget/admin.js?v=2"></script>
 </body>
 </html>
