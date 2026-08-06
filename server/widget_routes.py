@@ -290,10 +290,22 @@ async def serve_widget_js():
 
 @router.get("/chat", response_class=HTMLResponse, include_in_schema=False)
 async def widget_chat_page(request: Request, key: str = Query(...)):
-    """Serve the lightweight chat page (loaded inside an iframe)."""
+    """Serve the lightweight chat page (loaded inside an iframe).
+
+    This is where the embedding site is visible: the iframe navigation carries
+    the parent page as Referer. Once the page is loaded its own API calls are
+    same-origin, so the allowlist can only be enforced here and on
+    /widget/public-config, not on /widget/api/chat.
+    """
     wk = _lookup_widget_key(key)
     if wk is None:
         return HTMLResponse("<h3>Invalid widget key</h3>", status_code=401)
+    try:
+        _check_origin(request, wk)
+    except HTTPException:
+        return HTMLResponse(
+            "<h3>This chat widget is not enabled for this site.</h3>", status_code=403
+        )
     widget_cfg = wk.get_widget_config()
     return templates.TemplateResponse(request, "widget/chat.html", {
         "request": request,
@@ -304,11 +316,17 @@ async def widget_chat_page(request: Request, key: str = Query(...)):
 
 
 @router.get("/public-config", include_in_schema=False)
-async def widget_public_config(key: str = Query(...)):
-    """Return lightweight appearance config (button_color, theme) without full auth."""
+async def widget_public_config(request: Request, key: str = Query(...)):
+    """Return lightweight appearance config (button_color, theme) without full auth.
+
+    The loader calls this from the embedding page, so the browser sends a
+    truthful Origin header — the most reliable allowlist check available for
+    the chat surface.
+    """
     wk = _lookup_widget_key(key)
     if wk is None:
         raise HTTPException(status_code=401, detail="Invalid widget key")
+    _check_origin(request, wk)
     cfg = wk.get_widget_config()
     # The widget loader calls this from the embedding site's origin, so it needs a
     # permissive CORS header of its own now that the app-wide policy is restricted.
