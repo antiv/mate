@@ -205,6 +205,7 @@ class WizardProvisioningService:
                 logger.warning("Failed to store site memory blocks: %s", exc)
 
         api_key = f"wk_{secrets.token_urlsafe(32)}"
+        admin_key = f"wak_{secrets.token_urlsafe(32)}"
         widget_title = (analysis or {}).get("site_name", "").strip()
         if not widget_title:
             site_url = (step_data.get("site_url") or step_data.get("store_domain") or "").strip()
@@ -224,6 +225,7 @@ class WizardProvisioningService:
         try:
             wk = WidgetApiKey(
                 api_key=api_key,
+                admin_key=admin_key,
                 project_id=project_id,
                 agent_name=root_agent_name,
                 label=f"wizard trial {tier}",
@@ -252,6 +254,7 @@ class WizardProvisioningService:
 
         return {
             "widget_api_key": api_key,
+            "widget_admin_key": admin_key,
             "chat_url": f"/widget/chat?key={api_key}",
             "project_id": project_id,
             "root_agent_name": root_agent_name,

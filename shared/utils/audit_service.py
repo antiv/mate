@@ -62,12 +62,19 @@ RESOURCE_AUTH = "auth"
 
 
 def _client_ip(request: Any) -> Optional[str]:
-    """Extract client IP from FastAPI Request (supports X-Forwarded-For)."""
+    """Extract client IP from a FastAPI Request.
+
+    X-Forwarded-For is only honoured when TRUSTED_PROXY_HOSTS names the proxies
+    that set it. With the default ("*", i.e. nothing verified) any client could
+    forge the header and write arbitrary text into the audit trail.
+    """
     if request is None:
         return None
-    forwarded = getattr(request, "headers", None) and request.headers.get("X-Forwarded-For")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
+    trusted = os.getenv("TRUSTED_PROXY_HOSTS", "*").strip()
+    if trusted and trusted != "*":
+        forwarded = getattr(request, "headers", None) and request.headers.get("X-Forwarded-For")
+        if forwarded:
+            return forwarded.split(",")[0].strip()
     client = getattr(request, "client", None)
     if client:
         return getattr(client, "host", None)

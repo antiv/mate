@@ -17,6 +17,7 @@ from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 
 from shared.utils import audit_service
+from shared.utils.path_safety import resolve_within_base
 
 logger = logging.getLogger(__name__)
 
@@ -805,12 +806,12 @@ class DashboardServer:
     
     def _copy_template_agent(self, agent_name: str) -> Dict[str, Any]:
         """Copy template_agent folder to agents/{agent_name}/ directory."""
+        # Outside the try so a traversal attempt surfaces as 403, not a 500.
+        agents_dir = self.project_root / "agents"
+        dest_path = resolve_within_base(agents_dir, agent_name)
         try:
-            # Define source and destination paths
             template_path = self.project_root / "shared" / "template_agent"
-            agents_dir = self.project_root / "agents"
-            dest_path = agents_dir / agent_name
-            
+
             # Check if template exists
             if not template_path.exists():
                 return {
@@ -849,10 +850,12 @@ class DashboardServer:
     
     def _delete_agent_folder(self, agent_name: str) -> Dict[str, Any]:
         """Delete agent folder from agents/{agent_name}/ directory."""
+        # Outside the try so a traversal attempt surfaces as 403, not a 500.
+        agents_dir = self.project_root / "agents"
+        folder_path = resolve_within_base(agents_dir, agent_name)
+        if folder_path == agents_dir.resolve():
+            raise HTTPException(status_code=403, detail="Invalid path")
         try:
-            agents_dir = self.project_root / "agents"
-            folder_path = agents_dir / agent_name
-            
             # Check if folder exists
             if not folder_path.exists():
                 return {

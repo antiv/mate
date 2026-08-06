@@ -30,9 +30,11 @@ def _create_root_agent_folder(agent_name: str) -> Dict[str, Any]:
     from pathlib import Path
 
     try:
+        from shared.utils.path_safety import resolve_within_base
+
         project_root = Path(__file__).resolve().parents[3]
         template_path = project_root / "shared" / "template_agent"
-        dest_path = project_root / "agents" / agent_name
+        dest_path = resolve_within_base(project_root / "agents", agent_name)
 
         if not template_path.exists():
             return {"success": False, "message": f"Template agent folder not found at {template_path}"}

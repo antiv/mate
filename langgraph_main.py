@@ -20,7 +20,7 @@ configure_logging()
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--session-db-url", default="sqlite:///session_db.db")
-parser.add_argument("--host", default="0.0.0.0")
+parser.add_argument("--host", default="127.0.0.1")
 parser.add_argument("--a2a", action="store_true", help="Accepted for launch-contract parity; A2A is not supported by the langgraph runtime")
 args = parser.parse_args()
 SESSION_DB_URL = args.session_db_url

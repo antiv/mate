@@ -38,7 +38,7 @@ coverage run -m unittest discover -s shared/test -p "test_*.py"
 coverage report
 ```
 
-Tests live in `shared/test/` — 134 tests covering agent management, tool factory, model switching, RBAC, migrations, guardrails, tracing, and more.
+Tests live in `shared/test/` — 506 tests covering agent management, tool factory, model switching, RBAC, authorization, migrations, guardrails, tracing, and more.
 
 ## Database Migrations
 
@@ -93,7 +93,11 @@ Follow PEP 8 with type hints on all function signatures. Use f-strings for forma
 | `MATE_ENV` | `development` (default) or `production`; production refuses insecure defaults |
 | `MATE_ALLOW_INSECURE_DEFAULTS` | Override the production startup checks |
 | `ALLOWED_ORIGINS` | Comma-separated CORS allowlist |
-| `TRUSTED_PROXY_HOSTS` | Proxy hosts trusted for `X-Forwarded-*` headers |
+| `TRUSTED_PROXY_HOSTS` | Proxy hosts trusted for `X-Forwarded-*` headers; audit logs only trust `X-Forwarded-For` when set |
+| `OAUTH_ALLOWED_DOMAINS` / `OAUTH_ALLOWED_EMAILS` | Restrict who may sign in via SSO (unset = anyone with a provider account) |
+| `TOKEN_TTL_HOURS` | Bearer token lifetime, default 24 |
+| `WIDGET_ORIGIN_STRICT` | Enforce (vs. only log) a widget key's origin allowlist |
+| `WIDGET_LEGACY_ADMIN_KEY` | Transitional: let the public widget key work on `/widget/api` admin routes |
 | `ADK_HOST` / `ADK_PORT` | ADK server address (default `127.0.0.1:8001`) |
 | `ARTIFACT_SERVICE` | `local_folder`, `supabase`, or `s3` |
 | `EMBEDDING_MODEL` | Embedding model for memory block semantic search (litellm format, default `gemini/gemini-embedding-001`) |

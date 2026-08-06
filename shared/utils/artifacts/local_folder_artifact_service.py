@@ -38,13 +38,19 @@ class LocalFolderArtifactService(BaseArtifactService):
         filename: str,
         version: int,
     ) -> Path:
-        """Translate a logical filename into an on-disk path."""
+        """Translate a logical filename into an on-disk path.
+
+        Every part comes from the request, so the result is contained to
+        base_path — a filename of "../../.env" must not escape it.
+        """
+        from shared.utils.path_safety import resolve_within_base
+
         if self._file_has_user_namespace(filename):
             clean_name = self._strip_user_prefix(filename)
             parts = [app_name, user_id, "user", clean_name, str(version)]
         else:
             parts = [app_name, user_id, session_id, filename, str(version)]
-        return self.base_path.joinpath(*parts)
+        return resolve_within_base(self.base_path, *parts)
 
     @override
     async def save_artifact(

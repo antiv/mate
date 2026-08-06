@@ -1,6 +1,11 @@
 """
 Code executor tools for agents.
-Allows agents to write and execute Python scripts in a sandboxed subprocess.
+
+Runs agent-written Python and shell commands in a subprocess. NOT a sandbox:
+the subprocess runs as the server user, with the server's environment and full
+filesystem and network access — only the timeout and output size are capped.
+Enabling this tool on an agent is equivalent to granting whoever can prompt
+that agent code execution on the host, so keep it off public/widget agents.
 """
 
 import logging

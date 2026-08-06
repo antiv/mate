@@ -242,6 +242,12 @@ if _trusted_proxy_hosts != "*":
     _trusted_proxy_hosts = [h.strip() for h in _trusted_proxy_hosts.split(",") if h.strip()]
 app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=_trusted_proxy_hosts)
 
+# Deny-by-default authorization for mutating /dashboard/api requests.  Added
+# BEFORE SessionMiddleware on purpose: add_middleware inserts at the front, so
+# the session middleware ends up outside this one and request.session is set.
+from server.dashboard_authz import DashboardAuthzMiddleware
+app.add_middleware(DashboardAuthzMiddleware)
+
 # Encrypted session cookie required by both OAuth PKCE state and the session-based
 # auth check in server/auth.py.  https_only defaults to False so local HTTP dev works;
 # set SESSION_SECURE_COOKIE=true behind TLS in production.

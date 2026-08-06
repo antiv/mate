@@ -580,6 +580,9 @@ class WidgetApiKey(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     api_key = Column(String(255), unique=True, nullable=False, index=True)
+    # Separate secret for the /widget/api admin routes: api_key is embedded in
+    # customer pages and therefore public, admin_key never leaves the dashboard.
+    admin_key = Column(String(255), unique=True, nullable=True, index=True)
     project_id = Column(Integer, ForeignKey('projects.id'), nullable=False)
     agent_name = Column(String(255), nullable=False)
     label = Column(String(255), nullable=True)
@@ -618,6 +621,7 @@ class WidgetApiKey(Base):
         return {
             'id': self.id,
             'api_key': self.api_key,
+            'admin_key': self.admin_key,
             'project_id': self.project_id,
             'agent_name': self.agent_name,
             'label': self.label,

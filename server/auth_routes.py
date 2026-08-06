@@ -19,7 +19,7 @@ from shared.utils.auth_utils import (
 )
 from server.auth import (
     verify_credentials, verify_bearer_token, get_auth_user,
-    AUTH_USERNAME, AUTH_PASSWORD,
+    credentials_match, AUTH_USERNAME, AUTH_PASSWORD,
 )
 
 logger = logging.getLogger(__name__)
@@ -39,6 +39,7 @@ async def login_page(request: Request):
         "auth_failed": "OAuth authentication failed. Please try again.",
         "profile_fetch_failed": "Could not retrieve your profile from the provider.",
         "provider_not_configured": "That sign-in provider is not configured.",
+        "not_allowed": "This account is not allowed to sign in. Contact your administrator.",
         "unknown_provider": "Unknown OAuth provider.",
     }
     error_key = request.query_params.get("error", "")
@@ -124,7 +125,7 @@ async def logout(request: Request):
             encoded_credentials = auth_header[6:]
             decoded_credentials = base64.b64decode(encoded_credentials).decode("utf-8")
             u, p = decoded_credentials.split(":", 1)
-            if u == AUTH_USERNAME and p == AUTH_PASSWORD:
+            if credentials_match(u, p):
                 logger.debug("Logout: logging out basic auth for %s", u)
                 logout_basic_auth(u, p)
                 username = username or u
@@ -143,7 +144,7 @@ async def logout(request: Request):
         if not username and "username" in body and "password" in body:
             u = body["username"]
             p = body["password"]
-            if u == AUTH_USERNAME and p == AUTH_PASSWORD:
+            if credentials_match(u, p):
                 logger.debug("Logout: logging out basic auth from body for %s", u)
                 logout_basic_auth(u, p)
                 username = username or u

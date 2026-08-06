@@ -149,7 +149,7 @@ function updateFileSearchModalContent(prefix, stores, files, agentName, allStore
                             <div class="flex items-center space-x-2 flex-1">
                                 <i class="fas fa-chevron-${isExpanded ? 'down' : 'right'} text-xs text-gray-500 dark:text-gray-400 transition-transform" id="${storeId}-icon"></i>
                                 <div class="flex-1">
-                                    <p class="text-sm font-medium text-gray-900 dark:text-white">${store.display_name || store.store_name}</p>
+                                    <p class="text-sm font-medium text-gray-900 dark:text-white">${escapeHtml(store.display_name || store.store_name)}</p>
                                     <p class="text-xs text-gray-500 dark:text-gray-400">${fileCount} file${fileCount !== 1 ? 's' : ''} • ${store.store_name}</p>
                                 </div>
                             </div>
@@ -163,7 +163,7 @@ function updateFileSearchModalContent(prefix, stores, files, agentName, allStore
                                     Remove
                                 </button>
                                 <button 
-                                    onclick="event.stopPropagation(); event.preventDefault(); deleteFileSearchStore('${prefix}', '${store.store_name}', '${store.display_name || store.store_name}')"
+                                    onclick="event.stopPropagation(); event.preventDefault(); deleteFileSearchStore('${prefix}', '${escapeHtml(store.store_name)}', '${escapeHtml(store.display_name || store.store_name)}')"
                                     class="px-2 py-1 text-xs text-red-600 hover:text-red-700 border border-red-300 rounded"
                                     title="Delete store completely"
                                     type="button"
@@ -260,7 +260,7 @@ function updateFileSearchModalContent(prefix, stores, files, agentName, allStore
         } else {
             uploadStoreSelect.innerHTML = '<option value="">Select a store...</option>' + 
                 stores.map(store => 
-                    `<option value="${store.store_name}">${store.display_name || store.store_name}</option>`
+                    `<option value="${escapeHtml(store.store_name)}">${escapeHtml(store.display_name || store.store_name)}</option>`
                 ).join('');
             uploadStoreSelect.disabled = false;
         }
@@ -276,7 +276,7 @@ function updateFileSearchModalContent(prefix, stores, files, agentName, allStore
         
         if (availableStores.length > 0) {
             options += availableStores.map(store => 
-                `<option value="${store.store_name}">${store.display_name || store.store_name}</option>`
+                `<option value="${escapeHtml(store.store_name)}">${escapeHtml(store.display_name || store.store_name)}</option>`
             ).join('');
         }
         
