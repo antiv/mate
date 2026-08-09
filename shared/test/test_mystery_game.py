@@ -69,6 +69,36 @@ class TestValidateCase(unittest.TestCase):
         self.assertEqual(case["suspects"][0]["knowledge"], "prva stavka\ndruga stavka")
         self.assertEqual(case["solution"]["evidence_chain"], "nalaz\npismo")
 
+    def test_rejects_suspect_without_false_lead(self):
+        # Misleading testimony is what keeps the case from being a straight line
+        case = copy.deepcopy(DEFAULT_CASE)
+        case["suspects"][2]["false_lead"] = "  "
+        self.assertIn("false_lead", validate_case(case))
+
+    def test_rejects_solution_without_misdirection_fields(self):
+        for field in ("red_herring", "turning_point"):
+            case = copy.deepcopy(DEFAULT_CASE)
+            del case["solution"][field]
+            self.assertIn(field, validate_case(case))
+
+    def test_rejects_innocent_without_rebuttal(self):
+        case = copy.deepcopy(DEFAULT_CASE)
+        case["suspects"][0]["rebuttal"] = ""
+        self.assertIn("rebuttal", validate_case(case))
+
+    def test_rejects_too_few_evidence_items(self):
+        case = copy.deepcopy(DEFAULT_CASE)
+        case["evidence"] = case["evidence"][:2]
+        self.assertIn("evidence", validate_case(case))
+
+    def test_default_case_spreads_the_suspicion(self):
+        # Every suspect must carry a claim that can send the detective the wrong way
+        for suspect in DEFAULT_CASE["suspects"]:
+            self.assertTrue(suspect["false_lead"].strip(), suspect["name"])
+        # ...and the means must not be exclusive to the culprit's profession
+        forensics = next(e for e in DEFAULT_CASE["evidence"] if e["id"] == "forensics")
+        self.assertIn("bočici koja nedostaje", forensics["content"])
+
     def test_rejects_killer_name_mismatch(self):
         case = copy.deepcopy(DEFAULT_CASE)
         case["solution"]["killer"] = "Neko Sasvim Drugi"
@@ -113,7 +143,10 @@ class TestGmTools(unittest.TestCase):
         result = _gm_tools()["check_accusation"](accused_name="dr Ana Simić", tool_context=_fake_context())
         self.assertEqual(result["status"], "success")
         self.assertTrue(result["correct"])
-        self.assertIn("digitalis", result["solution"]["method"].casefold())
+        self.assertIn("digoksin", result["solution"]["method"].casefold())
+        # The reveal explains the false trail the player was meant to fall for
+        self.assertIn("Viktor", result["solution"]["red_herring"])
+        self.assertTrue(result["solution"]["turning_point"])
 
     def test_check_accusation_wrong_does_not_leak_killer(self):
         result = _gm_tools()["check_accusation"](accused_name="Žarko", tool_context=_fake_context())
@@ -121,6 +154,33 @@ class TestGmTools(unittest.TestCase):
         self.assertFalse(result["correct"])
         self.assertTrue(result["why_innocent"])
         self.assertNotIn("Ana", json.dumps(result, ensure_ascii=False))
+
+    def test_wrong_accusation_returns_only_the_bare_rebuttal(self):
+        # Guessing must not out-teach investigating: the full reasoning is withheld
+        ctx = _fake_context()
+        result = _gm_tools()["check_accusation"](accused_name="Viktor Radan", tool_context=ctx)
+        viktor = next(s for s in DEFAULT_CASE["suspects"] if s["name"] == "Viktor Radan")
+        self.assertEqual(result["why_innocent"], viktor["rebuttal"])
+        self.assertNotIn(viktor["not_killer_note"], json.dumps(result, ensure_ascii=False))
+
+    def test_rebuttals_withhold_the_solution_facts(self):
+        # A rebuttal is "partial" exactly when it shares no fact with the solving chain
+        solution = DEFAULT_CASE["solution"]
+        chain = f"{solution['turning_point']} {solution['evidence_chain']}".casefold()
+        for suspect in DEFAULT_CASE["suspects"]:
+            if suspect.get("is_killer"):
+                continue
+            rebuttal = suspect["rebuttal"].casefold()
+            for giveaway in ("22:35", "22:45", "22:48", "22:54", "prsten", "toksikolog", "advokat"):
+                self.assertNotIn(giveaway, rebuttal, f"{suspect['name']} rebuttal leaks '{giveaway}'")
+            self.assertNotIn(rebuttal.strip("."), chain)
+
+    def test_correct_accusation_clears_the_innocents(self):
+        result = _gm_tools()["check_accusation"](accused_name="dr Ana Simić", tool_context=_fake_context())
+        cleared = result["cleared_suspects"]
+        self.assertEqual(len(cleared), SUSPECT_COUNT - 1)
+        self.assertTrue(all(c["why_innocent"] for c in cleared))
+        self.assertNotIn("Ana Simić", {c["name"] for c in cleared})
 
     def test_check_accusation_unknown_name(self):
         result = _gm_tools()["check_accusation"](accused_name="Petar Petrović", tool_context=_fake_context())
@@ -146,6 +206,11 @@ class TestCharacterTool(unittest.TestCase):
         sheet = result["character"]
         self.assertEqual(sheet["name"], "dr Ana Simić")
         self.assertIn("POČINILAC", sheet["confidential_role"])
+
+    def test_sheet_carries_the_false_lead(self):
+        # The actor can only mislead the player if the wrong claim reaches its sheet
+        sheet = self._get_my_character("mystery_suspect_2")["character"]
+        self.assertIn("automobil", sheet["your_false_lead"])
 
     def test_reads_case_from_state_not_default(self):
         case = copy.deepcopy(DEFAULT_CASE)
@@ -262,6 +327,29 @@ class TestGenerateNewCase(unittest.TestCase):
                                        state=ctx.state))
         self.assertEqual(sheet["character"]["name"], "dr Ana Simić")
         self.assertIn("POČINILAC", sheet["character"]["confidential_role"])
+
+    def test_prompt_demands_misdirection(self):
+        with patch("litellm.completion",
+                   return_value=self._llm_response(json.dumps(copy.deepcopy(DEFAULT_CASE), ensure_ascii=False))) as mock_llm:
+            _gm_tools()["generate_new_case"](language="Serbian", tool_context=_fake_context())
+        prompt = mock_llm.call_args.kwargs["messages"][0]["content"]
+        self.assertIn("NO single piece of evidence may identify the killer on its own", prompt)
+        self.assertIn("Pick ONE innocent as the apparent culprit", prompt)
+        self.assertIn("false_lead", prompt)
+        self.assertIn("red_herring", prompt)
+
+    def test_retry_tells_the_model_what_was_wrong(self):
+        # A blind retry of the same prompt tends to reproduce the same defect
+        bad = copy.deepcopy(DEFAULT_CASE)
+        bad["suspects"][0]["false_lead"] = ""
+        with patch("litellm.completion",
+                   return_value=self._llm_response(json.dumps(bad, ensure_ascii=False))) as mock_llm:
+            result = _gm_tools()["generate_new_case"](language="Serbian", tool_context=_fake_context())
+        self.assertEqual(result["status"], "error")
+        self.assertEqual(mock_llm.call_count, 2)
+        retry_prompt = mock_llm.call_args.kwargs["messages"][0]["content"]
+        self.assertIn("previous attempt was rejected", retry_prompt)
+        self.assertIn("false_lead", retry_prompt)
 
     def test_markdown_fenced_json_is_accepted(self):
         fenced = "```json\n" + json.dumps(copy.deepcopy(DEFAULT_CASE), ensure_ascii=False) + "\n```"
