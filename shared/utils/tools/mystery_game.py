@@ -49,45 +49,63 @@ DEFAULT_CASE: Dict[str, Any] = {
         "neobičan gorak miris, a žrtva je dan ranije najavila „krupne odluke“.\n"
         "Prisutni u vili te večeri: batler Žarko Obradović (58), supruga Milena Kovač (44), poslovni partner "
         "Viktor Radan (51), porodična lekarka dr Ana Simić (49).\n"
-        "Vremenska linija: 22:30 batler služi rakiju u biblioteci; 23:15 batler pronalazi telo i poziva ukućane."
+        "Vremenska linija iz prvih izjava (nepotpuna i mestimično protivrečna):\n"
+        "- 21:50 Viktor Radan izlazi iz biblioteke posle kratkog razgovora sa žrtvom.\n"
+        "- 22:30 batler služi rakiju u biblioteci; žrtva je tada živa i mirna.\n"
+        "- „oko 23:00“ batler tvrdi da je iz biblioteke čuo povišene glasove.\n"
+        "- 23:15 batler pronalazi telo; u 23:20 dr Simić potpisuje nalaz „srčani udar“.\n"
+        "Napomena: svako od prisutnih ima ili rupu u iskazu ili razlog da ćuti."
     ),
     "suspects": [
         {
             "id": 1,
             "name": "Žarko Obradović",
             "role": "batler",
-            "public_info": "Služi porodicu Kovač 30 godina. Pronašao telo.",
+            "public_info": "Služi porodicu Kovač 30 godina. Jedini je te večeri nosio piće u biblioteku — i pronašao telo.",
             "character": (
                 "Žarko Obradović (58), batler. Krajnje formalan i odmeren, o poslodavcima govori sa dubokim "
                 "poštovanjem, izbegava direktne odgovore i odgovara protivpitanjima kad je nervozan."
             ),
             "knowledge": (
-                "- U 22:30 si gospodinu Kovaču odneo čašu rakije u biblioteku, kao svake večeri.\n"
-                "- Oko 22:45 si video dr Anu Simić kako IZLAZI iz biblioteke — rekla je da je „svratila da poželi "
-                "laku noć“. Ovo pominješ tek ako te detektiv pita ko se kretao po kući ili da li je neko prilazio "
-                "biblioteci.\n"
+                "- U 22:30 si gospodinu Kovaču odneo čašu rakije u biblioteku, kao svake večeri; bio je miran i "
+                "čaša je bila puna kada si izašao.\n"
+                "- Oko 22:45, prolazeći hodnikom sa poslužavnikom, video si dr Anu Simić kako IZLAZI iz biblioteke "
+                "— rekla je da je „svratila da poželi laku noć“. Ovo pominješ tek ako te detektiv pita ko se "
+                "kretao po kući ili da li je neko prilazio biblioteci.\n"
+                "- Između 22:30 i 22:50 glačao si srebro u kuhinji, odakle se vidi vrt: gospođu Milenu si video u "
+                "vrtu oko 22:40, a oko 22:55, kada si se vraćao, bila je tamo SAMA — gospodina Viktora više nije "
+                "bilo.\n"
                 "- Video si gospođu Milenu i gospodina Viktora zajedno u vrtu oko 22:00, „u poverljivom razgovoru“. "
                 "Nerado to pominješ, diskrecija ti je zanat.\n"
+                "- Ranije te večeri premeštao si automobil dr Simić sa prilaza do garaže — ako te neko pita zašto "
+                "je njen auto „otišao“, to je jedino objašnjenje.\n"
                 "- Telo si pronašao u 23:15 kada si došao po poslužavnik."
             ),
+            "false_lead": (
+                "Tvrdiš, sasvim uvereno, da si „oko 23:00“ iz hodnika čuo POVIŠENE MUŠKE GLASOVE iz biblioteke i "
+                "da je gospodin Viktor sigurno bio unutra — „takav ton ima samo on“. Grešiš: čuo si Petra samog na "
+                "telefonu i procenio si vreme napamet (u podrumu si bez sata). Od ove tvrdnje odustaješ tek ako te "
+                "detektiv suoči sa telefonskim ispisom; i tada nerado, uz „možda sam se u satu prevario“."
+            ),
             "secret": (
-                "Godinama kradeš retka vina iz podruma i prodaješ ih. U trenutku smrti bio si u PODRUMU — zato ti "
-                "je alibi mutan i deluje da nešto kriješ. Ako te detektiv suoči sa konkretnim dokazom (nestale "
-                "boce, inventar podruma), slomiš se i priznaš KRAĐU VINA — ali odlučno poričeš bilo kakvu vezu "
-                "sa ubistvom."
+                "Godinama kradeš retka vina iz podruma i prodaješ ih. Od oko 22:50 do 23:10 bio si u PODRUMU — "
+                "zato ti je alibi za taj deo večeri mutan i deluje da nešto kriješ. Ako te detektiv suoči sa "
+                "konkretnim dokazom (nestale boce, inventar podruma), slomiš se i priznaš KRAĐU VINA — ali "
+                "odlučno poričeš bilo kakvu vezu sa ubistvom."
             ),
             "is_killer": False,
             "killer_brief": "",
             "not_killer_note": (
-                "Batler Žarko je u vreme smrti bio u podrumu (krade vino — sitan kriminal, ne ubistvo); "
-                "nema ni motiv ni pristup otrovu."
+                "Otrov je u čašu dospeo tek pošto je žrtva popila otprilike polovinu (unutrašnji prsten na staklu), "
+                "dakle između 22:35 i 22:45 — a u tom prozoru Žarko je glačao srebro u kuhinji i Milena ga je "
+                "videla kroz prozor. Njegova tajna je krađa vina iz podruma, sitan kriminal, ne ubistvo."
             ),
         },
         {
             "id": 2,
             "name": "Milena Kovač",
             "role": "supruga žrtve",
-            "public_info": "Nasleđuje celokupno bogatstvo.",
+            "public_info": "Nasleđuje celokupno bogatstvo. U njenom stakleniku suši se lekovito bilje.",
             "character": (
                 "Milena Kovač (44), supruga pokojnog. Teatralna, emotivna, sklona dramatičnim uzdasima i "
                 "prebacivanju teme na sopstvenu patnju. Povremeno zajedljiva prema drugim ukućanima."
@@ -97,7 +115,17 @@ DEFAULT_CASE: Dict[str, Any] = {
                 "pa se osećaš unapred osuđeno.\n"
                 "- Tog jutra su se Petar i Viktor ŽESTOKO posvađali oko novca — čula si povišene glasove iz "
                 "kabineta, pominjala se „velika provera poslovanja“.\n"
-                "- Petar je poslednjih nedelja bio napet i tajanstven, pominjao je „ozbiljan razgovor sa advokatom“."
+                "- Petar je poslednjih nedelja bio napet i tajanstven, pominjao je „ozbiljan razgovor sa advokatom“.\n"
+                "- U stakleniku sušiš bilje, između ostalog i NAPRSTAK koji ti raste uz ogradu — priznaješ to mirno "
+                "ako te detektiv pita za baštu ili biljke, jer u tome ne vidiš ništa sporno.\n"
+                "- Iz vrta se vidi kuhinjski prozor: celo veče si gledala Žarka kako glača srebro, a oko 22:50 je "
+                "nestao niz stepenice ka podrumu."
+            ),
+            "false_lead": (
+                "Tvrdiš da je automobil dr Ane Simić otišao sa imanja JOŠ PRE 22:30 — „čula si šljunak“ — pa je "
+                "ona, po tebi, bila daleko od kuće u vreme smrti. To nije tačno: batler je tada samo premeštao njen "
+                "auto do garaže. Ti u to iskreno veruješ i ponavljaš to kad god se pomene lekarka; odustaješ tek "
+                "ako te detektiv suoči sa batlerovim iskazom."
             ),
             "secret": (
                 "U vreme smrti (22:00-23:00) bila si u VRTU sa Viktorom Radanom — u vezi ste već godinu dana. "
@@ -108,15 +136,16 @@ DEFAULT_CASE: Dict[str, Any] = {
             "is_killer": False,
             "killer_brief": "",
             "not_killer_note": (
-                "Milena je 22:00-23:00 bila u vrtu sa Viktorom (afera — međusobni alibi); motiv nasledstva "
-                "postoji, ali prilika ne."
+                "Toksikologija isključuje biljni napitak (nema biljne materije ni pratećih glikozida), pa naprstak "
+                "iz njenog staklenika otpada. U kritičnom prozoru (22:35-22:45) bila je u vrtu: Žarko ju je kroz "
+                "kuhinjski prozor video oko 22:40, a Viktor je bio s njom. Motiv nasledstva postoji, prilika ne."
             ),
         },
         {
             "id": 3,
             "name": "Viktor Radan",
             "role": "poslovni partner",
-            "public_info": "Tog jutra se žestoko posvađao sa žrtvom.",
+            "public_info": "Tog jutra se žestoko posvađao sa žrtvom; ispod radnog stola nađeno je njegovo nalivpero.",
             "character": (
                 "Viktor Radan (51), dugogodišnji poslovni partner. Arogantan, nestrpljiv, sve doživljava kao "
                 "gubljenje svog dragocenog vremena. Na pritisak reaguje napadom („Znate li vi ko sam ja?“)."
@@ -124,22 +153,34 @@ DEFAULT_CASE: Dict[str, Any] = {
             "knowledge": (
                 "- Jutrošnja svađa: Petar je najavio „veliku proveru celokupnog poslovanja“ i reviziju partnerskih "
                 "računa. Umanjuješ značaj svađe („poslovna rasprava, ništa više“).\n"
+                "- Tog jutra si sedeo za Petrovim radnim stolom i potpisivao papire — tada ti je i ispalo "
+                "nalivpero, ali toga se setiš tek ako te detektiv pritisne oko pera.\n"
+                "- U 21:50 si nakratko svratio u biblioteku da završiš razgovor; Petar je bio živ i zdrav.\n"
                 "- Znaš da je Petar poslednjih nedelja imao napete sastanke sa dr Anom oko „rezultata kliničke "
                 "studije“ novog leka — čuo si deo razgovora. Ovo pominješ tek kad te detektiv pita o Petrovim "
                 "poslovima ili drugim ukućanima — rado skrećeš sumnju sa sebe."
+            ),
+            "false_lead": (
+                "Tvrdiš da je Milena „negde oko pola jedanaest“ ušla u kuću po šal i da je nije bilo desetak "
+                "minuta — čime joj oduzimaš alibi. Izmišljaš to da bi sumnju odgurnuo od sebe. Obara te Žarkov "
+                "iskaz da je Milenu kroz kuhinjski prozor video u vrtu i oko 22:40 i oko 22:55; suočen sa tim, "
+                "prelaziš na „možda sam pomešao veče“."
             ),
             "secret": (
                 "(1) Dužan si Petru veliku sumu — revizija bi otkrila da si prisvajao novac iz zajedničke firme; "
                 "zato svađa i jeste bila žestoka. (2) U vreme smrti bio si u VRTU sa Milenom — u vezi ste. PRVO "
                 "tvrdiš da si bio sam u vrtu i pušio cigaru. Aferu priznaješ tek suočen sa svedočenjem ili "
-                "Mileninom izjavom — to ti je alibi. Dug priznaješ tek suočen sa pismom ili dokumentima. Poričeš "
-                "bilo kakvu vezu sa ubistvom."
+                "Mileninom izjavom — to ti je alibi. (3) Oko 22:50 napustio si vrt na desetak minuta — otišao si "
+                "do svog auta po cigare i usput fotografisao papire u hodniku. Ovo ZATAJIŠ dokle god možeš, jer "
+                "znaš kako zvuči; priznaješ tek ako te detektiv suoči sa tim da je Milena u 22:55 bila sama. Dug "
+                "priznaješ tek suočen sa pismom ili dokumentima. Poričeš bilo kakvu vezu sa ubistvom."
             ),
             "is_killer": False,
             "killer_brief": "",
             "not_killer_note": (
-                "Viktorov motiv (dug, revizija) postoji, ali je 22:00-23:00 bio u vrtu sa Milenom "
-                "(afera — međusobni alibi)."
+                "Viktorov motiv (dug, revizija) je jak i alibi mu puca oko 22:50 — ali to odsustvo pada POSLE "
+                "kritičnog prozora: u 22:48 Petar je već telefonirao advokatu i žalio se na simptome trovanja. "
+                "Nalivpero je ispalo tog jutra i ležalo je pod fasciklom sa jutarnjim datumom."
             ),
         },
         {
@@ -159,20 +200,35 @@ DEFAULT_CASE: Dict[str, Any] = {
                 "- Smrt je „klasična slika infarkta“; Petar je „imao slabo srce“. Ako se pomene poseta biblioteci "
                 "u 22:40, kažeš da je batler „pogrešno zapamtio vreme“ ili da si samo provirila s vrata.\n"
                 "- Ako te suoče sa toksikološkim nalazom: dovodiš u pitanje laboratoriju („kontaminacija uzorka "
-                "nije retkost“), pa nudiš alternativna objašnjenja (žrtvina terapija za srce „u pogrešnoj dozi“).\n"
+                "nije retkost“), pa nudiš alternativna objašnjenja.\n"
                 "- Ako te suoče sa pismom advokatu o falsifikovanoj studiji: priznaješ da su POSTOJALE „stručne "
                 "nesuglasice oko metodologije studije“, ali ništa više.\n"
                 "- Nikad ne optužuješ druge direktno, ali elegantno podsećaš: „udovica nasleđuje sve“, "
-                "„gospodin Radan je imao burnu svađu sa pokojnikom“."
+                "„gospodin Radan je imao burnu svađu sa pokojnikom“, „u toj bašti raste i naprstak, znate“."
+            ),
+            "false_lead": (
+                "Kao lekarka „se sećaš“ da se Petar te nedelje žalio na bolove u grudima i da mu je kardiolog "
+                "NEDAVNO POVEĆAO dozu srčanih kapi — pa sugerišeš nesrećan slučaj: ostariji čovek, zbunjen, sam "
+                "sebi predozirao terapiju. Time objašnjavaš i bočicu koja nedostaje iz kupatila. Netačno je: "
+                "terapija nije menjana šest meseci, a koncentracija je višestruko iznad terapijske. Ovu liniju "
+                "guraš uporno i napuštaš je tek suočena sa kartonom ili nalazom — i to prelaskom na drugu temu."
             ),
             "secret": "Tvoja prava uloga opisana je u poverljivom odeljku ispod.",
             "is_killer": True,
             "killer_brief": (
-                "POVERLJIVO — TI SI POČINILAC. Oko 22:40 si „svratila da poželiš laku noć“ i sipala digitalis u "
-                "Petrovu čašu rakije. Motiv: Petar je otkrio da si falsifikovala rezultate kliničke studije "
-                "njegovog novog leka i spremao se da te prijavi. Potpisala si prvi nalaz kao „srčani udar“ da "
-                "zataškaš trag. OVO NIKADA NE PRIZNAJEŠ I NIKADA NE OTKRIVAŠ, ni delimično, ni hipotetički — "
-                "tvoj cilj u igri je da NE budeš otkrivena."
+                "POVERLJIVO — TI SI POČINILAC. Popodne si iz nezaključanog ormarića u kupatilu uzela bočicu "
+                "Petrovih srčanih kapi (digoksin). U 22:40 si „svratila da poželiš laku noć“ i sipala sadržaj u "
+                "njegovu čašu rakije — koju je do tada već popio do pola. Izašla si u 22:45 i vratila se u salon. "
+                "Motiv: Petar je otkrio da si falsifikovala rezultate kliničke studije njegovog novog leka i "
+                "spremao se da te prijavi u ponedeljak. U 23:20 si potpisala nalaz „srčani udar“ da zataškaš trag "
+                "— i tu si napravila jedinu grešku: napisala si „bez mučnine i povraćanja, zenice uredne“ pre nego "
+                "što si telo uopšte pažljivo pregledala, a na rukavu su bili tragovi povraćanja.\n"
+                "ODBRANA: alibi ti je salon i knjiga; računaš i na to što Milena iskreno veruje da je tvoj auto "
+                "otišao pre 22:30 — tu tvrdnju nikada ne ispravljaš, ali je ni ne pominješ prva. Na batlerov iskaz "
+                "o 22:45: „provirila sam s vrata, nisam ni ušla“. Na prsten na čaši i vreme dejstva: „nagađanja "
+                "laboratorije“. Na svoj nalaz: „prva procena na licu mesta, ne obdukcija“. Na nestalu bočicu: "
+                "usmeravaš na samopredoziranje. OVO NIKADA NE PRIZNAJEŠ I NIKADA NE OTKRIVAŠ, ni delimično, ni "
+                "hipotetički — tvoj cilj u igri je da NE budeš otkrivena."
             ),
             "not_killer_note": "",
         },
@@ -185,10 +241,19 @@ DEFAULT_CASE: Dict[str, Any] = {
             "content": (
                 "UVIĐAJ — BIBLIOTEKA:\n"
                 "- Nema tragova borbe; žrtva zatečena u fotelji za radnim stolom.\n"
-                "- Čaša rakije, skoro ispijena: gorak miris koji ne odgovara šljivovici; čaša poslata na analizu.\n"
+                "- Čaša rakije, skoro ispijena: gorak miris koji ne odgovara šljivovici. Na staklu su DVA suva "
+                "prstena — spoljni na visini pune čaše i unutrašnji na polovini. Talog i sitni neistopljeni "
+                "kristali leže ispod donjeg prstena, pa je materija u piće dospela tek kada je čaša bila ispijena "
+                "do pola.\n"
+                "- Batler potvrđuje da je rakiju natočio iz porodične flaše koju koriste svi — flaša je čista, a "
+                "čaša je pri posluživanju u 22:30 bila puna.\n"
                 "- Vrata terase zaključana iznutra — ubica je ušao kroz kuću, niko sa strane.\n"
-                "- Na tepihu kod vrata: slab otisak uske ženske cipele, sveže blato sa staze koja vodi pored salona.\n"
-                "- Batler potvrđuje da je rakiju natočio iz porodične flaše koju koriste svi — flaša je čista."
+                "- Na tepihu kod vrata: slab otisak uske ženske cipele, sveže blato sa staze koja povezuje vrt, "
+                "salon i biblioteku.\n"
+                "- Ispod radnog stola: nalivpero sa monogramom V. R., zaglavljeno pod fasciklom koja nosi "
+                "jutrošnji datum.\n"
+                "- Iz nezaključanog ormarića u kupatilu na spratu nedostaje bočica žrtvinih srčanih kapi; prazna "
+                "kutijica je u korpi za otpatke. Do tog ormarića te večeri je mogao svako u kući."
             ),
         },
         {
@@ -197,13 +262,17 @@ DEFAULT_CASE: Dict[str, Any] = {
             "request_hints": "obdukcija, toksikologija, nalaz",
             "content": (
                 "TOKSIKOLOŠKI NALAZ (laboratorija Beograd, hitna analiza):\n"
-                "- U čaši i u krvi žrtve: DIGITALIS u višestruko smrtonosnoj dozi.\n"
-                "- Digitalis u ovoj koncentraciji izaziva zastoj srca koji NEISKUSNOM oku liči na infarkt — ali "
-                "obducent je kategoričan: ovo je trovanje.\n"
-                "- Napomena: digitalis je lek koji se ne nalazi u slobodnoj prodaji; dozira se isključivo pod "
-                "lekarskim nadzorom.\n"
-                "- Kontradikcija: prvi nalaz dr Simić („srčani udar“) ne pominje nikakvu sumnju, iako bi lekar "
-                "njenog iskustva morao primetiti simptome trovanja."
+                "- U talogu čaše i u krvi žrtve: DIGITALIS (digoksin) u višestruko smrtonosnoj koncentraciji. "
+                "Obducent je kategoričan: ovo je trovanje, a ne infarkt.\n"
+                "- Oblik je farmaceutski — čist rastvor digoksina. Nema biljne materije ni pratećih glikozida, pa "
+                "napitak od naprstka iz bašte NIJE upotrebljen.\n"
+                "- Sastav odgovara srčanim kapima koje je žrtva imala na recept, dakle bočici koja nedostaje iz "
+                "kupatila. Prema kartonu terapija nije menjana šest meseci i doza je bila uobičajena — slučajno "
+                "predoziranje ovom količinom nije moguće.\n"
+                "- Dejstvo: prvi simptomi (mučnina, poremećaj vida — žuti krugovi oko izvora svetlosti) javljaju "
+                "se 10-30 minuta po unosu; zastoj srca sledi kasnije i neiskusnom oku liči na infarkt.\n"
+                "- Na manžetni i rukavu žrtve tragovi povraćanja. Prvi nalaz dr Simić („srčani udar“) izričito "
+                "navodi „bez mučnine i povraćanja, zenice uredne“."
             ),
         },
         {
@@ -217,16 +286,33 @@ DEFAULT_CASE: Dict[str, Any] = {
                 "je moje poverenje i ugrozila živote pacijenata. Nameravam da u ponedeljak podnesem prijavu "
                 "nadležnima, bez obzira na posledice po ugled firme...“\n"
                 "- Pismo nije potpisano ni poslato. Ime osobe koja je vodila studiju nije navedeno u nacrtu.\n"
-                "- U istoj fioci: raskinut nacrt aneksa partnerskog ugovora sa Viktorom Radanom i nalog za "
-                "reviziju poslovnih računa."
+                "- U istoj fioci: raskinut nacrt aneksa partnerskog ugovora sa Viktorom Radanom, nalog za reviziju "
+                "poslovnih računa i podsetnik „V. R. — 140.000, rok istekao“.\n"
+                "- Dve teme, dva moguća adresata: revizija pogađa poslovnog partnera, klinička studija nekoga iz "
+                "struke. Nacrt ne razlučuje o kome je reč."
+            ),
+        },
+        {
+            "id": "phone_log",
+            "title": "Telefonski ispis i izjava advokata",
+            "request_hints": "telefon, ispis poziva, advokat, Arsić",
+            "content": (
+                "TELEFONSKI ISPIS (kućna linija, biblioteka) I IZJAVA ADVOKATA ARSIĆA:\n"
+                "- Odlazni poziv advokatu Arsiću: 22:48 - 22:56, osam minuta. Posle toga sa te linije nema poziva.\n"
+                "- Arsić: „Petar je bio potpuno pri svesti i vrlo ljut. Rekao je da u ponedeljak ide do kraja i da "
+                "će mi dokumentaciju poslati ujutru.“\n"
+                "- „Pred kraj razgovora požalio se da mu je muka i da vidi žute krugove oko stone lampe. Mislio je "
+                "da je od umora i naočara.“\n"
+                "- „Uzgred je pomenuo da mu je malopre neko svratio da poželi laku noć. Nije rekao ko.“\n"
+                "- Arsić nije čuo nikoga drugog u prostoriji tokom razgovora."
             ),
         },
     ],
     "solution": {
         "killer": "dr Ana Simić",
         "method": (
-            "Digitalis sipan u čašu rakije oko 22:40, kada je „svratila da poželi laku noć“. Batler ju je video "
-            "kako izlazi iz biblioteke u 22:45."
+            "Digoksin iz nestale bočice žrtvinih srčanih kapi, sipan u već do pola ispijenu čašu rakije oko 22:40, "
+            "kada je „svratila da poželi laku noć“. Batler ju je video kako izlazi iz biblioteke u 22:45."
         ),
         "motive": (
             "Petar je otkrio da je Ana falsifikovala rezultate kliničke studije njegovog novog leka i nameravao "
@@ -234,8 +320,23 @@ DEFAULT_CASE: Dict[str, Any] = {
             "uništeni. Kao prva lekarka na licu mesta potpisala je nalaz „srčani udar“ da zataška trag."
         ),
         "evidence_chain": (
-            "Toksikološki nalaz (digitalis) + pismo advokatu (motiv) + batlerovo svedočenje (prilika, "
-            "22:40-22:45) + falsifikovan prvi nalaz."
+            "Unutrašnji prsten na čaši (otrov ubačen posle ~22:35) + vreme dejstva iz toksikologije uz advokatov "
+            "opis žutih krugova u 22:54 (unos pre ~22:44) + batlerov iskaz da je u tom prozoru u biblioteku "
+            "ulazila samo dr Simić + pismo advokatu (motiv) + njen prvi nalaz koji opisuje simptome kojih na telu "
+            "nije bilo."
+        ),
+        "red_herring": (
+            "Sve isprva pokazuje na Viktora Radana: jutrošnja svađa, dug od 140.000, revizija koja bi ga raskrinkala, "
+            "nalivpero ispod stola, batlerovi „povišeni glasovi oko 23:00“ i desetak minuta kada je nestao iz vrta. "
+            "Ta linija pada kad se uporede vremena — glasovi su Petrov telefonski razgovor u 22:48-22:56, Viktorovo "
+            "odsustvo dolazi tek posle njega, a pero leži pod fasciklom sa jutrošnjim datumom. Drugi lažni trag je "
+            "Milenin naprstak i nasledstvo, koji padaju na toksikologiji (farmaceutski digoksin, ne biljni napitak)."
+        ),
+        "turning_point": (
+            "Ukrštanje tri nalaza suzi prozor trovanja na 22:35-22:45: otrov je dospeo u čašu tek kad je bila do "
+            "pola ispijena (a poslužena je puna u 22:30), simptomi počinju 10-30 minuta po unosu a žrtva ih opisuje "
+            "advokatu oko 22:54. U tom prozoru u biblioteku je ušla samo dr Simić. Milenina tvrdnja da je Anin auto "
+            "otišao pre 22:30 je iskrena zabuna — batler je tada premeštao taj auto do garaže."
         ),
     },
 }
@@ -271,9 +372,9 @@ def validate_case(case: Any) -> Optional[str]:
         if not isinstance(s, dict):
             return f"suspect {i} is not an object"
         for field in ("name", "role", "public_info", "character", "knowledge", "secret",
-                      "killer_brief", "not_killer_note"):
+                      "false_lead", "killer_brief", "not_killer_note"):
             _coerce_text(s, field)
-        for field in ("name", "role", "public_info", "character", "knowledge", "secret"):
+        for field in ("name", "role", "public_info", "character", "knowledge", "secret", "false_lead"):
             if not isinstance(s.get(field), str) or not s[field].strip():
                 return f"suspect {i}: missing or empty field: {field}"
         s["id"] = i
@@ -287,8 +388,8 @@ def validate_case(case: Any) -> Optional[str]:
     if killers != 1:
         return f"exactly one suspect must have is_killer=true (got {killers})"
     evidence = case.get("evidence")
-    if not isinstance(evidence, list) or not (2 <= len(evidence) <= 4):
-        return "evidence must be a list of 2-4 items"
+    if not isinstance(evidence, list) or not (3 <= len(evidence) <= 5):
+        return "evidence must be a list of 3-5 items"
     for i, ev in enumerate(evidence, 1):
         if not isinstance(ev, dict):
             return f"evidence {i} is not an object"
@@ -300,7 +401,7 @@ def validate_case(case: Any) -> Optional[str]:
     solution = case.get("solution")
     if not isinstance(solution, dict):
         return "missing solution object"
-    for field in ("killer", "method", "motive", "evidence_chain"):
+    for field in ("killer", "method", "motive", "evidence_chain", "red_herring", "turning_point"):
         _coerce_text(solution, field)
         if not isinstance(solution.get(field), str) or not solution[field].strip():
             return f"solution: missing or empty field: {field}"
@@ -421,6 +522,7 @@ Return ONLY a JSON object with this exact structure (no markdown fences, no comm
       "character": "2-3 sentences: age, personality, speech mannerisms for the AI actor",
       "knowledge": "ONE string (not an array): 3-5 bullet lines separated by newlines, of what this suspect truly knows and reveals only when asked the right questions (include observations that implicate OTHER suspects)",
       "secret": "the suspect's OWN hidden secret (a red herring for innocents), when they lie about it and what finally makes them confess it. Innocent secrets must NOT be the murder.",
+      "false_lead": "ONE claim this suspect states as fact but which is WRONG, and which sends the detective the wrong way (a misremembered time, a misidentified person, a self-serving invention). Say what the truth is and which evidence or testimony finally disproves it. Every suspect has one, the killer included.",
       "is_killer": false,
       "killer_brief": "",
       "not_killer_note": "for innocents: why they cannot be the killer (alibi/lack of means), used to rebut a wrong accusation. Empty string for the killer."
@@ -438,18 +540,30 @@ Return ONLY a JSON object with this exact structure (no markdown fences, no comm
     "killer": "name of the killer (must be one of the suspects)",
     "method": "how the murder was done, with times",
     "motive": "why, and any cover-up",
-    "evidence_chain": "which evidence + testimonies together prove it"
+    "evidence_chain": "which evidence + testimonies together prove it",
+    "red_herring": "who the case appears to accuse for most of the game, what makes them look guilty, and the concrete fact that collapses that reading",
+    "turning_point": "the single contradiction that unmasks the real killer, and how the player can reach it"
   }}
 }}
 
 Hard requirements:
 - Exactly {suspect_count} suspects; exactly ONE has "is_killer": true.
 - The killer's "killer_brief" holds their confidential briefing: what they did, when, why, their cover story, and how they deflect when confronted with each piece of evidence. Their "knowledge" holds only their OFFICIAL story.
-- Exactly 3 evidence items. The case must be solvable: evidence + suspects' testimonies must form a logical chain pointing to the killer, and innocents' alibis must hold.
+- Exactly 4 evidence items. The case must be solvable, but never obvious.
 - Give every innocent suspect a juicy red-herring secret so everyone seems guilty at first.
 - Follow the setting and murder method given above; invent a fresh victim and cast to fit them (no character named Nikola Vetrov).
 - Every text field must be a single JSON string (join bullet lines with newlines inside the string) — NEVER an array of strings.
-- All strings must be plain text (no nested JSON, no markdown)."""
+- All strings must be plain text (no nested JSON, no markdown).
+
+Misdirection requirements (the previous version of this game was far too easy — treat these as the point of the exercise):
+- NO single piece of evidence may identify the killer on its own. Guilt must follow only from combining at least TWO independent sources (e.g. a physical detail plus a witness's time, or two testimonies that cannot both be true).
+- The means must have been available to at least three of the {suspect_count} suspects. Never let the method point at one profession or one person by itself (a poison only a doctor could obtain, a knot only a sailor could tie) — that gives the game away in one move.
+- Pick ONE innocent as the apparent culprit: they must have motive, opportunity AND a piece of evidence physically tying them to the scene, so that a reasonable detective would accuse them by mid-game. Their exoneration must depend on a concrete detail the player has to dig up, never on their own word.
+- At least one of the 4 evidence items must, read on its own, incriminate that innocent. At least one must be genuinely ambiguous — supporting two different readings, both plausible.
+- The killer must look ordinary at the start: a reason to be above suspicion or an alibi that seems to hold, with a flaw that surfaces only when two facts are compared. Their cover-up itself should be what finally betrays them.
+- Testimony must not be a reliable oracle: each suspect's "false_lead" makes them wrong or lying about something factual, and at least one false lead must appear to clear the real killer.
+- "public_info" is a hook, not a verdict: every suspect's card must read as a possible motive, and none may hint at who is guilty or innocent.
+- Fair play still holds: everything needed is discoverable through evidence and interrogation, the timeline must be internally consistent, and nothing decisive may be invented only at the reveal."""
 
 
 def _extract_json(text: str) -> Optional[dict]:
@@ -500,9 +614,15 @@ def _generate_case_llm(language: str, theme: str = "", model: Optional[str] = No
 
     last_error = "unknown"
     for attempt in range(2):
+        # The retry is worth little if it repeats the same prompt blindly — the schema
+        # is strict enough that naming the rejected field usually fixes it in one go.
+        attempt_prompt = prompt if attempt == 0 else (
+            f"{prompt}\n\nYour previous attempt was rejected: {last_error}. "
+            f"Fix exactly that and return the complete JSON object again."
+        )
         resp = litellm.completion(
             model=model or _default_model(),
-            messages=[{"role": "user", "content": prompt}],
+            messages=[{"role": "user", "content": attempt_prompt}],
             temperature=0.9,
             # Reasoning models (deepseek-v4-pro, gemini flash) spend thinking tokens
             # from this budget before emitting the ~3-4k-token case JSON.
@@ -639,6 +759,7 @@ def create_mystery_character_tools_from_config(config: Dict[str, Any]) -> List[A
             "character": suspect["character"],
             "what_you_know": suspect["knowledge"],
             "your_secret": suspect["secret"],
+            "your_false_lead": suspect.get("false_lead", ""),
         }
         if suspect.get("is_killer"):
             sheet["confidential_role"] = suspect.get("killer_brief", "")
