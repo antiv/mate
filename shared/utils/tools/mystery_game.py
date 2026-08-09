@@ -25,12 +25,14 @@ SUSPECT_COUNT = 4
 
 
 def _default_model() -> str:
-    # Benchmarked 2026-07: gemini-3-flash-preview 17s/valid/~$0.009 per case beat
-    # gemini-2.5-flash (25s), gemini-3.6-flash (44s, reasoning burn, ~$0.065),
-    # deepseek-v4-pro (95-124s) and kimi-k2.6 / deepseek-v3.2 (>120s).
+    # Chosen for case writing; the transparency probe and the surface revision run on
+    # the same model. The earlier benchmark (2026-07) picked gemini-3-flash-preview on
+    # speed and cost — 17s/valid/~$0.009 per case, against gemini-2.5-flash (25s),
+    # gemini-3.6-flash (44s, reasoning burn, ~$0.065), deepseek-v4-pro (95-124s) and
+    # kimi-k2.6 / deepseek-v3.2 (>120s) — but plot quality was never what it measured.
     return (os.getenv("MYSTERY_GEN_MODEL")
             or os.getenv("WIZARD_ANALYSIS_MODEL")
-            or "openrouter/google/gemini-3-flash-preview")
+            or "openrouter/deepseek/deepseek-v4-flash")
 
 
 # ---------------------------------------------------------------------------
