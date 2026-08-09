@@ -532,7 +532,7 @@ Return ONLY a JSON object with this exact structure (no markdown fences, no comm
       "public_info": "one intriguing sentence shown on the suspect card",
       "character": "2-3 sentences: age, personality, speech mannerisms for the AI actor",
       "knowledge": "ONE string (not an array): 3-5 bullet lines separated by newlines, of what this suspect truly knows and reveals only when asked the right questions (include observations that implicate OTHER suspects)",
-      "secret": "the suspect's OWN hidden secret (a red herring for innocents), when they lie about it and what finally makes them confess it. Innocent secrets must NOT be the murder.",
+      "secret": "the suspect's OWN hidden secret (a red herring for innocents), when they lie about it and what finally makes them confess it. Innocent secrets must NOT be the murder. EXACTLY ONE innocent must have a secret they never admit no matter what evidence is put to them — write 'NIKADA NE PRIZNAJEŠ' (in the case language) into that suspect's secret.",
       "false_lead": "ONE claim this suspect states as fact but which is WRONG, and which sends the detective the wrong way (a misremembered time, a misidentified person, a self-serving invention). Say what the truth is and which evidence or testimony finally disproves it. Every suspect has one, the killer included.",
       "is_killer": false,
       "killer_brief": "",
@@ -545,7 +545,7 @@ Return ONLY a JSON object with this exact structure (no markdown fences, no comm
       "id": "short_snake_case_id",
       "title": "evidence title",
       "request_hints": "comma-separated phrases the player might use to request it",
-      "content": "4-7 lines of concrete findings, written as a report"
+      "content": "4-7 lines of concrete findings, written as a report. Findings ONLY — a lab states what it measured, never what it means. Never write the inference for the player ('which means only a doctor could obtain it', 'this points to someone who knew the house'), never call a detail decisive, suspicious or strange, and never name a suspect as its likely source."
     }}
   ],
   "solution": {{
@@ -573,10 +573,154 @@ Misdirection requirements (the previous version of this game was far too easy �
 - Pick ONE innocent as the apparent culprit: they must have motive, opportunity AND a piece of evidence physically tying them to the scene, so that a reasonable detective would accuse them by mid-game. Their exoneration must depend on a concrete detail the player has to dig up, never on their own word.
 - At least one of the 4 evidence items must, read on its own, incriminate that innocent. At least one must be genuinely ambiguous — supporting two different readings, both plausible.
 - The killer must look ordinary at the start: a reason to be above suspicion or an alibi that seems to hold, with a flaw that surfaces only when two facts are compared. Their cover-up itself should be what finally betrays them.
+- Write the killer as the COOPERATIVE one: helpful, forthcoming, the suspect who answers readily and volunteers useful detail. Never make them the evasive or hostile one. If three suspects crack under pressure and one stonewalls, the player identifies the killer from behaviour alone and the plot stops mattering — which is why exactly one innocent must also stonewall to the end.
+- The dossier must not editorialise either: it lists what was found and who was present, and never hints at which detail matters.
 - Testimony must not be a reliable oracle: each suspect's "false_lead" makes them wrong or lying about something factual, and at least one false lead must appear to clear the real killer.
 - "public_info" is a hook, not a verdict: every suspect's card must read as a possible motive, and none may hint at who is guilty or innocent.
 - A wrong accusation must cost the player, never reward them. "rebuttal" is all they get: it rejects the accusation without teaching anything, so guessing stays worse than investigating. The reasoning lives in "not_killer_note" and surfaces only once the case is solved.
 - Fair play still holds: everything needed is discoverable through evidence and interrogation, the timeline must be internally consistent, and nothing decisive may be invented only at the reveal."""
+
+
+# The generator obeys the letter of the misdirection rules and still writes cases a
+# reader solves off the evidence alone, so the requirements are verified rather than
+# trusted: a second call plays detective on exactly what the player can see.
+_PROBE_PROMPT = """You are stress-testing a whodunit for difficulty, not solving it for fun.
+
+Below is EVERYTHING the player can see: the case file, the suspect cards and every forensic report. You have interrogated nobody — this is the surface of the case.
+
+Name the one person you would accuse from this material alone.
+
+{material}
+
+Return ONLY a JSON object (no fences, no commentary):
+{{"culprit": "the name you would accuse", "confidence": 1-5, "reason": "one sentence: what in the material gave it away"}}
+
+confidence 5 = the material all but names them; 3 = they clearly stand out from the others; 1 = a coin flip between equally placed suspects."""
+
+_REVISION_PROMPT = """You wrote this whodunit, and a test reader named the killer straight off the case file and the evidence, without interrogating anyone. That makes the game pointless.
+
+What gave it away: {giveaway}
+
+The plot is fine — the SURFACE leaks. Rewrite only what the player sees, so the same solution stays true but stops being readable:
+- Every evidence item must fit at least two different suspects. Strip any line that reads as an inference, a verdict or a nudge; report measurements and observations only.
+- Whatever singled the killer out (access to the means, a profession, a convenient time, a loaded phrase on their card) must now apply to others too, or move off the surface entirely and into what suspects reveal only under questioning.
+- At least one evidence item must read as incriminating an innocent.
+- Suspect cards must all read as possible motives. None may hint at guilt or innocence.
+- Keep every name, role, time and fact that the solution depends on: you are rewriting emphasis and framing, not events.
+
+The case (for reference — its solution must remain exactly as it is):
+{case_json}
+
+Return ONLY a JSON object in the case's language with the rewritten surface, nothing else:
+{{"dossier": "the rewritten case file, 5-8 lines",
+  "public_info": [{public_info_count} rewritten suspect-card sentences, in the same order as the suspects above],
+  "evidence": [{{"id": "unchanged id", "title": "title", "request_hints": "phrases", "content": "rewritten report, 4-7 lines"}}]}}"""
+
+
+def _same_person(a: str, b: str) -> bool:
+    """Loose name match — the probe answers with whatever form it likes."""
+    a, b = (a or "").strip().casefold(), (b or "").strip().casefold()
+    if not a or not b:
+        return False
+    if a in b or b in a:
+        return True
+    parts = {p for p in a.split() if len(p) > 2}
+    return bool(parts & {p for p in b.split() if len(p) > 2})
+
+
+def _player_visible_material(case: Dict[str, Any]) -> str:
+    """Everything the player can reach without interrogating anyone."""
+    cards = "\n".join(
+        f"- {s['name']} ({s['role']}): {s['public_info']}" for s in case["suspects"])
+    reports = "\n\n".join(
+        f"[{ev['title']}]\n{ev['content']}" for ev in case["evidence"])
+    return (f"CASE FILE:\n{case['dossier']}\n\nSUSPECT CARDS:\n{cards}\n\nEVIDENCE:\n{reports}")
+
+
+def _probe_transparency(case: Dict[str, Any], model: str) -> Optional[str]:
+    """Return what gives the case away, or None when its surface holds up."""
+    import litellm  # type: ignore
+
+    resp = litellm.completion(
+        model=model,
+        messages=[{"role": "user",
+                   "content": _PROBE_PROMPT.format(material=_player_visible_material(case))}],
+        temperature=0.2,
+        max_tokens=2000,
+    )
+    verdict = _extract_json(resp.choices[0].message.content)
+    if not isinstance(verdict, dict):
+        return None
+    killer = next((s["name"] for s in case["suspects"] if s.get("is_killer")), "")
+    if not _same_person(str(verdict.get("culprit", "")), killer):
+        return None
+    try:
+        confidence = int(verdict.get("confidence", 0))
+    except (TypeError, ValueError):
+        confidence = 0
+    # Guessing right among four suspects happens; guessing right AND knowing why is
+    # the case explaining itself.
+    if confidence < 3:
+        return None
+    return str(verdict.get("reason") or "the material points at one suspect only")
+
+
+def _revise_surface(case: Dict[str, Any], giveaway: str, model: str) -> bool:
+    """Rewrite dossier, suspect cards and evidence in place. Returns True if applied.
+
+    Only the surface is sent back for a rewrite — the solution, the secrets and the
+    testimony stay exactly as generated, so a revision cannot quietly change whodunit.
+    """
+    import litellm  # type: ignore
+
+    resp = litellm.completion(
+        model=model,
+        messages=[{"role": "user", "content": _REVISION_PROMPT.format(
+            giveaway=giveaway,
+            case_json=json.dumps(case, ensure_ascii=False),
+            public_info_count=len(case["suspects"]),
+        )}],
+        temperature=0.8,
+        max_tokens=8000,
+    )
+    surface = _extract_json(resp.choices[0].message.content)
+    if not isinstance(surface, dict):
+        return False
+
+    revised = copy.deepcopy(case)
+    if isinstance(surface.get("dossier"), str) and surface["dossier"].strip():
+        revised["dossier"] = surface["dossier"]
+    cards = surface.get("public_info")
+    if isinstance(cards, list) and len(cards) == len(revised["suspects"]):
+        for suspect, card in zip(revised["suspects"], cards):
+            if isinstance(card, str) and card.strip():
+                suspect["public_info"] = card
+    if isinstance(surface.get("evidence"), list) and surface["evidence"]:
+        revised["evidence"] = surface["evidence"]
+
+    error = validate_case(revised)
+    if error is not None:
+        logger.warning(f"mystery_game: surface revision rejected ({error}); keeping the original")
+        return False
+    case.update(revised)
+    return True
+
+
+def _harden_case(case: Dict[str, Any], model: str) -> None:
+    """Best-effort difficulty gate — never blocks the player from getting a game."""
+    try:
+        giveaway = _probe_transparency(case, model)
+    except Exception as e:
+        logger.warning(f"mystery_game: difficulty probe failed: {e}")
+        return
+    if not giveaway:
+        return
+    logger.info(f"mystery_game: case gives itself away ({giveaway}); rewriting the surface")
+    try:
+        if not _revise_surface(case, giveaway, model):
+            logger.warning("mystery_game: surface revision produced nothing usable")
+    except Exception as e:
+        logger.warning(f"mystery_game: surface revision failed: {e}")
 
 
 def _extract_json(text: str) -> Optional[dict]:
@@ -645,6 +789,7 @@ def _generate_case_llm(language: str, theme: str = "", model: Optional[str] = No
         error = validate_case(case) if case is not None else "reply was not valid JSON"
         if error is None:
             _shuffle_suspects(case)
+            _harden_case(case, model=model or _default_model())
             return case
         last_error = error
         logger.warning(f"mystery_game: generated case invalid (attempt {attempt + 1}): {error}")

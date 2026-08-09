@@ -237,7 +237,7 @@ class TestGenerateNewCase(unittest.TestCase):
         self.assertEqual(result["status"], "success")
         self.assertEqual(result["case"]["title"], "Smrt na splavu")
         self.assertEqual(ctx.state[STATE_KEY]["title"], "Smrt na splavu")
-        prompt = mock_llm.call_args.kwargs["messages"][0]["content"]
+        prompt = mock_llm.call_args_list[0].kwargs["messages"][0]["content"]
         self.assertIn("Serbian", prompt)
         self.assertIn("reka", prompt)
 
@@ -277,7 +277,7 @@ class TestGenerateNewCase(unittest.TestCase):
             with patch("litellm.completion",
                        return_value=self._llm_response(json.dumps(copy.deepcopy(DEFAULT_CASE), ensure_ascii=False))) as mock_llm:
                 _gm_tools()["generate_new_case"](language="Serbian", tool_context=_fake_context())
-            prompt = mock_llm.call_args.kwargs["messages"][0]["content"]
+            prompt = mock_llm.call_args_list[0].kwargs["messages"][0]["content"]
             self.assertIn("Set the case here:", prompt)
             self.assertIn("The murder method must be:", prompt)
             seen.add(prompt.split("Set the case here:")[1].split("\n")[0])
@@ -288,7 +288,7 @@ class TestGenerateNewCase(unittest.TestCase):
                    return_value=self._llm_response(json.dumps(copy.deepcopy(DEFAULT_CASE), ensure_ascii=False))) as mock_llm:
             _gm_tools()["generate_new_case"](language="Serbian", theme="misterija na moru",
                                              tool_context=_fake_context())
-        prompt = mock_llm.call_args.kwargs["messages"][0]["content"]
+        prompt = mock_llm.call_args_list[0].kwargs["messages"][0]["content"]
         self.assertIn("misterija na moru", prompt)
         self.assertNotIn("Set the case here:", prompt)
         # The method seed still applies on top of the player's theme
@@ -332,7 +332,7 @@ class TestGenerateNewCase(unittest.TestCase):
         with patch("litellm.completion",
                    return_value=self._llm_response(json.dumps(copy.deepcopy(DEFAULT_CASE), ensure_ascii=False))) as mock_llm:
             _gm_tools()["generate_new_case"](language="Serbian", tool_context=_fake_context())
-        prompt = mock_llm.call_args.kwargs["messages"][0]["content"]
+        prompt = mock_llm.call_args_list[0].kwargs["messages"][0]["content"]
         self.assertIn("NO single piece of evidence may identify the killer on its own", prompt)
         self.assertIn("Pick ONE innocent as the apparent culprit", prompt)
         self.assertIn("false_lead", prompt)
@@ -347,9 +347,78 @@ class TestGenerateNewCase(unittest.TestCase):
             result = _gm_tools()["generate_new_case"](language="Serbian", tool_context=_fake_context())
         self.assertEqual(result["status"], "error")
         self.assertEqual(mock_llm.call_count, 2)
-        retry_prompt = mock_llm.call_args.kwargs["messages"][0]["content"]
+        retry_prompt = mock_llm.call_args_list[1].kwargs["messages"][0]["content"]
         self.assertIn("previous attempt was rejected", retry_prompt)
         self.assertIn("false_lead", retry_prompt)
+
+    def _case_then(self, *replies):
+        """Generation reply followed by the probe/revision replies, in order."""
+        case = json.dumps(copy.deepcopy(DEFAULT_CASE), ensure_ascii=False)
+        return [self._llm_response(r) for r in (case,) + replies]
+
+    def test_transparent_case_gets_its_surface_rewritten(self):
+        probe = json.dumps({"culprit": "dr Ana Simić", "confidence": 5,
+                            "reason": "the tox report says only a doctor can obtain it"})
+        revision = json.dumps({
+            "dossier": "Prepisani dosije bez navođenja.",
+            "public_info": ["Kartica 1", "Kartica 2", "Kartica 3", "Kartica 4"],
+            "evidence": [dict(e, content="Prepisan nalaz bez zaključka.\nDruga stavka.")
+                         for e in DEFAULT_CASE["evidence"]],
+        }, ensure_ascii=False)
+        ctx = _fake_context()
+        with patch("litellm.completion", side_effect=self._case_then(probe, revision)) as mock_llm:
+            result = _gm_tools()["generate_new_case"](language="Serbian", tool_context=ctx)
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(mock_llm.call_count, 3)  # generate, probe, revise
+        stored = ctx.state[STATE_KEY]
+        self.assertEqual(stored["dossier"], "Prepisani dosije bez navođenja.")
+        self.assertIn("Prepisan nalaz", stored["evidence"][0]["content"])
+        # The rewrite may only touch the surface — whodunit is untouchable
+        self.assertEqual(stored["solution"], DEFAULT_CASE["solution"])
+        killer = next(s for s in stored["suspects"] if s["is_killer"])
+        self.assertEqual(killer["name"], "dr Ana Simić")
+        self.assertTrue(killer["killer_brief"])
+
+    def test_opaque_case_is_left_alone(self):
+        probe = json.dumps({"culprit": "Viktor Radan", "confidence": 5, "reason": "the pen"})
+        with patch("litellm.completion", side_effect=self._case_then(probe)) as mock_llm:
+            result = _gm_tools()["generate_new_case"](language="Serbian", tool_context=_fake_context())
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(mock_llm.call_count, 2)  # no revision needed
+
+    def test_lucky_guess_does_not_trigger_a_rewrite(self):
+        # Naming the killer among four with no idea why is chance, not transparency
+        probe = json.dumps({"culprit": "dr Ana Simić", "confidence": 1, "reason": "a hunch"})
+        with patch("litellm.completion", side_effect=self._case_then(probe)) as mock_llm:
+            _gm_tools()["generate_new_case"](language="Serbian", tool_context=_fake_context())
+        self.assertEqual(mock_llm.call_count, 2)
+
+    def test_probe_sees_only_what_the_player_sees(self):
+        probe = json.dumps({"culprit": "nobody", "confidence": 1, "reason": "-"})
+        with patch("litellm.completion", side_effect=self._case_then(probe)) as mock_llm:
+            _gm_tools()["generate_new_case"](language="Serbian", tool_context=_fake_context())
+        material = mock_llm.call_args_list[1].kwargs["messages"][0]["content"]
+        self.assertIn("Toksikološki nalaz", material)      # evidence is visible
+        self.assertNotIn("POČINILAC", material)             # the killer brief is not
+        self.assertNotIn("kradeš retka vina", material)     # nor are secrets
+        self.assertNotIn("turning_point", material)
+
+    def test_probe_failure_never_costs_the_player_a_game(self):
+        case = json.dumps(copy.deepcopy(DEFAULT_CASE), ensure_ascii=False)
+        with patch("litellm.completion",
+                   side_effect=[self._llm_response(case), RuntimeError("probe model down")]):
+            result = _gm_tools()["generate_new_case"](language="Serbian", tool_context=_fake_context())
+        self.assertEqual(result["status"], "success")
+
+    def test_unusable_revision_keeps_the_original_case(self):
+        probe = json.dumps({"culprit": "dr Ana Simić", "confidence": 4, "reason": "obvious"})
+        broken = json.dumps({"dossier": "", "evidence": [{"id": "x"}]})  # fails validation
+        ctx = _fake_context()
+        with patch("litellm.completion", side_effect=self._case_then(probe, broken)):
+            result = _gm_tools()["generate_new_case"](language="Serbian", tool_context=ctx)
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(ctx.state[STATE_KEY]["dossier"], DEFAULT_CASE["dossier"])
+        self.assertEqual(len(ctx.state[STATE_KEY]["evidence"]), len(DEFAULT_CASE["evidence"]))
 
     def test_markdown_fenced_json_is_accepted(self):
         fenced = "```json\n" + json.dumps(copy.deepcopy(DEFAULT_CASE), ensure_ascii=False) + "\n```"
