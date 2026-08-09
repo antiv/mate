@@ -4,7 +4,7 @@
     "name": "Detektivske misterije (generator)",
     "description": "Interactive detective game with an LLM case generator: play the featured mystery or ask inspector Nikola to write a brand-new plot with new suspects — per player, stored in session state so other users are unaffected. Cases are built for misdirection: every suspect states something false, one innocent is framed by the evidence, and guilt only follows from combining two sources. Showcases session-scoped game state, dynamic multi-agent roleplay and per-agent guardrails.",
     "category": "demo",
-    "version": "1.0",
+    "version": "1.1",
     "compatibility_tags": [
       "guardrails"
     ],
