@@ -81,6 +81,11 @@ class TestValidateCase(unittest.TestCase):
             del case["solution"][field]
             self.assertIn(field, validate_case(case))
 
+    def test_rejects_innocent_without_rebuttal(self):
+        case = copy.deepcopy(DEFAULT_CASE)
+        case["suspects"][0]["rebuttal"] = ""
+        self.assertIn("rebuttal", validate_case(case))
+
     def test_rejects_too_few_evidence_items(self):
         case = copy.deepcopy(DEFAULT_CASE)
         case["evidence"] = case["evidence"][:2]
@@ -149,6 +154,33 @@ class TestGmTools(unittest.TestCase):
         self.assertFalse(result["correct"])
         self.assertTrue(result["why_innocent"])
         self.assertNotIn("Ana", json.dumps(result, ensure_ascii=False))
+
+    def test_wrong_accusation_returns_only_the_bare_rebuttal(self):
+        # Guessing must not out-teach investigating: the full reasoning is withheld
+        ctx = _fake_context()
+        result = _gm_tools()["check_accusation"](accused_name="Viktor Radan", tool_context=ctx)
+        viktor = next(s for s in DEFAULT_CASE["suspects"] if s["name"] == "Viktor Radan")
+        self.assertEqual(result["why_innocent"], viktor["rebuttal"])
+        self.assertNotIn(viktor["not_killer_note"], json.dumps(result, ensure_ascii=False))
+
+    def test_rebuttals_withhold_the_solution_facts(self):
+        # A rebuttal is "partial" exactly when it shares no fact with the solving chain
+        solution = DEFAULT_CASE["solution"]
+        chain = f"{solution['turning_point']} {solution['evidence_chain']}".casefold()
+        for suspect in DEFAULT_CASE["suspects"]:
+            if suspect.get("is_killer"):
+                continue
+            rebuttal = suspect["rebuttal"].casefold()
+            for giveaway in ("22:35", "22:45", "22:48", "22:54", "prsten", "toksikolog", "advokat"):
+                self.assertNotIn(giveaway, rebuttal, f"{suspect['name']} rebuttal leaks '{giveaway}'")
+            self.assertNotIn(rebuttal.strip("."), chain)
+
+    def test_correct_accusation_clears_the_innocents(self):
+        result = _gm_tools()["check_accusation"](accused_name="dr Ana Simić", tool_context=_fake_context())
+        cleared = result["cleared_suspects"]
+        self.assertEqual(len(cleared), SUSPECT_COUNT - 1)
+        self.assertTrue(all(c["why_innocent"] for c in cleared))
+        self.assertNotIn("Ana Simić", {c["name"] for c in cleared})
 
     def test_check_accusation_unknown_name(self):
         result = _gm_tools()["check_accusation"](accused_name="Petar Petrović", tool_context=_fake_context())

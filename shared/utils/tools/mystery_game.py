@@ -95,6 +95,9 @@ DEFAULT_CASE: Dict[str, Any] = {
             ),
             "is_killer": False,
             "killer_brief": "",
+            "rebuttal": (
+                "Gospođa Kovač ga je kroz kuhinjski prozor videla za poslom sve do trenutka kada je sišao u podrum."
+            ),
             "not_killer_note": (
                 "Otrov je u čašu dospeo tek pošto je žrtva popila otprilike polovinu (unutrašnji prsten na staklu), "
                 "dakle između 22:35 i 22:45 — a u tom prozoru Žarko je glačao srebro u kuhinji i Milena ga je "
@@ -135,6 +138,9 @@ DEFAULT_CASE: Dict[str, Any] = {
             ),
             "is_killer": False,
             "killer_brief": "",
+            "rebuttal": (
+                "Iz vrta se te večeri nije makla — i batler i Radan je nezavisno smeštaju tamo."
+            ),
             "not_killer_note": (
                 "Toksikologija isključuje biljni napitak (nema biljne materije ni pratećih glikozida), pa naprstak "
                 "iz njenog staklenika otpada. U kritičnom prozoru (22:35-22:45) bila je u vrtu: Žarko ju je kroz "
@@ -177,6 +183,9 @@ DEFAULT_CASE: Dict[str, Any] = {
             ),
             "is_killer": False,
             "killer_brief": "",
+            "rebuttal": (
+                "Radan je u 22:50 bio kod svog automobila na prilazu; to je provereno."
+            ),
             "not_killer_note": (
                 "Viktorov motiv (dug, revizija) je jak i alibi mu puca oko 22:50 — ali to odsustvo pada POSLE "
                 "kritičnog prozora: u 22:48 Petar je već telefonirao advokatu i žalio se na simptome trovanja. "
@@ -214,6 +223,7 @@ DEFAULT_CASE: Dict[str, Any] = {
                 "guraš uporno i napuštaš je tek suočena sa kartonom ili nalazom — i to prelaskom na drugu temu."
             ),
             "secret": "Tvoja prava uloga opisana je u poverljivom odeljku ispod.",
+            "rebuttal": "",
             "is_killer": True,
             "killer_brief": (
                 "POVERLJIVO — TI SI POČINILAC. Popodne si iz nezaključanog ormarića u kupatilu uzela bočicu "
@@ -372,7 +382,7 @@ def validate_case(case: Any) -> Optional[str]:
         if not isinstance(s, dict):
             return f"suspect {i} is not an object"
         for field in ("name", "role", "public_info", "character", "knowledge", "secret",
-                      "false_lead", "killer_brief", "not_killer_note"):
+                      "false_lead", "killer_brief", "rebuttal", "not_killer_note"):
             _coerce_text(s, field)
         for field in ("name", "role", "public_info", "character", "knowledge", "secret", "false_lead"):
             if not isinstance(s.get(field), str) or not s[field].strip():
@@ -383,8 +393,9 @@ def validate_case(case: Any) -> Optional[str]:
             if not isinstance(s.get("killer_brief"), str) or not s["killer_brief"].strip():
                 return f"suspect {i} is the killer but has no killer_brief"
         else:
-            if not isinstance(s.get("not_killer_note"), str) or not s["not_killer_note"].strip():
-                return f"suspect {i}: missing not_killer_note"
+            for field in ("rebuttal", "not_killer_note"):
+                if not isinstance(s.get(field), str) or not s[field].strip():
+                    return f"suspect {i}: missing {field}"
     if killers != 1:
         return f"exactly one suspect must have is_killer=true (got {killers})"
     evidence = case.get("evidence")
@@ -525,7 +536,8 @@ Return ONLY a JSON object with this exact structure (no markdown fences, no comm
       "false_lead": "ONE claim this suspect states as fact but which is WRONG, and which sends the detective the wrong way (a misremembered time, a misidentified person, a self-serving invention). Say what the truth is and which evidence or testimony finally disproves it. Every suspect has one, the killer included.",
       "is_killer": false,
       "killer_brief": "",
-      "not_killer_note": "for innocents: why they cannot be the killer (alibi/lack of means), used to rebut a wrong accusation. Empty string for the killer."
+      "rebuttal": "for innocents: ONE short sentence the inspector reads out when the player accuses this suspect wrongly — a single verified fact that stands in the way of the accusation. It must state the fact and stop: no reasoning, no timeline arithmetic, and none of the facts used in solution.turning_point or solution.evidence_chain. Empty string for the killer.",
+      "not_killer_note": "for innocents: the full explanation of why they cannot be the killer (alibi/lack of means), revealed only in the debrief after the case is solved. Empty string for the killer."
     }}
   ],
   "evidence": [
@@ -563,6 +575,7 @@ Misdirection requirements (the previous version of this game was far too easy �
 - The killer must look ordinary at the start: a reason to be above suspicion or an alibi that seems to hold, with a flaw that surfaces only when two facts are compared. Their cover-up itself should be what finally betrays them.
 - Testimony must not be a reliable oracle: each suspect's "false_lead" makes them wrong or lying about something factual, and at least one false lead must appear to clear the real killer.
 - "public_info" is a hook, not a verdict: every suspect's card must read as a possible motive, and none may hint at who is guilty or innocent.
+- A wrong accusation must cost the player, never reward them. "rebuttal" is all they get: it rejects the accusation without teaching anything, so guessing stays worse than investigating. The reasoning lives in "not_killer_note" and surfaces only once the case is solved.
 - Fair play still holds: everything needed is discoverable through evidence and interrogation, the timeline must be internally consistent, and nothing decisive may be invented only at the reveal."""
 
 
@@ -704,10 +717,19 @@ def create_mystery_gm_tools_from_config(config: Dict[str, Any]) -> List[Any]:
                     "error_message": f"'{accused_name}' is not one of the suspects: {names}"}
         if accused.get("is_killer"):
             return {"status": "success", "correct": True,
-                    "accused": accused["name"], "solution": case["solution"]}
+                    "accused": accused["name"], "solution": case["solution"],
+                    "cleared_suspects": [
+                        {"name": s["name"], "why_innocent": s.get("not_killer_note", "")}
+                        for s in case["suspects"] if not s.get("is_killer")
+                    ]}
+        # Only the bare rebuttal — the full not_killer_note reasons from the same facts
+        # that solve the case, so handing it over would make guessing pay better than
+        # detective work. It is kept for the debrief after a correct accusation.
         return {"status": "success", "correct": False, "accused": accused["name"],
-                "why_innocent": accused.get("not_killer_note", ""),
-                "note": "Do NOT reveal who the real killer is. Send the player back to the investigation."}
+                "why_innocent": accused.get("rebuttal", ""),
+                "note": "Relay this rebuttal as it stands and add nothing to it: no reasoning, "
+                        "no timeline, no other suspects. Do NOT reveal who the real killer is. "
+                        "Send the player back to the investigation."}
 
     def generate_new_case(language: Optional[str] = None, theme: Optional[str] = None,
                           tool_context: ToolContext = None, **kwargs) -> Dict[str, Any]:
