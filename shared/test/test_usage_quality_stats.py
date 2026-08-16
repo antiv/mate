@@ -205,6 +205,63 @@ class TestQualityStats(unittest.TestCase):
         self.assertEqual(stats["latency"]["samples"], 0)
         self.assertIsNone(stats["satisfaction"]["rate_pct"])
 
+    # --- origin filter ---------------------------------------------------
+
+    def _stats_for(self, origin):
+        session = self.Session()
+        try:
+            return self.server._get_quality_stats(
+                session, self.start, self.now,
+                self.server.resolve_origins(origin))
+        finally:
+            session.close()
+
+    def test_filter_selects_background_work(self):
+        # The point of the filter: ask how long the scheduled jobs actually take
+        self._response(500, origin="chat", minutes_ago=1)
+        self._response(240000, origin="trigger", minutes_ago=2)
+        latency = self._stats_for("trigger")["latency"]
+        self.assertEqual(latency["samples"], 1)
+        self.assertEqual(latency["p50_ms"], 240000)
+
+    def test_all_includes_every_origin(self):
+        self._response(500, origin="chat", minutes_ago=1)
+        self._response(240000, origin="trigger", minutes_ago=2)
+        self._response(900, origin="eval", minutes_ago=3)
+        self.assertEqual(self._stats_for("all")["latency"]["samples"], 3)
+
+    def test_unknown_filter_falls_back_to_interactive(self):
+        # It arrives from a query string; a typo must not blank the panel
+        self._response(500, origin="chat", minutes_ago=1)
+        self._response(240000, origin="trigger", minutes_ago=2)
+        latency = self._stats_for("nonsense")["latency"]
+        self.assertEqual(latency["samples"], 1)
+        self.assertEqual(latency["p50_ms"], 500)
+
+    def test_selected_origins_are_reported_back(self):
+        # So the panel can say which traffic the number describes
+        self.assertEqual(self._stats_for("trigger")["latency"]["origins"], ["trigger"])
+        self.assertEqual(sorted(self._stats_for("interactive")["latency"]["origins"]),
+                         ["api", "chat"])
+
+    def test_satisfaction_denominator_ignores_the_filter(self):
+        # response_feedback has no origin, and ratings only come from chat surfaces —
+        # chat ratings over a trigger denominator would be a meaningless ratio
+        self._response(500, origin="chat", minutes_ago=1)
+        self._response(240000, origin="trigger", minutes_ago=2)
+        self._rating("up")
+        for origin in ("interactive", "trigger", "all"):
+            s = self._stats_for(origin)["satisfaction"]
+            self.assertEqual(s["responses"], 1, origin)
+            self.assertEqual(s["rated"], 1, origin)
+
+    def test_usage_stats_passes_the_filter_through(self):
+        self._response(500, origin="chat", minutes_ago=1)
+        self._response(240000, origin="trigger", minutes_ago=2)
+        stats = self.server._get_usage_stats(
+            days=7, origins=self.server.resolve_origins("trigger"))
+        self.assertEqual(stats["latency"]["p50_ms"], 240000)
+
     def test_quality_panels_reach_the_usage_stats(self):
         self._response(700, minutes_ago=1)
         self._rating("up")

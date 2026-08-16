@@ -142,8 +142,20 @@
                 <div class="w-10 h-10 rounded-full bg-sky-100 dark:bg-sky-900 flex items-center justify-center">
                     <i class="fas fa-stopwatch text-sm text-sky-600 dark:text-sky-400"></i>
                 </div>
-                <div class="ml-3 min-w-0">
-                    <h3 class="text-xs font-medium text-gray-500 dark:text-gray-400">Response Latency</h3>
+                <div class="ml-3 min-w-0 flex-1">
+                    <div class="flex items-center justify-between gap-2">
+                        <h3 class="text-xs font-medium text-gray-500 dark:text-gray-400">Response Latency</h3>
+                        <select id="originSelect" onchange="updateOriginFilter()" title="Which traffic the percentiles cover"
+                                class="border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-1 py-0.5 text-xs">
+                            <option value="interactive" {% if origin == "interactive" %}selected{% endif %}>Interactive</option>
+                            <option value="chat" {% if origin == "chat" %}selected{% endif %}>Chat</option>
+                            <option value="api" {% if origin == "api" %}selected{% endif %}>API</option>
+                            <option value="trigger" {% if origin == "trigger" %}selected{% endif %}>Triggers</option>
+                            <option value="slack" {% if origin == "slack" %}selected{% endif %}>Slack</option>
+                            <option value="eval" {% if origin == "eval" %}selected{% endif %}>Evals</option>
+                            <option value="all" {% if origin == "all" %}selected{% endif %}>All</option>
+                        </select>
+                    </div>
                     <p class="text-lg font-bold text-gray-900 dark:text-white" id="latencyP50">
                         {% if stats.latency %}{{ "%.1f"|format(stats.latency.p50_ms / 1000) }}s{% else %}—{% endif %}
                         <span class="text-xs font-normal text-gray-500 dark:text-gray-400">p50</span>
@@ -646,6 +658,14 @@
 
     function closeModal(modalId) {
         document.getElementById(modalId).classList.add('hidden');
+    }
+
+    function updateOriginFilter() {
+        // Same shape as updateTimeRange: reload with the parameter, keeping the
+        // day range and the current view so the selection is not silently reset.
+        const url = new URL(window.location);
+        url.searchParams.set('origin', document.getElementById('originSelect').value);
+        window.location.href = url.toString();
     }
 
     async function updateTimeRange() {
