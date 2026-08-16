@@ -207,8 +207,12 @@ class DashboardServer:
 
         return last_text.strip()
 
-    def _get_usage_stats(self, days: int = 7) -> Dict[str, Any]:
-        """Get usage statistics from database."""
+    def _get_usage_stats(self, days: int = 7,
+                         origins: Optional[tuple] = None) -> Dict[str, Any]:
+        """Get usage statistics from database.
+
+        `origins` narrows the latency panel only; None keeps the interactive default.
+        """
         if not self.db_client:
             return {
                 "total_requests": 0,
@@ -299,7 +303,7 @@ class DashboardServer:
                 'hourly_usage': hourly_data,
                 'database_info': self._get_database_info()
             }
-            result.update(self._get_quality_stats(session, start_date, end_date))
+            result.update(self._get_quality_stats(session, start_date, end_date, origins))
             return result
         except Exception as e:
             print(f"Error getting usage stats: {e}")
@@ -323,19 +327,49 @@ class DashboardServer:
     # scheduled job took. The rest stays in the table and is reachable by filter.
     INTERACTIVE_ORIGINS = ('chat', 'api')
 
-    def _get_quality_stats(self, session, start_date, end_date) -> Dict[str, Any]:
+    # What the latency panel's dropdown offers. 'interactive' is the default because
+    # it answers "how long did a person wait"; the others are for diagnosing
+    # background work that would otherwise be invisible.
+    ORIGIN_FILTERS = {
+        'interactive': ('chat', 'api'),
+        'chat': ('chat',),
+        'api': ('api',),
+        'trigger': ('trigger',),
+        'slack': ('slack',),
+        'eval': ('eval',),
+        'all': ('chat', 'api', 'trigger', 'slack', 'eval'),
+    }
+
+    @classmethod
+    def resolve_origins(cls, origin: Optional[str]) -> tuple:
+        """Map a filter name to the origins it covers.
+
+        An unknown value falls back to interactive rather than erroring: this arrives
+        from a query string, and a typo should not blank the panel.
+        """
+        return cls.ORIGIN_FILTERS.get((origin or '').strip().lower(),
+                                      cls.INTERACTIVE_ORIGINS)
+
+    def _get_quality_stats(self, session, start_date, end_date,
+                           origins: Optional[tuple] = None) -> Dict[str, Any]:
         """Satisfaction, response latency and tokens per conversation.
 
         Kept apart from the token panels above: these read agent_responses and
         response_feedback, and a failure in any of them must not blank the whole
         usage page.
+
+        `origins` narrows the latency panel only. Satisfaction keeps the interactive
+        denominator whatever is selected: response_feedback has no origin column, and
+        ratings only ever come from the widget and the workroom — showing chat
+        ratings over a trigger denominator would be a meaningless ratio.
         """
         from sqlalchemy import func
 
         empty = {
             'satisfaction': {'up': 0, 'down': 0, 'rated': 0, 'rate_pct': None,
                              'responses': 0, 'per_agent': []},
-            'latency': {'p50_ms': 0, 'p95_ms': 0, 'samples': 0, 'unfinished': 0},
+            'latency': {'origins': list(origins or self.INTERACTIVE_ORIGINS),
+                        'p50_ms': 0, 'p95_ms': 0, 'samples': 0, 'unfinished': 0},
             'conversations': {'count': 0, 'avg_tokens': 0, 'median_tokens': 0},
         }
         try:
@@ -397,13 +431,14 @@ class DashboardServer:
             stats['satisfaction'] = empty['satisfaction']
 
         # --- Latency ------------------------------------------------------
+        selected_origins = tuple(origins or self.INTERACTIVE_ORIGINS)
         try:
             durations = [
                 int(r[0]) for r in session.query(AgentResponse.duration_ms).filter(
                     AgentResponse.started_at >= start_date,
                     AgentResponse.started_at <= end_date,
                     AgentResponse.duration_ms.isnot(None),
-                    AgentResponse.origin.in_(self.INTERACTIVE_ORIGINS),
+                    AgentResponse.origin.in_(selected_origins),
                 ).all() if r[0] is not None
             ]
             durations.sort()
@@ -413,10 +448,11 @@ class DashboardServer:
                 AgentResponse.started_at >= start_date,
                 AgentResponse.started_at <= end_date,
                 AgentResponse.duration_ms.is_(None),
-                AgentResponse.origin.in_(self.INTERACTIVE_ORIGINS),
+                AgentResponse.origin.in_(selected_origins),
             ).scalar() or 0
 
             stats['latency'] = {
+                'origins': list(selected_origins),
                 'p50_ms': self._percentile(durations, 0.50),
                 'p95_ms': self._percentile(durations, 0.95),
                 'samples': len(durations),
@@ -2786,10 +2822,10 @@ class DashboardServer:
             })
 
         @self.app.get("/dashboard/usage", response_class=HTMLResponse, tags=["Dashboard - Pages"])
-        async def dashboard_usage(request: Request, days: int = 30, view: str = "analytics", username: str = Depends(self._get_auth_user_dependency)):
+        async def dashboard_usage(request: Request, days: int = 30, view: str = "analytics", origin: str = "interactive", username: str = Depends(self._get_auth_user_dependency)):
             """Dashboard usage page"""
             is_admin = self._get_is_admin(request)
-            stats = self._get_usage_stats(days)
+            stats = self._get_usage_stats(days, self.resolve_origins(origin))
             logs = self._get_token_usage_logs(24, limit=1000) if view == "logs" else {"logs": []}
             # Non-admin users see only their own usage
             current_user_id = username
@@ -2801,6 +2837,7 @@ class DashboardServer:
                 "logs": logs.get("logs", []) if isinstance(logs, dict) else [],
                 "days": days,
                 "view": view,
+                "origin": origin if origin in self.ORIGIN_FILTERS else "interactive",
                 "is_admin": is_admin,
                 "current_user_id": current_user_id,
             })
@@ -3290,9 +3327,9 @@ class DashboardServer:
 
         # API Endpoints for Dashboard
         @self.app.get("/dashboard/api/stats", tags=["Dashboard - Usage Analytics"])
-        async def get_stats(request: Request, username: str = Depends(self._get_auth_user_dependency), days: int = 7):
-            """Get usage statistics."""
-            return self._get_usage_stats(days)
+        async def get_stats(request: Request, username: str = Depends(self._get_auth_user_dependency), days: int = 7, origin: str = "interactive"):
+            """Get usage statistics. `origin` narrows the latency panel only."""
+            return self._get_usage_stats(days, self.resolve_origins(origin))
 
         @self.app.get("/dashboard/api/usage/logs", tags=["Dashboard - Usage Analytics"])
         async def get_usage_logs_api(
