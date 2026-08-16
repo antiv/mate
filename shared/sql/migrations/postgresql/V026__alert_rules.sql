@@ -27,6 +27,17 @@ CREATE INDEX IF NOT EXISTS idx_ar_is_enabled     ON alert_rules(is_enabled);
 CREATE INDEX IF NOT EXISTS idx_ar_scope          ON alert_rules(scope, scope_id);
 CREATE INDEX IF NOT EXISTS idx_ar_condition_type ON alert_rules(condition_type);
 
+-- No migration ever creates update_updated_at_column(); V012 only references it, and
+-- the whole file is executed as a single statement, so a missing function rolls the
+-- table back with it. Define it here so this migration stands on its own.
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $func$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$func$ LANGUAGE plpgsql;
+
 DO $$
 BEGIN
     IF NOT EXISTS (
