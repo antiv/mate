@@ -40,8 +40,11 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         if any(path.startswith(p) for p in self.skip_paths):
             return await call_next(request)
 
-        # Only rate limit run_sse and widget chat
-        if path != "/run_sse" and not path.startswith("/widget/api/chat"):
+        # Only rate limit run_sse and the public widget endpoints. Feedback is included
+        # because it is unauthenticated beyond the widget's public key, so a visitor
+        # could otherwise hammer it freely.
+        if path != "/run_sse" and not path.startswith("/widget/api/chat") \
+                and not path.startswith("/widget/api/feedback"):
             return await call_next(request)
 
         user_id = "anonymous"

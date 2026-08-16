@@ -364,6 +364,37 @@ async def widget_admin_page(request: Request, key: str = Query(...)):
 # Widget Chat API
 # ---------------------------------------------------------------------------
 
+@router.post("/api/feedback")
+async def widget_feedback(request: Request, wk: WidgetApiKey = Depends(verify_widget_key)):
+    """Record a visitor's thumbs up/down on one agent response.
+
+    Rating is a visitor action, so it is scoped by the widget's public key. The agent
+    and project come from the key rather than the body — a visitor must not be able to
+    attribute a rating to someone else's agent.
+    """
+    from shared.utils.feedback_service import get_feedback_service
+
+    body = await request.json()
+    session_id = (body.get("session_id") or "").strip()
+    message_id = (body.get("message_id") or "").strip()
+    rating = (body.get("rating") or "").strip()
+    comment = body.get("comment")
+
+    if not session_id or not message_id:
+        raise HTTPException(status_code=400, detail="session_id and message_id are required")
+    if rating not in ("up", "down"):
+        raise HTTPException(status_code=400, detail="rating must be 'up' or 'down'")
+
+    result = get_feedback_service().submit(
+        session_id=session_id, message_id=message_id, rating=rating,
+        agent_name=wk.agent_name, project_id=wk.project_id,
+        comment=comment if isinstance(comment, str) else None,
+    )
+    if not result:
+        raise HTTPException(status_code=500, detail="Failed to record feedback")
+    return {"feedback": {"message_id": result["message_id"], "rating": result["rating"]}}
+
+
 @router.post("/api/chat")
 async def widget_chat(request: Request, wk: WidgetApiKey = Depends(verify_widget_key)):
     """SSE streaming chat — proxies to ADK /run_sse scoped to the widget's agent."""

@@ -3341,6 +3341,60 @@ class DashboardServer:
                 return {"success": False, "error": str(e)}
 
         # ---------- Personal Access Tokens API ----------
+        @self.app.post("/dashboard/api/feedback", tags=["Dashboard - Feedback"])
+        async def submit_feedback(
+            request: Request,
+            username: str = Depends(self._get_auth_user_dependency),
+        ):
+            """Record a thumbs up/down from the workroom chat."""
+            from shared.utils.feedback_service import get_feedback_service
+
+            body = await request.json()
+            session_id = (body.get("session_id") or "").strip()
+            message_id = (body.get("message_id") or "").strip()
+            rating = (body.get("rating") or "").strip()
+            if not session_id or not message_id:
+                raise HTTPException(status_code=400,
+                                    detail="session_id and message_id are required")
+            if rating not in ("up", "down"):
+                raise HTTPException(status_code=400, detail="rating must be 'up' or 'down'")
+
+            agent_name = (body.get("agent_name") or "").strip() or None
+            project_id = None
+            if agent_name and self.db_client:
+                # Resolved from the agent rather than trusted from the body
+                db = self.db_client.get_session()
+                if db:
+                    try:
+                        row = db.query(self.AgentConfig.project_id).filter(
+                            self.AgentConfig.name == agent_name).first()
+                        project_id = row[0] if row else None
+                    except Exception:
+                        project_id = None
+                    finally:
+                        db.close()
+
+            comment = body.get("comment")
+            result = get_feedback_service().submit(
+                session_id=session_id, message_id=message_id, rating=rating,
+                agent_name=agent_name, project_id=project_id,
+                comment=comment if isinstance(comment, str) else None,
+            )
+            if not result:
+                raise HTTPException(status_code=500, detail="Failed to record feedback")
+            return {"feedback": {"message_id": result["message_id"],
+                                 "rating": result["rating"]}}
+
+        @self.app.get("/dashboard/api/feedback", tags=["Dashboard - Feedback"])
+        async def list_session_feedback(
+            request: Request,
+            session_id: str,
+            username: str = Depends(self._get_auth_user_dependency),
+        ):
+            """Ratings already given in a session, so a reloaded chat shows them."""
+            from shared.utils.feedback_service import get_feedback_service
+            return {"ratings": get_feedback_service().get_for_session(session_id)}
+
         @self.app.get("/dashboard/api/tokens", tags=["Dashboard - Users"])
         async def list_user_tokens(
             request: Request,

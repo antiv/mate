@@ -2,7 +2,7 @@
 SQLAlchemy models for the application.
 """
 
-from sqlalchemy import Column, Integer, String, DateTime, create_engine, UUID, Text, ForeignKey, Boolean, Date, JSON, Float
+from sqlalchemy import Column, Integer, String, DateTime, create_engine, UUID, Text, ForeignKey, Boolean, Date, JSON, Float, UniqueConstraint
 from sqlalchemy.orm import sessionmaker, relationship, declarative_base
 from datetime import datetime, timezone
 from typing import Optional
@@ -1138,6 +1138,42 @@ class AgentTrigger(Base):
             'last_fired_at': self.last_fired_at.isoformat() if self.last_fired_at else None,
             'last_result': self.get_last_result(),
             'created_by': self.created_by,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class ResponseFeedback(Base):
+    """A visitor's thumbs up/down on one agent response.
+
+    Keyed by the invocation id, which is what ties a rating to the response's cost
+    and latency. One rating per message, changed in place rather than appended.
+    """
+
+    __tablename__ = 'response_feedback'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    session_id = Column(String(255), nullable=False)
+    message_id = Column(String(255), nullable=False)
+    agent_name = Column(String(255), nullable=True)
+    project_id = Column(Integer, ForeignKey('projects.id', ondelete='CASCADE'), nullable=True)
+    rating = Column(String(10), nullable=False)  # up | down
+    comment = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc),
+                        onupdate=lambda: datetime.now(timezone.utc), nullable=False)
+
+    __table_args__ = (UniqueConstraint('session_id', 'message_id', name='uq_rf_session_message'),)
+
+    def to_dict(self) -> dict:
+        return {
+            'id': self.id,
+            'session_id': self.session_id,
+            'message_id': self.message_id,
+            'agent_name': self.agent_name,
+            'project_id': self.project_id,
+            'rating': self.rating,
+            'comment': self.comment,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
         }

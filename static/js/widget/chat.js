@@ -28,6 +28,8 @@
   let abortController = null;
   let debugMode = false;
   let activeAgentEl = null;
+  let activeInvocationId = "";
+  let ratings = {}; // invocation id -> "up" | "down", so a re-rendered row stays lit
   // Locked by wizard via postMessage when trial prompt limit is reached. Persisted in
   // localStorage so the lock survives widget iframe reloads (iframe destruction clears sessionStorage).
   const _LOCK_KEY = `${STORAGE_PREFIX}_locked`;
@@ -40,12 +42,12 @@
 
   // UI string translations — placeholder, send button, new-chat button, stop button, interrupted message
   const UI_STRINGS = {
-    en: { placeholder: "Type a message…", send: "Send", newChat: "New Chat", stop: "Stop", interrupted: "Response interrupted", copy: "Copy", copied: "Copied!", download: "Download", access_denied: "You don't have permission to use this agent. Please contact the administrator.", error_occurred: "Hmm, I couldn't quite process that. Could you say it again?", endChat: "End chat", endConfirm: "End this conversation? Your chat will be cleared.", endYes: "Yes, end", endNo: "No", confirmTitle: "Approval required", confirmApprove: "Approve", confirmReject: "Reject", confirmApproved: "Approved", confirmRejected: "Rejected" },
-    sr: { placeholder: "Unesite poruku…", send: "Pošalji", newChat: "Nov razgovor", stop: "Prekini", interrupted: "Odgovor je prekinut", copy: "Kopiraj", copied: "Kopirano!", download: "Preuzmi", access_denied: "Nemate pristup ovom agentu. Molimo kontaktirajte administratora.", error_occurred: "Hm, nisam uspeo to da obradim. Možete li da ponovite?", endChat: "Završi", endConfirm: "Završiti razgovor? Vaš chat će biti obrisan.", endYes: "Da, završi", endNo: "Ne", confirmTitle: "Potrebna je potvrda", confirmApprove: "Potvrdi", confirmReject: "Odbaci", confirmApproved: "Potvrđeno", confirmRejected: "Odbačeno" },
-    hr: { placeholder: "Unesite poruku…", send: "Pošalji", newChat: "Novi razgovor", stop: "Prekini", interrupted: "Odgovor je prekinut", copy: "Kopiraj", copied: "Kopirano!", download: "Preuzmi", access_denied: "Nemate pristup ovom agentu. Kontaktirajte administratora.", error_occurred: "Hm, nisam uspio to obraditi. Možete li ponoviti?" },
-    bs: { placeholder: "Unesite poruku…", send: "Pošalji", newChat: "Novi razgovor", stop: "Prekini", interrupted: "Odgovor je prekinut", copy: "Kopiraj", copied: "Kopirano!", download: "Preuzmi", access_denied: "Nemate pristup ovom agentu. Kontaktirajte administratora.", error_occurred: "Hm, nisam uspio to obraditi. Možete li ponoviti?" },
-    de: { placeholder: "Nachricht eingeben…", send: "Senden", newChat: "Neuer Chat", stop: "Stoppen", interrupted: "Antwort unterbrochen", copy: "Kopieren", copied: "Kopiert!", download: "Herunterladen", access_denied: "Sie haben keinen Zugriff auf diesen Agenten. Bitte kontaktieren Sie den Administrator.", error_occurred: "Hmm, das konnte ich nicht verarbeiten. Können Sie es wiederholen?" },
-    fr: { placeholder: "Écrivez un message…", send: "Envoyer", newChat: "Nouveau chat", stop: "Arrêter", interrupted: "Réponse interrompue", copy: "Copier", copied: "Copié !", download: "Télécharger", access_denied: "Vous n'avez pas accès à cet agent. Veuillez contacter l'administrateur.", error_occurred: "Hmm, je n'ai pas réussi à traiter cela. Pouvez-vous répéter ?" },
+    en: { placeholder: "Type a message…", send: "Send", newChat: "New Chat", stop: "Stop", interrupted: "Response interrupted", copy: "Copy", copied: "Copied!", download: "Download", rateUp: "Helpful", rateDown: "Not helpful", access_denied: "You don't have permission to use this agent. Please contact the administrator.", error_occurred: "Hmm, I couldn't quite process that. Could you say it again?", endChat: "End chat", endConfirm: "End this conversation? Your chat will be cleared.", endYes: "Yes, end", endNo: "No", confirmTitle: "Approval required", confirmApprove: "Approve", confirmReject: "Reject", confirmApproved: "Approved", confirmRejected: "Rejected" },
+    sr: { placeholder: "Unesite poruku…", send: "Pošalji", newChat: "Nov razgovor", stop: "Prekini", interrupted: "Odgovor je prekinut", copy: "Kopiraj", copied: "Kopirano!", download: "Preuzmi", rateUp: "Koristan odgovor", rateDown: "Nije koristan", access_denied: "Nemate pristup ovom agentu. Molimo kontaktirajte administratora.", error_occurred: "Hm, nisam uspeo to da obradim. Možete li da ponovite?", endChat: "Završi", endConfirm: "Završiti razgovor? Vaš chat će biti obrisan.", endYes: "Da, završi", endNo: "Ne", confirmTitle: "Potrebna je potvrda", confirmApprove: "Potvrdi", confirmReject: "Odbaci", confirmApproved: "Potvrđeno", confirmRejected: "Odbačeno" },
+    hr: { placeholder: "Unesite poruku…", send: "Pošalji", newChat: "Novi razgovor", stop: "Prekini", interrupted: "Odgovor je prekinut", copy: "Kopiraj", copied: "Kopirano!", download: "Preuzmi", rateUp: "Koristan odgovor", rateDown: "Nije koristan", access_denied: "Nemate pristup ovom agentu. Kontaktirajte administratora.", error_occurred: "Hm, nisam uspio to obraditi. Možete li ponoviti?" },
+    bs: { placeholder: "Unesite poruku…", send: "Pošalji", newChat: "Novi razgovor", stop: "Prekini", interrupted: "Odgovor je prekinut", copy: "Kopiraj", copied: "Kopirano!", download: "Preuzmi", rateUp: "Koristan odgovor", rateDown: "Nije koristan", access_denied: "Nemate pristup ovom agentu. Kontaktirajte administratora.", error_occurred: "Hm, nisam uspio to obraditi. Možete li ponoviti?" },
+    de: { placeholder: "Nachricht eingeben…", send: "Senden", newChat: "Neuer Chat", stop: "Stoppen", interrupted: "Antwort unterbrochen", copy: "Kopieren", copied: "Kopiert!", download: "Herunterladen", rateUp: "Hilfreich", rateDown: "Nicht hilfreich", access_denied: "Sie haben keinen Zugriff auf diesen Agenten. Bitte kontaktieren Sie den Administrator.", error_occurred: "Hmm, das konnte ich nicht verarbeiten. Können Sie es wiederholen?" },
+    fr: { placeholder: "Écrivez un message…", send: "Envoyer", newChat: "Nouveau chat", stop: "Arrêter", interrupted: "Réponse interrompue", copy: "Copier", copied: "Copié !", download: "Télécharger", rateUp: "Utile", rateDown: "Pas utile", access_denied: "Vous n'avez pas accès à cet agent. Veuillez contacter l'administrateur.", error_occurred: "Hmm, je n'ai pas réussi à traiter cela. Pouvez-vous répéter ?" },
     es: { placeholder: "Escribe un mensaje…", send: "Enviar", newChat: "Nueva conversación", stop: "Detener", interrupted: "Respuesta interrumpida", access_denied: "No tienes permiso para usar este agente. Contacta al administrador.", error_occurred: "Mmm, no pude procesar eso. ¿Puedes repetirlo?" },
     it: { placeholder: "Scrivi un messaggio…", send: "Invia", newChat: "Nuova chat", stop: "Interrompi", interrupted: "Risposta interrotta", access_denied: "Non hai accesso a questo agente. Contatta l'amministratore.", error_occurred: "Hmm, non sono riuscito a elaborarlo. Puoi ripetere?" },
     pt: { placeholder: "Escreva uma mensagem…", send: "Enviar", newChat: "Nova conversa", stop: "Parar", interrupted: "Resposta interrompida", access_denied: "Você não tem acesso a este agente. Contacte o administrador.", error_occurred: "Hmm, não consegui processar isso. Pode repetir?" },
@@ -540,6 +542,7 @@
         activeAgentEl = document.createElement("div");
         activeAgentEl.className = "widget-message agent";
         activeAgentEl.setAttribute("data-author", activeAgentAuthor);
+        if (activeInvocationId) activeAgentEl.setAttribute("data-invocation", activeInvocationId);
         activeAgentEl.innerHTML = THINKING_HTML;
         
         wrapper.appendChild(avatarEl);
@@ -562,6 +565,10 @@
           localStorage.setItem(STORAGE_PREFIX + "_sid", sessionId);
           if (evt.debug_mode !== undefined) debugMode = !!evt.debug_mode;
         }
+
+        // The invocation id identifies the response being rated, and is what ties a
+        // rating to that response's cost and latency on the server.
+        if (evt.invocationId) activeInvocationId = evt.invocationId;
 
         // --- Handle error events (e.g. RBAC access denied) ---
         if (evt.error_code) {
@@ -1317,6 +1324,8 @@
   const COPY_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>';
   const CHECK_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle"><polyline points="20 6 9 17 4 12"></polyline></svg>';
   const DOWNLOAD_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>';
+  const THUMB_UP_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"></path></svg>';
+  const THUMB_DOWN_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle"><path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17"></path></svg>';
 
   function _addMessageActions(messageEl) {
     if (!messageEl) return;
@@ -1377,7 +1386,60 @@
     
     actionsContainer.appendChild(copyBtn);
     actionsContainer.appendChild(downloadBtn);
+    _addRatingButtons(actionsContainer, messageEl, s);
     messageEl.appendChild(actionsContainer);
+  }
+
+  function _addRatingButtons(container, messageEl, s) {
+    // Only a response the server can identify is rateable; restored history without an
+    // invocation id simply gets no thumbs rather than a button that fails on click.
+    var invocationId = messageEl.getAttribute("data-invocation");
+    if (!invocationId) return;
+
+    function makeBtn(rating, svg, label) {
+      var btn = document.createElement("button");
+      btn.className = "widget-message-action-btn rate-btn rate-" + rating;
+      btn.title = label;
+      btn.innerHTML = svg;
+      btn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        _submitRating(messageEl, invocationId, rating, container);
+      });
+      return btn;
+    }
+
+    container.appendChild(makeBtn("up", THUMB_UP_SVG, s.rateUp || UI_STRINGS["en"].rateUp));
+    container.appendChild(makeBtn("down", THUMB_DOWN_SVG, s.rateDown || UI_STRINGS["en"].rateDown));
+    _paintRating(container, ratings[invocationId]);
+  }
+
+  function _paintRating(container, rating) {
+    ["up", "down"].forEach(function (r) {
+      var btn = container.querySelector(".rate-" + r);
+      if (btn) btn.classList.toggle("rated", rating === r);
+    });
+  }
+
+  function _submitRating(messageEl, invocationId, rating, container) {
+    // Optimistic: a rating is a courtesy, not a transaction — reflect the click at once
+    ratings[invocationId] = rating;
+    _paintRating(container, rating);
+
+    var payload = {
+      session_id: sessionId,
+      message_id: invocationId,
+      rating: rating,
+    };
+    fetch(`${BASE}/widget/api/feedback`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Widget-Key": API_KEY,
+      },
+      body: JSON.stringify(payload),
+    }).catch(function () {
+      /* the visitor does not need to know; the next rating retries */
+    });
   }
 
   function _fallbackCopy(text, btn, successLabel, normalLabel) {

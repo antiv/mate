@@ -25,6 +25,8 @@
   var pendingFiles = []; // [{dataUrl, mimeType, base64, name}]
   var abortController = null;
   var activeAgentEl = null;
+  var activeInvocationId = "";
+  var ratings = {}; // invocation id -> "up" | "down", so a re-rendered row stays lit
   var activeAgentText = "";
   var activeAgentAuthor = "";
   var activeAgentImages = [];
@@ -37,12 +39,12 @@
 
   // UI string translations
   var UI_STRINGS = {
-    en: { placeholder: "Type a message…", send: "Send", newChat: "New Chat", stop: "Stop", interrupted: "Response interrupted", copy: "Copy", copied: "Copied!", download: "Download", confirmTitle: "Approval required", confirmApprove: "Approve", confirmReject: "Reject", confirmApproved: "Approved", confirmRejected: "Rejected" },
-    sr: { placeholder: "Unesite poruku…", send: "Pošalji", newChat: "Nov razgovor", stop: "Prekini", interrupted: "Odgovor je prekinut", copy: "Kopiraj", copied: "Kopirano!", download: "Preuzmi", confirmTitle: "Potrebna je potvrda", confirmApprove: "Potvrdi", confirmReject: "Odbaci", confirmApproved: "Potvrđeno", confirmRejected: "Odbačeno" },
-    hr: { placeholder: "Unesite poruku…", send: "Pošalji", newChat: "Novi razgovor", stop: "Prekini", interrupted: "Odgovor je prekinut", copy: "Kopiraj", copied: "Kopirano!", download: "Preuzmi", confirmTitle: "Potrebna je potvrda", confirmApprove: "Potvrdi", confirmReject: "Odbaci", confirmApproved: "Potvrđeno", confirmRejected: "Odbačeno" },
-    bs: { placeholder: "Unesite poruku…", send: "Pošalji", newChat: "Novi razgovor", stop: "Prekini", interrupted: "Odgovor je prekinut", copy: "Kopiraj", copied: "Kopirano!", download: "Preuzmi", confirmTitle: "Potrebna je potvrda", confirmApprove: "Potvrdi", confirmReject: "Odbaci", confirmApproved: "Potvrđeno", confirmRejected: "Odbačeno" },
-    de: { placeholder: "Nachricht eingeben…", send: "Senden", newChat: "Neuer Chat", stop: "Stoppen", interrupted: "Antwort unterbrochen", copy: "Kopieren", copied: "Kopiert!", download: "Herunterladen" },
-    fr: { placeholder: "Écrivez un message…", send: "Envoyer", newChat: "Nouveau chat", stop: "Arrêter", interrupted: "Réponse interrompue", copy: "Copier", copied: "Copié !", download: "Télécharger" },
+    en: { placeholder: "Type a message…", send: "Send", newChat: "New Chat", stop: "Stop", interrupted: "Response interrupted", copy: "Copy", copied: "Copied!", download: "Download", rateUp: "Helpful", rateDown: "Not helpful", confirmTitle: "Approval required", confirmApprove: "Approve", confirmReject: "Reject", confirmApproved: "Approved", confirmRejected: "Rejected" },
+    sr: { placeholder: "Unesite poruku…", send: "Pošalji", newChat: "Nov razgovor", stop: "Prekini", interrupted: "Odgovor je prekinut", copy: "Kopiraj", copied: "Kopirano!", download: "Preuzmi", rateUp: "Koristan odgovor", rateDown: "Nije koristan", confirmTitle: "Potrebna je potvrda", confirmApprove: "Potvrdi", confirmReject: "Odbaci", confirmApproved: "Potvrđeno", confirmRejected: "Odbačeno" },
+    hr: { placeholder: "Unesite poruku…", send: "Pošalji", newChat: "Novi razgovor", stop: "Prekini", interrupted: "Odgovor je prekinut", copy: "Kopiraj", copied: "Kopirano!", download: "Preuzmi", rateUp: "Koristan odgovor", rateDown: "Nije koristan", confirmTitle: "Potrebna je potvrda", confirmApprove: "Potvrdi", confirmReject: "Odbaci", confirmApproved: "Potvrđeno", confirmRejected: "Odbačeno" },
+    bs: { placeholder: "Unesite poruku…", send: "Pošalji", newChat: "Novi razgovor", stop: "Prekini", interrupted: "Odgovor je prekinut", copy: "Kopiraj", copied: "Kopirano!", download: "Preuzmi", rateUp: "Koristan odgovor", rateDown: "Nije koristan", confirmTitle: "Potrebna je potvrda", confirmApprove: "Potvrdi", confirmReject: "Odbaci", confirmApproved: "Potvrđeno", confirmRejected: "Odbačeno" },
+    de: { placeholder: "Nachricht eingeben…", send: "Senden", newChat: "Neuer Chat", stop: "Stoppen", interrupted: "Antwort unterbrochen", copy: "Kopieren", copied: "Kopiert!", download: "Herunterladen", rateUp: "Hilfreich", rateDown: "Nicht hilfreich" },
+    fr: { placeholder: "Écrivez un message…", send: "Envoyer", newChat: "Nouveau chat", stop: "Arrêter", interrupted: "Réponse interrompue", copy: "Copier", copied: "Copié !", download: "Télécharger", rateUp: "Utile", rateDown: "Pas utile" },
     es: { placeholder: "Escribe un mensaje…", send: "Enviar", newChat: "Nueva conversación", stop: "Detener", interrupted: "Respuesta interrumpida" },
     it: { placeholder: "Scrivi un messaggio…", send: "Invia", newChat: "Nuova chat", stop: "Interrompi", interrupted: "Risposta interrotta" },
     pt: { placeholder: "Escreva uma mensagem…", send: "Enviar", newChat: "Nova conversa", stop: "Parar", interrupted: "Resposta interrompida" },
@@ -434,6 +436,7 @@
         activeAgentEl = document.createElement("div");
         activeAgentEl.className = "widget-message agent";
         activeAgentEl.setAttribute("data-author", activeAgentAuthor);
+        if (activeInvocationId) activeAgentEl.setAttribute("data-invocation", activeInvocationId);
         activeAgentEl.innerHTML = THINKING_HTML;
         
         wrapper.appendChild(avatarEl);
@@ -450,6 +453,10 @@
 
       try {
         var evt = JSON.parse(raw);
+
+        // The invocation id identifies the response being rated, and is what ties a
+        // rating to that response's cost and latency on the server.
+        if (evt.invocationId) activeInvocationId = evt.invocationId;
 
         // Skip transfer/routing actions
         var actions = evt.actions || {};
@@ -1161,6 +1168,8 @@
   // --- SVG Icons & Actions ----------------------------------------------
   var COPY_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>';
   var CHECK_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+  var THUMB_UP_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"></path></svg>';
+  var THUMB_DOWN_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle"><path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17"></path></svg>';
   var DOWNLOAD_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>';
 
   function _addMessageActions(messageEl) {
@@ -1222,7 +1231,58 @@
     
     actionsContainer.appendChild(copyBtn);
     actionsContainer.appendChild(downloadBtn);
+    _addRatingButtons(actionsContainer, messageEl, s);
     messageEl.appendChild(actionsContainer);
+  }
+
+  function _addRatingButtons(container, messageEl, s) {
+    // Only a response the server can identify is rateable; restored history without an
+    // invocation id simply gets no thumbs rather than a button that fails on click.
+    var invocationId = messageEl.getAttribute("data-invocation");
+    if (!invocationId) return;
+
+    function makeBtn(rating, svg, label) {
+      var btn = document.createElement("button");
+      btn.className = "widget-message-action-btn rate-btn rate-" + rating;
+      btn.title = label;
+      btn.innerHTML = svg;
+      btn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        _submitRating(invocationId, rating, container);
+      });
+      return btn;
+    }
+
+    container.appendChild(makeBtn("up", THUMB_UP_SVG, (s && s.rateUp) || "Helpful"));
+    container.appendChild(makeBtn("down", THUMB_DOWN_SVG, (s && s.rateDown) || "Not helpful"));
+    _paintRating(container, ratings[invocationId]);
+  }
+
+  function _paintRating(container, rating) {
+    ["up", "down"].forEach(function (r) {
+      var btn = container.querySelector(".rate-" + r);
+      if (btn) btn.classList.toggle("rated", rating === r);
+    });
+  }
+
+  function _submitRating(invocationId, rating, container) {
+    // Optimistic: a rating is a courtesy, not a transaction — reflect the click at once
+    ratings[invocationId] = rating;
+    _paintRating(container, rating);
+
+    fetch("/dashboard/api/feedback", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        session_id: sessionId,
+        message_id: invocationId,
+        rating: rating,
+        agent_name: AGENT_NAME,
+      }),
+    }).catch(function () {
+      /* the next rating retries; no need to interrupt the conversation */
+    });
   }
 
   function _fallbackCopy(text, btn, successLabel, normalLabel) {
