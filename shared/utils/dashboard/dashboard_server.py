@@ -5,6 +5,7 @@ Basic dashboard endpoints without complex service dependencies
 
 import json
 import logging
+import math
 import os
 import sys
 import shutil
@@ -287,7 +288,7 @@ class DashboardServer:
                 hour = int(hour_stat.hour)
                 hourly_data[hour] = hour_stat.requests
             
-            return {
+            result = {
                 'total_requests': stats.total_requests or 0,
                 'total_prompt_tokens': stats.total_prompt_tokens or 0,
                 'total_response_tokens': stats.total_response_tokens or 0,
@@ -298,12 +299,160 @@ class DashboardServer:
                 'hourly_usage': hourly_data,
                 'database_info': self._get_database_info()
             }
+            result.update(self._get_quality_stats(session, start_date, end_date))
+            return result
         except Exception as e:
             print(f"Error getting usage stats: {e}")
             return {"error": str(e)}
         finally:
             session.close()
     
+    @staticmethod
+    def _percentile(sorted_values: List[int], fraction: float) -> int:
+        """Nearest-rank percentile.
+
+        Computed in Python rather than SQL because SQLite has no PERCENTILE_CONT and
+        the samples here are small enough that pulling the durations costs nothing.
+        """
+        if not sorted_values:
+            return 0
+        index = max(0, math.ceil(fraction * len(sorted_values)) - 1)
+        return int(sorted_values[min(index, len(sorted_values) - 1)])
+
+    # Latency a customer would recognise: what someone waited on, not what a
+    # scheduled job took. The rest stays in the table and is reachable by filter.
+    INTERACTIVE_ORIGINS = ('chat', 'api')
+
+    def _get_quality_stats(self, session, start_date, end_date) -> Dict[str, Any]:
+        """Satisfaction, response latency and tokens per conversation.
+
+        Kept apart from the token panels above: these read agent_responses and
+        response_feedback, and a failure in any of them must not blank the whole
+        usage page.
+        """
+        from sqlalchemy import func
+
+        empty = {
+            'satisfaction': {'up': 0, 'down': 0, 'rated': 0, 'rate_pct': None,
+                             'responses': 0, 'per_agent': []},
+            'latency': {'p50_ms': 0, 'p95_ms': 0, 'samples': 0, 'unfinished': 0},
+            'conversations': {'count': 0, 'avg_tokens': 0, 'median_tokens': 0},
+        }
+        try:
+            from shared.utils.models import AgentResponse, ResponseFeedback
+        except Exception as e:
+            logger.warning("Quality stats unavailable: %s", e)
+            return empty
+
+        stats = {}
+
+        # --- Satisfaction -------------------------------------------------
+        try:
+            rows = session.query(
+                ResponseFeedback.agent_name,
+                ResponseFeedback.rating,
+                func.count(ResponseFeedback.id).label('n'),
+            ).filter(
+                ResponseFeedback.created_at >= start_date,
+                ResponseFeedback.created_at <= end_date,
+            ).group_by(ResponseFeedback.agent_name, ResponseFeedback.rating).all()
+
+            per_agent = {}
+            total_up = total_down = 0
+            for agent_name, rating, n in rows:
+                bucket = per_agent.setdefault(agent_name or 'unknown', {'up': 0, 'down': 0})
+                bucket[rating] = bucket.get(rating, 0) + int(n or 0)
+                if rating == 'up':
+                    total_up += int(n or 0)
+                else:
+                    total_down += int(n or 0)
+
+            # The denominator that matters is how many responses could have been
+            # rated — a 100% score over three ratings is not a satisfaction rate.
+            responses = session.query(func.count(AgentResponse.id)).filter(
+                AgentResponse.started_at >= start_date,
+                AgentResponse.started_at <= end_date,
+                AgentResponse.origin.in_(self.INTERACTIVE_ORIGINS),
+            ).scalar() or 0
+
+            rated = total_up + total_down
+            stats['satisfaction'] = {
+                'up': total_up,
+                'down': total_down,
+                'rated': rated,
+                'rate_pct': round(100.0 * total_up / rated, 1) if rated else None,
+                'responses': int(responses),
+                'per_agent': sorted(
+                    [{'agent': a,
+                      'up': v['up'],
+                      'down': v['down'],
+                      'rated': v['up'] + v['down'],
+                      'rate_pct': round(100.0 * v['up'] / (v['up'] + v['down']), 1)
+                      if (v['up'] + v['down']) else None}
+                     for a, v in per_agent.items()],
+                    key=lambda r: r['rated'], reverse=True)[:10],
+            }
+        except Exception as e:
+            logger.warning("Satisfaction stats failed: %s", e)
+            stats['satisfaction'] = empty['satisfaction']
+
+        # --- Latency ------------------------------------------------------
+        try:
+            durations = [
+                int(r[0]) for r in session.query(AgentResponse.duration_ms).filter(
+                    AgentResponse.started_at >= start_date,
+                    AgentResponse.started_at <= end_date,
+                    AgentResponse.duration_ms.isnot(None),
+                    AgentResponse.origin.in_(self.INTERACTIVE_ORIGINS),
+                ).all() if r[0] is not None
+            ]
+            durations.sort()
+            # Invocations that never closed: ADK skips its after-run hook on failure,
+            # so these are errors or hangs. Counting them as zero would flatter p95.
+            unfinished = session.query(func.count(AgentResponse.id)).filter(
+                AgentResponse.started_at >= start_date,
+                AgentResponse.started_at <= end_date,
+                AgentResponse.duration_ms.is_(None),
+                AgentResponse.origin.in_(self.INTERACTIVE_ORIGINS),
+            ).scalar() or 0
+
+            stats['latency'] = {
+                'p50_ms': self._percentile(durations, 0.50),
+                'p95_ms': self._percentile(durations, 0.95),
+                'samples': len(durations),
+                'unfinished': int(unfinished),
+            }
+        except Exception as e:
+            logger.warning("Latency stats failed: %s", e)
+            stats['latency'] = empty['latency']
+
+        # --- Tokens per conversation ---------------------------------------
+        try:
+            per_session = [
+                int(r[0] or 0) for r in session.query(
+                    func.sum(
+                        func.coalesce(self.TokenUsageLog.prompt_tokens, 0) +
+                        func.coalesce(self.TokenUsageLog.response_tokens, 0)
+                    )
+                ).filter(
+                    self.TokenUsageLog.status == 'SUCCESS',
+                    self.TokenUsageLog.timestamp >= start_date,
+                    self.TokenUsageLog.timestamp <= end_date,
+                    self.TokenUsageLog.session_id.isnot(None),
+                ).group_by(self.TokenUsageLog.session_id).all()
+            ]
+            per_session.sort()
+            stats['conversations'] = {
+                'count': len(per_session),
+                'avg_tokens': int(sum(per_session) / len(per_session)) if per_session else 0,
+                'median_tokens': self._percentile(per_session, 0.50),
+            }
+        except Exception as e:
+            logger.warning("Conversation stats failed: %s", e)
+            stats['conversations'] = empty['conversations']
+
+        return stats
+
     def _get_database_info(self) -> dict:
         """Get database connection information."""
         db_type = os.getenv("DB_TYPE", "sqlite").upper()
