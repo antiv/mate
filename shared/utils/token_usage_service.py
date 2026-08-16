@@ -374,6 +374,45 @@ class TokenUsageService:
         finally:
             session.close()
 
+    def get_error_count_since(self, since: datetime, agent_name: Optional[str] = None,
+                              user_id: Optional[str] = None,
+                              project_id: Optional[int] = None) -> int:
+        """Count failed agent calls since given datetime.
+
+        Filters status == 'ERROR' only, so RBAC denials (ACCESS_DENIED) never read
+        as model failures. Exactly one scope argument is expected; passing none
+        counts errors across all agents.
+        """
+        session = self._get_session()
+        if not session:
+            return 0
+        try:
+            query = session.query(func.count(TokenUsageLog.id)).filter(
+                TokenUsageLog.status == 'ERROR',
+                TokenUsageLog.timestamp >= since
+            )
+            if agent_name:
+                query = query.filter(TokenUsageLog.agent_name == agent_name)
+            if user_id:
+                query = query.filter(TokenUsageLog.user_id == user_id)
+            if project_id is not None:
+                # Neither log table carries project_id — resolve through the agents
+                from .models import AgentConfig
+                agent_names = [
+                    r[0] for r in session.query(AgentConfig.name).filter(
+                        AgentConfig.project_id == project_id
+                    ).all()
+                ]
+                if not agent_names:
+                    return 0
+                query = query.filter(TokenUsageLog.agent_name.in_(agent_names))
+            return int(query.scalar() or 0)
+        except SQLAlchemyError as e:
+            logger.error("Failed to get error count since: %s", e)
+            return 0
+        finally:
+            session.close()
+
     def get_user_request_count_since(self, user_id: str, since: datetime) -> int:
         """Request count for user since given datetime."""
         session = self._get_session()

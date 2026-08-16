@@ -39,6 +39,13 @@ async def run_sse_stream(app_name: str, user_id: str, session_id: str,
             yield _sse_frame(event)
     except Exception as e:
         logger.exception(f"[LangGraph] run_sse failed for app={app_name} session={session_id}")
+        # Own try/except: a logging failure must not stop the error frame reaching the client
+        try:
+            from shared.callbacks.error_callback import record_agent_error
+            record_agent_error(agent_name=app_name, user_id=user_id, session_id=session_id,
+                               error=e, request_id=invocation_id)
+        except Exception:
+            logger.debug("[LangGraph] recording the agent error failed", exc_info=True)
         yield _sse_frame({
             "error_code": "INTERNAL_ERROR",
             "error_message": str(e),

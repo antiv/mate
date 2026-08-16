@@ -230,7 +230,12 @@ class DashboardServer:
             
             end_date = datetime.now()
             start_date = end_date - timedelta(days=days)
-            
+
+            # These panels report successful LLM traffic and sit next to token sums, so
+            # they must exclude the zero-token rows written for failures (status='ERROR')
+            # and RBAC denials (status='ACCESS_DENIED'), which would inflate every count.
+            succeeded = self.TokenUsageLog.status == 'SUCCESS'
+
             # Get token usage statistics
             stats = session.query(
                 func.count(self.TokenUsageLog.id).label('total_requests'),
@@ -239,34 +244,38 @@ class DashboardServer:
                 func.count(func.distinct(self.TokenUsageLog.user_id)).label('unique_users'),
                 func.count(func.distinct(self.TokenUsageLog.agent_name)).label('unique_agents')
             ).filter(
+                succeeded,
                 self.TokenUsageLog.timestamp >= start_date,
                 self.TokenUsageLog.timestamp <= end_date
             ).first()
-            
+
             # Get top agents
             top_agents = session.query(
                 self.TokenUsageLog.agent_name,
                 func.count(self.TokenUsageLog.id).label('request_count')
             ).filter(
+                succeeded,
                 self.TokenUsageLog.timestamp >= start_date,
                 self.TokenUsageLog.timestamp <= end_date
             ).group_by(self.TokenUsageLog.agent_name).order_by(func.count(self.TokenUsageLog.id).desc()).limit(5).all()
-            
+
             # Get daily usage
             daily_usage = session.query(
                 func.date(self.TokenUsageLog.timestamp).label('date'),
                 func.count(self.TokenUsageLog.id).label('requests'),
                 func.sum(self.TokenUsageLog.prompt_tokens + self.TokenUsageLog.response_tokens).label('total_tokens')
             ).filter(
+                succeeded,
                 self.TokenUsageLog.timestamp >= start_date,
                 self.TokenUsageLog.timestamp <= end_date
             ).group_by(func.date(self.TokenUsageLog.timestamp)).order_by(func.date(self.TokenUsageLog.timestamp)).all()
-            
+
             # Get hourly usage
             hourly_usage = session.query(
                 func.extract('hour', self.TokenUsageLog.timestamp).label('hour'),
                 func.count(self.TokenUsageLog.id).label('requests')
             ).filter(
+                succeeded,
                 self.TokenUsageLog.timestamp >= start_date,
                 self.TokenUsageLog.timestamp <= end_date
             ).group_by(func.extract('hour', self.TokenUsageLog.timestamp)).order_by(func.extract('hour', self.TokenUsageLog.timestamp)).all()

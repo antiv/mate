@@ -17,6 +17,7 @@ from google.adk.models.llm_request import LlmRequest
 from google.adk.models.llm_response import LlmResponse
 from google.adk.plugins.base_plugin import BasePlugin
 
+from .error_callback import record_model_error_callback
 from .guardrail_callback import guardrail_after_model_callback
 from .token_usage_callback import log_token_usage_callback
 from .user_profile_callback import combined_user_profile_and_rbac_callback
@@ -45,3 +46,12 @@ class MatePlugin(BasePlugin):
             log_token_usage_callback(callback_context, guardrail_result)
             return guardrail_result
         return log_token_usage_callback(callback_context, llm_response)
+
+    async def on_model_error_callback(
+        self, *, callback_context: CallbackContext, llm_request: LlmRequest,
+        error: Exception
+    ) -> Optional[LlmResponse]:
+        # Record the failure and return None so ADK re-raises the original error
+        return record_model_error_callback(
+            callback_context=callback_context, llm_request=llm_request, error=error
+        )

@@ -359,7 +359,8 @@ class AgentManager:
         from ..callbacks.rbac_callback import combined_rbac_and_token_callback
         from ..callbacks.user_profile_callback import combined_user_profile_and_rbac_callback
         from ..callbacks.guardrail_callback import guardrail_after_model_callback
-        
+        from ..callbacks.error_callback import record_model_error_callback
+
         try:
             agent_type = config.get('type', 'llm').lower()
             agent_name = config['name']
@@ -631,6 +632,11 @@ class AgentManager:
                         plugins_enabled = False
 
                 # For sub-agents of graph agents, use simpler callbacks to avoid TaskGroup issues
+                # ADK runs plugin error callbacks first and only short-circuits on a
+                # non-None return; ours returns None, so wiring the per-agent callback
+                # while the plugin is on would record every model error twice.
+                error_callback = None if plugins_enabled else record_model_error_callback
+
                 if plugins_enabled:
                     before_callback = None
                     after_callback = None
@@ -707,7 +713,11 @@ class AgentManager:
                     agent_params['before_model_callback'] = before_callback
                 if after_callback is not None:
                     agent_params['after_model_callback'] = after_callback
-                
+                # Guarded so a future ADK version dropping the hook cannot break
+                # agent construction — error recording is not worth that.
+                if error_callback is not None and 'on_model_error_callback' in Agent.model_fields:
+                    agent_params['on_model_error_callback'] = error_callback
+
                 # Framework-level retry for this agent node (ADK 2.x BaseNode.retry_config)
                 if isinstance(planner_config, dict):
                     retry_config = self._create_retry_config(planner_config.get('retry_config'))
