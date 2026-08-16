@@ -137,6 +137,13 @@ Opening a new session (New Chat button) closes and fully resets the canvas — n
   - Daily usage trends
   - Hourly usage patterns
   - Filter by time period (7/30/90 days)
+  - **Satisfaction**: share of thumbs-up among rated responses, shown with the number
+    rated out of the number that could have been rated, plus a per-agent breakdown
+  - **Response latency**: p50 and p95 over responses that finished, counting unfinished
+    invocations separately rather than as zero. Scheduled triggers, evals and other
+    background work are excluded so the figure describes what a person waited for
+  - **Tokens per conversation**: successful token usage grouped by session, mean and median
+    (MATE has no per-model pricing, so this is tokens, not money)
 - **Logs View (Raw Data)**: 
   - **Time Filters**: Last Hour, 3 Hours, 6 Hours, 12 Hours, 1 Day, 3 Days, 7 Days, 30 Days
   - **Pagination**: 50, 100, 200, or 500 records per page

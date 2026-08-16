@@ -118,6 +118,90 @@
         </div>
     </div>
 
+    <!-- Response quality: did it help, how long did it take, what did a conversation cost -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-3">
+            <div class="flex items-center">
+                <div class="w-10 h-10 rounded-full bg-emerald-100 dark:bg-emerald-900 flex items-center justify-center">
+                    <i class="fas fa-thumbs-up text-sm text-emerald-600 dark:text-emerald-400"></i>
+                </div>
+                <div class="ml-3 min-w-0">
+                    <h3 class="text-xs font-medium text-gray-500 dark:text-gray-400">Satisfaction</h3>
+                    <p class="text-lg font-bold text-gray-900 dark:text-white" id="satisfactionRate">
+                        {% if stats.satisfaction and stats.satisfaction.rate_pct is not none %}{{ stats.satisfaction.rate_pct }}%{% else %}—{% endif %}
+                    </p>
+                    <p class="text-xs text-gray-500 dark:text-gray-400" id="satisfactionSample">
+                        {% if stats.satisfaction %}{{ stats.satisfaction.rated }} of {{ stats.satisfaction.responses }} rated{% endif %}
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-3">
+            <div class="flex items-center">
+                <div class="w-10 h-10 rounded-full bg-sky-100 dark:bg-sky-900 flex items-center justify-center">
+                    <i class="fas fa-stopwatch text-sm text-sky-600 dark:text-sky-400"></i>
+                </div>
+                <div class="ml-3 min-w-0">
+                    <h3 class="text-xs font-medium text-gray-500 dark:text-gray-400">Response Latency</h3>
+                    <p class="text-lg font-bold text-gray-900 dark:text-white" id="latencyP50">
+                        {% if stats.latency %}{{ "%.1f"|format(stats.latency.p50_ms / 1000) }}s{% else %}—{% endif %}
+                        <span class="text-xs font-normal text-gray-500 dark:text-gray-400">p50</span>
+                    </p>
+                    <p class="text-xs text-gray-500 dark:text-gray-400" id="latencyP95">
+                        {% if stats.latency %}p95 {{ "%.1f"|format(stats.latency.p95_ms / 1000) }}s · {{ stats.latency.samples }} responses{% if stats.latency.unfinished %} · {{ stats.latency.unfinished }} unfinished{% endif %}{% endif %}
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-3">
+            <div class="flex items-center">
+                <div class="w-10 h-10 rounded-full bg-violet-100 dark:bg-violet-900 flex items-center justify-center">
+                    <i class="fas fa-comments text-sm text-violet-600 dark:text-violet-400"></i>
+                </div>
+                <div class="ml-3 min-w-0">
+                    <h3 class="text-xs font-medium text-gray-500 dark:text-gray-400">Tokens per Conversation</h3>
+                    <p class="text-lg font-bold text-gray-900 dark:text-white" id="tokensPerConversation">
+                        {% if stats.conversations %}{{ "{:,}".format(stats.conversations.avg_tokens) }}{% else %}—{% endif %}
+                    </p>
+                    <p class="text-xs text-gray-500 dark:text-gray-400" id="conversationSample">
+                        {% if stats.conversations %}median {{ "{:,}".format(stats.conversations.median_tokens) }} · {{ stats.conversations.count }} conversations{% endif %}
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if stats.satisfaction and stats.satisfaction.per_agent %}
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+        <h3 class="text-sm font-semibold text-gray-900 dark:text-white mb-2">Satisfaction by Agent</h3>
+        <div class="overflow-x-auto">
+            <table class="w-full text-xs">
+                <thead>
+                    <tr class="text-left text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
+                        <th class="px-2 py-1 font-medium">Agent</th>
+                        <th class="px-2 py-1 font-medium">Helpful</th>
+                        <th class="px-2 py-1 font-medium">Not helpful</th>
+                        <th class="px-2 py-1 font-medium">Rate</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
+                    {% for row in stats.satisfaction.per_agent %}
+                    <tr class="text-gray-700 dark:text-gray-300">
+                        <td class="px-2 py-1">{{ row.agent }}</td>
+                        <td class="px-2 py-1 text-emerald-600 dark:text-emerald-400">{{ row.up }}</td>
+                        <td class="px-2 py-1 text-red-600 dark:text-red-400">{{ row.down }}</td>
+                        <td class="px-2 py-1">{% if row.rate_pct is not none %}{{ row.rate_pct }}%{% else %}—{% endif %}
+                            <span class="text-gray-400">({{ row.rated }})</span></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
     <!-- Charts Row 1 -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <!-- Daily Usage Chart -->

@@ -473,13 +473,28 @@ def create_app_with_context_caching(
     # Register app-wide MATE plugin (RBAC/guardrails/token tracking for all agents,
     # including agents created at runtime). agent_manager skips per-agent model
     # callbacks when this is enabled.
+    plugins = []
+
+    # Response timing is registered whatever MATE_PLUGINS_ENABLED says: it is the only
+    # place that sees every surface (A2A and MCP never reach the auth server), and it
+    # implements only run-level hooks, so it cannot collide with the per-agent
+    # model callbacks.
+    try:
+        from shared.callbacks.metrics_plugin import MetricsPlugin
+        plugins.append(MetricsPlugin())
+    except Exception as e:
+        logger.error(f"Failed to register metrics plugin: {e}. Response latency will not be recorded.")
+
     if os.getenv("MATE_PLUGINS_ENABLED", "false").lower() == "true":
         try:
             from shared.callbacks.mate_plugin import MatePlugin
-            app_kwargs['plugins'] = [MatePlugin()]
+            plugins.append(MatePlugin())
             logger.info(f"App '{effective_app_name}' MATE plugin registered (app-wide callbacks)")
         except Exception as e:
             logger.error(f"Failed to register MATE plugin: {e}. Falling back to per-agent callbacks.")
+
+    if plugins:
+        app_kwargs['plugins'] = plugins
 
     # Create and return App instance
     app = App(**app_kwargs)

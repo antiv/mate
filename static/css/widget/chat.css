@@ -551,4 +551,18 @@ html, body {
   flex-shrink: 0;
 }
 
+/* A rating stays visible after the click, so the visitor can see it registered
+   and which way they voted. */
+.widget-message-action-btn.rated {
+  opacity: 1;
+}
+
+.widget-message-action-btn.rate-up.rated {
+  color: #16a34a;
+}
+
+.widget-message-action-btn.rate-down.rated {
+  color: #dc2626;
+}
+
 
