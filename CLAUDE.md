@@ -102,6 +102,7 @@ Follow PEP 8 with type hints on all function signatures. Use f-strings for forma
 | `ARTIFACT_SERVICE` | `local_folder`, `supabase`, or `s3` |
 | `EMBEDDING_MODEL` | Embedding model for memory block semantic search (litellm format, default `gemini/gemini-embedding-001`) |
 | `RATE_LIMIT_ENABLED` | Enable per-user/agent/project budgets |
+| `ALERTS_ENABLED` / `ALERTS_INTERVAL_SECONDS` | Alert rules on agent errors, guardrail bursts and budget thresholds |
 | `OTEL_TRACING_ENABLED` | OpenTelemetry distributed tracing (ADK runtime) |
 | `LANGSMITH_TRACING` / `LANGSMITH_API_KEY` | LangSmith run tracing (langgraph runtime) |
 | `AUDIT_RETENTION_DAYS` | EU AI Act audit log retention |
@@ -109,7 +110,7 @@ Follow PEP 8 with type hints on all function signatures. Use f-strings for forma
 ## Important Documentation
 
 - `AGENTS.md` — Architecture patterns and development guidelines (read before adding new agents or tools)
-- `documents/` — Feature-specific docs: `MCP_SERVERS.md`, `RATE_LIMITS.md`, `TRACING.md`, `WIDGET_INTEGRATION.md`, `TEMPLATE_LIBRARY.md`, `AGENT_WIZARD.md`, `LANGGRAPH_RUNTIME.md`
+- `documents/` — Feature-specific docs: `MCP_SERVERS.md`, `RATE_LIMITS.md`, `ALERTS.md`, `TRACING.md`, `WIDGET_INTEGRATION.md`, `TEMPLATE_LIBRARY.md`, `AGENT_WIZARD.md`, `LANGGRAPH_RUNTIME.md`
 - `shared/sql/README.md` — Database schema reference
 
 

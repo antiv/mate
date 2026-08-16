@@ -23,19 +23,14 @@ RATE_LIMIT_ENABLED=true
 - `throttle` – delay request
 - `block` – return 429 with `Retry-After` header
 
-**Alert thresholds:** 80%, 90%, 100% (configurable). When crossed, POST to `alert_webhook_url`:
+**Budget alerts** are no longer sent from here. They are alert rules now — see
+[Alerts](ALERTS.md) and the **Alerts** page in the dashboard, which also covers agent
+errors and guardrail bursts, and applies a cooldown that survives a restart.
 
-```json
-{
-  "event": "rate_limit_alert",
-  "scope": "user",
-  "scope_id": "user123",
-  "threshold_percent": 90,
-  "usage": 45000,
-  "limit": 50000,
-  "timestamp": "2025-03-03T12:00:00Z"
-}
-```
+The `alert_thresholds` and `alert_webhook_url` fields on a config are kept so existing
+rows are not lost, and a `budget_threshold` rule with no explicit `token_limit` reads its
+limit from the budget configured here. Rows that had a webhook URL and a daily token
+budget were migrated into alert rules automatically by `V026__alert_rules.sql`.
 
 ## Dashboard
 

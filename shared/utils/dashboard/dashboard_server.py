@@ -82,7 +82,7 @@ class DashboardServer:
                 AgentConfig, AgentConfigVersion, Project, User, TokenUsageLog,
                 GuardrailLog, AuditLog, TestCase, EvalResult, AgentTrigger,
                 FileSearchStore, AgentFileSearchStore, FileSearchDocument,
-                MemoryBlock, WidgetApiKey, WizardSession
+                MemoryBlock, WidgetApiKey, WizardSession, AlertRule
             )
 
             self.db_client = get_database_client()
@@ -98,6 +98,7 @@ class DashboardServer:
             self.TestCase = TestCase
             self.EvalResult = EvalResult
             self.AgentTrigger = AgentTrigger
+            self.AlertRule = AlertRule
             self.FileSearchStore = FileSearchStore
             self.AgentFileSearchStore = AgentFileSearchStore
             self.FileSearchDocument = FileSearchDocument
@@ -434,9 +435,12 @@ class DashboardServer:
                 raise HTTPException(status_code=404, detail="Project not found")
 
             # 1. Delete Agent Config Versions and Agent Configs in dependency order
-            agent_ids = [a.id for a in session.query(self.AgentConfig.id).filter(
-                self.AgentConfig.project_id == project_id
-            ).all()]
+            project_agents = session.query(
+                self.AgentConfig.id, self.AgentConfig.name
+            ).filter(self.AgentConfig.project_id == project_id).all()
+            agent_ids = [a.id for a in project_agents]
+            # Captured before the agents go: alert rules reference them by name
+            agent_names = [a.name for a in project_agents]
             if agent_ids:
                 session.query(self.AgentConfigVersion).filter(
                     self.AgentConfigVersion.agent_config_id.in_(agent_ids)
@@ -474,6 +478,18 @@ class DashboardServer:
             session.query(self.AgentTrigger).filter(
                 self.AgentTrigger.project_id == project_id
             ).delete(synchronize_session=False)
+
+            # 5b. Delete Alert Rules — scoped by (scope, scope_id) strings, so there is
+            # no foreign key to cascade and they would otherwise be orphaned
+            session.query(self.AlertRule).filter(
+                self.AlertRule.scope == 'project',
+                self.AlertRule.scope_id == str(project_id)
+            ).delete(synchronize_session=False)
+            if agent_names:
+                session.query(self.AlertRule).filter(
+                    self.AlertRule.scope == 'agent',
+                    self.AlertRule.scope_id.in_(agent_names)
+                ).delete(synchronize_session=False)
 
             # 6. Disassociate public wizard sessions (set trial_project_id to NULL)
             session.query(self.WizardSession).filter(
@@ -5964,6 +5980,154 @@ class DashboardServer:
             result = get_trigger_runner().execute_trigger(trigger_id)
             if result.get("status") == "error":
                 raise HTTPException(status_code=500, detail=result.get("message", "Trigger execution failed"))
+            return {"result": result}
+
+        # ------------------------------------------------------------------ #
+        # Alert rules                                                         #
+        # ------------------------------------------------------------------ #
+
+        @self.app.get("/dashboard/alerts", response_class=HTMLResponse, tags=["Dashboard - Pages"])
+        async def dashboard_alerts(request: Request, username: str = Depends(self._get_auth_user_dependency)):
+            if not self._get_is_admin(request):
+                return RedirectResponse(url="/dashboard/workroom", status_code=302)
+            agents = self._get_all_agent_configs()
+            return self.templates.TemplateResponse(request, "dashboard/alerts.html", {
+                "request": request,
+                "page_title": "Alerts",
+                "username": username,
+                "projects": self._get_all_projects(),
+                "agents": [{"name": a.get("name", "")} for a in agents],
+                "is_admin": True,
+            })
+
+        def _validate_alert_rule(body: dict, partial: bool = False) -> dict:
+            """Shared validation for create and update. Raises HTTPException on bad input."""
+            from shared.utils.alert_service import CONDITION_TYPES, DESTINATION_TYPES, SCOPES
+
+            fields = {}
+            for key in ("name", "description", "scope", "scope_id", "condition_type",
+                        "destination_type", "created_by"):
+                if key in body:
+                    fields[key] = body.get(key)
+            if not partial:
+                if not (body.get("name") or "").strip():
+                    raise HTTPException(status_code=400, detail="name is required")
+                for key in ("scope", "condition_type", "destination_type"):
+                    if not body.get(key):
+                        raise HTTPException(status_code=400, detail=f"{key} is required")
+
+            scope = body.get("scope")
+            if scope is not None and scope not in SCOPES:
+                raise HTTPException(status_code=400, detail=f"scope must be one of {list(SCOPES)}")
+            condition_type = body.get("condition_type")
+            if condition_type is not None and condition_type not in CONDITION_TYPES:
+                raise HTTPException(status_code=400,
+                                    detail=f"condition_type must be one of {list(CONDITION_TYPES)}")
+            destination_type = body.get("destination_type")
+            if destination_type is not None and destination_type not in DESTINATION_TYPES:
+                raise HTTPException(status_code=400,
+                                    detail=f"destination_type must be one of {list(DESTINATION_TYPES)}")
+            if scope and scope != 'global' and not (body.get("scope_id") or "").strip():
+                raise HTTPException(status_code=400, detail="scope_id is required unless scope is 'global'")
+
+            # guardrail_logs and the error rows are keyed by agent, never by user
+            if condition_type == 'guardrail_count' and scope == 'user':
+                raise HTTPException(status_code=400,
+                                    detail="guardrail_count cannot be scoped to a user")
+
+            destination_config = body.get("destination_config")
+            if destination_config is not None:
+                if destination_type == 'http' and not (destination_config.get("url") or "").strip():
+                    raise HTTPException(status_code=400, detail="destination_config.url is required for http")
+                if destination_type == 'email' and not (destination_config.get("to") or "").strip():
+                    raise HTTPException(status_code=400, detail="destination_config.to is required for email")
+                fields["destination_config"] = destination_config
+            if body.get("condition_config") is not None:
+                fields["condition_config"] = body.get("condition_config")
+            for key in ("cooldown_seconds",):
+                if key in body and body[key] is not None:
+                    fields[key] = int(body[key])
+            if "is_enabled" in body:
+                fields["is_enabled"] = bool(body["is_enabled"])
+            return fields
+
+        @self.app.get("/dashboard/api/alert-rules", tags=["Dashboard - Alerts"])
+        async def list_alert_rules(
+            request: Request,
+            username: str = Depends(self._get_auth_user_dependency),
+            scope: Optional[str] = None,
+            condition_type: Optional[str] = None,
+        ):
+            """List alert rules with optional filters."""
+            from shared.utils.alert_service import get_alert_service
+            return {"alert_rules": get_alert_service().get_rules(
+                scope=scope, condition_type=condition_type)}
+
+        @self.app.post("/dashboard/api/alert-rules", tags=["Dashboard - Alerts"])
+        async def create_alert_rule(
+            request: Request,
+            username: str = Depends(self._get_auth_user_dependency),
+        ):
+            """Create an alert rule."""
+            if not self._get_is_admin(request):
+                raise HTTPException(status_code=403, detail="Forbidden")
+            from shared.utils.alert_service import get_alert_service
+            body = await request.json()
+            fields = _validate_alert_rule(body)
+            fields.setdefault("created_by", username)
+            rule = get_alert_service().create_rule(**fields)
+            if not rule:
+                raise HTTPException(status_code=500, detail="Failed to create alert rule")
+            return {"alert_rule": rule}
+
+        @self.app.put("/dashboard/api/alert-rules/{rule_id}", tags=["Dashboard - Alerts"])
+        async def update_alert_rule(
+            rule_id: int,
+            request: Request,
+            username: str = Depends(self._get_auth_user_dependency),
+        ):
+            """Update an alert rule."""
+            if not self._get_is_admin(request):
+                raise HTTPException(status_code=403, detail="Forbidden")
+            from shared.utils.alert_service import get_alert_service
+            body = await request.json()
+            fields = _validate_alert_rule(body, partial=True)
+            rule = get_alert_service().update_rule(rule_id, **fields)
+            if not rule:
+                raise HTTPException(status_code=404, detail="Alert rule not found")
+            return {"alert_rule": rule}
+
+        @self.app.delete("/dashboard/api/alert-rules/{rule_id}", tags=["Dashboard - Alerts"])
+        async def delete_alert_rule(
+            rule_id: int,
+            request: Request,
+            username: str = Depends(self._get_auth_user_dependency),
+        ):
+            """Delete an alert rule."""
+            if not self._get_is_admin(request):
+                raise HTTPException(status_code=403, detail="Forbidden")
+            from shared.utils.alert_service import get_alert_service
+            if not get_alert_service().delete_rule(rule_id):
+                raise HTTPException(status_code=404, detail="Alert rule not found")
+            return {"deleted": True}
+
+        @self.app.post("/dashboard/api/alert-rules/{rule_id}/test", tags=["Dashboard - Alerts"])
+        async def test_alert_rule(
+            rule_id: int,
+            request: Request,
+            username: str = Depends(self._get_auth_user_dependency),
+        ):
+            """Measure the rule now and send a test notification.
+
+            Runs with force so a trial cannot consume the rule's real cooldown or
+            inflate fire_count.
+            """
+            if not self._get_is_admin(request):
+                raise HTTPException(status_code=403, detail="Forbidden")
+            from shared.utils.alert_service import get_alert_service
+            result = get_alert_service().evaluate_rule(rule_id, force=True)
+            if result.get("status") == "error":
+                raise HTTPException(status_code=500, detail=result.get("error", "Evaluation failed"))
             return {"result": result}
 
         @self.app.post("/triggers/{trigger_id}/fire", tags=["Dashboard - Triggers"])

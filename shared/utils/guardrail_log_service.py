@@ -4,7 +4,10 @@ Service for logging guardrail trigger events to the database.
 
 import logging
 from datetime import datetime, timezone
-from typing import Optional
+from typing import List, Optional
+
+from sqlalchemy import func
+
 from .database_client import get_database_client
 from .models import GuardrailLog
 
@@ -53,6 +56,39 @@ class GuardrailLogService:
             logger.error(f"Failed to log guardrail trigger: {e}")
             session.rollback()
             return False
+        finally:
+            session.close()
+
+    def count_triggers_since(
+        self,
+        since: datetime,
+        agent_names: Optional[List[str]] = None,
+        guardrail_type: Optional[str] = None,
+        action_taken: Optional[str] = None,
+    ) -> int:
+        """Count guardrail hits since a datetime. Used by the alert engine.
+
+        agent_names is a list so a project-scoped rule can pass all of its agents —
+        guardrail_logs has no project_id.
+        """
+        session = self.db_client.get_session() if self.db_client else None
+        if not session:
+            return 0
+        try:
+            query = session.query(func.count(GuardrailLog.id)).filter(
+                GuardrailLog.timestamp >= since)
+            if agent_names is not None:
+                if not agent_names:
+                    return 0
+                query = query.filter(GuardrailLog.agent_name.in_(agent_names))
+            if guardrail_type:
+                query = query.filter(GuardrailLog.guardrail_type == guardrail_type)
+            if action_taken:
+                query = query.filter(GuardrailLog.action_taken == action_taken)
+            return int(query.scalar() or 0)
+        except Exception as e:
+            logger.error(f"Failed to count guardrail triggers: {e}")
+            return 0
         finally:
             session.close()
 
