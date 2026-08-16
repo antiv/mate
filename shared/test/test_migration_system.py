@@ -150,6 +150,47 @@ class TestSQLSplitting(unittest.TestCase):
         result = self.ms._split_sql_statements("")
         self.assertEqual(result, [])
 
+    def test_function_body_is_one_statement(self):
+        # Splitting on the semicolons inside a PL/pgSQL body produced invalid
+        # fragments, which failed 18 of 26 PostgreSQL migrations on a fresh database
+        sql = (
+            "CREATE OR REPLACE FUNCTION touch() RETURNS TRIGGER AS $$\n"
+            "BEGIN\n"
+            "    NEW.updated_at = NOW();\n"
+            "    RETURN NEW;\n"
+            "END;\n"
+            "$$ LANGUAGE plpgsql;\n"
+            "CREATE INDEX idx_a ON a(b);"
+        )
+        result = self.ms._split_sql_statements(sql)
+        self.assertEqual(len(result), 2)
+        self.assertIn("RETURN NEW;", result[0])
+        self.assertTrue(result[1].startswith("CREATE INDEX"))
+
+    def test_do_block_is_one_statement_without_swallowing_the_file(self):
+        # The old code returned the entire file as a single statement whenever it
+        # saw a DO $$ block, so nothing else in that file could be split at all
+        sql = (
+            "CREATE TABLE a (id INT);\n"
+            "DO $$\nBEGIN\n    IF TRUE THEN\n        CREATE INDEX i ON a(id);\n"
+            "    END IF;\nEND $$;\n"
+            "CREATE TABLE b (id INT);"
+        )
+        result = self.ms._split_sql_statements(sql)
+        self.assertEqual(len(result), 3)
+        self.assertTrue(result[1].startswith("DO $$"))
+        self.assertIn("END IF;", result[1])
+
+    def test_tagged_dollar_quotes_are_respected(self):
+        sql = "CREATE FUNCTION f() RETURNS void AS $func$ BEGIN; END; $func$ LANGUAGE plpgsql; SELECT 1;"
+        result = self.ms._split_sql_statements(sql)
+        self.assertEqual(len(result), 2)
+        self.assertIn("BEGIN; END;", result[0])
+
+    def test_unterminated_dollar_quote_does_not_hang(self):
+        result = self.ms._split_sql_statements("CREATE FUNCTION f() AS $$ BEGIN")
+        self.assertEqual(len(result), 1)
+
     def test_split_no_semicolon(self):
         result = self.ms._split_sql_statements("SELECT 1")
         self.assertEqual(len(result), 1)

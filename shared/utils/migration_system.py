@@ -187,43 +187,58 @@ class MigrationSystem:
         """Split SQL content into individual statements."""
         import re
         
-        # For PostgreSQL DO $$ blocks, don't split them
-        if 'DO $$' in sql_content.upper():
-            # Return the entire content as a single statement
-            return [sql_content.strip()]
-        
         # Remove comments (both -- and /* */ style)
         sql_content = re.sub(r'--.*$', '', sql_content, flags=re.MULTILINE)
         sql_content = re.sub(r'/\*.*?\*/', '', sql_content, flags=re.DOTALL)
-        
-        # Split by semicolon, but be careful with semicolons inside strings
+
+        # Semicolons inside quoted literals and dollar-quoted blocks are data, not
+        # statement separators. PL/pgSQL bodies are full of them, so splitting on
+        # them naively cuts CREATE FUNCTION ... AS $$ ... $$ into invalid fragments.
+        dollar_tag = re.compile(r'\$[A-Za-z_]\w*\$|\$\$')
         statements = []
-        current_statement = ""
-        in_string = False
-        string_char = None
-        
-        for char in sql_content:
-            if char in ["'", '"'] and not in_string:
-                in_string = True
-                string_char = char
-                current_statement += char
-            elif char == string_char and in_string:
-                in_string = False
-                string_char = None
-                current_statement += char
-            elif char == ';' and not in_string:
-                current_statement = current_statement.strip()
-                if current_statement:
-                    statements.append(current_statement)
-                current_statement = ""
-            else:
-                current_statement += char
-        
-        # Add the last statement if it doesn't end with semicolon
-        current_statement = current_statement.strip()
-        if current_statement:
-            statements.append(current_statement)
-        
+        current = []
+        i = 0
+        length = len(sql_content)
+
+        while i < length:
+            char = sql_content[i]
+
+            if char in ("'", '"'):
+                quote = char
+                current.append(char)
+                i += 1
+                while i < length:
+                    current.append(sql_content[i])
+                    if sql_content[i] == quote:
+                        i += 1
+                        break
+                    i += 1
+                continue
+
+            tag_match = dollar_tag.match(sql_content, i)
+            if tag_match:
+                tag = tag_match.group(0)
+                close = sql_content.find(tag, i + len(tag))
+                end = length if close == -1 else close + len(tag)
+                current.append(sql_content[i:end])
+                i = end
+                continue
+
+            if char == ';':
+                statement = ''.join(current).strip()
+                if statement:
+                    statements.append(statement)
+                current = []
+                i += 1
+                continue
+
+            current.append(char)
+            i += 1
+
+        statement = ''.join(current).strip()
+        if statement:
+            statements.append(statement)
+
         return statements
     
     def _create_migrations_table(self, engine):

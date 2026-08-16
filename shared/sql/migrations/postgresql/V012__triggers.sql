@@ -28,6 +28,16 @@ CREATE INDEX IF NOT EXISTS idx_at_project_id   ON agent_triggers(project_id);
 CREATE INDEX IF NOT EXISTS idx_at_trigger_type ON agent_triggers(trigger_type);
 CREATE INDEX IF NOT EXISTS idx_at_is_enabled   ON agent_triggers(is_enabled);
 
+-- Nothing else defines this helper, so the trigger below could not be created and
+-- took the whole migration down with it.
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $func$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$func$ LANGUAGE plpgsql;
+
 DO $$
 BEGIN
     IF NOT EXISTS (
