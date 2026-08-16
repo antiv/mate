@@ -12,13 +12,13 @@ import logging
 import os
 import re
 import secrets
-import smtplib
 import threading
 from datetime import datetime, timezone
-from email.message import EmailMessage
 from typing import Any, Dict, Optional, Tuple
 
 import httpx
+
+from .notify import post_json, send_email
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +82,33 @@ class TriggerRunner:
         self.sync_cron_jobs()
         self._register_wizard_cleanup()
         self._register_user_cleanup()
+        self._register_alert_evaluation()
+
+    def _register_alert_evaluation(self) -> None:
+        """Register the periodic alert-rule evaluation pass.
+
+        Alerts ride this scheduler rather than evaluating inline in the model
+        callbacks, which is what kept the old budget alert on the request path.
+        """
+        from .alert_service import alerts_enabled
+        if not alerts_enabled():
+            return
+        try:
+            from apscheduler.triggers.interval import IntervalTrigger
+            from .alert_service import get_alert_service
+            interval = max(10, int(os.getenv("ALERTS_INTERVAL_SECONDS", "60")))
+            with self._scheduler_lock:
+                if not self._scheduler:
+                    return
+                self._scheduler.add_job(
+                    lambda: get_alert_service().evaluate_all(),
+                    trigger=IntervalTrigger(seconds=interval),
+                    id="alert_rule_evaluation",
+                    replace_existing=True,
+                )
+            logger.info("TriggerRunner: registered alert evaluation every %ss", interval)
+        except Exception as exc:
+            logger.warning("Could not register alert evaluation job: %s", exc)
 
     def _register_wizard_cleanup(self) -> None:
         """Register a daily job that removes expired Agent Builder Wizard trial agents."""
@@ -404,42 +431,33 @@ class TriggerRunner:
             svc.create_block(trigger.project_id, label, value=text, description=description)
 
     def _output_http_callback(self, cfg: dict, text: str) -> None:
-        """POST agent response as JSON to a configured URL."""
+        """POST agent response as JSON to a configured URL.
+
+        Raises on delivery failure: _execute_trigger_sync records the trigger result
+        from the exception, so swallowing it here would make failures invisible.
+        """
         url = cfg.get("url", "")
         if not url:
             logger.warning("http_callback output_config missing 'url'")
             return
-        headers = cfg.get("headers") or {}
-        timeout = float(cfg.get("timeout", 30))
-        payload = {"response": text, "source": "mate_trigger"}
-        with httpx.Client(timeout=timeout) as client:
-            resp = client.post(url, json=payload, headers=headers)
-            resp.raise_for_status()
-        logger.info("http_callback delivered to %s (%s)", url, resp.status_code)
+        ok, detail = post_json(
+            url,
+            payload={"response": text, "source": "mate_trigger"},
+            headers=cfg.get("headers") or {},
+            timeout=float(cfg.get("timeout", 30)),
+        )
+        if not ok:
+            raise RuntimeError(f"http_callback delivery failed: {detail}")
 
     def _output_email(self, cfg: dict, text: str) -> None:
-        """Send agent response via SMTP."""
+        """Send agent response via SMTP. Raises on delivery failure (see above)."""
         to_addr = cfg.get("to", "")
-        subject = cfg.get("subject", "MATE Trigger Result")
-        smtp_host = os.getenv("SMTP_HOST", "")
-        smtp_port = int(os.getenv("SMTP_PORT", "587"))
-        smtp_user = os.getenv("SMTP_USER", "")
-        smtp_pass = os.getenv("SMTP_PASS", "")
-        from_addr = os.getenv("SMTP_FROM", smtp_user)
-        if not to_addr or not smtp_host:
+        if not to_addr or not os.getenv("SMTP_HOST", ""):
             logger.warning("Email output misconfigured: missing 'to' in config or SMTP_HOST env var")
             return
-        msg = EmailMessage()
-        msg["From"] = from_addr
-        msg["To"] = to_addr
-        msg["Subject"] = subject
-        msg.set_content(text)
-        with smtplib.SMTP(smtp_host, smtp_port) as smtp:
-            smtp.starttls()
-            if smtp_user and smtp_pass:
-                smtp.login(smtp_user, smtp_pass)
-            smtp.send_message(msg)
-        logger.info("Email sent to %s", to_addr)
+        ok, detail = send_email(to_addr, cfg.get("subject", "MATE Trigger Result"), text)
+        if not ok:
+            raise RuntimeError(f"email delivery failed: {detail}")
 
     # ------------------------------------------------------------------ #
     # Fire key helpers                                                     #

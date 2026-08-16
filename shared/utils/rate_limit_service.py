@@ -20,8 +20,6 @@ from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from typing import Optional, Dict, Any, List, Tuple
 
-import httpx
-
 from .database_client import get_database_client
 from .models import RateLimitConfig, AgentConfig
 from .token_usage_service import get_token_usage_service
@@ -468,56 +466,6 @@ class RateLimitService:
         if agent_name:
             key += f":agent:{agent_name}"
         await _record_request(key)
-
-    def send_alert_webhook_sync(
-        self,
-        scope: str,
-        scope_id: str,
-        threshold_pct: int,
-        usage: int,
-        limit: int,
-        webhook_url: str,
-    ):
-        """Send budget alert to webhook (sync, for use from callbacks)."""
-        try:
-            payload = {
-                "event": "rate_limit_alert",
-                "scope": scope,
-                "scope_id": scope_id,
-                "threshold_percent": threshold_pct,
-                "usage": usage,
-                "limit": limit,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-            }
-            with httpx.Client() as client:
-                client.post(webhook_url, json=payload, timeout=10.0)
-        except Exception as e:
-            logger.warning("Failed to send alert webhook: %s", e)
-
-    async def send_alert_webhook(
-        self,
-        scope: str,
-        scope_id: str,
-        threshold_pct: int,
-        usage: int,
-        limit: int,
-        webhook_url: str,
-    ):
-        """Send budget alert to webhook (async)."""
-        try:
-            payload = {
-                "event": "rate_limit_alert",
-                "scope": scope,
-                "scope_id": scope_id,
-                "threshold_percent": threshold_pct,
-                "usage": usage,
-                "limit": limit,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-            }
-            async with httpx.AsyncClient() as client:
-                await client.post(webhook_url, json=payload, timeout=10.0)
-        except Exception as e:
-            logger.warning("Failed to send alert webhook: %s", e)
 
 
 _rate_limit_service: Optional[RateLimitService] = None

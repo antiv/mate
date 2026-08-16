@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+
+{% block title %}Alerts - MATE{% endblock %}
+
+{% block content %}
+<div class="space-y-4">
+
+    <!-- Header -->
+    <div class="flex flex-col gap-4 md:flex-row md:justify-between md:items-center">
+        <div>
+            <h2 class="text-xl font-bold text-gray-900 dark:text-white">Alerts</h2>
+            <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                Get notified when agents start failing, guardrails fire repeatedly, or a token budget runs out.
+                Enable with <code class="bg-gray-100 dark:bg-gray-700 px-1 rounded">ALERTS_ENABLED=true</code>.
+            </p>
+        </div>
+        <button onclick="AlertPage.openCreateModal()" class="px-3 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center space-x-1">
+            <i class="fas fa-plus mr-1"></i>New Rule
+        </button>
+    </div>
+
+    <!-- Filters -->
+    <div class="flex flex-wrap gap-2 items-center">
+        <select id="filterCondition" onchange="AlertPage.loadRules()" class="text-xs border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500">
+            <option value="">All Conditions</option>
+            <option value="agent_error_count">Agent errors</option>
+            <option value="budget_threshold">Budget threshold</option>
+            <option value="guardrail_count">Guardrail hits</option>
+        </select>
+        <select id="filterScope" onchange="AlertPage.loadRules()" class="text-xs border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500">
+            <option value="">All Scopes</option>
+            <option value="global">Global</option>
+            <option value="project">Project</option>
+            <option value="agent">Agent</option>
+            <option value="user">User</option>
+        </select>
+    </div>
+
+    <!-- Rules table -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-x-auto">
+        <table class="w-full text-xs">
+            <thead>
+                <tr class="text-left text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
+                    <th class="px-3 py-2 font-medium">Name</th>
+                    <th class="px-3 py-2 font-medium">Condition</th>
+                    <th class="px-3 py-2 font-medium">Scope</th>
+                    <th class="px-3 py-2 font-medium">Destination</th>
+                    <th class="px-3 py-2 font-medium">Cooldown</th>
+                    <th class="px-3 py-2 font-medium">Last fired</th>
+                    <th class="px-3 py-2 font-medium">Status</th>
+                    <th class="px-3 py-2 font-medium text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody id="ruleTableBody" class="divide-y divide-gray-100 dark:divide-gray-700">
+                <tr><td colspan="8" class="px-3 py-6 text-center text-gray-500 dark:text-gray-400">Loading...</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Create/Edit Modal -->
+<div id="ruleModal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center dashboard-modal">
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-lg w-full mx-4 p-4 max-h-[90vh] overflow-y-auto">
+        <h3 id="ruleModalTitle" class="text-lg font-semibold text-gray-900 dark:text-white mb-4">New Alert Rule</h3>
+        <form id="ruleForm" class="space-y-3" onsubmit="return false;">
+            <div>
+                <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Name</label>
+                <input type="text" id="formName" required placeholder="e.g. Support bot failing"
+                       class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-sm">
+            </div>
+
+            <div class="grid grid-cols-2 gap-2">
+                <div>
+                    <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Condition</label>
+                    <select id="formCondition" onchange="AlertPage.onConditionChange()"
+                            class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-sm">
+                        <option value="agent_error_count">Agent errors</option>
+                        <option value="budget_threshold">Budget threshold</option>
+                        <option value="guardrail_count">Guardrail hits</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Scope</label>
+                    <select id="formScope" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-sm">
+                        <option value="agent">Agent</option>
+                        <option value="project">Project</option>
+                        <option value="user">User</option>
+                        <option value="global">Global</option>
+                    </select>
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Scope ID (agent name, project id, or user id)</label>
+                <input type="text" id="formScopeId" placeholder="e.g. support_root"
+                       class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-sm">
+            </div>
+
+            <!-- Count-based conditions -->
+            <div id="countFields" class="grid grid-cols-2 gap-2">
+                <div>
+                    <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Threshold (count)</label>
+                    <input type="number" id="formThreshold" min="1" value="5"
+                           class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-sm">
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Window (minutes)</label>
+                    <input type="number" id="formWindow" min="1" value="15"
+                           class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-sm">
+                </div>
+            </div>
+
+            <!-- Budget condition -->
+            <div id="budgetFields" class="hidden grid grid-cols-2 gap-2">
+                <div>
+                    <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Threshold (% of budget)</label>
+                    <input type="number" id="formThresholdPct" min="1" max="100" value="90"
+                           class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-sm">
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Period</label>
+                    <select id="formPeriod" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-sm">
+                        <option value="day">Day</option>
+                        <option value="hour">Hour</option>
+                        <option value="month">Month</option>
+                    </select>
+                </div>
+                <div class="col-span-2">
+                    <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Token limit (blank = use the Rate Limits budget)</label>
+                    <input type="number" id="formTokenLimit" min="1" placeholder="from rate_limit_config"
+                           class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-sm">
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-2">
+                <div>
+                    <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Destination</label>
+                    <select id="formDestination" onchange="AlertPage.onDestinationChange()"
+                            class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-sm">
+                        <option value="http">HTTP POST</option>
+                        <option value="email">Email</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Cooldown (seconds)</label>
+                    <input type="number" id="formCooldown" min="0" value="3600"
+                           class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-sm">
+                </div>
+            </div>
+
+            <div id="httpFields">
+                <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Webhook URL</label>
+                <input type="text" id="formUrl" placeholder="https://hooks.example.com/mate"
+                       class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-sm">
+            </div>
+
+            <div id="emailFields" class="hidden">
+                <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Recipient</label>
+                <input type="text" id="formTo" placeholder="ops@example.com"
+                       class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-sm">
+                <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Requires SMTP_HOST and related env vars.</p>
+            </div>
+
+            <div class="flex justify-end gap-2 pt-2">
+                <button type="button" onclick="AlertPage.closeModal()" class="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 dark:text-gray-200 rounded-lg">Cancel</button>
+                <button type="button" onclick="AlertPage.saveRule()" class="px-3 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg">Save</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script src="/static/js/alerts-page.js?v=1"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function () { AlertPage.init(); });
+</script>
+{% endblock %}

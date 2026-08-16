@@ -1143,6 +1143,91 @@ class AgentTrigger(Base):
         }
 
 
+class AlertRule(Base):
+    """Notification rule: a condition over recorded events, a destination, a cooldown.
+
+    Scoped like RateLimitConfig rather than by project_id: budgets have to target
+    users and agents, and neither has a project foreign key.
+    """
+
+    __tablename__ = 'alert_rules'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    scope = Column(String(20), nullable=False)  # user | agent | project | global
+    scope_id = Column(String(255), nullable=True)  # NULL only when scope='global'
+    condition_type = Column(String(50), nullable=False)  # agent_error_count | budget_threshold | guardrail_count
+    condition_config = Column(Text, nullable=True)
+    destination_type = Column(String(50), nullable=False)  # http | email
+    destination_config = Column(Text, nullable=True)
+    cooldown_seconds = Column(Integer, nullable=False, default=3600)
+    is_enabled = Column(Boolean, nullable=False, default=True)
+    # The durable cooldown: read before every evaluation, so a restart cannot
+    # forget that a rule already fired.
+    last_fired_at = Column(DateTime, nullable=True)
+    last_state = Column(Text, nullable=True)
+    last_error = Column(Text, nullable=True)
+    fire_count = Column(Integer, nullable=False, default=0)
+    created_by = Column(String(255), nullable=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc),
+                        onupdate=lambda: datetime.now(timezone.utc), nullable=False)
+
+    def get_condition_config(self) -> dict:
+        try:
+            return json.loads(self.condition_config) if self.condition_config else {}
+        except json.JSONDecodeError:
+            return {}
+
+    def set_condition_config(self, config: dict) -> None:
+        self.condition_config = json.dumps(config) if config else None
+
+    def get_destination_config(self) -> dict:
+        try:
+            return json.loads(self.destination_config) if self.destination_config else {}
+        except json.JSONDecodeError:
+            return {}
+
+    def set_destination_config(self, config: dict) -> None:
+        self.destination_config = json.dumps(config) if config else None
+
+    def get_last_state(self) -> dict:
+        try:
+            return json.loads(self.last_state) if self.last_state else {}
+        except json.JSONDecodeError:
+            return {}
+
+    def set_last_state(self, state: Optional[dict]) -> None:
+        self.last_state = json.dumps(state) if state else None
+
+    def to_dict(self, include_secrets: bool = False) -> dict:
+        destination = self.get_destination_config()
+        if not include_secrets and destination.get('headers'):
+            # Destination headers routinely carry an auth token
+            destination = {**destination, 'headers': '***'}
+        return {
+            'id': self.id,
+            'name': self.name,
+            'description': self.description,
+            'scope': self.scope,
+            'scope_id': self.scope_id,
+            'condition_type': self.condition_type,
+            'condition_config': self.get_condition_config(),
+            'destination_type': self.destination_type,
+            'destination_config': destination,
+            'cooldown_seconds': self.cooldown_seconds,
+            'is_enabled': self.is_enabled,
+            'last_fired_at': self.last_fired_at.isoformat() if self.last_fired_at else None,
+            'last_state': self.get_last_state(),
+            'last_error': self.last_error,
+            'fire_count': self.fire_count,
+            'created_by': self.created_by,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
 class LangGraphSession(Base):
     """Session metadata for the LangGraph runtime (AGENT_FRAMEWORK=langgraph).
 
