@@ -138,8 +138,11 @@ def log_token_usage_callback(
     if llm_response.usage_metadata:
         usage = llm_response.usage_metadata
         
-        # Generate unique request ID for this LLM call
-        request_id = str(uuid.uuid4())
+        # The invocation id groups every model call made while answering one user
+        # turn, so "what did this response cost" is a GROUP BY. A per-call uuid, which
+        # this used to be, cannot be tied back to a response at all. The LangGraph
+        # runtime already keys its rows this way.
+        request_id = _get_invocation_id(callback_context) or str(uuid.uuid4())
         timestamp = datetime.now().isoformat()
         
         # Get session information from ADK context using the proper properties
@@ -266,6 +269,15 @@ def log_token_usage_callback(
             logger.debug("Tracing span end skipped: %s", e)
     
     return None  # Continue with normal processing
+
+
+def _get_invocation_id(callback_context: CallbackContext) -> Optional[str]:
+    """Return the ADK invocation id for the turn being answered, if reachable."""
+    try:
+        invocation = getattr(callback_context, '_invocation_context', None)
+        return getattr(invocation, 'invocation_id', None) if invocation else None
+    except Exception:
+        return None
 
 
 def _get_adk_session_info(callback_context: CallbackContext) -> tuple[str, str]:

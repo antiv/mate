@@ -5,7 +5,9 @@ graph invocation and the ADK-shape event translation behind POST /run_sse.
 
 import json
 import logging
+import time
 import uuid
+from datetime import datetime, timezone
 from typing import Any, AsyncGenerator, Dict
 
 logger = logging.getLogger(__name__)
@@ -31,6 +33,16 @@ async def run_sse_stream(app_name: str, user_id: str, session_id: str,
                          new_message: Dict[str, Any]) -> AsyncGenerator[str, None]:
     """Stream ADK Event JSON frames for one /run_sse invocation."""
     invocation_id = f"e-{uuid.uuid4()}"
+    # This is the LangGraph equivalent of the ADK run boundary: every surface on this
+    # runtime arrives through /run_sse, and it has no A2A or MCP of its own.
+    started_monotonic = time.monotonic()
+    status = "SUCCESS"
+    try:
+        from shared.utils.response_metrics import start_response
+        start_response(invocation_id=invocation_id, started_at=datetime.now(timezone.utc),
+                       session_id=session_id, user_id=user_id, agent_name=app_name)
+    except Exception:
+        logger.debug("[LangGraph] opening response metrics failed", exc_info=True)
     try:
         from shared.utils.langgraph.executor import execute_run
         async for event in execute_run(app_name=app_name, user_id=user_id,
@@ -38,6 +50,7 @@ async def run_sse_stream(app_name: str, user_id: str, session_id: str,
                                        invocation_id=invocation_id):
             yield _sse_frame(event)
     except Exception as e:
+        status = "ERROR"
         logger.exception(f"[LangGraph] run_sse failed for app={app_name} session={session_id}")
         # Own try/except: a logging failure must not stop the error frame reaching the client
         try:
@@ -51,3 +64,13 @@ async def run_sse_stream(app_name: str, user_id: str, session_id: str,
             "error_message": str(e),
             **_error_event(app_name, "An error occurred while processing your request.", invocation_id),
         })
+    finally:
+        try:
+            from shared.utils.response_metrics import finish_response
+            finish_response(
+                invocation_id=invocation_id,
+                duration_ms=int((time.monotonic() - started_monotonic) * 1000),
+                status=status,
+            )
+        except Exception:
+            logger.debug("[LangGraph] closing response metrics failed", exc_info=True)

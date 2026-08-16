@@ -1143,6 +1143,42 @@ class AgentTrigger(Base):
         }
 
 
+class AgentResponse(Base):
+    """One row per agent invocation: how long the whole response took, and where from.
+
+    token_usage_logs records per-LLM-call cost but no duration, and the HTTP layer
+    cannot supply one — six of the eight surfaces that invoke an agent bypass the
+    proxy entirely. This is written at the runtime's invocation boundary instead, so
+    every transport is covered by the same code.
+    """
+
+    __tablename__ = 'agent_responses'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    invocation_id = Column(String(255), nullable=False)
+    session_id = Column(String(255), nullable=True)
+    user_id = Column(String(255), nullable=True)
+    agent_name = Column(String(255), nullable=True)
+    # chat | api | trigger | slack | eval | mcp | a2a — see resolve_origin()
+    origin = Column(String(20), nullable=False, default='chat')
+    started_at = Column(DateTime, nullable=False)
+    duration_ms = Column(Integer, nullable=True)
+    status = Column(String(50), nullable=False, default='SUCCESS')
+
+    def to_dict(self) -> dict:
+        return {
+            'id': self.id,
+            'invocation_id': self.invocation_id,
+            'session_id': self.session_id,
+            'user_id': self.user_id,
+            'agent_name': self.agent_name,
+            'origin': self.origin,
+            'started_at': self.started_at.isoformat() if self.started_at else None,
+            'duration_ms': self.duration_ms,
+            'status': self.status,
+        }
+
+
 class AlertRule(Base):
     """Notification rule: a condition over recorded events, a destination, a cooldown.
 
