@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 ACTION_AGENT_CREATE = "agent.create"
 ACTION_AGENT_UPDATE = "agent.update"
 ACTION_AGENT_DELETE = "agent.delete"
+ACTION_AGENT_CLONE = "agent.clone"
 ACTION_USER_CREATE = "user.create"
 ACTION_USER_UPDATE = "user.update"
 ACTION_USER_DELETE = "user.delete"
