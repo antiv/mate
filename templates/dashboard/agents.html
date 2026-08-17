@@ -207,6 +207,46 @@
             </div>
         </div>
 
+        <!-- Clone Agent Tree Modal -->
+        <div id="cloneAgentModal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center dashboard-modal">
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full mx-4 p-4">
+                <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-1">Clone to Project</h3>
+                <p class="text-xs text-gray-500 dark:text-gray-400 mb-4">
+                    Copies <span id="cloneAgentRootLabel" class="font-mono"></span> and its whole sub-agent tree.
+                    The source is not modified.
+                </p>
+                <div class="space-y-3">
+                    <div>
+                        <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Target project</label>
+                        <select id="cloneTargetProject" onchange="updateCloneSuffix()"
+                                class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-sm"></select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Name suffix (applied to every cloned agent)</label>
+                        <input type="text" id="cloneSuffix" oninput="updateClonePreview()"
+                               class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-sm font-mono">
+                        <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                            New root: <span id="clonePreview" class="font-mono"></span>
+                        </p>
+                    </div>
+                    <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                        <input type="checkbox" id="cloneMemoryBlocks" checked>
+                        Copy the source project's memory blocks (existing labels kept)
+                    </label>
+                    <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                        <input type="checkbox" id="cloneFileSearch" checked>
+                        Assign the same file-search stores to the clones
+                    </label>
+                </div>
+                <div class="flex justify-end gap-2 pt-4">
+                    <button type="button" onclick="hideCloneAgentModal()"
+                            class="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 dark:text-gray-200 rounded-lg">Cancel</button>
+                    <button type="button" onclick="submitCloneAgent()"
+                            class="px-3 py-2 text-sm bg-teal-600 hover:bg-teal-700 text-white rounded-lg">Clone</button>
+                </div>
+            </div>
+        </div>
+
         <!-- Agent Chat Panel and Chat User Selection Modal -->
         {% include 'dashboard/modals/chat_modals.html' %}
 

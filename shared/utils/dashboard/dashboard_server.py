@@ -1756,6 +1756,202 @@ class DashboardServer:
         finally:
             session.close()
     
+    def _clone_agent_tree(self, root_name: str, target_project_id: int, suffix: str,
+                          include_memory_blocks: bool = False,
+                          include_file_search: bool = False,
+                          changed_by: str = None) -> Dict[str, Any]:
+        """Deep-copy a root agent and its sub-agent tree into another project.
+
+        Insert-only by design: the "without corrupting the source" acceptance
+        criterion of #19 holds because no source row is ever updated. Agent names
+        are globally unique, so every clone gets `name + suffix` (bumped with _2/_3
+        on collision), and in-tree name references in text fields follow the rename.
+        """
+        import re
+
+        suffix = (suffix or "").strip()
+        if not suffix:
+            return {"error": "suffix is required", "status_code": 400}
+
+        if not self.db_client:
+            return {"error": "Database connection failed", "status_code": 500}
+        session = self.db_client.get_session()
+        if not session:
+            return {"error": "Database connection failed", "status_code": 500}
+
+        try:
+            root = session.query(self.AgentConfig).filter(
+                self.AgentConfig.name == root_name).first()
+            if not root:
+                return {"error": f"Agent '{root_name}' not found", "status_code": 404}
+            if root.get_parent_agents():
+                return {"error": f"'{root_name}' is not a root agent — clone starts from the top of a tree",
+                        "status_code": 400}
+            target = session.query(self.Project).filter(
+                self.Project.id == target_project_id).first()
+            if not target:
+                return {"error": f"Target project {target_project_id} not found", "status_code": 404}
+
+            # Walk the tree in the source project. One query, then BFS in Python —
+            # a sub-agent reachable through two in-tree parents is collected once.
+            project_agents = session.query(self.AgentConfig).filter(
+                self.AgentConfig.project_id == root.project_id).all()
+            by_name = {a.name: a for a in project_agents}
+            tree_order = [root.name]
+            seen = {root.name}
+            frontier = {root.name}
+            while frontier:
+                next_frontier = set()
+                for agent in project_agents:
+                    if agent.name in seen:
+                        continue
+                    if any(p in frontier or p in seen for p in agent.get_parent_agents()):
+                        tree_order.append(agent.name)
+                        seen.add(agent.name)
+                        next_frontier.add(agent.name)
+                frontier = next_frontier
+
+            # New names: suffix everyone, bump on collision against the DB and
+            # against names assigned earlier in this very clone.
+            def _name_taken(candidate: str) -> bool:
+                return session.query(self.AgentConfig.id).filter(
+                    self.AgentConfig.name == candidate).first() is not None
+
+            name_map: Dict[str, str] = {}
+            for old_name in tree_order:
+                candidate = f"{old_name}{suffix}"
+                bump = 1
+                while _name_taken(candidate) or candidate in name_map.values():
+                    bump += 1
+                    candidate = f"{old_name}{suffix}_{bump}"
+                name_map[old_name] = candidate
+
+            # In-tree references inside text fields follow the rename. A single-pass
+            # regex with word boundaries, longest name first: sequential .replace (as
+            # sub_names in _import_template does) corrupts nested names — renaming
+            # "support" would also hit the middle of an already-renamed
+            # "support_billing" clone.
+            pattern = re.compile(
+                r"\b(?:" + "|".join(
+                    re.escape(n) for n in sorted(name_map, key=len, reverse=True)
+                ) + r")\b")
+
+            def _substitute(text: Optional[str]) -> Optional[str]:
+                if not text or not isinstance(text, str):
+                    return text
+                return pattern.sub(lambda m: name_map[m.group(0)], text)
+
+            cloned = []
+            for old_name in tree_order:
+                source = by_name[old_name]
+                # Parents outside the cloned tree are dropped: the clone must form
+                # its own tree in the target project, not attach to the source one.
+                new_parents = [name_map[p] for p in source.get_parent_agents()
+                               if p in name_map]
+                config_data = {
+                    "name": name_map[old_name],
+                    "type": source.type,
+                    "model_name": source.model_name,
+                    "description": source.description,
+                    "instruction": _substitute(source.instruction),
+                    "mcp_servers_config": _substitute(source.mcp_servers_config),
+                    "parent_agents": new_parents,
+                    "allowed_for_roles": source.allowed_for_roles,
+                    "tool_config": _substitute(source.tool_config),
+                    "max_iterations": source.max_iterations,
+                    "planner_config": source.planner_config,
+                    "generate_content_config": source.generate_content_config,
+                    "input_schema": source.input_schema,
+                    "output_schema": source.output_schema,
+                    "include_contents": source.include_contents,
+                    "guardrail_config": _substitute(source.guardrail_config),
+                    "disabled": source.disabled,
+                    # A hardcoded agent's behaviour lives in its code folder, which
+                    # is not cloned — the copy is fully database-driven.
+                    "hardcoded": False,
+                    "expose_as_model": source.expose_as_model,
+                    "debug_mode": source.debug_mode,
+                    "project_id": target_project_id,
+                }
+                if not self._create_agent_config(config_data, changed_by=changed_by):
+                    return {"error": f"Failed to create clone of '{old_name}'",
+                            "status_code": 500,
+                            "cloned": cloned}
+                cloned.append({"old": old_name, "new": name_map[old_name]})
+
+            # Folder for the cloned root only — the ADK entry point, matching what
+            # _import_template does for a fresh project.
+            self._copy_template_agent(name_map[root.name])
+
+            memory_blocks_copied = 0
+            if include_memory_blocks:
+                from shared.utils.memory_blocks_service import MemoryBlocksService
+                from shared.utils.models import MemoryBlock
+                mem_service = MemoryBlocksService(self.db_client)
+                existing_labels = {b.label for b in session.query(MemoryBlock).filter(
+                    MemoryBlock.project_id == target_project_id).all()}
+                for block in session.query(MemoryBlock).filter(
+                        MemoryBlock.project_id == root.project_id).all():
+                    if block.label in existing_labels:
+                        continue
+                    result = mem_service.create_block(
+                        project_id=target_project_id, label=block.label,
+                        value=block.value, description=block.description)
+                    if result.get("status") == "success":
+                        memory_blocks_copied += 1
+
+            file_search_assigned = 0
+            if include_file_search:
+                from shared.utils.models import AgentFileSearchStore
+                assignments = session.query(AgentFileSearchStore).filter(
+                    AgentFileSearchStore.agent_name.in_(list(name_map.keys()))).all()
+                for assignment in assignments:
+                    # The remote store and its documents are shared, not duplicated —
+                    # duplicating would mean re-uploading everything to a new store.
+                    session.add(AgentFileSearchStore(
+                        agent_name=name_map[assignment.agent_name],
+                        store_id=assignment.store_id,
+                        is_primary=assignment.is_primary))
+                    file_search_assigned += 1
+                session.commit()
+
+            try:
+                from shared.utils import audit_service
+                audit_service.log(
+                    actor=changed_by or "unknown",
+                    action=audit_service.ACTION_AGENT_CLONE,
+                    resource_type="agent",
+                    resource_id=root_name,
+                    details={"target_project_id": target_project_id,
+                             "new_root": name_map[root.name],
+                             "agents_cloned": len(cloned)})
+            except Exception as e:
+                logger.warning(f"Audit entry for clone failed: {e}")
+
+            # Same hot reload as a template import — this is what makes the
+            # clones immediately loadable.
+            try:
+                from shared.utils.utils import get_adk_config
+                import httpx
+                adk_config = get_adk_config()
+                adk_url = f"http://{adk_config['adk_host']}:{adk_config['adk_port']}/api/reload-all-agents"
+                with httpx.Client(timeout=30.0) as client:
+                    client.post(adk_url)
+            except Exception:
+                pass
+
+            return {"success": True,
+                    "cloned": cloned,
+                    "new_root": name_map[root.name],
+                    "memory_blocks_copied": memory_blocks_copied,
+                    "file_search_assigned": file_search_assigned}
+        except Exception as e:
+            session.rollback()
+            logger.error(f"Agent clone failed: {e}")
+            return {"error": str(e), "status_code": 500}
+        finally:
+            session.close()
+
     def _import_template(self, template_id: Optional[str] = None, project_name: Optional[str] = None,
                          changed_by: str = None, template_dict: Optional[Dict[str, Any]] = None,
                          substitutions: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -3974,6 +4170,33 @@ class DashboardServer:
                 media_type=media_type,
                 headers={"Content-Disposition": f'attachment; filename="{filename}"'},
             )
+
+        @self.app.post("/dashboard/api/agents/{agent_name}/clone", tags=["Dashboard - Agents"])
+        async def clone_agent_tree(
+            agent_name: str,
+            request: Request,
+            username: str = Depends(self._get_auth_user_dependency),
+        ):
+            """Deep-copy a root agent and its sub-agent tree into another project."""
+            if not self._get_is_admin(request):
+                raise HTTPException(status_code=403, detail="Forbidden")
+            body = await request.json()
+            try:
+                target_project_id = int(body.get("target_project_id"))
+            except (TypeError, ValueError):
+                raise HTTPException(status_code=400, detail="target_project_id is required")
+            result = self._clone_agent_tree(
+                root_name=agent_name,
+                target_project_id=target_project_id,
+                suffix=body.get("suffix") or "",
+                include_memory_blocks=bool(body.get("include_memory_blocks")),
+                include_file_search=bool(body.get("include_file_search")),
+                changed_by=username,
+            )
+            if "error" in result:
+                raise HTTPException(status_code=result.get("status_code", 500),
+                                    detail=result["error"])
+            return result
 
         @self.app.post("/dashboard/api/agents/import", tags=["Dashboard - Agents"])
         async def import_agents(

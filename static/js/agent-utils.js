@@ -156,6 +156,79 @@ function hideCopyAgentModal() {
     }
 }
 
+// --- Clone agent tree to another project (#19) -------------------------
+
+let cloneAgentRootName = null;
+
+// Mirrors TemplateService.slugify_project_name so the pre-filled suffix matches
+// what a template import would have produced for the same project.
+function slugifyProjectName(name) {
+    let text = String(name || '').toLowerCase().trim();
+    text = text.replace(/[^\w\s-]/g, '');
+    text = text.replace(/[-\s]+/g, '_');
+    return text.replace(/^_+|_+$/g, '') || 'project';
+}
+
+function showCloneAgentModal(rootName) {
+    cloneAgentRootName = rootName;
+    const select = document.getElementById('cloneTargetProject');
+    select.innerHTML = (window.projects || []).map(
+        p => `<option value="${p.id}">${p.name}</option>`).join('');
+    document.getElementById('cloneAgentRootLabel').textContent = rootName;
+    updateCloneSuffix();
+    document.getElementById('cloneAgentModal').classList.remove('hidden');
+}
+
+function hideCloneAgentModal() {
+    document.getElementById('cloneAgentModal').classList.add('hidden');
+    cloneAgentRootName = null;
+}
+
+function updateCloneSuffix() {
+    const select = document.getElementById('cloneTargetProject');
+    const project = (window.projects || []).find(p => String(p.id) === select.value);
+    document.getElementById('cloneSuffix').value = '_' + slugifyProjectName(project ? project.name : '');
+    updateClonePreview();
+}
+
+function updateClonePreview() {
+    const suffix = document.getElementById('cloneSuffix').value;
+    document.getElementById('clonePreview').textContent =
+        cloneAgentRootName ? `${cloneAgentRootName}${suffix}` : '';
+}
+
+async function submitCloneAgent() {
+    const targetId = document.getElementById('cloneTargetProject').value;
+    const suffix = document.getElementById('cloneSuffix').value.trim();
+    if (!cloneAgentRootName || !targetId || !suffix) {
+        showNotification('Target project and suffix are required', 'error');
+        return;
+    }
+    try {
+        const resp = await fetch(`/dashboard/api/agents/${encodeURIComponent(cloneAgentRootName)}/clone`, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                target_project_id: parseInt(targetId, 10),
+                suffix: suffix,
+                include_memory_blocks: document.getElementById('cloneMemoryBlocks').checked,
+                include_file_search: document.getElementById('cloneFileSearch').checked,
+            }),
+        });
+        const data = await resp.json();
+        if (!resp.ok) {
+            showNotification(data.detail || 'Clone failed', 'error');
+            return;
+        }
+        hideCloneAgentModal();
+        showNotification(`Cloned ${data.cloned.length} agent(s) — new root: ${data.new_root}`);
+        if (typeof refreshAgentsPage === 'function') refreshAgentsPage();
+    } catch (e) {
+        showNotification('Clone failed', 'error');
+    }
+}
+
 const CHAT_USER_STORAGE_KEY = 'agentChatSelectedUserId';
 let chatUsersCache = null;
 let chatUserFetchPromise = null;
@@ -1600,6 +1673,18 @@ function createAgentRow(config, depth, parentName, hasChildren, isHighlighted, r
             copyAgentById(config.id);
         }
     }));
+
+    if (getParentList(config).length === 0) {
+        actionsWrap.appendChild(createActionButton({
+            title: 'Clone to project',
+            icon: 'fas fa-clone',
+            className: 'text-teal-600 dark:text-teal-400 hover:text-teal-900 dark:hover:text-teal-300',
+            onClick: (event) => {
+                event.stopPropagation();
+                showCloneAgentModal(config.name);
+            }
+        }));
+    }
 
     actionsWrap.appendChild(createActionButton({
         title: 'Reload',
