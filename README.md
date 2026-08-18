@@ -114,7 +114,7 @@ Edit every aspect of an agent: model, instruction, RBAC roles, memory blocks, to
 ![Agent Configuration](documents/images/config_agent.png)
 
 ### Tool Configuration
-Toggle built-in tools or provide custom JSON — Google Drive, Search, Image, Memory Blocks, Code Executor, File Search, and more.
+Toggle built-in tools or provide custom JSON — Google Drive, You.com Search, Image, Memory Blocks, Code Executor, File Search, and more.
 
 ![Tool Configuration](documents/images/tools_agent_modal.png)
 

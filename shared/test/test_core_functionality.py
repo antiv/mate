@@ -149,6 +149,7 @@ class TestCoreFunctionality(unittest.TestCase):
         # Check that the factory has the expected private methods
         self.assertTrue(hasattr(factory, '_create_mcp_tools'))
         self.assertTrue(hasattr(factory, '_create_google_search_tools'))
+        self.assertTrue(hasattr(factory, '_create_youcom_search_tools'))
         self.assertTrue(hasattr(factory, '_create_google_drive_tools'))
         self.assertTrue(hasattr(factory, '_create_cv_tools'))
         self.assertTrue(hasattr(factory, '_create_custom_function_tools'))
@@ -156,6 +157,7 @@ class TestCoreFunctionality(unittest.TestCase):
         # Check that these are callable
         self.assertTrue(callable(getattr(factory, '_create_mcp_tools')))
         self.assertTrue(callable(getattr(factory, '_create_google_search_tools')))
+        self.assertTrue(callable(getattr(factory, '_create_youcom_search_tools')))
         self.assertTrue(callable(getattr(factory, '_create_google_drive_tools')))
         self.assertTrue(callable(getattr(factory, '_create_cv_tools')))
         self.assertTrue(callable(getattr(factory, '_create_custom_function_tools')))

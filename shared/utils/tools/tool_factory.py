@@ -20,6 +20,7 @@ class ToolFactory:
         self._tool_creators = {
             'mcp': self._create_mcp_tools,
             'google_search': self._create_google_search_tools,
+            'youcom_search': self._create_youcom_search_tools,
             'google_drive': self._create_google_drive_tools,
             'cv_tools': self._create_cv_tools,
             'image_tools': self._create_image_tools,
@@ -187,6 +188,11 @@ class ToolFactory:
         """Create Google Search tools using the specialized Google tools module."""
         from .google_tools import create_google_search_tools_from_config
         return create_google_search_tools_from_config(config)
+    
+    def _create_youcom_search_tools(self, config: Dict[str, Any]) -> List[Any]:
+        """Create You.com search tools using the specialized You.com tools module."""
+        from .youcom_tools import create_youcom_search_tools_from_config
+        return create_youcom_search_tools_from_config(config)
     
     def _create_google_drive_tools(self, config: Dict[str, Any]) -> List[Any]:
         """Create Google Drive tools using the specialized Google tools module."""

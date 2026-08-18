@@ -58,9 +58,24 @@
 - Use ToolFactory for creating agent tools
 - MCP tools are configured via `mcp_servers_config` (JSON): use `mcpServers` with per-server `command`, `args`, and optional `env` (stdio-based). See `documents/MCP_SERVERS.md` for details.
 - Google tools require proper service account credentials
+- You.com search tools require optional `YDC_API_KEY` environment variable (supports keyless access with payment flow)
 - Custom tools are defined in `shared/utils/tools/custom_tools.py`
 - Tool configuration is stored as JSON in `tool_config` field
 - All tools should be created through the ToolFactory system in `shared/utils/tools/`
+
+### Tool Configuration Examples
+
+```json
+{
+  "youcom_search": true,
+  "google_drive": true,
+  "memory_blocks": {
+    "enabled": true
+  }
+}
+```
+
+Available tools: `youcom_search`, `google_search` (disabled), `google_drive`, `cv_tools`, `image_tools`, `memory_blocks`, `file_search`, `code_executor`, `browser`, `mcp` (via `mcp_servers_config`).
 
 ## Error Handling
 - Always include try-except blocks for database operations

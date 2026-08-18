@@ -51,24 +51,20 @@ logger = logging.getLogger(__name__)
 #         return None
 
 
-# def create_google_search_tools_from_config(config: Dict[str, Any]) -> List[Any]:
-#     """
-#     Create Google Search tools from agent configuration.
+def create_google_search_tools_from_config(config: Dict[str, Any]) -> List[Any]:
+    """
+    Create Google Search tools from agent configuration.
     
-#     Args:
-#         config: Agent configuration dictionary
+    Args:
+        config: Agent configuration dictionary
         
-#     Returns:
-#         List of Google Search tools
-#     """
-#     tools = []
-#     agent_name = config.get('name', 'unknown')
-    
-#     search_tool = create_google_search_tool(agent_name)
-#     if search_tool:
-#         tools.append(search_tool)
-    
-#     return tools
+    Returns:
+        List of Google Search tools (currently disabled)
+    """
+    # Google search tools are currently disabled
+    # Use youcom_search instead for web search capabilities
+    logger.info("Google search tools are disabled. Use youcom_search for web search.")
+    return []
 
 
 def create_google_drive_tools(agent_name: str) -> List[Any]:
