@@ -47,11 +47,11 @@ def configure_auth(username: str, password: str):
 
 
 def _get_session_user(request: Request):
-    """Return the display identifier stored in the encrypted session, or None."""
+    """Return the user identifier stored in the encrypted session, or None."""
     try:
         user = request.session.get("user")
         if user:
-            return user.get("display_name") or user.get("user_id")
+            return user.get("user_id") or user.get("email") or user.get("display_name")
     except Exception:
         pass
     return None
