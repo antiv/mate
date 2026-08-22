@@ -9,6 +9,7 @@ import math
 import os
 import sys
 import shutil
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 from sqlalchemy.exc import IntegrityError
@@ -258,7 +259,8 @@ class DashboardServer:
             # Get top agents
             top_agents = session.query(
                 self.TokenUsageLog.agent_name,
-                func.count(self.TokenUsageLog.id).label('request_count')
+                func.count(self.TokenUsageLog.id).label('request_count'),
+                func.max(self.TokenUsageLog.timestamp).label('last_used')
             ).filter(
                 succeeded,
                 self.TokenUsageLog.timestamp >= start_date,
@@ -292,13 +294,19 @@ class DashboardServer:
                 hour = int(hour_stat.hour)
                 hourly_data[hour] = hour_stat.requests
             
+            # Latency and success rate live in agent_responses, not here: this table
+            # records per-LLM-call cost with no duration, and its rows are already
+            # filtered to successes, so a success rate is not derivable from them.
+            perf = self._get_agent_perf(
+                session, [a.agent_name for a in top_agents], start_date, end_date)
+
             result = {
                 'total_requests': stats.total_requests or 0,
                 'total_prompt_tokens': stats.total_prompt_tokens or 0,
                 'total_response_tokens': stats.total_response_tokens or 0,
                 'unique_users': stats.unique_users or 0,
                 'unique_agents': stats.unique_agents or 0,
-                'top_agents': [{'agent': agent.agent_name, 'requests': agent.request_count} for agent in top_agents],
+                'top_agents': [self._agent_row(agent, perf, end_date) for agent in top_agents],
                 'daily_usage': [{'date': str(day.date), 'requests': day.requests, 'tokens': day.total_tokens or 0} for day in daily_usage],
                 'hourly_usage': hourly_data,
                 'database_info': self._get_database_info()
@@ -322,6 +330,95 @@ class DashboardServer:
             return 0
         index = max(0, math.ceil(fraction * len(sorted_values)) - 1)
         return int(sorted_values[min(index, len(sorted_values) - 1)])
+
+    @staticmethod
+    def _format_relative(moment: Optional[datetime], now: datetime) -> Optional[str]:
+        """"3h ago" for a timestamp. Same vocabulary as the dashboard's JS clocks."""
+        if not moment:
+            return None
+        minutes = int((now - moment).total_seconds() // 60)
+        if minutes < 1:
+            return 'just now'
+        if minutes < 60:
+            return f'{minutes}m ago'
+        if minutes < 1440:
+            return f'{minutes // 60}h ago'
+        return f'{minutes // 1440}d ago'
+
+    @staticmethod
+    def _format_duration_ms(duration_ms: Optional[int]) -> Optional[str]:
+        """Milliseconds under a second, seconds above it. None stays None: a missing
+        measurement must reach the template as absent, not as a zero."""
+        if duration_ms is None:
+            return None
+        if duration_ms < 1000:
+            return f'{int(duration_ms)}ms'
+        return f'{duration_ms / 1000:.1f}s'
+
+    def _get_agent_perf(self, session, agent_names: List[str],
+                        start_date: datetime, end_date: datetime) -> Dict[str, dict]:
+        """Mean duration and success rate per agent, from agent_responses.
+
+        Separate from the token panels for the same reason as _get_quality_stats:
+        this reads a newer table, and its absence must leave the page standing.
+        Agents with no rows here are simply missing from the result, so callers
+        report "no data" rather than inventing a number.
+
+        No origin filter: the request count these sit beside counts every origin,
+        and narrowing only some columns would put inconsistent figures on one row.
+        """
+        names = [n for n in agent_names if n]
+        if not names:
+            return {}
+        try:
+            from sqlalchemy import case, func
+
+            from shared.utils.models import AgentResponse
+
+            rows = session.query(
+                AgentResponse.agent_name,
+                func.count(AgentResponse.id).label('invocations'),
+                func.sum(case((AgentResponse.status == 'SUCCESS', 1), else_=0)).label('successes'),
+                func.avg(AgentResponse.duration_ms).label('avg_ms'),
+                # COUNT over the column skips NULLs, so this is how many invocations
+                # actually closed. Unfinished ones still count against success rate.
+                func.count(AgentResponse.duration_ms).label('timed'),
+            ).filter(
+                AgentResponse.started_at >= start_date,
+                AgentResponse.started_at <= end_date,
+                AgentResponse.agent_name.in_(names),
+            ).group_by(AgentResponse.agent_name).all()
+
+            perf = {}
+            for row in rows:
+                invocations = int(row.invocations or 0)
+                perf[row.agent_name] = {
+                    'invocations': invocations,
+                    'avg_ms': int(round(row.avg_ms)) if row.timed and row.avg_ms is not None else None,
+                    'success_pct': round(100.0 * int(row.successes or 0) / invocations, 1)
+                    if invocations else None,
+                }
+            return perf
+        except Exception as e:
+            logger.warning("Agent performance stats failed: %s", e)
+            return {}
+
+    @classmethod
+    def _agent_row(cls, agent, perf: Dict[str, dict], now: datetime) -> Dict[str, Any]:
+        """One row of the agent performance table, with absent metrics left as None."""
+        metrics = perf.get(agent.agent_name, {})
+        avg_ms = metrics.get('avg_ms')
+        last_used = getattr(agent, 'last_used', None)
+        return {
+            'agent': agent.agent_name,
+            'requests': agent.request_count,
+            'last_used': last_used.isoformat() if last_used else None,
+            'last_used_label': cls._format_relative(last_used, now),
+            'avg_response_ms': avg_ms,
+            'avg_response_label': cls._format_duration_ms(avg_ms),
+            'success_rate_pct': metrics.get('success_pct'),
+            'invocations': metrics.get('invocations', 0),
+        }
 
     # Latency a customer would recognise: what someone waited on, not what a
     # scheduled job took. The rest stays in the table and is reachable by filter.
