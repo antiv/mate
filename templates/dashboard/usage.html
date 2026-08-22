@@ -285,11 +285,23 @@
                     <tr>
                         <td class="px-3 py-1.5 text-xs font-medium text-gray-900 dark:text-white truncate" data-label="Agent Name">{{ agent.agent or 'Unknown' }}</td>
                         <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate" data-label="Requests">{{ agent.requests }}</td>
-                        <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate" data-label="Avg. Response Time">~1.2s</td>
-                        <td class="px-3 py-1.5" data-label="Success Rate">
-                            <span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200">98.5%</span>
+                        <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate" data-label="Avg. Response Time"
+                            data-sort="{{ agent.avg_response_ms if agent.avg_response_ms is not none else -1 }}"
+                            title="{% if agent.invocations %}mean over {{ agent.invocations }} invocation(s){% else %}no invocations recorded in this period{% endif %}">{{ agent.avg_response_label or '—' }}</td>
+                        <td class="px-3 py-1.5" data-label="Success Rate"
+                            data-sort="{{ agent.success_rate_pct if agent.success_rate_pct is not none else -1 }}">
+                            {% if agent.success_rate_pct is none %}
+                            <span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300" title="no invocations recorded in this period">—</span>
+                            {% elif agent.success_rate_pct >= 95 %}
+                            <span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200">{{ agent.success_rate_pct }}%</span>
+                            {% elif agent.success_rate_pct >= 80 %}
+                            <span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200">{{ agent.success_rate_pct }}%</span>
+                            {% else %}
+                            <span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200">{{ agent.success_rate_pct }}%</span>
+                            {% endif %}
                         </td>
-                        <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate" data-label="Last Used">2 hours ago</td>
+                        <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate" data-label="Last Used"
+                            data-sort="{{ agent.last_used or '' }}" title="{{ agent.last_used or '' }}">{{ agent.last_used_label or '—' }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -903,9 +915,14 @@
         initMultiColumnTableSorting('usageAnalyticsTable', {
             0: { sortable: true, dataType: 'text' }, // Agent Name
             1: { sortable: true, dataType: 'number' }, // Requests
-            2: { sortable: true, dataType: 'text' }, // Avg. Response Time
-            3: { sortable: true, dataType: 'text' }, // Success Rate
-            4: { sortable: true, dataType: 'text' } // Last Used
+            // These three render formatted text ("1.2s", "3h ago"), so sort on the
+            // raw value in data-sort instead. Rows with no data carry -1 and sink.
+            2: { sortable: true, dataType: 'number',
+                 valueExtractor: (cell) => cell.dataset.sort || -1 }, // Avg. Response Time
+            3: { sortable: true, dataType: 'number',
+                 valueExtractor: (cell) => cell.dataset.sort || -1 }, // Success Rate
+            4: { sortable: true, dataType: 'number',
+                 valueExtractor: (cell) => Date.parse(cell.dataset.sort) || -1 } // Last Used
         });
         {% else %}
         initMultiColumnTableSorting('usageLogsTable', {
