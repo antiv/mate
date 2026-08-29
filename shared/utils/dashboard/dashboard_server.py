@@ -6527,9 +6527,18 @@ class DashboardServer:
             request: Request,
             username: str = Depends(self._get_auth_user_dependency),
         ):
-            """Immediately execute a trigger and return the result."""
+            """Immediately execute a trigger and return the result.
+
+            Accepts an optional JSON body so a prompt using {{ payload }} can be
+            tested with a sample body — otherwise the only way to exercise one
+            would be to fire the real webhook.
+            """
             from shared.utils.trigger_runner import get_trigger_runner
-            result = get_trigger_runner().execute_trigger(trigger_id)
+            try:
+                payload = await request.json()
+            except Exception:
+                payload = None
+            result = get_trigger_runner().execute_trigger(trigger_id, payload)
             if result.get("status") == "error":
                 raise HTTPException(status_code=500, detail=result.get("message", "Trigger execution failed"))
             return {"result": result}
@@ -6725,7 +6734,16 @@ class DashboardServer:
                         detail="Authentication required: provide X-MATE-Trigger-Key header or dashboard credentials",
                     )
 
-            result = get_trigger_runner().execute_trigger(trigger_id)
+            # The firing system's body reaches the prompt through {{ payload }}.
+            # A body that is absent or not JSON is not an error: plenty of
+            # webhooks fire with nothing, and those triggers ran before payloads
+            # existed and must keep running.
+            try:
+                payload = await request.json()
+            except Exception:
+                payload = None
+
+            result = get_trigger_runner().execute_trigger(trigger_id, payload)
             if result.get("status") == "error":
                 raise HTTPException(status_code=500, detail=result.get("message", "Trigger execution failed"))
             return result

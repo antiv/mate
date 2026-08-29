@@ -43,6 +43,47 @@ curl -X POST https://your-mate.example.com/triggers/{trigger_id}/fire \
   -H "Authorization: Bearer <token>"
 ```
 
+### Using the request body in the prompt
+
+The JSON body of the firing request is available to the trigger's prompt through
+`{{ payload }}` placeholders, so a webhook can say *what happened* instead of only *that
+something happened*.
+
+| Placeholder | Renders |
+|---|---|
+| `{{ payload }}` | the whole body as JSON |
+| `{{ payload.key }}` | one top-level field |
+| `{{ payload.issue.fields.summary }}` | a nested field, by dotted path |
+| `{{ payload.commits.0.id }}` | a list element, by index |
+
+```bash
+curl -X POST https://your-mate.example.com/triggers/7/fire \
+  -H "X-MATE-Trigger-Key: <fire_key>" \
+  -H "Content-Type: application/json" \
+  -d '{"key": "MT-32", "action": "updated"}'
+```
+
+With the prompt `Issue {{ payload.key }} was {{ payload.action }} — summarise it`, the agent
+receives `Issue MT-32 was updated — summarise it`.
+
+Notes:
+
+- A prompt with no placeholder is sent unchanged, so existing triggers behave exactly as
+  before. A body that is missing or is not JSON is not an error — the trigger fires with no
+  payload and placeholders are left as-is.
+- An unresolved path renders empty rather than failing, so one missing field does not stop
+  the run.
+- Each substituted value is capped at 4,000 characters and truncated with a marker beyond
+  that, so an oversized POST cannot inflate the prompt or the token bill.
+- Substitution is single-pass: a body that itself contains `{{ payload.x }}` is inserted as
+  literal text, not re-expanded.
+- `POST /dashboard/api/triggers/{id}/test-fire` accepts the same JSON body, so you can
+  exercise a payload-using prompt from the dashboard before wiring up the real caller.
+
+> **Treat the body as untrusted input.** Whoever holds the fire key controls text that goes
+> straight into an agent prompt. Enable the `prompt_injection` guardrail on any agent whose
+> trigger interpolates a payload, and keep the trigger's output destination narrow.
+
 ### Fire key lifecycle
 
 - A **fire key** is generated when you create a webhook trigger. It is shown **once** in a dashboard banner — copy it immediately.
