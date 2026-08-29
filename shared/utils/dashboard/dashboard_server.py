@@ -4347,18 +4347,16 @@ class DashboardServer:
             if not success:
                 raise HTTPException(status_code=404, detail=f"Template not found or could not be deleted: {template_id}")
             
-            # Audit the deletion
-            if hasattr(self, 'AuditLog'):
-                try:
-                    audit_service.log_event(
-                        action="delete_template",
-                        actor=username,
-                        target_type="template",
-                        target_id=template_id,
-                        description=f"Deleted template: {template_id}"
-                    )
-                except Exception as e:
-                    logger.warning(f"Failed to audit template deletion: {e}")
+            # Audit the deletion. audit_service.log never raises and resolves its
+            # own database client, so it needs neither a try/except nor the
+            # self.AuditLog guard that used to stand here.
+            audit_service.log(
+                username,
+                audit_service.ACTION_TEMPLATE_DELETE,
+                audit_service.RESOURCE_TEMPLATE,
+                resource_id=template_id,
+                request=request,
+            )
 
             return {"success": True}
 
