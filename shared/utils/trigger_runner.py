@@ -40,6 +40,11 @@ def get_trigger_runner() -> "TriggerRunner":
 # POST costs a truncated placeholder, not an unbounded token bill.
 MAX_PAYLOAD_CHARS = 4000
 
+# Stored and loadable, but nothing ever fires them (see _execute_trigger_sync).
+# Creating one is therefore always a mistake, so the API refuses it. Existing
+# rows keep loading and listing — removing them is the operator's call, not ours.
+UNIMPLEMENTED_TRIGGER_TYPES = ("file_watch", "event_bus")
+
 _PAYLOAD_PLACEHOLDER = re.compile(r"\{\{\s*payload(?:\.([A-Za-z0-9_.\-]+))?\s*\}\}")
 
 
@@ -359,7 +364,7 @@ class TriggerRunner:
 
         Cron firings pass no payload; the prompt then renders unchanged.
         """
-        if trigger.trigger_type in ("file_watch", "event_bus"):
+        if trigger.trigger_type in UNIMPLEMENTED_TRIGGER_TYPES:
             logger.info("Trigger %s type='%s' — not yet implemented", trigger.id, trigger.trigger_type)
             return {"status": "skipped", "message": f"trigger_type '{trigger.trigger_type}' not yet implemented"}
 

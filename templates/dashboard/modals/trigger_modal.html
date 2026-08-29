@@ -26,8 +26,11 @@
                             class="mt-1 block w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500">
                             <option value="cron">Cron (schedule)</option>
                             <option value="webhook">Webhook (HTTP POST)</option>
-                            <option value="file_watch">File Watch ⚠ stub</option>
-                            <option value="event_bus">Event Bus ⚠ stub</option>
+                            <!-- Disabled, not removed: a legacy row of this type must still
+                                 display its real type when edited. Removing the option would
+                                 make the select fall back to "cron" and silently convert it. -->
+                            <option value="file_watch" disabled>File Watch (not implemented)</option>
+                            <option value="event_bus" disabled>Event Bus (not implemented)</option>
                         </select>
                     </div>
                 </div>
@@ -98,7 +101,9 @@
                     <div class="bg-yellow-50 dark:bg-yellow-900 border border-yellow-200 dark:border-yellow-700 rounded px-3 py-2">
                         <p class="text-xs text-yellow-800 dark:text-yellow-200">
                             <i class="fas fa-exclamation-triangle mr-1"></i>
-                            This trigger type is not yet implemented. The trigger will be saved but will return a "not yet implemented" status when fired.
+                            This trigger type is not implemented — it never fires. New triggers of
+                            this type are refused; this existing one can still be renamed or
+                            disabled, but it will not run until the type is implemented.
                         </p>
                     </div>
                 </div>
