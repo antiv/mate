@@ -7,6 +7,7 @@ MCP tools, Google services, and custom functions.
 
 import json
 import logging
+import os
 from typing import Dict, List, Any, Optional
 
 logger = logging.getLogger(__name__)
@@ -230,9 +231,57 @@ class ToolFactory:
         return create_user_profile_tools_from_config(config)
 
     def _create_code_executor_tools(self, config: Dict[str, Any]) -> List[Any]:
-        """Create code executor tools (Python & shell execution)."""
+        """Create code executor tools (Python & shell execution).
+
+        Refused when the agent is reachable through a widget key: the executor is
+        not a sandbox, so handing it to an agent anonymous site visitors can prompt
+        grants them shell access to the host. A key counts whether or not it is
+        active — deactivating one is a dashboard toggle that can be flipped back
+        without touching the agent, so an inactive key is still exposure waiting to
+        happen. Delete the key, or set MATE_ALLOW_CODE_EXECUTOR_ON_WIDGET=true.
+        """
+        agent_name = config.get('name')
+        if agent_name and self._agent_has_widget_key(agent_name):
+            logger.error(
+                "Refusing code_executor for agent '%s': it has a widget API key, which "
+                "would give anonymous visitors shell access to the host. Delete the "
+                "widget key or set MATE_ALLOW_CODE_EXECUTOR_ON_WIDGET=true to override.",
+                agent_name,
+            )
+            return []
         from .code_executor_tools import create_code_executor_tools_from_config
         return create_code_executor_tools_from_config(config)
+
+    @staticmethod
+    def _agent_has_widget_key(agent_name: str) -> bool:
+        """True when a widget API key points at this agent and the override is off.
+
+        Fails closed: if the check itself cannot run, the tool is refused rather
+        than granted, since the whole point is to not hand out shell access by
+        accident.
+        """
+        if os.getenv('MATE_ALLOW_CODE_EXECUTOR_ON_WIDGET', '').strip().lower() in ('1', 'true', 'yes'):
+            return False
+        try:
+            from ..database_client import get_database_client
+            from ..models import WidgetApiKey
+            db_client = get_database_client()
+            if not db_client:
+                logger.error("code_executor widget-exposure check: no database client; refusing the tool")
+                return True
+            session = db_client.get_session()
+            if not session:
+                logger.error("code_executor widget-exposure check: no database session; refusing the tool")
+                return True
+            try:
+                return session.query(WidgetApiKey.id).filter(
+                    WidgetApiKey.agent_name == agent_name
+                ).first() is not None
+            finally:
+                session.close()
+        except Exception as e:
+            logger.error("code_executor widget-exposure check failed (%s); refusing the tool", e)
+            return True
 
     def _create_image_data_extraction_tools(self, config: Dict[str, Any]) -> List[Any]:
         """Create image data extraction (vision) tools."""

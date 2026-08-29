@@ -97,6 +97,7 @@ Follow PEP 8 with type hints on all function signatures. Use f-strings for forma
 | `OAUTH_ALLOWED_DOMAINS` / `OAUTH_ALLOWED_EMAILS` | Restrict who may sign in via SSO (unset = anyone with a provider account) |
 | `TOKEN_TTL_HOURS` | Bearer token lifetime, default 24 |
 | `WIDGET_ORIGIN_STRICT` | Enforce (vs. only log) a widget key's origin allowlist |
+| `MATE_ALLOW_CODE_EXECUTOR_ON_WIDGET` | Allow `code_executor` on an agent that has a widget key (refused by default — it is not a sandbox) |
 | `WIDGET_LEGACY_ADMIN_KEY` | Transitional: let the public widget key work on `/widget/api` admin routes |
 | `ADK_HOST` / `ADK_PORT` | ADK server address (default `127.0.0.1:8001`) |
 | `ARTIFACT_SERVICE` | `local_folder`, `supabase`, or `s3` |

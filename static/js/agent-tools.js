@@ -150,6 +150,46 @@ function handleShopChange(prefix) {
 }
 
 /**
+ * Handle code executor checkbox change.
+ *
+ * The executor is refused at load time for any agent that has a widget key, so
+ * warn here rather than let someone save a config that silently won't take effect.
+ */
+function handleCodeExecutorChange(prefix) {
+    syncToolConfigToJson(prefix);
+    updateCodeExecutorWidgetWarning(prefix);
+}
+
+let _widgetKeyAgentsPromise = null;
+
+function updateCodeExecutorWidgetWarning(prefix) {
+    const warning = document.getElementById(prefix + 'CodeExecutorWidgetWarning');
+    const checkbox = document.getElementById(prefix + 'CodeExecutor');
+    if (!warning || !checkbox) return;
+    if (!checkbox.checked) {
+        warning.style.display = 'none';
+        return;
+    }
+    const nameField = document.getElementById(prefix + 'Name');
+    const agentName = nameField ? (nameField.value || '').trim() : '';
+    if (!agentName) {
+        warning.style.display = 'none';
+        return;
+    }
+    if (!_widgetKeyAgentsPromise) {
+        _widgetKeyAgentsPromise = fetch('/dashboard/api/widget-keys', { credentials: 'same-origin' })
+            .then(r => r.ok ? r.json() : { keys: [] })
+            .then(res => new Set((res.keys || []).map(k => k.agent_name)))
+            // A failed lookup must not block the form; the server still refuses the tool.
+            .catch(() => new Set());
+    }
+    _widgetKeyAgentsPromise.then(agentsWithKeys => {
+        const stillChecked = checkbox.checked;
+        warning.style.display = (stillChecked && agentsWithKeys.has(agentName)) ? 'block' : 'none';
+    });
+}
+
+/**
  * Handle memory blocks checkbox change (sync + update section visibility)
  */
 function handleMemoryBlocksChange(prefix) {
@@ -202,7 +242,10 @@ function syncJsonToToolConfig(prefix = '') {
         if (browser) browser.checked = !!config.browser;
         if (cvTools) cvTools.checked = !!config.cv_tools;
         if (createAgent) createAgent.checked = !!config.create_agent;
-        if (codeExecutor) codeExecutor.checked = !!config.code_executor;
+        if (codeExecutor) {
+            codeExecutor.checked = !!config.code_executor;
+            updateCodeExecutorWidgetWarning(prefix);
+        }
         const shop = document.getElementById(prefix + 'Shop');
         if (shop) {
             shop.checked = !!config.shop;
@@ -314,6 +357,8 @@ function setupToolListeners(prefix) {
                         handleGoogleCalendarChange(prefix);
                     } else if (checkboxId === prefix + 'Shop') {
                         handleShopChange(prefix);
+                    } else if (checkboxId === prefix + 'CodeExecutor') {
+                        handleCodeExecutorChange(prefix);
                     } else {
                         syncToolConfigToJson(prefix);
                     }
@@ -345,6 +390,8 @@ function setupToolListeners(prefix) {
                         handleGoogleCalendarChange(prefix);
                     } else if (checkboxId === prefix + 'Shop') {
                         handleShopChange(prefix);
+                    } else if (checkboxId === prefix + 'CodeExecutor') {
+                        handleCodeExecutorChange(prefix);
                     } else {
                         syncToolConfigToJson(prefix);
                     }
