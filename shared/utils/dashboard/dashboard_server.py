@@ -6346,12 +6346,22 @@ class DashboardServer:
             """Create a new trigger. Returns trigger + fire_key (webhook triggers only, shown once)."""
             import re as _re
             import secrets as _secrets
-            from shared.utils.trigger_runner import get_trigger_runner, generate_webhook_path
+            from shared.utils.trigger_runner import (
+                UNIMPLEMENTED_TRIGGER_TYPES, get_trigger_runner, generate_webhook_path,
+            )
 
             if not self.db_client:
                 raise HTTPException(status_code=500, detail="Database unavailable")
             body = await request.json()
             trigger_type = body.get("trigger_type", "cron")
+            # Nothing fires these, so creating one only produces a row that looks
+            # like automation and never runs. Refuse rather than store it.
+            if trigger_type in UNIMPLEMENTED_TRIGGER_TYPES:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"trigger_type '{trigger_type}' is not implemented and would never fire. "
+                           "Use 'cron' or 'webhook'.",
+                )
             session = self.db_client.get_session()
             if not session:
                 raise HTTPException(status_code=500, detail="Database unavailable")
@@ -6410,7 +6420,7 @@ class DashboardServer:
             username: str = Depends(self._get_auth_user_dependency),
         ):
             """Update a trigger. Pass regenerate_fire_key=true to rotate the webhook key."""
-            from shared.utils.trigger_runner import get_trigger_runner
+            from shared.utils.trigger_runner import UNIMPLEMENTED_TRIGGER_TYPES, get_trigger_runner
 
             if not self.db_client:
                 raise HTTPException(status_code=500, detail="Database unavailable")
@@ -6424,6 +6434,18 @@ class DashboardServer:
                 ).first()
                 if not trigger:
                     raise HTTPException(status_code=404, detail="Trigger not found")
+
+                # Block converting a working trigger into an unfireable type. A row
+                # already stored as one may still be saved unchanged, so a legacy
+                # trigger can be renamed or — the point — disabled.
+                new_type = body.get("trigger_type")
+                if (new_type in UNIMPLEMENTED_TRIGGER_TYPES
+                        and new_type != trigger.trigger_type):
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"trigger_type '{new_type}' is not implemented and would never fire. "
+                               "Use 'cron' or 'webhook'.",
+                    )
 
                 for field in ("name", "description", "trigger_type", "agent_name", "prompt",
                               "cron_expression", "output_type"):
