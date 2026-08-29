@@ -86,6 +86,28 @@ WHERE name = 'my_agent';
 
 Scripts have access to whatever packages are installed in the server's Python environment. They inherit the server's environment variables (minus any sandboxing you add at the infrastructure level).
 
+### Never on a public agent
+
+This is not a sandbox. Enabling it on an agent grants code execution on the host to anyone who
+can prompt that agent, as the server user, with the server's environment and full filesystem and
+network access.
+
+MATE enforces one case of this: **an agent that has a widget API key does not receive the code
+executor tools.** A widget key makes the agent promptable by anonymous visitors on the embedding
+site, which would turn the executor into remote shell access for the public internet. The refusal
+is logged at load time, and the dashboard warns when you tick the box on such an agent.
+
+A key counts whether or not it is currently active — reactivating one is a dashboard toggle that
+never touches the agent, so an inactive key is exposure waiting to happen rather than the absence
+of it. To use the executor on such an agent, delete the widget key.
+
+| Variable | Effect |
+|----------|--------|
+| `MATE_ALLOW_CODE_EXECUTOR_ON_WIDGET` | `true` skips the check. Only set this if the widget key is not reachable by untrusted users. |
+
+The check fails closed: if it cannot reach the database to determine exposure, the tools are
+refused rather than granted.
+
 ## Example Agent Instruction
 
 ```

@@ -118,6 +118,14 @@
                                 class="ml-1.5 text-xs font-medium text-gray-700 dark:text-gray-300">Code
                                 Executor</label>
                         </div>
+                        <div id="{{ id_prefix }}CodeExecutorWidgetWarning" style="display: none"
+                            class="col-span-full text-xs rounded border border-red-300 bg-red-50 px-2 py-1.5 text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-300">
+                            <i class="fas fa-triangle-exclamation mr-1"></i>
+                            This agent has a widget API key. The code executor is not a sandbox, so it
+                            will be refused at load time — anonymous visitors could otherwise run shell
+                            commands on the host. Delete the widget key, or set
+                            <code>MATE_ALLOW_CODE_EXECUTOR_ON_WIDGET=true</code> if you mean it.
+                        </div>
                         <div class="flex items-center">
                             <input type="checkbox" id="{{ id_prefix }}ImageDataExtraction"
                                 class="w-3 h-3 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-gray-800 focus:ring-1 dark:bg-gray-700 dark:border-gray-600">
