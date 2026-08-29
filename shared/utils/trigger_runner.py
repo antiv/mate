@@ -35,6 +35,58 @@ def get_trigger_runner() -> "TriggerRunner":
     return _runner_instance
 
 
+# A webhook body is attacker-influenced text heading straight into a prompt, so
+# it is bounded before it gets there. The cap is per substituted value: a runaway
+# POST costs a truncated placeholder, not an unbounded token bill.
+MAX_PAYLOAD_CHARS = 4000
+
+_PAYLOAD_PLACEHOLDER = re.compile(r"\{\{\s*payload(?:\.([A-Za-z0-9_.\-]+))?\s*\}\}")
+
+
+def _lookup_payload_path(payload: Any, path: str) -> Any:
+    """Walk a dotted path through the payload. Missing keys yield None."""
+    current = payload
+    for part in path.split("."):
+        if isinstance(current, dict) and part in current:
+            current = current[part]
+        elif isinstance(current, list) and part.isdigit() and int(part) < len(current):
+            current = current[int(part)]
+        else:
+            return None
+    return current
+
+
+def _stringify(value: Any) -> str:
+    """Render a payload value for inclusion in a prompt, bounded in length."""
+    if value is None:
+        return ""
+    text = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False, default=str)
+    if len(text) > MAX_PAYLOAD_CHARS:
+        text = text[:MAX_PAYLOAD_CHARS] + f"... [truncated at {MAX_PAYLOAD_CHARS} chars]"
+    return text
+
+
+def render_prompt(prompt: str, payload: Any = None) -> str:
+    """Substitute {{ payload }} and {{ payload.a.b }} placeholders in a prompt.
+
+    A prompt with no placeholder is returned untouched, so triggers written
+    before payloads existed behave exactly as they did. An unresolved path
+    renders empty rather than raising: a trigger that fires with a field
+    missing should still run, and the agent can see the field is absent.
+    """
+    if not prompt or payload is None or "{{" not in prompt:
+        return prompt
+
+    def replace(match: "re.Match") -> str:
+        path = match.group(1)
+        value = payload if path is None else _lookup_payload_path(payload, path)
+        if path is not None and value is None:
+            logger.debug("Trigger payload has no path %r; rendering empty", path)
+        return _stringify(value)
+
+    return _PAYLOAD_PLACEHOLDER.sub(replace, prompt)
+
+
 def generate_webhook_path(name: str) -> str:
     """Generate a unique-enough webhook path slug from a trigger name."""
     slug = re.sub(r'[^a-z0-9-]', '-', name.lower().strip())[:40].strip('-') or 'trigger'
@@ -268,10 +320,13 @@ class TriggerRunner:
         except Exception as exc:
             logger.error("_run_trigger_by_id outer %s error: %s", trigger_id, exc)
 
-    def execute_trigger(self, trigger_id: int) -> Dict[str, Any]:
+    def execute_trigger(self, trigger_id: int, payload: Any = None) -> Dict[str, Any]:
         """
         Execute one trigger immediately (webhook fire or dashboard test-fire).
         Persists last_fired_at and last_result. Returns result dict.
+
+        ``payload`` is the decoded body of the firing request, available to the
+        trigger's prompt through {{ payload }} placeholders.
         """
         from shared.utils.database_client import get_database_client
         from shared.utils.models import AgentTrigger
@@ -285,7 +340,7 @@ class TriggerRunner:
             ).first()
             if not trigger:
                 return {"status": "error", "message": "Trigger not found"}
-            result = self._execute_trigger_sync(trigger)
+            result = self._execute_trigger_sync(trigger, payload)
             trigger.last_fired_at = datetime.now(timezone.utc)
             trigger.set_last_result(result)
             session.commit()
@@ -297,17 +352,20 @@ class TriggerRunner:
         finally:
             session.close()
 
-    def _execute_trigger_sync(self, trigger: Any) -> Dict[str, Any]:
+    def _execute_trigger_sync(self, trigger: Any, payload: Any = None) -> Dict[str, Any]:
         """
         Core execution: invoke ADK agent then route output.
         Returns result dict with status, optional agent_response.
+
+        Cron firings pass no payload; the prompt then renders unchanged.
         """
         if trigger.trigger_type in ("file_watch", "event_bus"):
             logger.info("Trigger %s type='%s' — not yet implemented", trigger.id, trigger.trigger_type)
             return {"status": "skipped", "message": f"trigger_type '{trigger.trigger_type}' not yet implemented"}
 
         try:
-            agent_response = self._invoke_agent(trigger.agent_name, trigger.prompt)
+            prompt = render_prompt(trigger.prompt, payload)
+            agent_response = self._invoke_agent(trigger.agent_name, prompt)
         except Exception as exc:
             return {"status": "error", "message": f"Agent invocation failed: {exc}"}
 
