@@ -7,6 +7,7 @@ import json
 import logging
 import math
 import os
+import re
 import sys
 import shutil
 from datetime import datetime
@@ -45,6 +46,39 @@ def sanitize_agent_text(text: Optional[str]) -> Optional[str]:
     text = text.replace('‘', "'").replace('’', "'")
     text = text.replace('“', '"').replace('”', '"')
     return text
+
+
+def make_name_substituter(name_map: Dict[str, str]):
+    """Build a substituter that rewrites agent names in strings, lists and dicts.
+
+    Renaming has to be a single pass with word boundaries, not a loop of
+    ``str.replace``. Sequential replacement rewrites text that a previous
+    replacement produced, and it has no notion of a whole word — so with agents
+    ``support`` and ``support_billing``, mapping ``support`` first also rewrites
+    the middle of ``support_billing`` and yields ``support_acme_billing``.
+    Whether that happens depends on dict order, which makes it intermittent.
+
+    Longest names are tried first so ``support_billing`` wins over ``support``
+    where both could match at the same position.
+    """
+    names = [n for n in name_map if n]
+    if not names:
+        return lambda obj: obj
+
+    pattern = re.compile(
+        r"\b(?:" + "|".join(re.escape(n) for n in sorted(names, key=len, reverse=True)) + r")\b"
+    )
+
+    def substitute(obj):
+        if isinstance(obj, str):
+            return pattern.sub(lambda m: name_map[m.group(0)], obj)
+        if isinstance(obj, list):
+            return [substitute(x) for x in obj]
+        if isinstance(obj, dict):
+            return {k: substitute(v) for k, v in obj.items()}
+        return obj
+
+    return substitute
 
 
 class DashboardServer:
@@ -1864,8 +1898,6 @@ class DashboardServer:
         are globally unique, so every clone gets `name + suffix` (bumped with _2/_3
         on collision), and in-tree name references in text fields follow the rename.
         """
-        import re
-
         suffix = (suffix or "").strip()
         if not suffix:
             return {"error": "suffix is required", "status_code": 400}
@@ -1923,20 +1955,8 @@ class DashboardServer:
                     candidate = f"{old_name}{suffix}_{bump}"
                 name_map[old_name] = candidate
 
-            # In-tree references inside text fields follow the rename. A single-pass
-            # regex with word boundaries, longest name first: sequential .replace (as
-            # sub_names in _import_template does) corrupts nested names — renaming
-            # "support" would also hit the middle of an already-renamed
-            # "support_billing" clone.
-            pattern = re.compile(
-                r"\b(?:" + "|".join(
-                    re.escape(n) for n in sorted(name_map, key=len, reverse=True)
-                ) + r")\b")
-
-            def _substitute(text: Optional[str]) -> Optional[str]:
-                if not text or not isinstance(text, str):
-                    return text
-                return pattern.sub(lambda m: name_map[m.group(0)], text)
+            # In-tree references inside text fields follow the rename.
+            _substitute = make_name_substituter(name_map)
 
             cloned = []
             for old_name in tree_order:
@@ -2124,16 +2144,7 @@ class DashboardServer:
         root_agent_name = name_map.get(root_agent_raw, root_agent_raw)
 
         # Substitute in agent names and parent_agents
-        def sub_names(obj):
-            if isinstance(obj, str):
-                for old, new in name_map.items():
-                    obj = obj.replace(old, new)
-                return obj
-            if isinstance(obj, list):
-                return [sub_names(x) for x in obj]
-            if isinstance(obj, dict):
-                return {k: sub_names(v) for k, v in obj.items()}
-            return obj
+        sub_names = make_name_substituter(name_map)
         
         # Create agents in order: root first (no parents), then children
         agents_created = 0
@@ -2325,11 +2336,7 @@ class DashboardServer:
             agents_to_add = []
             agents_to_update = []
             
-            def sub_names(text):
-                if isinstance(text, str):
-                    for old, new in name_map.items():
-                        text = text.replace(old, new)
-                return text
+            sub_names = make_name_substituter(name_map)
 
             for tpl_agent in template_agents:
                 tpl_name = tpl_agent.get("name", "")
@@ -2400,11 +2407,7 @@ class DashboardServer:
             ).all()
             db_block_labels = {b.label for b in db_blocks}
             
-            def sub_names(text):
-                if isinstance(text, str):
-                    for old, new in name_map.items():
-                        text = text.replace(old, new)
-                return text
+            sub_names = make_name_substituter(name_map)
             
             blocks_to_add = []
             blocks_to_update = []
@@ -2474,16 +2477,7 @@ class DashboardServer:
                     new_name = old_name.replace(tpl_prefix, replace_with, 1) if tpl_prefix in old_name else f"{slug}_{old_name}"
                     name_map[old_name] = new_name
             
-            def sub_names(obj):
-                if isinstance(obj, str):
-                    for old, new in name_map.items():
-                        obj = obj.replace(old, new)
-                    return obj
-                if isinstance(obj, list):
-                    return [sub_names(x) for x in obj]
-                if isinstance(obj, dict):
-                    return {k: sub_names(v) for k, v in obj.items()}
-                return obj
+            sub_names = make_name_substituter(name_map)
             
             # Get existing DB agents
             db_agents = session.query(self.AgentConfig).filter(
