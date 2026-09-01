@@ -367,7 +367,17 @@ class AgentManager:
             description = config.get('description') or ''
             instruction = config.get('instruction') or ''
             sub_agents = sub_agents or []
-            
+
+            # ADK picks a sub-agent to delegate to by reading descriptions, so an
+            # agent inside a tree with an empty one is reachable but never routed
+            # to — silently, at delegation time. Surface it at build time instead.
+            # A lone root agent delegates nowhere, so it is not worth a warning.
+            if not description and (sub_agents or config.get('parent_agents')):
+                logger.warning(
+                    f"Agent '{agent_name}' has no description. ADK routes to sub-agents "
+                    f"on their description, so a parent has nothing to delegate on here."
+                )
+
             # Parse input_schema if present and convert to Pydantic model
             input_schema = None
             input_schema_config = config.get('input_schema')
