@@ -4304,6 +4304,8 @@ class DashboardServer:
                     raise HTTPException(status_code=400, detail=result["error"])
                 
                 return result
+            except HTTPException:
+                raise
             except Exception as e:
                 raise HTTPException(status_code=400, detail=f"Invalid JSON data: {str(e)}")
 
