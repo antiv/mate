@@ -116,7 +116,7 @@ class TestFireEndpointReadsTheBody(unittest.TestCase):
             app = FastAPI()
             server = DashboardServer(app, project_root)
 
-        trigger_row = MagicMock(id=7, fire_key_hash=None)
+        trigger_row = MagicMock(id=7, fire_key_hash=None, require_signature=False)
         session = MagicMock()
         session.query.return_value.filter.return_value.first.return_value = trigger_row
         server.db_client = MagicMock()

@@ -35,13 +35,18 @@ The scheduler uses APScheduler's `BackgroundScheduler` with `coalesce=True` — 
 curl -X POST https://your-mate.example.com/triggers/{trigger_id}/fire \
   -H "X-MATE-Trigger-Key: <fire_key>"
 
-# With fire key query param
+# With fire key query param (deprecated — see below)
 curl -X POST "https://your-mate.example.com/triggers/{trigger_id}/fire?key=<fire_key>"
 
 # With standard dashboard credentials (bearer token)
 curl -X POST https://your-mate.example.com/triggers/{trigger_id}/fire \
   -H "Authorization: Bearer <token>"
 ```
+
+> **`?key=` is deprecated.** A secret in the URL lands in access logs, proxy logs and browser
+> history, where it outlives any rotation you meant it to have. It still works and fires a
+> warning in the server log; use the `X-MATE-Trigger-Key` header, or sign the request and drop
+> the query param entirely.
 
 ### Using the request body in the prompt
 
@@ -84,12 +89,66 @@ Notes:
 > straight into an agent prompt. Enable the `prompt_injection` guardrail on any agent whose
 > trigger interpolates a payload, and keep the trigger's output destination narrow.
 
+### Verifying signatures (optional)
+
+A fire key authenticates the *caller*; it cannot prove who composed the *body*. Anyone who has
+ever seen the key — a proxy log, a CI variable, a screenshot of the one-time banner — can forge
+any payload, and since the body reaches the agent's prompt, that is a prompt-injection surface
+on an endpoint designed to be called by third parties. A signature binds the body to the sender;
+a shared key does not. This is why GitHub, GitLab, Jira and Stripe all sign.
+
+Turn it on per trigger: open the trigger edit modal and tick **Require signed requests**, or
+`PUT /dashboard/api/triggers/{id}` with `{"require_signature": true}`. It is **off by default**,
+so existing callers keep working unchanged.
+
+Each webhook trigger gets a **signing secret** alongside its fire key, shown once in the same
+dashboard banner. To rotate it, click **Regenerate Signing Secret** — senders on the old secret
+start failing immediately.
+
+The signature is `HMAC-SHA256(signing_secret, raw_request_body)`, hex-encoded, sent in either
+header:
+
+| Header | Format | Sent by |
+|---|---|---|
+| `X-Hub-Signature-256` | `sha256=<hex>` | GitHub, GitLab |
+| `X-MATE-Signature` | `<hex>` | MATE-native callers |
+
+`X-Hub-Signature-256` is checked first. Verification runs over the raw bytes, **before** the body
+is parsed as JSON, and the comparison is constant-time.
+
+```bash
+BODY='{"key":"MT-32","action":"updated"}'
+SIG=$(printf '%s' "$BODY" | openssl dgst -sha256 -hmac "$SIGNING_SECRET" | awk '{print $2}')
+
+curl -X POST https://your-mate.example.com/triggers/7/fire \
+  -H "X-MATE-Trigger-Key: $FIRE_KEY" \
+  -H "X-Hub-Signature-256: sha256=$SIG" \
+  -H "Content-Type: application/json" \
+  -d "$BODY"
+```
+
+For GitHub or GitLab, paste the signing secret into the webhook's **Secret** field — they compute
+`X-Hub-Signature-256` themselves.
+
+Notes:
+
+- When verification is required, a missing or wrong signature is rejected **401**, and a valid
+  fire key on its own is not sufficient.
+- Triggers without it enabled behave exactly as before — no signature is looked for.
+- Sign the exact bytes you send. Re-serialising parsed JSON reorders keys and changes whitespace,
+  which changes the digest.
+- **No replay protection.** A captured signed request can be replayed, since there is no
+  timestamp or nonce window. Keep the trigger's output destination narrow, and treat a signed
+  body as authentic, not as fresh.
+
 ### Fire key lifecycle
 
 - A **fire key** is generated when you create a webhook trigger. It is shown **once** in a dashboard banner — copy it immediately.
 - The raw key is never stored; only its SHA-256 hash is kept in the database.
 - To rotate the key: open the trigger edit modal and click **Regenerate Key**. The old key is invalidated immediately.
 - If you lose your fire key, regenerate it — there is no recovery.
+- The **signing secret** is separate and rotates separately. Unlike the fire key it is stored in
+  the clear, because verifying a signature means recomputing it and a hash could not.
 
 ## Output Destinations
 

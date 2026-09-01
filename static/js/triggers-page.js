@@ -132,6 +132,8 @@ const TriggerPage = (function () {
         document.getElementById('outputEmailTo').value = cfg.to || '';
         document.getElementById('outputEmailSubject').value = cfg.subject || '';
 
+        document.getElementById('triggerRequireSignature').checked = !!trigger.require_signature;
+
         // Webhook URL
         if (trigger.trigger_type === 'webhook' && trigger.webhook_path) {
             const webhookUrl = window.location.origin + '/triggers/' + triggerId + '/fire';
@@ -203,6 +205,7 @@ const TriggerPage = (function () {
             cron_expression: triggerType === 'cron' ? document.getElementById('triggerCronExpr').value.trim() : null,
             output_type: outputType,
             output_config: outputConfig,
+            require_signature: document.getElementById('triggerRequireSignature').checked,
         };
 
         const btn = document.getElementById('triggerSubmitBtn');
@@ -224,9 +227,7 @@ const TriggerPage = (function () {
             const result = await resp.json();
             if (!resp.ok) throw new Error(result.detail || 'Request failed');
             closeModal();
-            if (result.fire_key) {
-                _showFireKeyBanner(result.fire_key);
-            }
+            _showSecretsBanner(result.fire_key, result.signing_secret);
             _showNotification(formId ? 'Trigger updated' : 'Trigger created');
             loadTriggers();
         } catch (err) {
@@ -300,6 +301,27 @@ const TriggerPage = (function () {
         }
     }
 
+    async function regenerateSigningSecret() {
+        const triggerId = document.getElementById('triggerFormId').value;
+        if (!triggerId) return;
+        if (!confirm('Regenerate the signing secret? Senders using the old secret will start failing immediately.')) return;
+        try {
+            const resp = await fetch(`/dashboard/api/triggers/${triggerId}`, {
+                method: 'PUT',
+                credentials: 'same-origin',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({regenerate_signing_secret: true}),
+            });
+            const result = await resp.json();
+            if (!resp.ok) throw new Error(result.detail || 'Failed');
+            closeModal();
+            _showSecretsBanner(result.fire_key, result.signing_secret);
+            loadTriggers();
+        } catch (err) {
+            _showNotification('Error: ' + err.message, 'error');
+        }
+    }
+
     async function regenerateKey() {
         const triggerId = document.getElementById('triggerFormId').value;
         if (!triggerId) return;
@@ -314,9 +336,7 @@ const TriggerPage = (function () {
             const result = await resp.json();
             if (!resp.ok) throw new Error(result.detail || 'Failed');
             closeModal();
-            if (result.fire_key) {
-                _showFireKeyBanner(result.fire_key);
-            }
+            _showSecretsBanner(result.fire_key, result.signing_secret);
             loadTriggers();
         } catch (err) {
             _showNotification('Error: ' + err.message, 'error');
@@ -389,6 +409,8 @@ const TriggerPage = (function () {
         });
         document.getElementById('triggerType').value = 'cron';
         document.getElementById('triggerOutputType').value = 'memory_block';
+        const sigChk = document.getElementById('triggerRequireSignature');
+        if (sigChk) sigChk.checked = false;
         const projSel = document.getElementById('triggerProject');
         if (projSel) projSel.value = '';
         // Reset agent dropdown to "select project first" state
@@ -430,11 +452,20 @@ const TriggerPage = (function () {
         return {};
     }
 
-    function _showFireKeyBanner(key) {
+    // Both secrets are shown once and never again, so they share one banner.
+    // Either may be absent: rotating one does not reissue the other.
+    function _showSecretsBanner(fireKey, signingSecret) {
         const banner = document.getElementById('fireKeyBanner');
-        const keyEl = document.getElementById('fireKeyValue');
-        if (!banner || !keyEl) return;
-        keyEl.textContent = key;
+        if (!banner || (!fireKey && !signingSecret)) return;
+
+        const keyRow = document.getElementById('fireKeyRow');
+        if (fireKey) document.getElementById('fireKeyValue').textContent = fireKey;
+        keyRow.classList.toggle('hidden', !fireKey);
+
+        const secretRow = document.getElementById('signingSecretRow');
+        if (signingSecret) document.getElementById('signingSecretValue').textContent = signingSecret;
+        secretRow.classList.toggle('hidden', !signingSecret);
+
         banner.classList.remove('hidden');
         // Auto-hide after 60 seconds
         setTimeout(() => banner.classList.add('hidden'), 60000);
@@ -513,5 +544,6 @@ const TriggerPage = (function () {
         toggleTrigger,
         testFire,
         regenerateKey,
+        regenerateSigningSecret,
     };
 })();

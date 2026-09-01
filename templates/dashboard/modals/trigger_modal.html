@@ -94,6 +94,27 @@
                         </button>
                         <span class="text-xs text-gray-400">New key is shown once after regeneration</span>
                     </div>
+                    <div class="pt-2 border-t border-gray-200 dark:border-gray-700 space-y-2">
+                        <label class="flex items-start gap-2 cursor-pointer">
+                            <input type="checkbox" id="triggerRequireSignature"
+                                class="mt-0.5 rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500">
+                            <span class="text-xs text-gray-700 dark:text-gray-300">
+                                Require signed requests
+                                <span class="block text-gray-500 dark:text-gray-400">
+                                    HMAC-SHA256 of the raw body in <code class="bg-gray-100 dark:bg-gray-700 px-1 rounded">X-Hub-Signature-256</code>
+                                    or <code class="bg-gray-100 dark:bg-gray-700 px-1 rounded">X-MATE-Signature</code>.
+                                    The fire key alone is then rejected — the body reaches the agent's prompt, so it has to be signed.
+                                </span>
+                            </span>
+                        </label>
+                        <div class="flex items-center gap-2">
+                            <button type="button" id="regenerateSigningSecretBtn" onclick="TriggerPage.regenerateSigningSecret()"
+                                class="px-2 py-1 text-xs bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200 rounded hover:bg-yellow-200 dark:hover:bg-yellow-800">
+                                <i class="fas fa-sync-alt mr-1"></i>Regenerate Signing Secret
+                            </button>
+                            <span class="text-xs text-gray-400">New secret is shown once after regeneration</span>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Stub warning -->
