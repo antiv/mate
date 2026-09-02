@@ -128,7 +128,76 @@ curl -u admin:mate -X POST http://localhost:8000/agents/creative_agent/mcp/tools
 
 ## External MCP Servers
 
-Agents can connect to external MCP servers via the `mcp_servers_config` field in the `agents_config` database table. These are created using stdio connections and exposed as tools to agents (not as HTTP endpoints).
+Agents can connect to external MCP servers via the `mcp_servers_config` field in the `agents_config` database table. The remote server's tools are exposed to the agent as ordinary tools.
+
+Two transports are supported, chosen by what the server entry contains:
+
+| Entry has | Transport | Use for |
+|-----------|-----------|---------|
+| `url` | Streamable HTTP (or SSE) | Remote servers reachable over the network |
+| `command` + `args` | stdio | Servers that run as a local subprocess |
+
+If an entry sets both, `url` wins and the command is ignored.
+
+### HTTP servers
+
+**Configuration Format:**
+```json
+{
+  "mcpServers": {
+    "server_name": {
+      "url": "https://mcp.example.com/mcp",
+      "headers": {"Authorization": "Bearer YOUR_TOKEN"},
+      "transport": "streamable_http",
+      "timeout": 60
+    }
+  }
+}
+```
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `url` | string | required | Server endpoint. Must be `http` or `https`; anything else is refused |
+| `headers` | object | `{}` | Extra request headers, typically `Authorization` |
+| `transport` | string | `streamable_http` | `streamable_http` or `sse` for older servers. `type` is accepted as a synonym |
+| `timeout` | number | 60 | How long a tool call may take, in seconds. Raise it for slow tools |
+| `connect_timeout` | number | 5 | How long to wait for the connection itself |
+
+This replaces the older workaround of wrapping a remote server in `npx mcp-remote`
+over stdio, which needed Node on the host and a subprocess per server.
+
+### Secrets: `${VAR}` interpolation
+
+Any string value in a server entry may reference the server's environment as
+`${VAR}` — in `headers`, `url`, `command`, `args` or `env`. The value is read from
+the environment when the toolset is built, so credentials stay out of the
+`agents_config` row and out of config exports.
+
+```json
+{
+  "mcpServers": {
+    "tavily": {
+      "url": "https://mcp.tavily.com/mcp",
+      "headers": {"Authorization": "Bearer ${TAVILY_API_KEY}"}
+    }
+  }
+}
+```
+
+Rules:
+
+- Only `${NAME}` is a placeholder. A bare `$NAME` is left alone.
+- **If a referenced variable is unset, the server is skipped** and the agent
+  answers without its tools, with the missing names logged. Sending the request
+  without the credential, or with the literal text `${NAME}` as the credential,
+  are both worse failures.
+- A variable that is set but empty is treated as a real value, not a miss.
+
+Note that interpolation reads the server's environment, so anyone who can edit an
+agent's MCP config can route an environment value to the URL they choose. That is
+the same trust level agent configuration already carries.
+
+### stdio servers
 
 **Configuration Format:**
 ```json
@@ -165,7 +234,7 @@ Agents can connect to external MCP servers via the `mcp_servers_config` field in
 }
 ```
 
-External MCP servers are created via `create_mcp_tools_from_config()` function which uses stdio connections (`StdioConnectionParams`) to communicate with remote MCP servers.
+External MCP servers are created via `create_mcp_tools_from_config()`, which dispatches on the server entry: `create_mcp_toolset_http()` for a `url` (`StreamableHTTPConnectionParams` or `SseConnectionParams`) and `create_mcp_toolset_command()` for `command`/`args` (`StdioConnectionParams`).
 
 ---
 

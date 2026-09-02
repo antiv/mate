@@ -228,17 +228,20 @@
                 <textarea id="{{ id_prefix }}McpServersConfig" name="{{ id_prefix }}McpServersConfig" rows="10"
                     placeholder='{
   "mcpServers": {
-    "mate-chess-mcp": {
-      "command": "npx",
-      "args": ["mcp-remote", "https://your-mcp-server.example/mcp"]
+    "example-remote": {
+      "url": "https://your-mcp-server.example/mcp",
+      "headers": {"Authorization": "Bearer ${AUTH_TOKEN}"}
     }
   }
 }' class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500 text-xs font-mono"></textarea>
                 <div id="{{ id_prefix }}McpServersConfigEditor"
                     style="display: none; height: 200px; border: 1px solid #d1d5db; border-radius: 0.25rem;"
                     class="mt-0.5"></div>
-                <p class="text-xs text-gray-500 dark:text-gray-400">Each server can define command, args, env, and
-                    headers. Use interpolation for secrets (e.g. <code>${AUTH_HEADER}</code>).</p>
+                <p class="text-xs text-gray-500 dark:text-gray-400">A server with a <code>url</code> is
+                    reached over HTTP; one with <code>command</code> and <code>args</code> runs as a local
+                    subprocess. Write secrets as <code>${AUTH_TOKEN}</code> to read them from the server
+                    environment instead of storing them here; if the variable is unset, the server is
+                    skipped rather than called without it.</p>
             </div>
             <div class="px-4 py-3 border-t border-gray-200 dark:border-gray-700 flex justify-end space-x-2">
                 <button type="button"
