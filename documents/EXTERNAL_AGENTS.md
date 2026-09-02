@@ -69,6 +69,12 @@ token counts rather than invented ones — the request is still recorded.
 The remote runs its own agent loop. MATE sees one request and one response, so
 its internal tool calls and sub-agent steps do not appear in MATE's traces.
 
+## Streaming
+
+Streaming needs no translation layer: LiteLLM consumes the remote's SSE stream and
+the deltas reach the widget and Work Room like any other agent's. This is covered
+by an integration test against a stub server rather than assumed.
+
 ## Both runtimes
 
 The ADK and LangGraph runtimes resolve the endpoint through the same function
