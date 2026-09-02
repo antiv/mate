@@ -195,6 +195,12 @@ class AgentConfig(Base):
     # and none can point at an agent you already run elsewhere.
     model_base_url = Column(String(1024), nullable=True)
     model_api_key = Column(String(1024), nullable=True)  # Literal, or ${VAR} read from the environment
+    # EU AI Act Art. 50: people must be told they are interacting with an AI.
+    # NULL text means the default disclosure is shown. Setting a waiver turns the
+    # disclosure off, and the column holds the reason — so it cannot be switched
+    # off without one being recorded.
+    ai_disclosure = Column(Text, nullable=True)
+    ai_disclosure_waiver = Column(Text, nullable=True)
     description = Column(Text, nullable=True)
     instruction = Column(Text, nullable=True)
     mcp_servers_config = Column(Text, nullable=True)  # JSON object containing multiple MCP server configurations
@@ -290,6 +296,8 @@ class AgentConfig(Base):
             'model_name': self.model_name,
             'model_base_url': self.model_base_url,
             'model_api_key': self.model_api_key,
+            'ai_disclosure': self.ai_disclosure,
+            'ai_disclosure_waiver': self.ai_disclosure_waiver,
             'description': self.description,
             'instruction': self.instruction,
             'mcp_servers_config': self.mcp_servers_config,
@@ -543,7 +551,7 @@ class MemoryBlock(Base):
 
 
 class AuditLog(Base):
-    """Append-only audit log for compliance (EU AI Act). No UPDATE/DELETE on application side."""
+    """Append-only audit log. Evidence toward EU AI Act Art. 12. No UPDATE/DELETE on application side."""
 
     __tablename__ = 'audit_logs'
 

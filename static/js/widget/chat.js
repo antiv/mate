@@ -117,6 +117,7 @@
   const endConfirmYes = document.getElementById("widgetEndConfirmYes");
   const endConfirmNo = document.getElementById("widgetEndConfirmNo");
   const greetingEl = document.getElementById("widgetGreeting");
+  const disclosureEl = document.getElementById("widgetDisclosure");
   const headerTitle = document.getElementById("widgetHeaderTitle");
   const attachBtn = document.getElementById("widgetAttachBtn");
   const fileInput = document.getElementById("widgetFileInput");
@@ -167,6 +168,17 @@
   function init() {
     if (CFG.title) headerTitle.textContent = CFG.title;
     if (CFG.greeting && greetingEl) greetingEl.textContent = CFG.greeting;
+
+    // Art. 50: tell people they are talking to an AI, and keep telling them.
+    // Rendered as text, never innerHTML — it is operator-supplied copy.
+    if (disclosureEl) {
+      if (CFG.ai_disclosure) {
+        disclosureEl.textContent = CFG.ai_disclosure;
+        disclosureEl.hidden = false;
+      } else {
+        disclosureEl.hidden = true;
+      }
+    }
 
     // Theme
     const theme = CFG.theme || "auto";

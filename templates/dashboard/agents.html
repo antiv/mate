@@ -491,6 +491,8 @@
                 formData.append('type', document.getElementById('agentType').value);
                 formData.append('model_name', document.getElementById('agentModel').value || '');
                 formData.append('model_base_url', document.getElementById('agentModelBaseUrl').value || '');
+                formData.append('ai_disclosure', document.getElementById('agentAiDisclosure').value || '');
+                formData.append('ai_disclosure_waiver', document.getElementById('agentAiDisclosureWaiver').value || '');
                 formData.append('model_api_key', document.getElementById('agentModelApiKey').value || '');
                 formData.append('description', description);
                 formData.append('instruction', instruction);
@@ -677,6 +679,8 @@
                 formData.append('type', document.getElementById('editAgentType').value);
                 formData.append('model_name', document.getElementById('editAgentModel').value || '');
                 formData.append('model_base_url', document.getElementById('editAgentModelBaseUrl').value || '');
+                formData.append('ai_disclosure', document.getElementById('editAgentAiDisclosure').value || '');
+                formData.append('ai_disclosure_waiver', document.getElementById('editAgentAiDisclosureWaiver').value || '');
                 formData.append('model_api_key', document.getElementById('editAgentModelApiKey').value || '');
                 formData.append('description', description);
                 formData.append('instruction', instruction);
@@ -889,6 +893,8 @@
                 formData.append('project_id', projectId);
                 formData.append('model_name', document.getElementById('copyAgentModel').value || '');
                 formData.append('model_base_url', document.getElementById('copyAgentModelBaseUrl').value || '');
+                formData.append('ai_disclosure', document.getElementById('copyAgentAiDisclosure').value || '');
+                formData.append('ai_disclosure_waiver', document.getElementById('copyAgentAiDisclosureWaiver').value || '');
                 formData.append('model_api_key', document.getElementById('copyAgentModelApiKey').value || '');
                 formData.append('description', description);
                 formData.append('instruction', instruction);

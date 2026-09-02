@@ -106,12 +106,13 @@ Follow PEP 8 with type hints on all function signatures. Use f-strings for forma
 | `ALERTS_ENABLED` / `ALERTS_INTERVAL_SECONDS` | Alert rules on agent errors, guardrail bursts and budget thresholds |
 | `OTEL_TRACING_ENABLED` | OpenTelemetry distributed tracing (ADK runtime) |
 | `LANGSMITH_TRACING` / `LANGSMITH_API_KEY` | LangSmith run tracing (langgraph runtime) |
-| `AUDIT_RETENTION_DAYS` | EU AI Act audit log retention |
+| `AUDIT_RETENTION_DAYS` | Audit log retention (evidence toward EU AI Act Art. 12) |
+| `MATE_AI_DISCLOSURE` | Standalone builds only: wording of the Art. 50 AI disclosure |
 
 ## Important Documentation
 
 - `AGENTS.md` — Architecture patterns and development guidelines (read before adding new agents or tools)
-- `documents/` — Feature-specific docs: `MCP_SERVERS.md`, `RATE_LIMITS.md`, `ALERTS.md`, `TRACING.md`, `WIDGET_INTEGRATION.md`, `TEMPLATE_LIBRARY.md`, `AGENT_WIZARD.md`, `LANGGRAPH_RUNTIME.md`, `EXTERNAL_AGENTS.md`
+- `documents/` — Feature-specific docs: `MCP_SERVERS.md`, `RATE_LIMITS.md`, `ALERTS.md`, `TRACING.md`, `WIDGET_INTEGRATION.md`, `TEMPLATE_LIBRARY.md`, `AGENT_WIZARD.md`, `LANGGRAPH_RUNTIME.md`, `EXTERNAL_AGENTS.md`, `AI_ACT.md`
 - `shared/sql/README.md` — Database schema reference
 
 
