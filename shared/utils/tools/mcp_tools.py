@@ -5,6 +5,7 @@ MCP (Model Context Protocol) tools creation and management.
 import logging
 import json
 import os
+import re
 import shutil
 from typing import Dict, List, Any, Optional
 from urllib.parse import urlparse
@@ -68,10 +69,10 @@ def create_mcp_toolset_command(
             for slow tools like tavily_research (e.g. 300).
 
     Returns:
-        MCPToolset instance or None if creation fails
+        McpToolset instance or None if creation fails
     """
     try:
-        from google.adk.tools.mcp_tool.mcp_toolset import MCPToolset, StdioConnectionParams, StdioServerParameters
+        from google.adk.tools.mcp_tool.mcp_toolset import McpToolset, StdioConnectionParams, StdioServerParameters
 
         # Resolve the command to a full absolute path before spawning.
         # This avoids a cryptic FileNotFoundError at subprocess-creation time and
@@ -89,7 +90,7 @@ def create_mcp_toolset_command(
         env_vars = os.environ.copy()
         env_vars.update(env)
 
-        mcp_toolset = MCPToolset(
+        mcp_toolset = McpToolset(
             connection_params=StdioConnectionParams(
                 timeout=float(timeout),
                 server_params=StdioServerParameters(
@@ -140,10 +141,10 @@ def create_mcp_toolset_http(
         transport: 'streamable_http' (default) or 'sse' for older servers.
 
     Returns:
-        MCPToolset instance or None if creation fails
+        McpToolset instance or None if creation fails
     """
     try:
-        from google.adk.tools.mcp_tool.mcp_toolset import MCPToolset
+        from google.adk.tools.mcp_tool.mcp_toolset import McpToolset
         from google.adk.tools.mcp_tool.mcp_session_manager import (
             SseConnectionParams,
             StreamableHTTPConnectionParams,
@@ -162,7 +163,7 @@ def create_mcp_toolset_http(
             return None
 
         params_cls = SseConnectionParams if transport == "sse" else StreamableHTTPConnectionParams
-        mcp_toolset = MCPToolset(
+        mcp_toolset = McpToolset(
             connection_params=params_cls(
                 url=url,
                 headers=headers or None,
@@ -182,6 +183,50 @@ def create_mcp_toolset_http(
     except Exception as e:
         logger.error(f"Failed to create HTTP MCP toolset for agent {agent_name}: {e}")
         return None
+
+
+# Secrets do not belong in agent config rows, so string values in an MCP server
+# entry may reference the server environment as ${VAR}.
+_ENV_PLACEHOLDER = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
+
+
+def _resolve_env(obj: Any, server_name: str, agent_name: str) -> Optional[Any]:
+    """
+    Replace ${VAR} references with values from the environment, recursing through
+    lists and dicts.
+
+    Returns None if any referenced variable is unset, having logged which ones.
+    Skipping the server is the safe failure: substituting an empty string would
+    send an unauthenticated request, and leaving the placeholder would send the
+    literal text `${VAR}` as the credential.
+    """
+    missing = set()
+
+    def walk(value: Any) -> Any:
+        if isinstance(value, str):
+            def substitute(match):
+                name = match.group(1)
+                resolved = os.environ.get(name)
+                if resolved is None:
+                    missing.add(name)
+                    return match.group(0)
+                return resolved
+            return _ENV_PLACEHOLDER.sub(substitute, value)
+        if isinstance(value, list):
+            return [walk(item) for item in value]
+        if isinstance(value, dict):
+            return {key: walk(item) for key, item in value.items()}
+        return value
+
+    resolved = walk(obj)
+    if missing:
+        logger.error(
+            f"Skipping MCP server '{server_name}' for agent '{agent_name}': "
+            f"{', '.join(sorted(missing))} not set in the environment. "
+            f"The agent will respond without this MCP tool."
+        )
+        return None
+    return resolved
 
 
 def _parse_json_field(value: Any, field: str, server_name: str, agent_name: str) -> Optional[Any]:
@@ -248,9 +293,15 @@ def create_mcp_tools_from_config(config: Dict[str, Any]) -> List[Any]:
                                 f"MCP server '{server_name}' in agent '{agent_name}' sets both "
                                 f"url and command; using url and ignoring command"
                             )
+                        # Interpolate after parsing, so a secret containing a quote
+                        # cannot corrupt a field that arrived as a JSON string.
+                        resolved = _resolve_env(
+                            {'url': url, 'headers': headers}, server_name, agent_name)
+                        if resolved is None:
+                            continue
                         mcp_toolset = create_mcp_toolset_http(
-                            url,
-                            headers,
+                            resolved['url'],
+                            resolved['headers'],
                             f"{agent_name}_{server_name}",
                             timeout=timeout,
                             connect_timeout=server_config.get('connect_timeout', 5.0),
@@ -274,8 +325,14 @@ def create_mcp_tools_from_config(config: Dict[str, Any]) -> List[Any]:
                             )
                             continue
 
+                        resolved = _resolve_env(
+                            {'command': command, 'args': args, 'env': env},
+                            server_name, agent_name)
+                        if resolved is None:
+                            continue
                         mcp_toolset = create_mcp_toolset_command(
-                            command, args, env, f"{agent_name}_{server_name}", timeout=timeout
+                            resolved['command'], resolved['args'], resolved['env'],
+                            f"{agent_name}_{server_name}", timeout=timeout
                         )
 
                     if mcp_toolset:

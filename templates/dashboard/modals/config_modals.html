@@ -239,8 +239,9 @@
                     class="mt-0.5"></div>
                 <p class="text-xs text-gray-500 dark:text-gray-400">A server with a <code>url</code> is
                     reached over HTTP; one with <code>command</code> and <code>args</code> runs as a local
-                    subprocess. Values are stored and sent literally, so a token pasted here is kept
-                    in the database as written.</p>
+                    subprocess. Write secrets as <code>${AUTH_TOKEN}</code> to read them from the server
+                    environment instead of storing them here; if the variable is unset, the server is
+                    skipped rather than called without it.</p>
             </div>
             <div class="px-4 py-3 border-t border-gray-200 dark:border-gray-700 flex justify-end space-x-2">
                 <button type="button"

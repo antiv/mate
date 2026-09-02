@@ -166,6 +166,37 @@ If an entry sets both, `url` wins and the command is ignored.
 This replaces the older workaround of wrapping a remote server in `npx mcp-remote`
 over stdio, which needed Node on the host and a subprocess per server.
 
+### Secrets: `${VAR}` interpolation
+
+Any string value in a server entry may reference the server's environment as
+`${VAR}` — in `headers`, `url`, `command`, `args` or `env`. The value is read from
+the environment when the toolset is built, so credentials stay out of the
+`agents_config` row and out of config exports.
+
+```json
+{
+  "mcpServers": {
+    "tavily": {
+      "url": "https://mcp.tavily.com/mcp",
+      "headers": {"Authorization": "Bearer ${TAVILY_API_KEY}"}
+    }
+  }
+}
+```
+
+Rules:
+
+- Only `${NAME}` is a placeholder. A bare `$NAME` is left alone.
+- **If a referenced variable is unset, the server is skipped** and the agent
+  answers without its tools, with the missing names logged. Sending the request
+  without the credential, or with the literal text `${NAME}` as the credential,
+  are both worse failures.
+- A variable that is set but empty is treated as a real value, not a miss.
+
+Note that interpolation reads the server's environment, so anyone who can edit an
+agent's MCP config can route an environment value to the URL they choose. That is
+the same trust level agent configuration already carries.
+
 ### stdio servers
 
 **Configuration Format:**
