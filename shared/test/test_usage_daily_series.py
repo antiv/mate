@@ -17,10 +17,12 @@ disagree about the same database. Three defects were responsible:
 
 import os
 import sys
+import time
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import MagicMock, patch
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -104,21 +106,42 @@ class TestDailyUsageSeries(unittest.TestCase):
 
     def test_totals_do_not_move_with_the_host_timezone(self):
         # Rows are UTC; a naive local window shifted the range by the host offset.
-        self._seed([(d, 5) for d in range(7)])
+        # The data has to be dense right up to the window edge for the shift to
+        # show: sparse rows sitting far from the boundary survive a two-hour
+        # slide unchanged, and the test would pass against the broken code.
+        session = self.Session()
+        for hour in range(9 * 24):
+            session.add(TokenUsageLog(
+                request_id=f"h{hour}", agent_name="a1", status="SUCCESS",
+                prompt_tokens=10, response_tokens=5,
+                timestamp=self.now - timedelta(hours=hour)))
+        session.commit()
+        session.close()
+
+        if not hasattr(time, "tzset"):
+            self.skipTest("tzset is unavailable on this platform")
 
         def totals_under(tz):
-            with patch.dict(os.environ, {"TZ": tz}):
-                if hasattr(os, "tzset"):
-                    os.tzset()
-                return self.server._get_usage_stats(7)["total_requests"]
+            # os.environ must be assigned directly: patching it through
+            # mock.patch.dict does not reach putenv, so tzset() reads the old
+            # zone and the test silently stops exercising anything.
+            os.environ["TZ"] = tz
+            time.tzset()
+            self.assertEqual(datetime.now().hour, datetime.now(ZoneInfo(tz)).hour,
+                             f"TZ={tz} did not take effect; the check below is vacuous")
+            return self.server._get_usage_stats(7)["total_requests"]
 
+        original_tz = os.environ.get("TZ")
         try:
             utc = totals_under("UTC")
             plus_two = totals_under("Europe/Belgrade")
             minus_eight = totals_under("America/Los_Angeles")
         finally:
-            if hasattr(os, "tzset"):
-                os.tzset()
+            if original_tz is None:
+                os.environ.pop("TZ", None)
+            else:
+                os.environ["TZ"] = original_tz
+            time.tzset()
 
         self.assertEqual(utc, plus_two)
         self.assertEqual(utc, minus_eight)
