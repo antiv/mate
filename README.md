@@ -19,6 +19,17 @@ Without a control layer, every one of those is a code change, a commit, and a re
 
 ---
 
+## Try it without installing anything
+
+A live MATE instance runs at **[ai.antonijevic.rs](https://ai.antonijevic.rs)**.
+
+- **[Play the murder mystery demo](https://ai.antonijevic.rs/static/mystery-demo.html)** — a multi-agent game running on MATE. No signup: you question suspects, and a wrong accusation costs you
+- **[Build an agent in the browser](https://ai.antonijevic.rs/static/wizard-demo.html)** — the embeddable wizard provisions a working agent and lets you chat with it
+
+Everything below runs the same way on your own machine.
+
+---
+
 ## The Problem with Agents in Production
 
 A single agent in a notebook is easy. A hierarchy of agents serving real users is not.

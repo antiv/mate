@@ -1,0 +1,41 @@
+name: Release
+
+# Publishing was manual, so it stopped happening: the CHANGELOG reached 1.0.9 while
+# GitHub still showed only v1.0.0. Pushing a tag is now the whole ritual.
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract this version's CHANGELOG section
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          # Everything between this version's heading and the next one.
+          awk -v v="$version" '
+            $0 ~ "^## \\[" v "\\]" { found = 1; next }
+            found && /^## \[/       { exit }
+            found                   { print }
+          ' CHANGELOG.md > release_notes.md
+          if [ ! -s release_notes.md ]; then
+            echo "No CHANGELOG section for [$version] — add one before tagging." >&2
+            exit 1
+          fi
+
+      # gh is preinstalled on the runner, so the release needs no third-party action.
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "$GITHUB_REF_NAME" \
+            --notes-file release_notes.md

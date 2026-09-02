@@ -183,3 +183,10 @@ tramp
 # Agents
 agents/*
 !agents/__init__.py
+
+# Local working files that should not ship with the repo
+scratch/
+*.db
+agent-configs-*.json
+chess_mate_root.json
+test_sync_status.py
