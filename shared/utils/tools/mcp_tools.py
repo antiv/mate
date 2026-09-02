@@ -5,10 +5,11 @@ MCP (Model Context Protocol) tools creation and management.
 import logging
 import json
 import os
-import re
 import shutil
 from typing import Dict, List, Any, Optional
 from urllib.parse import urlparse
+
+from ..utils import resolve_env_placeholders
 
 logger = logging.getLogger(__name__)
 
@@ -185,40 +186,16 @@ def create_mcp_toolset_http(
         return None
 
 
-# Secrets do not belong in agent config rows, so string values in an MCP server
-# entry may reference the server environment as ${VAR}.
-_ENV_PLACEHOLDER = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
-
-
 def _resolve_env(obj: Any, server_name: str, agent_name: str) -> Optional[Any]:
     """
-    Replace ${VAR} references with values from the environment, recursing through
-    lists and dicts.
+    Resolve ${VAR} references in a server entry.
 
     Returns None if any referenced variable is unset, having logged which ones.
     Skipping the server is the safe failure: substituting an empty string would
     send an unauthenticated request, and leaving the placeholder would send the
     literal text `${VAR}` as the credential.
     """
-    missing = set()
-
-    def walk(value: Any) -> Any:
-        if isinstance(value, str):
-            def substitute(match):
-                name = match.group(1)
-                resolved = os.environ.get(name)
-                if resolved is None:
-                    missing.add(name)
-                    return match.group(0)
-                return resolved
-            return _ENV_PLACEHOLDER.sub(substitute, value)
-        if isinstance(value, list):
-            return [walk(item) for item in value]
-        if isinstance(value, dict):
-            return {key: walk(item) for key, item in value.items()}
-        return value
-
-    resolved = walk(obj)
+    resolved, missing = resolve_env_placeholders(obj)
     if missing:
         logger.error(
             f"Skipping MCP server '{server_name}' for agent '{agent_name}': "

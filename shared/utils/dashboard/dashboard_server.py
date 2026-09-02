@@ -48,6 +48,20 @@ def sanitize_agent_text(text: Optional[str]) -> Optional[str]:
     return text
 
 
+# The edit form posts every field back, so the stored key has to survive a round
+# trip without being sent to the browser. A ${VAR} reference is not a secret and
+# goes out as written; anything else is replaced by this sentinel, and a save that
+# returns the sentinel unchanged leaves the stored value alone.
+STORED_SECRET_SENTINEL = "__stored__"
+
+
+def mask_api_key(value: Optional[str]) -> Optional[str]:
+    """Hide a literal key from API responses, passing ${VAR} references through."""
+    if not value or value.strip().startswith("${"):
+        return value
+    return STORED_SECRET_SENTINEL
+
+
 def make_name_substituter(name_map: Dict[str, str]):
     """Build a substituter that rewrites agent names in strings, lists and dicts.
 
@@ -1434,6 +1448,8 @@ class DashboardServer:
             'name': config.name,
             'type': config.type,
             'model_name': config.model_name,
+            'model_base_url': config.model_base_url,
+            'model_api_key': config.model_api_key,
             'description': config.description,
             'instruction': config.instruction,
             'mcp_servers_config': config.mcp_servers_config,
@@ -1594,6 +1610,8 @@ class DashboardServer:
                     "name": config.name,
                     "type": config.type,
                     "model_name": config.model_name,
+                    "model_base_url": config.model_base_url,
+                    "model_api_key": mask_api_key(config.model_api_key),
                     "description": config.description,
                     "instruction": config.instruction,
                     "mcp_servers_config": config.mcp_servers_config,
@@ -2005,6 +2023,8 @@ class DashboardServer:
                     "name": name_map[old_name],
                     "type": source.type,
                     "model_name": source.model_name,
+                    "model_base_url": source.model_base_url,
+                    "model_api_key": source.model_api_key,
                     "description": source.description,
                     "instruction": _substitute(source.instruction),
                     "mcp_servers_config": _substitute(source.mcp_servers_config),
@@ -2193,6 +2213,8 @@ class DashboardServer:
                 "name": new_name,
                 "type": agent_data.get("type", "llm"),
                 "model_name": agent_data.get("model_name"),
+                "model_base_url": agent_data.get("model_base_url"),
+                "model_api_key": agent_data.get("model_api_key"),
                 "description": agent_data.get("description"),
                 "instruction": sub_names(agent_data.get("instruction") or ""),
                 "parent_agents": sub_names(agent_data.get("parent_agents") or []),
@@ -2537,6 +2559,8 @@ class DashboardServer:
                         "name": proj_name,
                         "type": tpl_agent.get("type", "llm"),
                         "model_name": tpl_agent.get("model_name"),
+                        # Endpoint yes, credential no — a template is shared.
+                        "model_base_url": tpl_agent.get("model_base_url"),
                         "description": tpl_agent.get("description"),
                         "instruction": sub_names(tpl_agent.get("instruction") or ""),
                         "parent_agents": sub_names(tpl_agent.get("parent_agents") or []),
@@ -4630,6 +4654,8 @@ class DashboardServer:
             type: str = Form(...),
             project_id: str = Form(...),
             model_name: str = Form(None),
+            model_base_url: str = Form(None),
+            model_api_key: str = Form(None),
             description: str = Form(None),
             instruction: str = Form(None),
             parent_agents: str = Form(None),
@@ -4665,6 +4691,8 @@ class DashboardServer:
                 "type": type,
                 "project_id": int(project_id) if project_id else None,
                 "model_name": model_name,
+                "model_base_url": model_base_url or None,
+                "model_api_key": (None if model_api_key == STORED_SECRET_SENTINEL else (model_api_key or None)),
                 "description": description,
                 "instruction": instruction,
                 "parent_agents": parent_agents_list,
@@ -4697,6 +4725,8 @@ class DashboardServer:
             type: str = Form(...),
             project_id: str = Form(...),
             model_name: str = Form(None),
+            model_base_url: str = Form(None),
+            model_api_key: str = Form(None),
             description: str = Form(None),
             instruction: str = Form(None),
             parent_agents: str = Form(None),
@@ -4732,6 +4762,7 @@ class DashboardServer:
                 "type": type,
                 "project_id": int(project_id) if project_id else None,
                 "model_name": model_name,
+                "model_base_url": model_base_url or None,
                 "description": description,
                 "instruction": instruction,
                 "parent_agents": parent_agents_list,
@@ -4750,6 +4781,10 @@ class DashboardServer:
                 "expose_as_model": expose_as_model,
                 "debug_mode": debug_mode
             }
+            # The sentinel means the form never saw the real key, so leave it be.
+            # Anything else — including an empty field, which clears it — is a change.
+            if model_api_key != STORED_SECRET_SENTINEL:
+                config_data["model_api_key"] = model_api_key or None
             success = self._update_agent_config(config_id, config_data, changed_by=username)
             if success:
                 audit_service.log(username, audit_service.ACTION_AGENT_UPDATE, audit_service.RESOURCE_AGENT, resource_id=name, details={"config_id": config_id}, request=request)

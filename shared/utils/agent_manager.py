@@ -354,7 +354,7 @@ class AgentManager:
         """Initialize an agent of any type."""
         # Import here to avoid circular imports
         from google.adk.agents import Agent
-        from .utils import create_model
+        from .utils import create_model_from_agent_config
         from ..callbacks.token_usage_callback import capture_model_name_callback, log_token_usage_callback
         from ..callbacks.rbac_callback import combined_rbac_and_token_callback
         from ..callbacks.user_profile_callback import combined_user_profile_and_rbac_callback
@@ -712,7 +712,7 @@ class AgentManager:
                 # Build agent parameters
                 agent_params = {
                     'name': agent_name,
-                    'model': create_model(model_name=config.get('model_name')),
+                    'model': create_model_from_agent_config(config),
                     'description': description,
                     'instruction': instruction,
                     'tools': tools,

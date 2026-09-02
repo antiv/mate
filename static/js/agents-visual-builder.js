@@ -372,6 +372,8 @@
         formData.append('type', agent.type || 'llm');
         formData.append('project_id', projectId != null ? String(projectId) : '');
         formData.append('model_name', agent.model_name || '');
+                        formData.append('model_base_url', agent.model_base_url || '');
+                        formData.append('model_api_key', agent.model_api_key || '');
         formData.append('description', agent.description || '');
         formData.append('instruction', agent.instruction || '');
 
@@ -1633,6 +1635,8 @@
                 if (projectId) formData.append('project_id', projectId);
                 formData.append('type', document.getElementById('editAgentType').value);
                 formData.append('model_name', document.getElementById('editAgentModel').value || '');
+                formData.append('model_base_url', document.getElementById('editAgentModelBaseUrl').value || '');
+                formData.append('model_api_key', document.getElementById('editAgentModelApiKey').value || '');
                 formData.append('description', description);
                 formData.append('instruction', instruction);
 

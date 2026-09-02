@@ -207,6 +207,7 @@ Drill into individual request logs — prompt / response / thought / tool-use to
 
 **OpenAI Compatibility & External Clients**
 - OpenAI-compatible API bridge mapping MATE agents as standard LLM models at `/v1`
+- Point an agent at an OpenAI-compatible endpoint you already run, and MATE's RBAC, guardrails, evals and cost tracking apply to it
 - Expose any root agent as a model with a single switch in the dashboard
 - Secure access using Personal Access Tokens (PATs) hashed with SHA-256 in the database
 - Integration with external coding engines, CLI tools, and IDE extensions (OpenCode, Continue, Cline/Roo Code)
@@ -376,6 +377,7 @@ Each exposed agent gets endpoints at `/agents/{name}/mcp/*`. Built-in MCP server
 
 ## Additional Documentation
 
+- **[documents/EXTERNAL_AGENTS.md](documents/EXTERNAL_AGENTS.md)** — governing an agent that runs outside MATE
 - **[documents/OPENAI_COMPATIBILITY.md](documents/OPENAI_COMPATIBILITY.md)** — OpenAI-compatible API bridge, PAT generation, and external client setup (OpenCode, Continue, Cline)
 - **[documents/WIDGET_INTEGRATION.md](documents/WIDGET_INTEGRATION.md)** — embed code, widget admin panel, JS API, security, theming, page context
 - **[documents/SSO_OAUTH.md](documents/SSO_OAUTH.md)** — Google and GitHub SSO setup, enterprise domain restrictions, session security

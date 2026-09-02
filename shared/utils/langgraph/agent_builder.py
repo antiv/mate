@@ -302,15 +302,19 @@ class AgentBuilder:
                                  transfer_note: Optional[str] = None) -> Any:
         from langgraph.prebuilt import create_react_agent
         from shared.utils.langgraph.model_factory import create_chat_model
+        from shared.utils.utils import resolve_agent_endpoint
 
         app_name = config["name"]
         planner_config = _json_field(config, "planner_config")
         if planner_config:
             logger.debug(f"Agent '{app_name}': planner_config is not supported by the langgraph runtime; ignoring")
 
+        base_url, api_key = resolve_agent_endpoint(config)
         model = create_chat_model(
             config.get("model_name"),
             generate_content_config=_json_field(config, "generate_content_config"),
+            api_key=api_key,
+            base_url=base_url,
         )
         tools = await self._build_tools(config)
         if extra_tools:
