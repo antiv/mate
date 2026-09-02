@@ -5,6 +5,62 @@ All notable changes to MATE (Multi-Agent Tree Engine) will be documented in this
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-09-02
+
+Everything shipped since 1.0.9. Highlights: a second agent runtime (LangGraph), an
+OpenAI-compatible API so external coding tools can drive MATE agents, Slack, a code canvas in
+the Work Room, and a security audit.
+
+### Added
+
+- **LangGraph runtime** - alternative agent runtime selectable with `AGENT_FRAMEWORK=langgraph`, emulating the ADK HTTP/SSE wire contract so the dashboard, widget and API behave identically on either engine. See `documents/LANGGRAPH_RUNTIME.md`
+- **OpenAI-compatible API** - `GET /v1/models` and `POST /v1/chat/completions` (streaming and non-streaming) expose root agents as standard LLM models to OpenCode, Continue, Cline and other tools. Authenticated with Personal Access Tokens. See `documents/OPENAI_COMPATIBILITY.md`
+- **Slack integration** - channel and direct-message support, agent invocation, Block Kit translation of agent rich cards, and interactive button callbacks. See `documents/SLACK_INTEGRATION.md`
+- **Work Room and Canvas** - built-in chat in the dashboard with a side-by-side code canvas: Ace editor, sandboxed iframe execution for HTML/JS/CSS/SVG, Python via Pyodide, and zero-install Dart/Flutter via DartPad. Canvas edits are fed back into the next prompt
+- **Browser automation tools** - async Playwright tools with session management
+- **Human-in-the-loop tool confirmation** - agents can require explicit approval before a tool call proceeds
+- **Semantic memory search** - configurable embeddings over memory blocks with lazy backfill (`EMBEDDING_MODEL`)
+- **Alerts** - rule-based notifications on agent errors, guardrail bursts and budget thresholds (`ALERTS_ENABLED`). See `documents/ALERTS.md`
+- **Response quality metrics** - thumbs up/down feedback, per-response latency measurement, and tokens per conversation, with a traffic-origin filter on the latency panel
+- **Agent tree cloning** - copy a root agent and its whole hierarchy into another project, renaming every agent to keep names globally unique
+- **Trigger payloads** - webhook triggers pass the request body into the prompt via `{{ payload }}` / `{{ payload.field }}` placeholders, with a size cap
+- **Session management dashboard** - list and filter active ADK and LangGraph sessions
+- **Public agent builder wizard** - embeddable self-service wizard with provisioning, trial chat and lead capture, plus multi-tenant pricing and partner administration. See `documents/AGENT_WIZARD.md`
+- **Local LLM servers** - LM Studio, llama.cpp, LocalAI and Llamafile alongside the existing hosted providers
+- **File handling** - PDF and text extraction with per-model capability validation
+- **Widget** - custom button icons and agent avatars, live appearance preview, copy/download on messages, a minimize control, authenticated artifact proxy with client-side caching, and mobile layout fixes
+- **Agent debug mode** and required-instruction enforcement
+- **Murder mystery demo** - game engine and agent templates, with case generation that misleads rather than pointing straight at the culprit. See `documents/DEMO_MURDER_MYSTERY.md`
+- **Design system** - shared visual tokens applied across dashboard templates, redesigned login page with theme toggle, mobile-responsive workspace navigation
+- **CI** - GitHub Actions workflow running the full test suite on every push and pull request
+
+### Changed
+
+- **Workflow engine** - `sequential` and `parallel` agent types are replaced by a unified graph-based workflow engine with proper loop support and error propagation. Existing agent configurations keep working; no migration is required
+- **ADK 2.0** support
+- The root path now redirects to the Work Room, which is the default landing page after login
+- Rate limit service database operations decoupled into thread-safe sync methods
+
+### Fixed
+
+- **Usage charts** - the overview and usage analytics daily charts disagreed with each other: the window was built in local time against UTC rows, the oldest bucket was a partial day, and days with no traffic were dropped instead of plotted as zero
+- **Agent performance table** - now backed by real measurements instead of estimates
+- **Migrations** - `V026` creates the trigger function it depends on; the runner no longer splits SQL inside dollar-quoted blocks; two long-standing papercuts in the migration CLI
+- **Audit log** - template deletion was silently failing to record; template and agent-config imports were never audited
+- **Template import** - name substitution corrupted agent names that contain another agent's name as a prefix
+- **Triggers** - trigger types that can never fire (`file_watch`, `event_bus`) are refused at creation instead of saving silently
+- Agents built from the database without a description now warn, since an empty description makes the parent delegate poorly
+- Streaming text deltas no longer duplicate or stutter
+- The widget admin page preview keeps using the public key
+
+### Security
+
+- **Security audit** - patched path traversal, added API authorization middleware, and hardened identity and widget key management
+- `code_executor` is refused on agents reachable through a widget key, since it is not a sandbox (`MATE_ALLOW_CODE_EXECUTOR_ON_WIDGET` overrides)
+- Widget origin allowlists are enforced on the chat surface, not only on admin routes
+- HMAC signature verification on inbound trigger webhooks
+- Crawler hardened against hidden prompt injection in fetched pages
+
 ## [1.0.9] - 2026-04-27
 
 ### Added
