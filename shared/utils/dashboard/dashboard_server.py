@@ -242,6 +242,31 @@ class DashboardServer:
 
         return last_text.strip()
 
+    @staticmethod
+    def _fill_daily_gaps(rows: List[Any], start_date: Any, days: int) -> List[Dict[str, Any]]:
+        """Expand grouped daily rows into one entry per day, zeroes included.
+
+        GROUP BY date only returns days that have traffic. Charts plot points at
+        even spacing, so omitting quiet days makes the x-axis stop being a
+        timeline: a month with three busy days is drawn as three adjacent points
+        and reads as continuous activity. Two charts over different windows then
+        compress their gaps differently and appear to disagree about the same data.
+        """
+        from datetime import timedelta
+
+        # func.date() gives a str on SQLite and a date on PostgreSQL/MySQL.
+        by_date = {str(row.date): row for row in rows}
+        series = []
+        for offset in range(days):
+            day = (start_date + timedelta(days=offset)).date().isoformat()
+            row = by_date.get(day)
+            series.append({
+                'date': day,
+                'requests': row.requests if row else 0,
+                'tokens': (row.total_tokens or 0) if row else 0,
+            })
+        return series
+
     def _get_usage_stats(self, days: int = 7,
                          origins: Optional[tuple] = None) -> Dict[str, Any]:
         """Get usage statistics from database.
@@ -267,10 +292,21 @@ class DashboardServer:
         
         try:
             from sqlalchemy import func
-            from datetime import datetime, timedelta
-            
-            end_date = datetime.now()
-            start_date = end_date - timedelta(days=days)
+            from datetime import datetime, timedelta, timezone
+
+            # Rows are written with datetime.now(timezone.utc) and stored naive, so the
+            # window has to be computed in UTC as well. Naive local time silently
+            # shifts it by the host's offset — on a UTC+2 server a 7-day window drops
+            # the oldest two hours of traffic.
+            now_utc = datetime.now(timezone.utc).replace(tzinfo=None)
+            end_date = now_utc
+            # Snap the start to midnight so the oldest bucket is a whole day. With a
+            # mid-day start the first day was always a partial one, which rendered as
+            # a dip at the left edge of every chart and read as a trend that was not
+            # there. Anchoring at now - (days - 1) keeps exactly `days` buckets,
+            # the last being today so far.
+            start_date = (now_utc - timedelta(days=days - 1)).replace(
+                hour=0, minute=0, second=0, microsecond=0)
 
             # These panels report successful LLM traffic and sit next to token sums, so
             # they must exclude the zero-token rows written for failures (status='ERROR')
@@ -341,7 +377,7 @@ class DashboardServer:
                 'unique_users': stats.unique_users or 0,
                 'unique_agents': stats.unique_agents or 0,
                 'top_agents': [self._agent_row(agent, perf, end_date) for agent in top_agents],
-                'daily_usage': [{'date': str(day.date), 'requests': day.requests, 'tokens': day.total_tokens or 0} for day in daily_usage],
+                'daily_usage': self._fill_daily_gaps(daily_usage, start_date, days),
                 'hourly_usage': hourly_data,
                 'database_info': self._get_database_info()
             }

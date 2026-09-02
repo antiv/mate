@@ -467,20 +467,33 @@
                     tension: 0.4,
                     fill: true
                 }, {
-                    label: 'Tokens (÷100)',
-                    data: dailyData.map(d => Math.round((d.tokens || 0) / 100)),
+                    label: 'Tokens',
+                    data: dailyData.map(d => d.tokens || 0),
                     borderColor: 'rgb(16, 185, 129)',
                     backgroundColor: 'rgba(16, 185, 129, 0.1)',
                     tension: 0.4,
-                    fill: true
+                    fill: true,
+                    yAxisID: 'y1'
                 }]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
                 scales: {
+                    // Tokens outrun requests by three orders of magnitude, so a shared
+                    // axis flattened the request line onto zero and made a busy week
+                    // look idle. Scaling tokens by 100 only moved the problem. Each
+                    // series now gets its own axis, matching the overview chart.
                     y: {
-                        beginAtZero: true
+                        beginAtZero: true,
+                        position: 'left',
+                        title: { display: true, text: 'Requests' }
+                    },
+                    y1: {
+                        beginAtZero: true,
+                        position: 'right',
+                        title: { display: true, text: 'Tokens' },
+                        grid: { drawOnChartArea: false }
                     }
                 },
                 plugins: {
