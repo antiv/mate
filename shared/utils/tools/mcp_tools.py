@@ -7,6 +7,7 @@ import json
 import os
 import shutil
 from typing import Dict, List, Any, Optional
+from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
 
@@ -113,6 +114,93 @@ def create_mcp_toolset_command(
         return None
 
 
+def create_mcp_toolset_http(
+    url: str,
+    headers: Dict[str, str],
+    agent_name: str = "unknown",
+    timeout: int = 60,
+    connect_timeout: float = 5.0,
+    transport: str = "streamable_http",
+) -> Any:
+    """
+    Create an MCP toolset that talks to a remote server over HTTP.
+
+    MATE already serves its own agents as HTTP MCP servers, but the client could
+    only speak stdio, so remote servers had to be reached by spawning
+    `npx mcp-remote` as a subprocess. This removes that hop, and the Node
+    dependency along with it.
+
+    Args:
+        url: Server endpoint, http or https.
+        headers: Extra request headers, typically Authorization.
+        agent_name: Name of the agent (for logging).
+        timeout: How long a tool call may take before giving up, in seconds.
+            Matches the meaning `timeout` already has for stdio servers.
+        connect_timeout: How long to wait for the connection itself.
+        transport: 'streamable_http' (default) or 'sse' for older servers.
+
+    Returns:
+        MCPToolset instance or None if creation fails
+    """
+    try:
+        from google.adk.tools.mcp_tool.mcp_toolset import MCPToolset
+        from google.adk.tools.mcp_tool.mcp_session_manager import (
+            SseConnectionParams,
+            StreamableHTTPConnectionParams,
+        )
+
+        # A stdio server is a local process; an HTTP one is wherever the URL points.
+        # Refuse anything that is not http(s) rather than handing an arbitrary
+        # scheme to the transport.
+        scheme = urlparse(url).scheme.lower()
+        if scheme not in ("http", "https"):
+            logger.error(
+                f"Skipping MCP server for agent '{agent_name}': "
+                f"url '{url}' is not http or https. "
+                f"The agent will respond without this MCP tool."
+            )
+            return None
+
+        params_cls = SseConnectionParams if transport == "sse" else StreamableHTTPConnectionParams
+        mcp_toolset = MCPToolset(
+            connection_params=params_cls(
+                url=url,
+                headers=headers or None,
+                timeout=float(connect_timeout),
+                sse_read_timeout=float(timeout),
+            ),
+        )
+
+        logger.info(
+            f"Created {transport} MCP toolset for {agent_name} at {url}"
+        )
+        return mcp_toolset
+
+    except ImportError as e:
+        logger.warning(f"MCP tools not available for agent {agent_name}: {e}")
+        return None
+    except Exception as e:
+        logger.error(f"Failed to create HTTP MCP toolset for agent {agent_name}: {e}")
+        return None
+
+
+def _parse_json_field(value: Any, field: str, server_name: str, agent_name: str) -> Optional[Any]:
+    """
+    Config fields arrive either already parsed or as a JSON string, depending on
+    whether they came from the database or the dashboard. Returns None when the
+    string is not valid JSON, having logged which field and which server.
+    """
+    if not isinstance(value, str):
+        return value
+    try:
+        return json.loads(value)
+    except json.JSONDecodeError:
+        logger.error(
+            f"Invalid JSON in {field} for server '{server_name}' in agent '{agent_name}': {value}"
+        )
+        return None
+
+
 def create_mcp_tools_from_config(config: Dict[str, Any]) -> List[Any]:
     """
     Create MCP tools from agent configuration using both new multi-server format and legacy format.
@@ -140,43 +228,62 @@ def create_mcp_tools_from_config(config: Dict[str, Any]) -> List[Any]:
             
             for server_name, server_config in mcp_servers.items():
                 try:
-                    command = server_config.get('command')
-                    args_raw = server_config.get('args', [])
-                    env_raw = server_config.get('env', {})
-                    
-                    # Parse args if it's a JSON string
-                    if isinstance(args_raw, str):
-                        try:
-                            args = json.loads(args_raw)
-                        except json.JSONDecodeError:
-                            logger.error(f"Invalid JSON in args for server '{server_name}' in agent '{agent_name}': {args_raw}")
+                    timeout = server_config.get('timeout', 60)
+                    url = server_config.get('url')
+
+                    if url:
+                        # A url means a remote server we can reach directly, with no
+                        # subprocess in between.
+                        headers = _parse_json_field(
+                            server_config.get('headers', {}), 'headers', server_name, agent_name
+                        ) or {}
+                        # Configs in the wild spell the transport as either key.
+                        transport = (
+                            server_config.get('transport')
+                            or server_config.get('type')
+                            or 'streamable_http'
+                        )
+                        if server_config.get('command'):
+                            logger.warning(
+                                f"MCP server '{server_name}' in agent '{agent_name}' sets both "
+                                f"url and command; using url and ignoring command"
+                            )
+                        mcp_toolset = create_mcp_toolset_http(
+                            url,
+                            headers,
+                            f"{agent_name}_{server_name}",
+                            timeout=timeout,
+                            connect_timeout=server_config.get('connect_timeout', 5.0),
+                            transport=transport,
+                        )
+                    else:
+                        command = server_config.get('command')
+                        args = _parse_json_field(
+                            server_config.get('args', []), 'args', server_name, agent_name
+                        )
+                        if args is None:
                             continue
-                    else:
-                        args = args_raw
-                    
-                    # Parse env if it's a JSON string
-                    if isinstance(env_raw, str):
-                        try:
-                            env = json.loads(env_raw)
-                        except json.JSONDecodeError:
-                            logger.error(f"Invalid JSON in env for server '{server_name}' in agent '{agent_name}': {env_raw}")
-                            env = {}
-                    else:
-                        env = env_raw
-                    
-                    if command and args:
-                        timeout = server_config.get('timeout', 60)
+                        env = _parse_json_field(
+                            server_config.get('env', {}), 'env', server_name, agent_name
+                        ) or {}
+
+                        if not (command and args):
+                            logger.warning(
+                                f"Invalid MCP server configuration for '{server_name}' in agent "
+                                f"'{agent_name}': needs either a url, or a command and args"
+                            )
+                            continue
+
                         mcp_toolset = create_mcp_toolset_command(
                             command, args, env, f"{agent_name}_{server_name}", timeout=timeout
                         )
-                        if mcp_toolset:
-                            tools.append(mcp_toolset)
-                            logger.info(f"Created MCP toolset for server '{server_name}' in agent '{agent_name}'")
-                        else:
-                            logger.warning(f"Failed to create MCP toolset for server '{server_name}' in agent '{agent_name}'")
+
+                    if mcp_toolset:
+                        tools.append(mcp_toolset)
+                        logger.info(f"Created MCP toolset for server '{server_name}' in agent '{agent_name}'")
                     else:
-                        logger.warning(f"Invalid MCP server configuration for '{server_name}' in agent '{agent_name}': missing command or args")
-                        
+                        logger.warning(f"Failed to create MCP toolset for server '{server_name}' in agent '{agent_name}'")
+
                 except Exception as e:
                     logger.error(f"Failed to create MCP toolset for server '{server_name}' in agent '{agent_name}': {e}")
                     
