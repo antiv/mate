@@ -7,6 +7,7 @@ file_watch and event_bus triggers are stored in DB but log "not yet implemented"
 """
 
 import hashlib
+import hmac
 import json
 import logging
 import os
@@ -107,6 +108,8 @@ class TriggerRunner:
       - execute_trigger(trigger_id) — run one trigger (webhook fire or test-fire)
       - generate_fire_key()         — create a raw key + its SHA-256 hash
       - verify_fire_key(raw, hash)  — constant-time key verification
+      - generate_signing_secret()   — create a webhook body-signing secret
+      - verify_signature(...)       — constant-time HMAC check over the raw body
     """
 
     def __init__(self) -> None:
@@ -540,3 +543,31 @@ class TriggerRunner:
             hashlib.sha256(raw.encode()).hexdigest(),
             stored_hash,
         )
+
+    # ------------------------------------------------------------------ #
+    # Body signature helpers                                              #
+    # ------------------------------------------------------------------ #
+
+    @staticmethod
+    def generate_signing_secret() -> str:
+        """Return a webhook signing secret. Stored in the clear — see the model."""
+        return f"whsec_{secrets.token_urlsafe(32)}"
+
+    @staticmethod
+    def verify_signature(secret: str, raw_body: bytes, signature: str) -> bool:
+        """Constant-time HMAC-SHA256 check of a signature over the raw request body.
+
+        Accepts both shapes real senders use: `sha256=<hex>` as GitHub and GitLab
+        send in X-Hub-Signature-256, and a bare hex digest for MATE's own
+        X-MATE-Signature. Mirrors the Slack verifier in server/slack_routes.py,
+        minus the timestamp window — replay protection is a separate concern.
+        """
+        if not secret or not signature:
+            return False
+        candidate = signature.strip()
+        if candidate.lower().startswith("sha256="):
+            candidate = candidate[len("sha256="):]
+        computed = hmac.new(
+            secret.encode("utf-8"), raw_body or b"", hashlib.sha256
+        ).hexdigest()
+        return hmac.compare_digest(computed, candidate.lower())

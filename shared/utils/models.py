@@ -1091,6 +1091,11 @@ class AgentTrigger(Base):
     cron_expression = Column(String(100), nullable=True)
     webhook_path = Column(String(255), nullable=True, unique=True)
     fire_key_hash = Column(String(255), nullable=True)
+    # HMAC secret for signing the request body. Unlike the fire key this is
+    # stored in the clear — verifying a signature means recomputing it, so a
+    # hash would not do. Never returned by to_dict().
+    signing_secret = Column(String(255), nullable=True)
+    require_signature = Column(Boolean, nullable=False, default=False)
     output_type = Column(String(50), nullable=False, default='memory_block')
     output_config = Column(Text, nullable=True)
     is_enabled = Column(Boolean, nullable=False, default=True)
@@ -1132,6 +1137,9 @@ class AgentTrigger(Base):
             'prompt': self.prompt,
             'cron_expression': self.cron_expression,
             'webhook_path': self.webhook_path,
+            'require_signature': bool(self.require_signature),
+            # The secret itself is shown once at creation and never again.
+            'has_signing_secret': bool(self.signing_secret),
             'output_type': self.output_type,
             'output_config': self.get_output_config(),
             'is_enabled': self.is_enabled,

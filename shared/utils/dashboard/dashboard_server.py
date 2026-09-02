@@ -6402,7 +6402,11 @@ class DashboardServer:
             request: Request,
             username: str = Depends(self._get_auth_user_dependency),
         ):
-            """Create a new trigger. Returns trigger + fire_key (webhook triggers only, shown once)."""
+            """Create a new trigger.
+
+            Returns trigger + fire_key and signing_secret (webhook triggers only,
+            both shown once).
+            """
             import re as _re
             import secrets as _secrets
             from shared.utils.trigger_runner import (
@@ -6427,6 +6431,7 @@ class DashboardServer:
             try:
                 raw_fire_key = None
                 fire_key_hash = None
+                signing_secret = None
                 webhook_path = None
 
                 if trigger_type == "webhook":
@@ -6441,6 +6446,9 @@ class DashboardServer:
                             break
                         webhook_path = generate_webhook_path(name)
                     raw_fire_key, fire_key_hash = get_trigger_runner().generate_fire_key()
+                    # Always minted, so enabling verification later needs no
+                    # rotation dance — it is simply not used until asked for.
+                    signing_secret = get_trigger_runner().generate_signing_secret()
 
                 trigger = self.AgentTrigger(
                     name=body.get("name", "").strip(),
@@ -6452,6 +6460,8 @@ class DashboardServer:
                     cron_expression=body.get("cron_expression"),
                     webhook_path=webhook_path,
                     fire_key_hash=fire_key_hash,
+                    signing_secret=signing_secret,
+                    require_signature=bool(body.get("require_signature", False)),
                     output_type=body.get("output_type", "memory_block"),
                     is_enabled=body.get("is_enabled", True),
                     created_by=username,
@@ -6464,6 +6474,8 @@ class DashboardServer:
                 result = {"trigger": trigger.to_dict()}
                 if raw_fire_key:
                     result["fire_key"] = raw_fire_key
+                if signing_secret:
+                    result["signing_secret"] = signing_secret
                 return result
             except Exception as e:
                 session.rollback()
@@ -6478,7 +6490,11 @@ class DashboardServer:
             request: Request,
             username: str = Depends(self._get_auth_user_dependency),
         ):
-            """Update a trigger. Pass regenerate_fire_key=true to rotate the webhook key."""
+            """Update a trigger.
+
+            Pass regenerate_fire_key=true to rotate the webhook key, or
+            regenerate_signing_secret=true to rotate the body-signing secret.
+            """
             from shared.utils.trigger_runner import UNIMPLEMENTED_TRIGGER_TYPES, get_trigger_runner
 
             if not self.db_client:
@@ -6514,6 +6530,8 @@ class DashboardServer:
                     trigger.project_id = int(body["project_id"])
                 if "is_enabled" in body:
                     trigger.is_enabled = bool(body["is_enabled"])
+                if "require_signature" in body:
+                    trigger.require_signature = bool(body["require_signature"])
                 if "output_config" in body:
                     trigger.set_output_config(body["output_config"] or {})
 
@@ -6521,12 +6539,24 @@ class DashboardServer:
                 if body.get("regenerate_fire_key") and trigger.trigger_type == "webhook":
                     raw_fire_key, trigger.fire_key_hash = get_trigger_runner().generate_fire_key()
 
+                signing_secret = None
+                if trigger.trigger_type == "webhook" and (
+                    body.get("regenerate_signing_secret")
+                    # A trigger created before signing existed has no secret, so
+                    # turning verification on has to mint one or nothing can pass.
+                    or (trigger.require_signature and not trigger.signing_secret)
+                ):
+                    signing_secret = get_trigger_runner().generate_signing_secret()
+                    trigger.signing_secret = signing_secret
+
                 session.commit()
                 session.refresh(trigger)
                 get_trigger_runner().sync_cron_jobs()
                 result = {"trigger": trigger.to_dict()}
                 if raw_fire_key:
                     result["fire_key"] = raw_fire_key
+                if signing_secret:
+                    result["signing_secret"] = signing_secret
                 return result
             except HTTPException:
                 raise
@@ -6777,30 +6807,49 @@ class DashboardServer:
             """
             Webhook fire endpoint — authenticate with X-MATE-Trigger-Key header,
             ?key= query param, or standard dashboard bearer/basic auth.
+
+            A trigger may additionally require the body to be signed; see
+            documents/TRIGGERS.md.
             """
             from shared.utils.trigger_runner import get_trigger_runner, TriggerRunner
 
             if not self.db_client:
                 raise HTTPException(status_code=500, detail="Database unavailable")
 
+            # Read the raw body before anything parses it: the signature is over
+            # exactly these bytes, and re-serialising parsed JSON would not
+            # reproduce them. Starlette caches it, so request.json() still works.
+            raw_body = await request.body()
+
+            session = self.db_client.get_session()
+            if not session:
+                raise HTTPException(status_code=500, detail="Database unavailable")
+            try:
+                trigger_row = session.query(self.AgentTrigger).filter(
+                    self.AgentTrigger.id == trigger_id
+                ).first()
+                fire_key_hash = trigger_row.fire_key_hash if trigger_row else None
+                signing_secret = trigger_row.signing_secret if trigger_row else None
+                require_signature = bool(trigger_row.require_signature) if trigger_row else False
+            finally:
+                session.close()
+
             # 1. Try fire key auth first (for external callers)
-            raw_key = (
-                request.headers.get("X-MATE-Trigger-Key")
-                or request.query_params.get("key")
-            )
+            raw_key = request.headers.get("X-MATE-Trigger-Key")
+            if not raw_key:
+                raw_key = request.query_params.get("key")
+                if raw_key:
+                    # Deprecated: a query param lands in access logs, proxy logs
+                    # and browser history. Still honoured, but say so.
+                    logger.warning(
+                        "Trigger %s fired with ?key= — the secret ends up in access "
+                        "logs and browser history. Use the X-MATE-Trigger-Key header "
+                        "or a signed request instead.", trigger_id
+                    )
             authed = False
             if raw_key:
-                session = self.db_client.get_session()
-                if not session:
-                    raise HTTPException(status_code=500, detail="Database unavailable")
-                try:
-                    trigger_row = session.query(self.AgentTrigger).filter(
-                        self.AgentTrigger.id == trigger_id
-                    ).first()
-                    if trigger_row and trigger_row.fire_key_hash:
-                        authed = TriggerRunner.verify_fire_key(raw_key, trigger_row.fire_key_hash)
-                finally:
-                    session.close()
+                if fire_key_hash:
+                    authed = TriggerRunner.verify_fire_key(raw_key, fire_key_hash)
                 if not authed:
                     raise HTTPException(status_code=403, detail="Invalid trigger key")
             else:
@@ -6814,6 +6863,22 @@ class DashboardServer:
                         status_code=403,
                         detail="Authentication required: provide X-MATE-Trigger-Key header or dashboard credentials",
                     )
+
+            # 3. A bearer secret proves nothing about who composed the body, and
+            # since the body reaches the prompt, that matters. When the trigger
+            # requires it, a valid fire key on its own is not enough.
+            if require_signature:
+                signature = (
+                    request.headers.get("X-Hub-Signature-256")
+                    or request.headers.get("X-MATE-Signature")
+                )
+                if not signature:
+                    raise HTTPException(
+                        status_code=401,
+                        detail="Signature required: send X-Hub-Signature-256 or X-MATE-Signature",
+                    )
+                if not TriggerRunner.verify_signature(signing_secret, raw_body, signature):
+                    raise HTTPException(status_code=401, detail="Invalid signature")
 
             # The firing system's body reaches the prompt through {{ payload }}.
             # A body that is absent or not JSON is not an error: plenty of

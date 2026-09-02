@@ -97,15 +97,22 @@
 
 </div>
 
-<!-- Fire Key Banner (shown once after creating a webhook trigger) -->
+<!-- Secrets Banner (shown once after creating or rotating a webhook trigger's secrets) -->
 <div id="fireKeyBanner" class="hidden fixed bottom-4 left-1/2 -translate-x-1/2 z-[100] w-full max-w-lg">
     <div class="bg-yellow-50 dark:bg-yellow-900 border border-yellow-300 dark:border-yellow-600 rounded-lg px-4 py-3 shadow-lg">
         <div class="flex items-start gap-3">
             <i class="fas fa-key text-yellow-600 dark:text-yellow-300 mt-0.5"></i>
             <div class="flex-1">
-                <p class="text-xs font-semibold text-yellow-800 dark:text-yellow-200">Save your trigger fire key — it won't be shown again</p>
-                <code id="fireKeyValue" class="text-xs font-mono text-yellow-900 dark:text-yellow-100 break-all block mt-1"></code>
-                <p class="text-xs text-yellow-700 dark:text-yellow-300 mt-1">Use this key with the <code>X-MATE-Trigger-Key</code> header or <code>?key=</code> query param to fire the webhook.</p>
+                <div id="fireKeyRow">
+                    <p class="text-xs font-semibold text-yellow-800 dark:text-yellow-200">Save your trigger fire key — it won't be shown again</p>
+                    <code id="fireKeyValue" class="text-xs font-mono text-yellow-900 dark:text-yellow-100 break-all block mt-1"></code>
+                    <p class="text-xs text-yellow-700 dark:text-yellow-300 mt-1">Use this key with the <code>X-MATE-Trigger-Key</code> header to fire the webhook.</p>
+                </div>
+                <div id="signingSecretRow" class="hidden mt-2 pt-2 border-t border-yellow-200 dark:border-yellow-700">
+                    <p class="text-xs font-semibold text-yellow-800 dark:text-yellow-200">Signing secret — also shown only once</p>
+                    <code id="signingSecretValue" class="text-xs font-mono text-yellow-900 dark:text-yellow-100 break-all block mt-1"></code>
+                    <p class="text-xs text-yellow-700 dark:text-yellow-300 mt-1">Paste into your sender's webhook secret field. Used only when <em>Require signed requests</em> is on.</p>
+                </div>
             </div>
             <button onclick="document.getElementById('fireKeyBanner').classList.add('hidden')" class="text-yellow-600 dark:text-yellow-300 hover:text-yellow-900">
                 <i class="fas fa-times"></i>
