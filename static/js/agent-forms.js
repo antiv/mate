@@ -699,6 +699,8 @@ function editAgent(config) {
     document.getElementById('editAgentName').value = config.name;
     document.getElementById('editAgentType').value = config.type;
     document.getElementById('editAgentModel').value = config.model_name || '';
+    document.getElementById('editAgentModelBaseUrl').value = config.model_base_url || '';
+    document.getElementById('editAgentModelApiKey').value = config.model_api_key || '';
     document.getElementById('editAgentParents').value = safeStringify(config.parent_agents);
     document.getElementById('editAgentDescription').value = config.description || '';
     document.getElementById('editAgentInstruction').value = config.instruction || '';
@@ -817,6 +819,11 @@ function copyAgent(config) {
     document.getElementById('copyAgentName').value = config.name + '_copy';
     document.getElementById('copyAgentType').value = config.type;
     document.getElementById('copyAgentModel').value = config.model_name || '';
+    document.getElementById('copyAgentModelBaseUrl').value = config.model_base_url || '';
+    // The browser never saw the original key, so leave the copy's field empty
+    // rather than showing the sentinel and silently creating a keyless agent.
+    document.getElementById('copyAgentModelApiKey').value =
+        (config.model_api_key === '__stored__' ? '' : (config.model_api_key || ''));
     document.getElementById('copyAgentParents').value = config.parent_agents ? JSON.stringify(config.parent_agents) : '';
     document.getElementById('copyAgentDescription').value = config.description || '';
     document.getElementById('copyAgentInstruction').value = config.instruction || '';

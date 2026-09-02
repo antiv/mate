@@ -4,9 +4,10 @@ Utility functions for the MATE (Multi-Agent Tree Engine) system.
 
 import os
 import logging
+import re
 from google.adk.models.lite_llm import LiteLlm
 from google.adk.models import Gemini
-from typing import Dict, Any, Optional, Any as AnyType
+from typing import Dict, Any, Optional, Set, Tuple, Any as AnyType
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +61,44 @@ def _is_gemini_model(model_name: str) -> bool:
     if not provider:
         return True
     return model_name.startswith(('gemini-', 'models/'))
+
+
+
+# Secrets belong in the environment, not in database config rows, so string values
+# in agent and MCP configuration may reference it as ${VAR}.
+ENV_PLACEHOLDER = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
+
+
+def resolve_env_placeholders(obj: AnyType) -> Tuple[AnyType, Set[str]]:
+    """
+    Replace ${VAR} references with values from the environment, recursing through
+    lists and dicts.
+
+    Returns the resolved value and the set of names that were not set. Callers
+    decide what an unresolved name means for them; leaving the placeholder in
+    place is never right, because it would be used as though it were the value.
+
+    Only ${NAME} is a placeholder — a bare $NAME is left alone.
+    """
+    missing: Set[str] = set()
+
+    def walk(value: AnyType) -> AnyType:
+        if isinstance(value, str):
+            def substitute(match):
+                name = match.group(1)
+                resolved = os.environ.get(name)
+                if resolved is None:
+                    missing.add(name)
+                    return match.group(0)
+                return resolved
+            return ENV_PLACEHOLDER.sub(substitute, value)
+        if isinstance(value, list):
+            return [walk(item) for item in value]
+        if isinstance(value, dict):
+            return {key: walk(item) for key, item in value.items()}
+        return value
+
+    return walk(obj), missing
 
 
 def create_model(model_name: str = None, api_key: str = None, base_url: str = None):
@@ -139,6 +178,62 @@ def create_model(model_name: str = None, api_key: str = None, base_url: str = No
     logger.info(f"Creating LiteLLM model: {effective_model_name} (provider: {provider})")
     return LiteLlm(effective_model_name, **litellm_kwargs)
 
+
+
+def resolve_agent_endpoint(config: Dict[str, Any]) -> Tuple[Optional[str], Optional[str]]:
+    """
+    Read a database agent's own OpenAI-compatible endpoint as (base_url, api_key).
+
+    This is what lets one agent point at an agent you already run elsewhere while
+    another uses a hosted provider: without it the endpoint comes from provider
+    env vars, so every agent shares one per provider.
+
+    Both runtimes call this so they agree on what a config means.
+
+    Raises ValueError if the configured key references an environment variable
+    that is not set. Falling back would be worse than failing: `base_url` names a
+    third-party host, and LiteLLM's fallback would send the provider's own key
+    there.
+    """
+    resolved, missing = resolve_env_placeholders({
+        'base_url': config.get('model_base_url') or None,
+        'api_key': config.get('model_api_key') or None,
+    })
+    if missing:
+        raise ValueError(
+            f"model endpoint references {', '.join(sorted(missing))}, "
+            f"which is not set in the environment"
+        )
+
+    base_url = resolved['base_url']
+    api_key = resolved['api_key']
+
+    if base_url:
+        model_name = (config.get('model_name') or '').strip()
+        if _is_gemini_model(model_name):
+            logger.warning(
+                f"Agent '{config.get('name', 'unknown')}' sets model_base_url but "
+                f"'{model_name}' routes to the native Gemini backend, which ignores it. "
+                f"Prefix the model with a provider (e.g. 'openai/') to use the endpoint."
+            )
+        if not api_key:
+            # Endpoints that need no key are normal (local servers, agents on a
+            # private network). But leaving api_key unset makes LiteLLM fall back to
+            # the provider's env key, which would then travel to whatever host
+            # base_url names. Send a placeholder instead.
+            api_key = "not-required"
+
+    return base_url, api_key
+
+
+def create_model_from_agent_config(config: Dict[str, Any]):
+    """Build the model for a database-configured agent, honouring its own endpoint."""
+    base_url, api_key = resolve_agent_endpoint(config)
+    return create_model(
+        model_name=config.get('model_name'),
+        api_key=api_key,
+        base_url=base_url,
+    )
 
 def get_database_config() -> Dict[str, Any]:
     """

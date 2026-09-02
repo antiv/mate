@@ -106,6 +106,30 @@ container_class='', projects_list=None, current_project_id=None) %}
                                 "parent2"]</p>
                         </div>
                     </div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <div>
+                            <label for="{{ id_prefix }}ModelBaseUrl"
+                                class="block text-xs font-medium text-gray-700 dark:text-gray-300">Model Base URL
+                                <span class="text-gray-400 font-normal">(optional)</span></label>
+                            <input type="text" id="{{ id_prefix }}ModelBaseUrl" name="{{ id_prefix }}ModelBaseUrl"
+                                placeholder="https://agent.example.com/v1"
+                                class="mt-0.5 block w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500">
+                            <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Point this agent at an
+                                OpenAI-compatible endpoint you already run. Needs a provider prefix on the model
+                                (e.g. <code>openai/my-agent</code>).</p>
+                        </div>
+                        <div>
+                            <label for="{{ id_prefix }}ModelApiKey"
+                                class="block text-xs font-medium text-gray-700 dark:text-gray-300">Model API Key
+                                <span class="text-gray-400 font-normal">(optional)</span></label>
+                            <input type="password" id="{{ id_prefix }}ModelApiKey" name="{{ id_prefix }}ModelApiKey"
+                                placeholder="${MY_AGENT_KEY}" autocomplete="off"
+                                class="mt-0.5 block w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500">
+                            <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Write
+                                <code>${VAR}</code> to read it from the server environment. A key typed literally is
+                                stored in the database and in this agent's version history.</p>
+                        </div>
+                    </div>
                     <div id="{{ id_prefix }}MaxIterationsField" class="hidden">
                         <label for="{{ id_prefix }}MaxIterations"
                             class="block text-xs font-medium text-gray-700 dark:text-gray-300">Max Iterations (for Loop

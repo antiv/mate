@@ -190,6 +190,11 @@ class AgentConfig(Base):
     name = Column(String(255), nullable=False, unique=True)
     type = Column(String(50), nullable=False)  # llm, graph, loop
     model_name = Column(String(255), nullable=True)
+    # An OpenAI-compatible endpoint this agent's model lives behind. Without it the
+    # endpoint comes from provider env vars, so every agent shares one per provider
+    # and none can point at an agent you already run elsewhere.
+    model_base_url = Column(String(1024), nullable=True)
+    model_api_key = Column(String(1024), nullable=True)  # Literal, or ${VAR} read from the environment
     description = Column(Text, nullable=True)
     instruction = Column(Text, nullable=True)
     mcp_servers_config = Column(Text, nullable=True)  # JSON object containing multiple MCP server configurations
@@ -283,6 +288,8 @@ class AgentConfig(Base):
             'name': self.name,
             'type': self.type,
             'model_name': self.model_name,
+            'model_base_url': self.model_base_url,
+            'model_api_key': self.model_api_key,
             'description': self.description,
             'instruction': self.instruction,
             'mcp_servers_config': self.mcp_servers_config,

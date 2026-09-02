@@ -490,6 +490,8 @@
                 formData.append('project_id', projectId);
                 formData.append('type', document.getElementById('agentType').value);
                 formData.append('model_name', document.getElementById('agentModel').value || '');
+                formData.append('model_base_url', document.getElementById('agentModelBaseUrl').value || '');
+                formData.append('model_api_key', document.getElementById('agentModelApiKey').value || '');
                 formData.append('description', description);
                 formData.append('instruction', instruction);
                 // Get values from Monaco editors if they're active, otherwise from form fields
@@ -674,6 +676,8 @@
 
                 formData.append('type', document.getElementById('editAgentType').value);
                 formData.append('model_name', document.getElementById('editAgentModel').value || '');
+                formData.append('model_base_url', document.getElementById('editAgentModelBaseUrl').value || '');
+                formData.append('model_api_key', document.getElementById('editAgentModelApiKey').value || '');
                 formData.append('description', description);
                 formData.append('instruction', instruction);
                 // Get values from Monaco editors if they're active, otherwise from form fields
@@ -884,6 +888,8 @@
 
                 formData.append('project_id', projectId);
                 formData.append('model_name', document.getElementById('copyAgentModel').value || '');
+                formData.append('model_base_url', document.getElementById('copyAgentModelBaseUrl').value || '');
+                formData.append('model_api_key', document.getElementById('copyAgentModelApiKey').value || '');
                 formData.append('description', description);
                 formData.append('instruction', instruction);
                 // Get values from Monaco editors if they're active, otherwise from form fields
