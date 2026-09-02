@@ -5,6 +5,37 @@ All notable changes to MATE (Multi-Agent Tree Engine) will be documented in this
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-09-02
+
+MATE's control layer no longer requires that you built your agents in MATE, and
+EU AI Act Art. 50 obligations — which applied from 2 August 2026 — are now met by
+default on public chat surfaces.
+
+### Added
+
+- **External agents** - an agent can point at an OpenAI-compatible endpoint you already run, via `model_base_url` and `model_api_key` on the agent row. RBAC, guardrails, evals, config versioning, audit, cost tracking and the widget then apply to it like any other agent, with no new runtime paths. Both the ADK and LangGraph runtimes resolve the endpoint through the same function. See `documents/EXTERNAL_AGENTS.md`
+- **MCP over HTTP** - an external MCP server entry with a `url` is reached directly over streamable HTTP (or `sse` for older servers), instead of spawning `npx mcp-remote` as a subprocess. `command`/`args` stdio servers are unchanged. See `documents/MCP_SERVERS.md`
+- **`${VAR}` secrets** - any string in an MCP server entry, and an agent's endpoint key, may reference the server environment as `${VAR}`, keeping credentials out of the database and out of config exports. An unset variable skips the server or refuses to build the agent rather than sending the placeholder as a credential
+- **AI disclosure (Art. 50)** - the widget and standalone builds tell people they are talking to an AI. Wording is per-agent and translatable; there is no on/off switch, only a waiver field that hides the notice and records why, so the decision and its justification cannot come apart. Setting or clearing a waiver writes its own audit entry. See `documents/AI_ACT.md`
+- **Marking of generated images (Art. 50(2))** - generated PNGs carry an XMP packet declaring the IPTC digital source type `trainedAlgorithmicMedia`, written before the artifact is saved so every copy carries it. All three image generation paths mark
+- **`documents/AI_ACT.md`** - what applies when, and what MATE does and does not do about it
+- **Integration test against a live endpoint** - a stub OpenAI-compatible server on localhost proves the configured host, credential and `usage` object actually cross the wire. Streaming needed no translation layer; the test asserts that rather than assuming it
+
+### Changed
+
+- **`MCPToolset` renamed to `McpToolset`** - ADK 2.3 keeps the old name as a subclass that only warns and delegates, so this is behaviour-identical and silences the DeprecationWarning
+- **Compliance wording corrected** - `audit_service` described itself as "for EU AI Act compliance" and the README called the audit log "EU AI Act retention-aware". An append-only log is *evidence toward* Art. 12 record-keeping; compliance is a property of a deployed system and its operator, not of a log
+
+### Fixed
+
+- **README demo links** - the murder mystery link was published without its widget key, so the page rendered with nothing to interact with, and defaulted to Serbian. The section headline pointed at the site root, which redirects to an authenticated dashboard, so a visitor arriving from GitHub met a login form
+
+### Security
+
+- **A provider key no longer follows an agent to a third-party host.** An agent with a custom `model_base_url` and no key of its own is given a placeholder rather than left to LiteLLM's fallback, which would have read `OPENAI_API_KEY` and sent it to whatever that URL names
+- **An unresolvable `${VAR}` refuses to build the agent** instead of falling back, for the same reason
+- **Stored endpoint keys never reach the browser** - API responses carry a sentinel, and saving a form with the sentinel unchanged leaves the stored value alone. A `${VAR}` reference is not a secret and is shown as written. Templates carry an endpoint but never a credential
+
 ## [1.1.0] - 2026-09-02
 
 Everything shipped since 1.0.9. Highlights: a second agent runtime (LangGraph), an
