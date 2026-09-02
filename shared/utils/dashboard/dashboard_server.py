@@ -20,6 +20,7 @@ from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 
 from shared.utils import audit_service
+from ..ai_disclosure import resolve_disclosure, validate_waiver
 from shared.utils.path_safety import resolve_within_base
 
 logger = logging.getLogger(__name__)
@@ -1285,6 +1286,42 @@ class DashboardServer:
                 "error": True
             }
     
+    def _get_disclosure_waiver(self, config_id: int) -> Optional[str]:
+        """The stored disclosure waiver for an agent, before an update overwrites it."""
+        if not self.db_client:
+            return None
+        session = self.db_client.get_session()
+        if not session:
+            return None
+        try:
+            config = session.query(self.AgentConfig).filter(
+                self.AgentConfig.id == config_id).first()
+            return config.ai_disclosure_waiver if config else None
+        except Exception as exc:
+            logger.warning(f"Could not read the disclosure waiver for agent {config_id}: {exc}")
+            return None
+        finally:
+            session.close()
+
+    def _audit_disclosure_change(self, username: str, agent_name: str,
+                                 before: Optional[str], after: Optional[str],
+                                 request: Any = None) -> None:
+        """Record a change to whether an agent tells people it is an AI."""
+        before = (before or "").strip()
+        after = (after or "").strip()
+        if before == after:
+            return
+        if after:
+            audit_service.log(
+                username, audit_service.ACTION_DISCLOSURE_WAIVED,
+                audit_service.RESOURCE_AGENT, resource_id=agent_name,
+                details={"reason": after}, request=request)
+        else:
+            audit_service.log(
+                username, audit_service.ACTION_DISCLOSURE_RESTORED,
+                audit_service.RESOURCE_AGENT, resource_id=agent_name,
+                details={"previous_reason": before}, request=request)
+
     def _create_agent_config(self, config_data: Dict[str, Any], changed_by: str = None) -> bool:
         """Create a new agent configuration."""
         if not self.db_client:
@@ -1448,6 +1485,8 @@ class DashboardServer:
             'name': config.name,
             'type': config.type,
             'model_name': config.model_name,
+            'ai_disclosure': config.ai_disclosure,
+            'ai_disclosure_waiver': config.ai_disclosure_waiver,
             'model_base_url': config.model_base_url,
             'model_api_key': config.model_api_key,
             'description': config.description,
@@ -1610,6 +1649,8 @@ class DashboardServer:
                     "name": config.name,
                     "type": config.type,
                     "model_name": config.model_name,
+                    "ai_disclosure": config.ai_disclosure,
+                    "ai_disclosure_waiver": config.ai_disclosure_waiver,
                     "model_base_url": config.model_base_url,
                     "model_api_key": mask_api_key(config.model_api_key),
                     "description": config.description,
@@ -2023,6 +2064,8 @@ class DashboardServer:
                     "name": name_map[old_name],
                     "type": source.type,
                     "model_name": source.model_name,
+                    "ai_disclosure": source.ai_disclosure,
+                    "ai_disclosure_waiver": source.ai_disclosure_waiver,
                     "model_base_url": source.model_base_url,
                     "model_api_key": source.model_api_key,
                     "description": source.description,
@@ -2213,6 +2256,8 @@ class DashboardServer:
                 "name": new_name,
                 "type": agent_data.get("type", "llm"),
                 "model_name": agent_data.get("model_name"),
+                "ai_disclosure": agent_data.get("ai_disclosure"),
+                "ai_disclosure_waiver": agent_data.get("ai_disclosure_waiver"),
                 "model_base_url": agent_data.get("model_base_url"),
                 "model_api_key": agent_data.get("model_api_key"),
                 "description": agent_data.get("description"),
@@ -3231,7 +3276,7 @@ class DashboardServer:
 
         @self.app.get("/dashboard/audit-logs", response_class=HTMLResponse, tags=["Dashboard - Pages"])
         async def dashboard_audit_logs(request: Request, username: str = Depends(self._get_auth_user_dependency)):
-            """Dashboard audit log viewer (EU AI Act compliance)."""
+            """Dashboard audit log viewer. Evidence toward EU AI Act Art. 12 record-keeping."""
             if not self._get_is_admin(request):
                 return RedirectResponse(url="/dashboard/workroom", status_code=302)
             return self.templates.TemplateResponse(request, "dashboard/audit_logs.html", {
@@ -4656,6 +4701,8 @@ class DashboardServer:
             model_name: str = Form(None),
             model_base_url: str = Form(None),
             model_api_key: str = Form(None),
+            ai_disclosure: str = Form(None),
+            ai_disclosure_waiver: str = Form(None),
             description: str = Form(None),
             instruction: str = Form(None),
             parent_agents: str = Form(None),
@@ -4679,6 +4726,9 @@ class DashboardServer:
                 raise HTTPException(status_code=400, detail="Description is required")
             if not instruction or not instruction.strip():
                 raise HTTPException(status_code=400, detail="Instruction is required")
+            waiver_error = validate_waiver(ai_disclosure_waiver)
+            if waiver_error:
+                raise HTTPException(status_code=400, detail=waiver_error)
             # Parse parent_agents JSON string to list
             import json
             try:
@@ -4691,6 +4741,8 @@ class DashboardServer:
                 "type": type,
                 "project_id": int(project_id) if project_id else None,
                 "model_name": model_name,
+                "ai_disclosure": ai_disclosure or None,
+                "ai_disclosure_waiver": ai_disclosure_waiver or None,
                 "model_base_url": model_base_url or None,
                 "model_api_key": (None if model_api_key == STORED_SECRET_SENTINEL else (model_api_key or None)),
                 "description": description,
@@ -4714,6 +4766,7 @@ class DashboardServer:
             success = self._create_agent_config(config_data, changed_by=username)
             if success:
                 audit_service.log(username, audit_service.ACTION_AGENT_CREATE, audit_service.RESOURCE_AGENT, resource_id=name, details={"project_id": config_data.get("project_id")}, request=request)
+                self._audit_disclosure_change(username, name, None, ai_disclosure_waiver, request)
             return {"success": success, "message": "Agent created successfully" if success else "Failed to create agent"}
 
         @self.app.put("/dashboard/api/agents/{config_id}", tags=["Dashboard - Agents"])
@@ -4727,6 +4780,8 @@ class DashboardServer:
             model_name: str = Form(None),
             model_base_url: str = Form(None),
             model_api_key: str = Form(None),
+            ai_disclosure: str = Form(None),
+            ai_disclosure_waiver: str = Form(None),
             description: str = Form(None),
             instruction: str = Form(None),
             parent_agents: str = Form(None),
@@ -4750,6 +4805,9 @@ class DashboardServer:
                 raise HTTPException(status_code=400, detail="Description is required")
             if not instruction or not instruction.strip():
                 raise HTTPException(status_code=400, detail="Instruction is required")
+            waiver_error = validate_waiver(ai_disclosure_waiver)
+            if waiver_error:
+                raise HTTPException(status_code=400, detail=waiver_error)
             # Parse parent_agents JSON string to list
             import json
             try:
@@ -4762,6 +4820,8 @@ class DashboardServer:
                 "type": type,
                 "project_id": int(project_id) if project_id else None,
                 "model_name": model_name,
+                "ai_disclosure": ai_disclosure or None,
+                "ai_disclosure_waiver": ai_disclosure_waiver or None,
                 "model_base_url": model_base_url or None,
                 "description": description,
                 "instruction": instruction,
@@ -4785,9 +4845,15 @@ class DashboardServer:
             # Anything else — including an empty field, which clears it — is a change.
             if model_api_key != STORED_SECRET_SENTINEL:
                 config_data["model_api_key"] = model_api_key or None
+            # Read before writing: switching the Art. 50 notice off, or back on, is
+            # a compliance decision and gets its own entry rather than hiding
+            # inside a generic agent.update.
+            previous_waiver = self._get_disclosure_waiver(config_id)
             success = self._update_agent_config(config_id, config_data, changed_by=username)
             if success:
                 audit_service.log(username, audit_service.ACTION_AGENT_UPDATE, audit_service.RESOURCE_AGENT, resource_id=name, details={"config_id": config_id}, request=request)
+                self._audit_disclosure_change(
+                    username, name, previous_waiver, ai_disclosure_waiver, request)
             return {"success": success, "message": "Agent updated successfully" if success else "Failed to update agent"}
 
         @self.app.delete("/dashboard/api/agents/{config_id}", tags=["Dashboard - Agents"])
@@ -5580,7 +5646,7 @@ class DashboardServer:
             finally:
                 session.close()
 
-        # ─── Audit Logs API (EU AI Act compliance) ─────────────────────
+        # ─── Audit Logs API (evidence toward EU AI Act Art. 12) ────────
 
         @self.app.get("/dashboard/api/audit-logs", tags=["Dashboard - Audit"])
         async def get_audit_logs(

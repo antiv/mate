@@ -353,6 +353,18 @@ html, body {
 }
 
 /* Footer */
+/* Art. 50 disclosure — persistent, so it does not vanish with the greeting. */
+.widget-disclosure {
+  padding: 5px 12px;
+  font-size: 11px;
+  line-height: 1.4;
+  text-align: center;
+  color: var(--w-text-secondary);
+  background: var(--w-bg-secondary, transparent);
+  border-top: 1px solid var(--w-border);
+  flex-shrink: 0;
+}
+
 .widget-footer {
   text-align: center;
   padding: 6px;

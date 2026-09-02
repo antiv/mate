@@ -1,5 +1,9 @@
 """
-Audit logging service for EU AI Act compliance.
+Audit logging service.
+
+An append-only record of who changed what, when. This is evidence toward
+record-keeping obligations such as EU AI Act Art. 12 — it is not compliance,
+which is a property of a deployed system and its operator, not of a log.
 Append-only log: no UPDATE/DELETE from application code.
 Retention: configurable auto-delete after N days (AUDIT_RETENTION_DAYS).
 """
@@ -43,6 +47,10 @@ ACTION_SERVER_STOP = "server.stop"
 ACTION_SERVER_RESTART = "server.restart"
 ACTION_AGENT_ACCESS = "agent.access"
 ACTION_AGENT_ROLLBACK = "agent.rollback"
+# Turning off the Art. 50 "you are talking to an AI" notice is a compliance
+# decision, not a preference, so it is recorded separately from agent.update.
+ACTION_DISCLOSURE_WAIVED = "agent.disclosure_waived"
+ACTION_DISCLOSURE_RESTORED = "agent.disclosure_restored"
 ACTION_TEMPLATE_IMPORT = "template.import"
 ACTION_TEMPLATE_DELETE = "template.delete"
 ACTION_TEMPLATE_CREATE = "template.create"

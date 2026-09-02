@@ -700,6 +700,8 @@ function editAgent(config) {
     document.getElementById('editAgentType').value = config.type;
     document.getElementById('editAgentModel').value = config.model_name || '';
     document.getElementById('editAgentModelBaseUrl').value = config.model_base_url || '';
+    document.getElementById('editAgentAiDisclosure').value = config.ai_disclosure || '';
+    document.getElementById('editAgentAiDisclosureWaiver').value = config.ai_disclosure_waiver || '';
     document.getElementById('editAgentModelApiKey').value = config.model_api_key || '';
     document.getElementById('editAgentParents').value = safeStringify(config.parent_agents);
     document.getElementById('editAgentDescription').value = config.description || '';
@@ -820,6 +822,8 @@ function copyAgent(config) {
     document.getElementById('copyAgentType').value = config.type;
     document.getElementById('copyAgentModel').value = config.model_name || '';
     document.getElementById('copyAgentModelBaseUrl').value = config.model_base_url || '';
+    document.getElementById('copyAgentAiDisclosure').value = config.ai_disclosure || '';
+    document.getElementById('copyAgentAiDisclosureWaiver').value = config.ai_disclosure_waiver || '';
     // The browser never saw the original key, so leave the copy's field empty
     // rather than showing the sentinel and silently creating a keyless agent.
     document.getElementById('copyAgentModelApiKey').value =

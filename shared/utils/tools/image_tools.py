@@ -26,6 +26,8 @@ except Exception:
 
 from google.adk.tools.tool_context import ToolContext
 
+from ..content_marking import is_marked_as_ai_generated, mark_png_as_ai_generated
+
 logger = logging.getLogger(__name__)
 
 
@@ -357,6 +359,17 @@ async def _generate_image_internal(prompt: str, tool_context: ToolContext = None
                     image_bytes = image_response.content
                     
                 if image_bytes:
+                    # EU AI Act Art. 50(2), from 2 December 2026: generated content
+                    # must be machine-readably marked as such. Marked before the
+                    # artifact is saved so every copy carries it.
+                    marked_bytes = mark_png_as_ai_generated(
+                        image_bytes, description=f"AI-generated image for prompt: {prompt}"[:300])
+                    if not is_marked_as_ai_generated(marked_bytes):
+                        logger.warning(
+                            "Generated image could not be marked as AI-generated; "
+                            "it is stored unmarked.")
+                    image_bytes = marked_bytes
+
                     # Use ADK types.Part for artifact content
                     import google.genai.types as types
                     part = types.Part.from_bytes(data=image_bytes, mime_type="image/png")
@@ -696,6 +709,9 @@ async def generate_image_nano_banana(prompt: str, tool_context: ToolContext = No
                                     
                                     # Extract mime type from data URL
                                     mime_type = url.split(';')[0].split(':')[1] if ':' in url else "image/png"
+                                    # Art. 50(2) marking, same as the other generation path.
+                                    image_bytes = mark_png_as_ai_generated(
+                                        image_bytes, description="AI-generated image")
                                     inline_data = InlineData(image_bytes, mime_type)
                                     logger.info(f"Successfully extracted base64 image data, size: {len(image_bytes)} bytes")
                                 except Exception as e:
@@ -848,6 +864,13 @@ async def generate_image_nano_banana(prompt: str, tool_context: ToolContext = No
             inline_data = await asyncio.to_thread(_consume_stream)
 
             if inline_data is not None:
+                # Art. 50(2) marking. inline_data comes back from the SDK, so the
+                # marked bytes are written onto it before the Part is built.
+                try:
+                    inline_data.data = mark_png_as_ai_generated(
+                        inline_data.data, description="AI-generated image")
+                except Exception as exc:
+                    logger.warning("Could not mark the generated image: %s", exc)
                 # Create a Part object from the inline data to save as artifact
                 image_part = types.Part(inline_data=inline_data)
 

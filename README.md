@@ -189,7 +189,8 @@ Drill into individual request logs — prompt / response / thought / tool-use to
 - Rate limiting configurable per user/agent/project from the dashboard
 - Hallucination guardrail: LLM-scored factual consistency check per response, configurable threshold
 - Function call and model-level guardrails
-- Audit log for every configuration change (EU AI Act retention-aware)
+- Append-only audit log of every configuration change, with configurable retention — evidence toward EU AI Act Art. 12 record-keeping
+- Art. 50 AI disclosure shown by default wherever an agent is public, and not removable without a recorded reason
 - Prometheus metrics at `/metrics`
 - OpenTelemetry distributed tracing
 
@@ -378,6 +379,7 @@ Each exposed agent gets endpoints at `/agents/{name}/mcp/*`. Built-in MCP server
 
 ## Additional Documentation
 
+- **[documents/AI_ACT.md](documents/AI_ACT.md)** — EU AI Act: what applies when, and what MATE does and does not do about it
 - **[documents/EXTERNAL_AGENTS.md](documents/EXTERNAL_AGENTS.md)** — governing an agent that runs outside MATE
 - **[documents/OPENAI_COMPATIBILITY.md](documents/OPENAI_COMPATIBILITY.md)** — OpenAI-compatible API bridge, PAT generation, and external client setup (OpenCode, Continue, Cline)
 - **[documents/WIDGET_INTEGRATION.md](documents/WIDGET_INTEGRATION.md)** — embed code, widget admin panel, JS API, security, theming, page context

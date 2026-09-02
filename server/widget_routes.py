@@ -26,6 +26,7 @@ from fastapi.templating import Jinja2Templates
 
 from shared.utils.database_client import get_database_client
 from shared.utils.models import WidgetApiKey, AgentConfig, Project
+from shared.utils.ai_disclosure import DEFAULT_DISCLOSURE, resolve_disclosure
 
 logger = logging.getLogger(__name__)
 
@@ -306,7 +307,12 @@ async def widget_chat_page(request: Request, key: str = Query(...)):
         return HTMLResponse(
             "<h3>This chat widget is not enabled for this site.</h3>", status_code=403
         )
-    widget_cfg = wk.get_widget_config()
+    widget_cfg = dict(wk.get_widget_config())
+    # Set here rather than stored in widget_config: that blob is editable through
+    # the widget admin API by whoever embeds the widget, and the disclosure is not
+    # theirs to remove. Overwriting on every render makes the agent row the only
+    # source of truth.
+    widget_cfg["ai_disclosure"] = _agent_disclosure(wk.agent_name)
     return templates.TemplateResponse(request, "widget/chat.html", {
         "request": request,
         "api_key": key,
@@ -572,6 +578,33 @@ async def _create_adk_session(app_name: str, user_id: str) -> str:
         raise HTTPException(status_code=502, detail="Failed to create chat session")
 
 
+
+def _agent_disclosure(agent_name: str) -> Optional[str]:
+    """
+    The Art. 50 disclosure for the agent behind a widget key, or None if waived.
+
+    Falls back to the default text if the agent row cannot be read: a widget is a
+    public surface, and the failure that leaves people uninformed is worse than
+    the one that tells them something true.
+    """
+    try:
+        db = get_database_client()
+        session = db.get_session()
+        try:
+            config = session.query(AgentConfig).filter(
+                AgentConfig.name == agent_name).first()
+            if config is None:
+                return DEFAULT_DISCLOSURE
+            return resolve_disclosure(config)
+        finally:
+            session.close()
+    except Exception as exc:
+        logger.warning(
+            "Could not read the AI disclosure for agent '%s' (%s); showing the "
+            "default rather than nothing.", agent_name, exc)
+        return DEFAULT_DISCLOSURE
+
+
 @router.get("/api/config")
 async def widget_config(wk: WidgetApiKey = Depends(verify_widget_key)):
     """Return widget configuration (agent name, greeting, theme)."""
@@ -582,6 +615,10 @@ async def widget_config(wk: WidgetApiKey = Depends(verify_widget_key)):
         "theme": cfg.get("theme", "auto"),
         "button_color": cfg.get("button_color", ""),
         "title": cfg.get("title", wk.agent_name),
+        # Art. 50 disclosure. Deliberately not part of widget_config, which the
+        # embedding site can edit through the widget admin API — the disclosure
+        # belongs to the agent and is changed only from the MATE dashboard.
+        "ai_disclosure": _agent_disclosure(wk.agent_name),
     }
 
 

@@ -20,6 +20,8 @@ import os
 import sys
 import shutil
 
+from shared.utils.ai_disclosure import DEFAULT_DISCLOSURE
+
 
 def _enrich_path():
     """
@@ -284,9 +286,14 @@ def create_app():
     @adk_app.get("/", response_class=HTMLResponse)
     async def chat_page(request: Request):
         """Serve the standalone chat UI."""
+        # A standalone build is a public chat surface with no dashboard behind it,
+        # so the Art. 50 disclosure is always shown. MATE_AI_DISCLOSURE exists to
+        # translate it, not to remove it — an empty value falls back to the default.
+        disclosure = (os.getenv("MATE_AI_DISCLOSURE") or "").strip() or DEFAULT_DISCLOSURE
         return templates.TemplateResponse(request, "standalone/chat.html", {
             "request": request,
             "agent_name": ROOT_AGENT_NAME,
+            "ai_disclosure": disclosure,
         })
 
     # --- Health check ---
