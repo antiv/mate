@@ -20,7 +20,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # Load environment variables
 load_dotenv()
 
-from .utils.migration_system import MigrationSystem
+from shared.utils.migration_system import MigrationSystem
 
 
 def main():
