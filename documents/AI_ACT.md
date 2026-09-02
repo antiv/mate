@@ -74,8 +74,37 @@ embeds the widget, and the notice is not theirs to remove.
 
 ## Art. 50(2): marking generated content
 
-See below once implemented — synthetic content must be marked in a
-machine-readable form from 2 December 2026.
+From 2 December 2026, synthetic image, audio, video and text must be marked in a
+machine-readable form so it can be detected as artificially generated.
+
+Images generated through MATE's image tools carry an XMP packet declaring the
+IPTC digital source type
+`http://cv.iptc.org/newscodes/digitalsourcetype/trainedAlgorithmicMedia` — the
+same marker the major image generators write, so anything that already reads
+provenance metadata will read MATE's. The prompt is recorded in the description
+field, XML-escaped.
+
+The marker is written **before the artifact is saved**, so every stored copy and
+every URL served from it carries the same bytes. All three image paths mark:
+the OpenAI-compatible generation path, the base64 data-URL path, and the streamed
+inline-data path.
+
+### What this is and is not
+
+It is a **marker, not a signature**. It states provenance to anything that reads
+the file; it does not prove it, and re-encoding the image strips it. C2PA adds
+cryptographic signing on top and is the natural next step, but it needs a signing
+identity that MATE has no way to provision on your behalf.
+
+Marking is written directly into the PNG rather than through an imaging library,
+because MATE emits PNG and a PNG text chunk is less code than the dependency
+would be. If anything goes wrong, the original image is returned unchanged and
+the failure is logged: an unmarked image is a compliance gap, but a corrupted one
+is a broken product, and the gap is the recoverable failure.
+
+Formats other than PNG are passed through unmarked, with a warning. If MATE grows
+audio or video generation, they need their own marking — this covers what it
+generates today.
 
 ## What MATE does not do
 
