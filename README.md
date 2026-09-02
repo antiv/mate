@@ -21,12 +21,13 @@ Without a control layer, every one of those is a code change, a commit, and a re
 
 ## Try it without installing anything
 
-A live MATE instance runs at **[ai.antonijevic.rs](https://ai.antonijevic.rs)**.
+These run on a live MATE instance. No signup, no install.
 
-- **[Play the murder mystery demo](https://ai.antonijevic.rs/static/mystery-demo.html)** — a multi-agent game running on MATE. No signup: you question suspects, and a wrong accusation costs you
-- **[Build an agent in the browser](https://ai.antonijevic.rs/static/wizard-demo.html)** — the embeddable wizard provisions a working agent and lets you chat with it
+- **[Play the murder mystery demo](https://ai.antonijevic.rs/static/mystery-demo.html?key=wk_sQgptSKpw21XGHAEdcfLA9RykUDcDPYBt8uQjG-eK-g&lang=en)** — a multi-agent game running on MATE. No signup: you question suspects, and a wrong accusation costs you
+- **[Build an agent in the browser](https://ai.antonijevic.rs/static/wizard-demo.html)** — the embeddable wizard provisions a working agent and lets you chat with it (interface in Serbian)
 
-Everything below runs the same way on your own machine.
+The dashboard behind them needs an account — everything below sets up your own
+instance, which behaves the same way.
 
 ---
 
