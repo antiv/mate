@@ -4303,6 +4303,22 @@ class DashboardServer:
                 if "error" in result:
                     raise HTTPException(status_code=400, detail=result["error"])
                 
+                # overwrite=true rewrites existing agents wholesale, so it is the
+                # one detail separating adding from destroying — record it.
+                audit_service.log(
+                    username,
+                    audit_service.ACTION_AGENTS_IMPORT,
+                    audit_service.RESOURCE_AGENT,
+                    details={
+                        "overwrite": bool(overwrite),
+                        "imported_count": result.get("imported_count", 0),
+                        "skipped_count": result.get("skipped_count", 0),
+                        "error_count": len(result.get("errors") or []),
+                        "memory_blocks_imported": result.get("memory_blocks_imported", 0),
+                        "triggers_imported": result.get("triggers_imported", 0),
+                    },
+                    request=request,
+                )
                 return result
             except Exception as e:
                 raise HTTPException(status_code=400, detail=f"Invalid JSON data: {str(e)}")
@@ -4369,6 +4385,20 @@ class DashboardServer:
                 result = self._import_template(template_id, project_name=project_name, changed_by=username)
                 if "error" in result:
                     raise HTTPException(status_code=400, detail=result["error"])
+                audit_service.log(
+                    username,
+                    audit_service.ACTION_TEMPLATE_IMPORT,
+                    audit_service.RESOURCE_TEMPLATE,
+                    resource_id=template_id,
+                    details={
+                        "project_id": result.get("project_id"),
+                        "project_name": result.get("project_name"),
+                        "root_agent_name": result.get("root_agent_name"),
+                        "agents_created": result.get("agents_created", 0),
+                        "memory_blocks_created": result.get("memory_blocks_created", 0),
+                    },
+                    request=request,
+                )
                 return result
             except HTTPException:
                 raise
@@ -4404,6 +4434,20 @@ class DashboardServer:
                 )
                 if "error" in result:
                     raise HTTPException(status_code=400, detail=result["error"])
+                # The saved id is the sanitized one, which is what a later delete
+                # or import will name — audit that, not the raw request value.
+                audit_service.log(
+                    username,
+                    audit_service.ACTION_TEMPLATE_CREATE,
+                    audit_service.RESOURCE_TEMPLATE,
+                    resource_id=result.get("template_id"),
+                    details={
+                        "project_id": int(project_id),
+                        "root_agent": str(root_agent).strip(),
+                        "category": str(category).strip() or "custom",
+                    },
+                    request=request,
+                )
                 return result
             except HTTPException:
                 raise
@@ -4436,6 +4480,21 @@ class DashboardServer:
                 result = self._sync_template(int(project_id), changed_by=username)
                 if "error" in result:
                     raise HTTPException(status_code=400, detail=result["error"])
+                audit_service.log(
+                    username,
+                    audit_service.ACTION_TEMPLATE_SYNC,
+                    audit_service.RESOURCE_TEMPLATE,
+                    resource_id=result.get("template_id"),
+                    details={
+                        "project_id": int(project_id),
+                        "synced_to_version": result.get("synced_to_version"),
+                        "agents_added": result.get("agents_added", 0),
+                        "agents_updated": result.get("agents_updated", 0),
+                        "memory_blocks_added": result.get("memory_blocks_added", 0),
+                        "memory_blocks_updated": result.get("memory_blocks_updated", 0),
+                    },
+                    request=request,
+                )
                 return result
             except HTTPException:
                 raise
