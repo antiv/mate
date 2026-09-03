@@ -53,6 +53,7 @@ class MateToolContext:
 
     def __init__(self, run_context: "RunContext"):
         self._run_context = run_context
+        self.app_name = run_context.app_name
         self.state = run_context.state
         self.user_id = run_context.user_id
         self.agent_name = run_context.agent_name
@@ -181,6 +182,10 @@ def adapt_tools(tools: List[Any]) -> List[Callable]:
     """Adapt a ToolFactory tool list for LangGraph; skips non-callable ADK objects."""
     adapted = []
     for tool in tools:
+        # If it's an ADK FunctionTool, unwrap its underlying callable function
+        if hasattr(tool, "_func") and callable(getattr(tool, "_func")):
+            tool = getattr(tool, "_func")
+
         if not callable(tool) or isinstance(tool, type):
             logger.warning(
                 f"Skipping tool {tool!r}: ADK-specific tool objects are not supported "

@@ -51,24 +51,74 @@ logger = logging.getLogger(__name__)
 #         return None
 
 
-# def create_google_search_tools_from_config(config: Dict[str, Any]) -> List[Any]:
-#     """
-#     Create Google Search tools from agent configuration.
+async def google_search(query: str) -> str:
+    """
+    Search the web for real-time information, websites, facts, and prices.
     
-#     Args:
-#         config: Agent configuration dictionary
+    Args:
+        query: The search query string.
         
-#     Returns:
-#         List of Google Search tools
-#     """
-#     tools = []
-#     agent_name = config.get('name', 'unknown')
-    
-#     search_tool = create_google_search_tool(agent_name)
-#     if search_tool:
-#         tools.append(search_tool)
-    
-#     return tools
+    Returns:
+        Structured search results with titles, URLs, and summaries.
+    """
+    import os
+    tavily_key = os.getenv("TAVILY_API_KEY")
+    if tavily_key:
+        try:
+            from tavily import TavilyClient
+            client = TavilyClient(api_key=tavily_key)
+            res = client.search(query, max_results=5)
+            formatted = []
+            for r in res.get("results", []):
+                formatted.append(f"Title: {r.get('title')}\nURL: {r.get('url')}\nSnippet: {r.get('content')}")
+            if formatted:
+                return "\n\n---\n\n".join(formatted)
+        except Exception as te:
+            logger.warning(f"Tavily search error: {te}, falling back to web search")
+
+    try:
+        import httpx
+        import urllib.parse
+        import re
+        from html import unescape
+
+        encoded = urllib.parse.quote_plus(query)
+        url = f"https://html.duckduckgo.com/html/?q={encoded}"
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept-Language": "en-US,en;q=0.9,sr;q=0.8,sl;q=0.7",
+        }
+        async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
+            resp = await client.get(url, headers=headers)
+            if resp.status_code == 200:
+                matches = re.findall(
+                    r'<a class="result__snippet"[^>]*href="([^"]+)"[^>]*>(.*?)</a>',
+                    resp.text,
+                    re.DOTALL
+                )
+                if matches:
+                    results = []
+                    for raw_url, raw_snip in matches[:5]:
+                        clean_snip = unescape(re.sub(r'<[^>]+>', '', raw_snip).strip())
+                        actual_url = raw_url
+                        if "uddg=" in actual_url:
+                            actual_url = urllib.parse.unquote(actual_url.split("uddg=")[-1].split("&")[0])
+                        actual_url = urllib.parse.unquote(actual_url)
+                        results.append(f"URL: {actual_url}\nSnippet: {clean_snip}")
+                    return "\n\n---\n\n".join(results)
+    except Exception as e:
+        logger.error(f"Web search error for query '{query}': {e}")
+        return f"Could not perform web search: {e}"
+
+    return f"No search results found for query: {query}"
+
+
+def create_google_search_tools_from_config(config: Dict[str, Any]) -> List[Any]:
+    """
+    Create Google Search tools from agent configuration.
+    Returns the universal async google_search tool (works with Gemini, OpenRouter, DeepSeek, Ollama, etc.).
+    """
+    return [google_search]
 
 
 def create_google_drive_tools(agent_name: str) -> List[Any]:

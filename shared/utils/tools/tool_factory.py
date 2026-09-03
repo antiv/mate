@@ -35,7 +35,8 @@ class ToolFactory:
             'google_calendar': self._create_google_calendar_tools,
             'shop': self._create_shop_tools,
             'mystery_gm': self._create_mystery_gm_tools,
-            'mystery_character': self._create_mystery_character_tools
+            'mystery_character': self._create_mystery_character_tools,
+            'subagent_delegation': self._create_subagent_delegation_tools
         }
     
     def create_tools(self, config: Dict[str, Any]) -> List[Any]:
@@ -312,6 +313,11 @@ class ToolFactory:
         """Create the mystery-game suspect character-sheet tool."""
         from .mystery_game import create_mystery_character_tools_from_config
         return create_mystery_character_tools_from_config(config)
+
+    def _create_subagent_delegation_tools(self, config: Dict[str, Any]) -> List[Any]:
+        """Create dynamic runtime subagent delegation tools."""
+        from .subagent_delegation_tool import create_subagent_delegation_tools_from_config
+        return create_subagent_delegation_tools_from_config(config)
     
     
     def get_available_tool_types(self) -> List[str]:
