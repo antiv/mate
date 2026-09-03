@@ -9,6 +9,7 @@ on:
 
 permissions:
   contents: write
+  discussions: write
 
 jobs:
   release:
@@ -39,3 +40,10 @@ jobs:
           gh release create "$GITHUB_REF_NAME" \
             --title "$GITHUB_REF_NAME" \
             --notes-file release_notes.md
+
+          # Open an Announcements thread so a release has somewhere to be replied
+          # to instead of being a one-way changelog post. Deliberately a separate,
+          # non-fatal step: a renamed or missing category should not fail a release
+          # that has already published correctly.
+          gh release edit "$GITHUB_REF_NAME" --discussion-category "Announcements" \
+            || echo "::warning::Could not open a release discussion. Check that an 'Announcements' category exists. The release itself is published."
