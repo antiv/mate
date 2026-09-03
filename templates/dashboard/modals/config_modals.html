@@ -149,6 +149,15 @@
                         <div id="{{ id_prefix }}ShopHint" style="display: none;" class="pl-1 border-l-2 border-gray-200 dark:border-gray-600 ml-1">
                             <p class="text-[10px] text-gray-400">Edit <code>shop.catalog</code> / currency / partner_key in the JSON editor on the right.</p>
                         </div>
+                        <div class="flex items-center">
+                            <input type="checkbox" id="{{ id_prefix }}SubagentDelegation"
+                                class="w-3 h-3 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-gray-800 focus:ring-1 dark:bg-gray-700 dark:border-gray-600">
+                            <label for="{{ id_prefix }}SubagentDelegation"
+                                class="ml-1.5 text-xs font-medium text-gray-700 dark:text-gray-300" title="Dynamically spawn parallel runtime subagents (Fan-out / Fan-in)">Subagent Delegation</label>
+                        </div>
+                        <div id="{{ id_prefix }}SubagentDelegationHint" style="display: none;" class="pl-1 border-l-2 border-gray-200 dark:border-gray-600 ml-1">
+                            <p class="text-[10px] text-gray-400">Enables <code>delegate_subtasks</code> tool. Customize limits/model in JSON on the right.</p>
+                        </div>
                     </div>
                     <div class="md:col-span-2 space-y-2">
                         <div class="flex items-center justify-between">
@@ -171,7 +180,9 @@
                         <p class="text-xs text-gray-500 dark:text-gray-400 mt-2">Available keys: google_search,
                             google_drive, google_calendar, browser,
                             cv_tools, image_tools, memory_blocks, create_agent, custom_functions, code_executor, image_data_extraction,
-                            shop.</p>
+                            shop, subagent_delegation.</p>
+                        <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">subagent_delegation enables parallel runtime worker subagents, e.g.
+                            <code class="text-[10px]">{"subagent_delegation": true}</code> or <code class="text-[10px]">{"subagent_delegation": {"max_subagents": 4, "timeout_seconds": 60, "default_model": "gemini-2.5-flash"}}</code>.</p>
                         <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">shop (e-commerce) is configured via JSON, e.g.
                             <code class="text-[10px]">{"shop": {"catalog": [{"id": "a", "name": "Item", "price": 10}], "currency": "EUR", "shop_name": "Store", "vendor_email": "orders@x.com", "partner_key": "store-key"}}</code>.
                             vendor_email enables order emails; partner_key enables saving to Shop Orders.</p>

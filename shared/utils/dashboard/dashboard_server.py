@@ -4854,6 +4854,16 @@ class DashboardServer:
                 audit_service.log(username, audit_service.ACTION_AGENT_UPDATE, audit_service.RESOURCE_AGENT, resource_id=name, details={"config_id": config_id}, request=request)
                 self._audit_disclosure_change(
                     username, name, previous_waiver, ai_disclosure_waiver, request)
+                # Auto-reinitialize agent on agent server so configuration changes take effect immediately
+                try:
+                    import httpx
+                    from shared.utils.utils import get_adk_config
+                    adk_config = get_adk_config()
+                    adk_url = f"http://{adk_config['adk_host']}:{adk_config['adk_port']}/api/reload-agent/{name}"
+                    async with httpx.AsyncClient(timeout=5.0) as client:
+                        await client.post(adk_url)
+                except Exception as reload_e:
+                    print(f"Notice: Agent '{name}' auto-reload on agent server skipped or deferred: {reload_e}")
             return {"success": success, "message": "Agent updated successfully" if success else "Failed to update agent"}
 
         @self.app.delete("/dashboard/api/agents/{config_id}", tags=["Dashboard - Agents"])

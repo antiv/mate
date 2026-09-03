@@ -12,6 +12,7 @@
 const CHECKBOX_MANAGED_TOOL_KEYS = [
     'google_drive', 'google_calendar', 'browser', 'cv_tools', 'image_tools',
     'memory_blocks', 'create_agent', 'code_executor', 'image_data_extraction', 'shop',
+    'subagent_delegation',
 ];
 
 function syncToolConfigToJson(prefix = '') {
@@ -30,6 +31,7 @@ function syncToolConfigToJson(prefix = '') {
     // Preserve the shop object (catalog etc.) across a checkbox re-sync — the checkbox only
     // toggles presence, the catalog is authored in the JSON editor.
     const existingShop = (config.shop && typeof config.shop === 'object') ? config.shop : null;
+    const existingSubagentDelegation = (config.subagent_delegation && typeof config.subagent_delegation === 'object') ? config.subagent_delegation : null;
     CHECKBOX_MANAGED_TOOL_KEYS.forEach(function (k) { delete config[k]; });
 
     // Check each tool checkbox
@@ -94,6 +96,10 @@ function syncToolConfigToJson(prefix = '') {
     if (shop && shop.checked) {
         // Keep the authored catalog/currency/partner_key; default to an empty catalog.
         config.shop = existingShop || { catalog: [] };
+    }
+    const subagentDelegation = document.getElementById(prefix + 'SubagentDelegation');
+    if (subagentDelegation && subagentDelegation.checked) {
+        config.subagent_delegation = existingSubagentDelegation || true;
     }
 
     const textarea = document.getElementById(prefix + 'ToolConfig');
@@ -252,6 +258,12 @@ function syncJsonToToolConfig(prefix = '') {
             const shopHint = document.getElementById(prefix + 'ShopHint');
             if (shopHint) shopHint.style.display = config.shop ? 'block' : 'none';
         }
+        const subagentDelegation = document.getElementById(prefix + 'SubagentDelegation');
+        if (subagentDelegation) {
+            subagentDelegation.checked = !!config.subagent_delegation;
+            const saHint = document.getElementById(prefix + 'SubagentDelegationHint');
+            if (saHint) saHint.style.display = config.subagent_delegation ? 'block' : 'none';
+        }
         if (memoryBlocks) {
             memoryBlocks.checked = config.memory_blocks === true ||
                 (config.memory_blocks && typeof config.memory_blocks === 'object' && config.memory_blocks.enabled !== false);
@@ -343,7 +355,8 @@ function setupToolListeners(prefix) {
                     prefix + 'CreateAgent',
                     prefix + 'CodeExecutor',
                     prefix + 'ImageDataExtraction',
-                    prefix + 'Shop'
+                    prefix + 'Shop',
+                    prefix + 'SubagentDelegation'
                 ];
 
                 if (toolCheckboxIds.includes(checkboxId)) {
@@ -359,6 +372,8 @@ function setupToolListeners(prefix) {
                         handleShopChange(prefix);
                     } else if (checkboxId === prefix + 'CodeExecutor') {
                         handleCodeExecutorChange(prefix);
+                    } else if (checkboxId === prefix + 'SubagentDelegation') {
+                        handleSubagentDelegationChange(prefix);
                     } else {
                         syncToolConfigToJson(prefix);
                     }
@@ -377,7 +392,8 @@ function setupToolListeners(prefix) {
             prefix + 'CreateAgent',
             prefix + 'CodeExecutor',
             prefix + 'ImageDataExtraction',
-            prefix + 'Shop'
+            prefix + 'Shop',
+            prefix + 'SubagentDelegation'
         ];
 
         toolCheckboxes.forEach(checkboxId => {
@@ -392,6 +408,8 @@ function setupToolListeners(prefix) {
                         handleShopChange(prefix);
                     } else if (checkboxId === prefix + 'CodeExecutor') {
                         handleCodeExecutorChange(prefix);
+                    } else if (checkboxId === prefix + 'SubagentDelegation') {
+                        handleSubagentDelegationChange(prefix);
                     } else {
                         syncToolConfigToJson(prefix);
                     }
@@ -445,3 +463,16 @@ function handleImageDataExtractionChange(prefix) {
     
     syncToolConfigToJson(prefix);
 }
+
+/**
+ * Handle subagent delegation checkbox change
+ */
+function handleSubagentDelegationChange(prefix) {
+    const checkbox = document.getElementById(prefix + 'SubagentDelegation');
+    const hint = document.getElementById(prefix + 'SubagentDelegationHint');
+    if (checkbox && hint) {
+        hint.style.display = checkbox.checked ? 'block' : 'none';
+    }
+    syncToolConfigToJson(prefix);
+}
+
