@@ -46,6 +46,31 @@ Instead of an agent executing multiple slow research tasks sequentially or pollu
 
 ---
 
+## Privilege boundary
+
+**A subagent can only be equipped with tools its parent already holds.** Anything
+else named in a subtask is dropped and logged.
+
+This is the only boundary there is. A subagent is not a row in `agents_config`,
+so it has no RBAC of its own, no widget key of its own, and nothing downstream
+constrains what it is handed — which means without this rule the orchestrator's
+prompt would decide the child's privileges. Since that prompt can be influenced by
+whoever is talking to the agent, a request to spawn a child with a shell would be
+one injected instruction away.
+
+Two consequences worth knowing:
+
+- **The parent's widget exposure is the child's.** `code_executor` is refused for
+  an agent reachable through a widget key, and a child of such an agent is
+  refused it too. The check is the factory's own, called rather than restated, so
+  the two cannot drift apart.
+- **A child inherits the parent's settings for a tool, not a bare `true`.** A
+  subagent given `shop` gets the parent's catalog and vendor details, not an
+  empty default that would behave differently.
+
+MCP works the same way: a subagent's MCP servers are the parent's, so a parent
+with none grants none.
+
 ## Configuring the Tool
 
 Enable the tool on any agent in `tool_config`:
