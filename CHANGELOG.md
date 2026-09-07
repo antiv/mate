@@ -5,6 +5,13 @@ All notable changes to MATE (Multi-Agent Tree Engine) will be documented in this
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Dynamic subagent delegation** (`subagent_delegation`) - an orchestrator agent can spawn ephemeral subagents and run them in parallel within a single turn. They execute in memory via `InMemorySessionService` and an ADK `Runner`, so they create no rows in `agents_config`; each is equipped only with the tools its subtask needs; and only the distilled result returns to the parent, keeping raw search and tool output out of the root agent's context window. Token usage is recorded against the parent session and user. Configurable per agent from the dashboard. See `documents/DYNAMIC_SUBAGENTS.md`
+- **Real-time web search** - `google_search` uses the Tavily API when `TAVILY_API_KEY` is set, and falls back to DuckDuckGo when it is not
+
 ## [1.2.0] - 2026-09-02
 
 MATE's control layer no longer requires that you built your agents in MATE, and
