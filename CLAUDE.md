@@ -101,6 +101,7 @@ Follow PEP 8 with type hints on all function signatures. Use f-strings for forma
 | `WIDGET_LEGACY_ADMIN_KEY` | Transitional: let the public widget key work on `/widget/api` admin routes |
 | `ADK_HOST` / `ADK_PORT` | ADK server address (default `127.0.0.1:8001`) |
 | `ARTIFACT_SERVICE` | `local_folder`, `supabase`, or `s3` |
+| `TAVILY_API_KEY` | Web search for `google_search`; falls back to DuckDuckGo when unset |
 | `EMBEDDING_MODEL` | Embedding model for memory block semantic search (litellm format, default `gemini/gemini-embedding-001`) |
 | `RATE_LIMIT_ENABLED` | Enable per-user/agent/project budgets |
 | `ALERTS_ENABLED` / `ALERTS_INTERVAL_SECONDS` | Alert rules on agent errors, guardrail bursts and budget thresholds |
