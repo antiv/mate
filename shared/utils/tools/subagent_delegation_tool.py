@@ -17,7 +17,7 @@ import json
 import logging
 import os
 import uuid
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from google.adk.agents import Agent
 from google.adk.runners import Runner
@@ -94,8 +94,9 @@ class SubtaskSpec(BaseModel):
     tools: List[str] = Field(
         default_factory=list,
         description=(
-            "List of tool names to equip this subagent with. Examples: "
-            "['google_search', 'browser', 'code_executor', 'file_search', 'memory_blocks', 'image_tools']."
+            "Tool names to equip this subagent with, drawn from the tools you "
+            "already have. Anything you do not hold yourself is ignored. "
+            "Examples: ['google_search', 'browser', 'file_search', 'memory_blocks']."
         ),
     )
     model: Optional[str] = Field(
@@ -141,6 +142,34 @@ def _get_context_values(tool_context: Optional[ToolContext]) -> Tuple[str, str, 
     return app_name, user_id, session_id
 
 
+def _parent_effective_tools(
+    parent_tool_config: Dict[str, Any],
+    parent_name: Optional[str],
+) -> Set[str]:
+    """
+    The tool families the parent actually ends up holding.
+
+    A subagent must never exceed its parent. It is not a row in `agents_config`,
+    so it carries no RBAC of its own, has no widget key of its own, and nothing
+    else downstream constrains what it is handed — the parent's set is the only
+    boundary there is.
+
+    This is the parent's *effective* set, not merely its configured one. The
+    code_executor refusal for widget-exposed agents is applied here by calling
+    the factory's own check rather than restating it, so the two cannot drift.
+    The parent is the surface an anonymous visitor can actually reach, so its
+    exposure is the child's exposure.
+    """
+    families = {name for name, value in parent_tool_config.items() if value is not None}
+
+    if "code_executor" in families and parent_name:
+        from .tool_factory import ToolFactory
+        if ToolFactory._agent_has_widget_key(parent_name):
+            families.discard("code_executor")
+
+    return families
+
+
 def _build_subagent_tools(
     requested_tool_names: List[str],
     parent_config: Dict[str, Any],
@@ -166,6 +195,9 @@ def _build_subagent_tools(
         elif isinstance(ptc, dict):
             parent_tool_config = ptc
 
+    parent_name = parent_config.get("name") if parent_config else None
+    parent_effective = _parent_effective_tools(parent_tool_config, parent_name)
+
     sub_tool_config: Dict[str, Any] = {}
     has_mcp = False
     assigned_tool_names: List[str] = []
@@ -181,16 +213,28 @@ def _build_subagent_tools(
             continue
 
         if canon == "mcp":
+            # Bound to the parent's servers, so a parent with none grants none.
+            if not (parent_config or {}).get("mcp_servers_config"):
+                logger.warning(
+                    "Subagent requested MCP tools but parent '%s' has no MCP servers "
+                    "configured — stripped.", parent_name)
+                continue
             has_mcp = True
             assigned_tool_names.append("mcp")
             continue
 
-        # Inherit parent configuration dict if available (e.g. memory_blocks, shop, file_search)
-        if canon in parent_tool_config and parent_tool_config[canon] is not None:
-            sub_tool_config[canon] = parent_tool_config[canon]
-        else:
-            sub_tool_config[canon] = True
+        # A subagent may only be equipped with what its parent already holds.
+        # Granting anything else would let an orchestrator's prompt — including
+        # one an anonymous visitor injected — hand a child tools its parent was
+        # never trusted with, code_executor above all.
+        if canon not in parent_effective:
+            logger.warning(
+                "Subagent requested tool '%s', which parent '%s' does not hold — stripped.",
+                canon, parent_name)
+            continue
 
+        # Inherit the parent's own settings for it (catalog, memory blocks, timeout).
+        sub_tool_config[canon] = parent_tool_config[canon]
         assigned_tool_names.append(canon)
 
     subagent_config = {

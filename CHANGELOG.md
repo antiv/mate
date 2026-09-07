@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **A subagent can no longer exceed the tools its parent holds.** `_build_subagent_tools` equipped a child with any tool family named in a subtask, defaulting to enabled when the parent had no such entry — so the orchestrator's prompt decided the child's privileges rather than the parent's configuration. Since that prompt can be influenced by anyone talking to the agent, a child with `execute_shell_command` running as the server user was one injected instruction away. The widget guard did not help: it keys off the agent name, and a subagent gets a fresh one, so an agent refused the executor for being widget-exposed could obtain it on a child. The same route granted `delete_agent` and `place_order`. Child tools are now intersected with the parent's effective set, with the widget refusal inherited. Reported privately against 695c735
+
 ### Added
 
 - **Dynamic subagent delegation** (`subagent_delegation`) - an orchestrator agent can spawn ephemeral subagents and run them in parallel within a single turn. They execute in memory via `InMemorySessionService` and an ADK `Runner`, so they create no rows in `agents_config`; each is equipped only with the tools its subtask needs; and only the distilled result returns to the parent, keeping raw search and tool output out of the root agent's context window. Token usage is recorded against the parent session and user. Configurable per agent from the dashboard. See `documents/DYNAMIC_SUBAGENTS.md`
