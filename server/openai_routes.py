@@ -1,46 +1,59 @@
-import json
-import time
-import httpx
-import hashlib
-import logging
-from typing import List, Optional, Dict, Any, Union
-from fastapi import APIRouter, Depends, HTTPException, Request, status
-from fastapi.responses import StreamingResponse, JSONResponse
-from pydantic import BaseModel, Field
+"""
+OpenAI-compatible bridge: MATE agents as chat-completions models.
 
+Beyond plain chat this speaks the tool-calling half of the protocol, so an
+external coding agent can hand the model its own tools. The model's call is
+emitted as `tool_calls`, the caller runs it locally, and the result comes back
+as a `role: "tool"` message that resumes the paused agent turn. The caller's
+tools are added to the agent's own — they do not replace them.
+"""
+
+import hashlib
+import json
+import logging
+import time
+from typing import Any, AsyncGenerator, Dict, List, Optional, Tuple, Union
+
+import httpx
+from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import JSONResponse, StreamingResponse
+from pydantic import BaseModel
+
+from server.openai_translate import (build_runtime_turns, consumed_index,
+                                     conversation_key, event_parts, final_chunk,
+                                     iter_sse_payloads, normalize_client_tools,
+                                     part_function_call, system_text, text_chunk,
+                                     tool_call_chunk, TextDeltaTracker,
+                                     CLIENT_TOOL_METADATA_KEY)
+from server.pat_auth import get_pat_user
+from shared.utils.agent_invoke import _ensure_session
 from shared.utils.database_client import get_database_client
 from shared.utils.models import AgentConfig, User
 from shared.utils.utils import get_adk_config
-from server.pat_auth import get_pat_user
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/v1", tags=["OpenAI Compatibility"])
 
-# Get ADK configuration
 adk_config = get_adk_config()
 ADK_HOST = adk_config.get("adk_host", "localhost")
 ADK_PORT = adk_config.get("adk_port", 8001)
 
-# Helper to extract plain text from OpenAI messages content (which can be a string or a list of blocks)
-def extract_content_text(content: Any) -> str:
-    """Helper to extract text from simple string or list of content parts."""
-    if isinstance(content, str):
-        return content
-    elif isinstance(content, list):
-        text_parts = []
-        for part in content:
-            if isinstance(part, dict):
-                if part.get("type") == "text" and "text" in part:
-                    text_parts.append(part["text"])
-                elif "text" in part:
-                    text_parts.append(part["text"])
-        return "".join(text_parts)
-    return str(content) if content is not None else ""
+# agents_config carries no timestamps, so there is no real creation date to
+# report. A constant is at least honest about that, where the row id was not.
+_MODELS_CREATED = int(time.time())
 
-# Pydantic models for OpenAI request format
+_RUN_TIMEOUT_SECONDS = 900.0
+
+
 class ChatMessage(BaseModel):
     role: str
-    content: Union[str, List[Any]]
+    # Optional because an assistant message that only makes tool calls carries a
+    # null content, and clients replay their own history verbatim.
+    content: Optional[Union[str, List[Any]]] = None
+    name: Optional[str] = None
+    tool_calls: Optional[List[Any]] = None
+    tool_call_id: Optional[str] = None
+
 
 class ChatCompletionRequest(BaseModel):
     model: str
@@ -48,285 +61,294 @@ class ChatCompletionRequest(BaseModel):
     stream: Optional[bool] = False
     temperature: Optional[float] = 1.0
     max_tokens: Optional[int] = None
+    tools: Optional[List[Any]] = None
+    tool_choice: Optional[Union[str, Dict[str, Any]]] = None
+
 
 @router.get("/models")
 async def list_models(user: User = Depends(get_pat_user)):
-    """
-    List all active root agents that have expose_as_model = True.
-    """
+    """List active root agents that have expose_as_model = True."""
     db = get_database_client()
     session = db.get_session()
     if not session:
         raise HTTPException(
-            status_code=status.HTTP_530_SITE_IS_FROZEN, # DB error
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Database unavailable"
         )
     try:
-        # Query root agents that are exposed and active
         agents = session.query(AgentConfig).filter(
             AgentConfig.disabled.is_(False),
             AgentConfig.expose_as_model.is_(True),
-            (AgentConfig.parent_agents.is_(None) | 
-             (AgentConfig.parent_agents == "") | 
+            (AgentConfig.parent_agents.is_(None) |
+             (AgentConfig.parent_agents == "") |
              (AgentConfig.parent_agents == "[]"))
         ).all()
-        
-        models_list = []
-        for agent in agents:
-            models_list.append({
-                "id": agent.name,
-                "object": "model",
-                "created": int(agent.id),  # placeholder creation timestamp or ID
-                "owned_by": "mate"
-            })
+
         return {
             "object": "list",
-            "data": models_list
+            "data": [
+                {
+                    "id": agent.name,
+                    "object": "model",
+                    "created": _MODELS_CREATED,
+                    "owned_by": "mate",
+                }
+                for agent in agents
+            ],
         }
     finally:
         session.close()
 
-@router.post("/chat/completions")
-async def chat_completions(
-    request: Request,
-    body: ChatCompletionRequest,
-    user: User = Depends(get_pat_user)
-):
-    """
-    Execute a MATE agent using the OpenAI completions schema.
-    """
-    agent_name = body.model
-    messages = body.messages
-    
-    if not messages:
-        raise HTTPException(status_code=400, detail="Messages list cannot be empty")
-        
-    # Check if agent exists and is exposed
+
+def _load_exposed_agent(agent_name: str) -> None:
+    """Refuse anything that is not an agent deliberately exposed as a model."""
     db = get_database_client()
     session = db.get_session()
     if not session:
-        raise HTTPException(status_code=500, detail="Database unavailable")
+        raise HTTPException(status_code=503, detail="Database unavailable")
     try:
         agent = session.query(AgentConfig).filter_by(name=agent_name).first()
         if not agent or agent.disabled or not agent.expose_as_model:
             raise HTTPException(
-                status_code=404, 
+                status_code=404,
                 detail=f"Model/Agent '{agent_name}' not found or not exposed as model"
             )
     finally:
         session.close()
-        
-    last_msg = extract_content_text(messages[-1].content)
-    
-    # Generate a deterministic session key based on the first message in this conversation
-    # to isolate different chat sessions for the same user & agent.
-    first_msg_text = extract_content_text(messages[0].content) if messages else ""
-    first_msg_hash = hashlib.md5(first_msg_text.encode("utf-8")).hexdigest()[:12]
-    
-    # Scoped user & session name for ADK
-    scoped_user = user.user_id
-    session_id = f"openai_sess_{user.user_id}_{first_msg_hash}"
-    
-    # Pre-create session on ADK side if it doesn't exist
-    async with httpx.AsyncClient() as client:
-        # Create session endpoint: POST /apps/{app_name}/users/{user_id}/sessions/{session_id}
-        adk_session_url = f"http://{ADK_HOST}:{ADK_PORT}/apps/{agent_name}/users/{scoped_user}/sessions/{session_id}"
-        try:
-            # Check if session already exists to avoid noisy 409 Conflict logs
-            check_resp = await client.get(adk_session_url)
-            if check_resp.status_code == 404:
-                # Send empty state payload to create session
-                await client.post(adk_session_url, json={})
-        except Exception as e:
-            logger.warning("Failed to check/pre-create session on ADK: %s", e)
 
-    # Payload for ADK run_sse
-    adk_payload = {
-        "app_name": agent_name,
-        "user_id": scoped_user,
-        "session_id": session_id,
-        "new_message": {
-            "role": "user",
-            "parts": [{"text": last_msg}],
-        },
-        "streaming": True,
-    }
-    
-    target_url = f"http://{ADK_HOST}:{ADK_PORT}/run_sse"
-    headers = {
-        "Content-Type": "application/json",
-        "Accept": "text/event-stream",
-    }
-    
-    completion_id = f"chatcmpl-{hashlib.md5(f'{session_id}_{time.time()}'.encode()).hexdigest()[:12]}"
 
-    async def sse_streamer():
-        client = httpx.AsyncClient(timeout=900.0)
-        try:
-            req = client.build_request("POST", target_url, json=adk_payload, headers=headers)
-            r = await client.send(req, stream=True)
-            
-            if r.status_code != 200:
-                error_msg = f"ADK server returned error status {r.status_code}"
-                logger.error(error_msg)
-                yield f"data: {json.dumps({'error': {'message': error_msg}})}\n\n".encode("utf-8")
-                return
+def _turn_usage(invocation_ids: List[str]) -> Dict[str, int]:
+    """
+    Token usage for THIS turn.
 
-            last_text = ""
-            buffer = ""
-            
-            async for chunk in r.aiter_bytes():
-                buffer += chunk.decode("utf-8", errors="replace")
-                while "\n" in buffer:
-                    line, buffer = buffer.split("\n", 1)
-                    line = line.rstrip("\r")
-                    if not line.startswith("data: "):
-                        continue
-                    raw = line[6:]
-                    if raw == "[DONE]":
-                        break
-                    try:
-                        evt = json.loads(raw)
-                    except json.JSONDecodeError:
-                        continue
-                        
-                    # Filter out tool calls within MATE agent loop
-                    parts = (evt.get("content") or {}).get("parts") or []
-                    for part in parts:
-                        text = part.get("text")
-                        if not text:
-                            continue
-                            
-                        # De-duplicate deltas (similar to frontend widget logic)
-                        delta_text = ""
-                        if last_text and text.startswith(last_text):
-                            delta_text = text[len(last_text):]
-                            last_text = text
-                        elif last_text and last_text.startswith(text):
-                            pass
-                        else:
-                            delta_text = text
-                            last_text += text
-                            
-                        if delta_text:
-                            chunk_data = {
-                                "id": completion_id,
-                                "object": "chat.completion.chunk",
-                                "created": int(time.time()),
-                                "model": agent_name,
-                                "choices": [{
-                                    "index": 0,
-                                    "delta": {"content": delta_text},
-                                    "finish_reason": None
-                                }]
-                            }
-                            yield f"data: {json.dumps(chunk_data)}\n\n".encode("utf-8")
-                            
-            # Query token usage at the end of the execution
-            prompt_tokens = 0
-            completion_tokens = 0
-            db = get_database_client()
-            db_session = db.get_session()
-            if db_session:
+    Keyed on the runtime invocation ids seen on the stream, because one turn is
+    one invocation and may span several model calls across sub-agents. Summing
+    by session id — what this used to do — reports the whole conversation again
+    on every request.
+    """
+    usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+    if not invocation_ids:
+        return usage
+    db = get_database_client()
+    db_session = db.get_session()
+    if not db_session:
+        return usage
+    try:
+        from sqlalchemy import func
+
+        from shared.utils.models import TokenUsageLog
+        row = db_session.query(
+            func.sum(TokenUsageLog.prompt_tokens),
+            func.sum(TokenUsageLog.response_tokens)
+        ).filter(TokenUsageLog.request_id.in_(invocation_ids)).first()
+        if row:
+            usage["prompt_tokens"] = int(row[0] or 0)
+            usage["completion_tokens"] = int(row[1] or 0)
+        usage["total_tokens"] = usage["prompt_tokens"] + usage["completion_tokens"]
+    except Exception as exc:
+        logger.warning("Failed to query token usage: %s", exc)
+    finally:
+        db_session.close()
+    return usage
+
+
+async def _stream_turn(client: httpx.AsyncClient, payload: Dict[str, Any],
+                       client_tool_names: set, tracker: TextDeltaTracker,
+                       outcome: Dict[str, Any]) -> AsyncGenerator[Tuple[str, Any], None]:
+    """
+    Run one /run_sse turn, yielding ("text", delta) and ("tool_call", call) as
+    the events arrive — the caller must see the answer being written, not a
+    silence followed by all of it at once.
+
+    `outcome` is filled in with the invocation id and whether a client tool was
+    called; a client tool call ends the turn, because the runtime has stopped
+    and is waiting for the caller's result.
+    """
+    url = f"http://{ADK_HOST}:{ADK_PORT}/run_sse"
+    headers = {"Content-Type": "application/json", "Accept": "text/event-stream"}
+    buffer = ""
+
+    async with client.stream("POST", url, json=payload, headers=headers) as response:
+        if response.status_code != 200:
+            await response.aread()
+            raise RuntimeError(f"Agent runtime returned HTTP {response.status_code}")
+        async for chunk in response.aiter_bytes():
+            buffer += chunk.decode("utf-8", errors="replace")
+            payloads, buffer = iter_sse_payloads(buffer)
+            for raw in payloads:
+                if raw == "[DONE]":
+                    continue
                 try:
-                    from sqlalchemy import func
-                    from shared.utils.models import TokenUsageLog
-                    res = db_session.query(
-                        func.sum(TokenUsageLog.prompt_tokens),
-                        func.sum(TokenUsageLog.response_tokens)
-                    ).filter(TokenUsageLog.session_id == session_id).first()
-                    
-                    if res and res[0] is not None:
-                        prompt_tokens = int(res[0])
-                    if res and res[1] is not None:
-                        completion_tokens = int(res[1])
-                except Exception as db_err:
-                    logger.warning("Failed to query token usage: %s", db_err)
-                finally:
-                    db_session.close()
+                    event = json.loads(raw)
+                except json.JSONDecodeError:
+                    continue
 
-            # Stream final choice stop with usage
-            final_chunk = {
-                "id": completion_id,
-                "object": "chat.completion.chunk",
-                "created": int(time.time()),
-                "model": agent_name,
-                "choices": [{
-                    "index": 0,
-                    "delta": {},
-                    "finish_reason": "stop"
-                }],
-                "usage": {
-                    "prompt_tokens": prompt_tokens,
-                    "completion_tokens": completion_tokens,
-                    "total_tokens": prompt_tokens + completion_tokens
-                }
+                error_message = event.get("errorMessage") or event.get("error_message")
+                if isinstance(event.get("error"), str):
+                    raise RuntimeError(event["error"])
+                if error_message:
+                    raise RuntimeError(error_message)
+
+                outcome["invocation_id"] = (event.get("invocationId")
+                                            or event.get("invocation_id")
+                                            or outcome.get("invocation_id"))
+                author = event.get("author") or ""
+
+                for part in event_parts(event):
+                    function_call = part_function_call(part)
+                    if function_call:
+                        name = function_call.get("name")
+                        if name in client_tool_names:
+                            tracker.reset_segment()
+                            outcome["called_client_tool"] = True
+                            yield "tool_call", {
+                                "id": function_call.get("id") or f"call_{name}",
+                                "name": name,
+                                "args": function_call.get("args") or {},
+                            }
+                        else:
+                            # The agent's own tools run inside MATE; the caller
+                            # cannot execute them and must not see them as work
+                            # it owes.
+                            tracker.reset_segment()
+                        continue
+                    if part.get("thought"):
+                        continue
+                    delta = tracker.feed(author, part.get("text") or "")
+                    if delta:
+                        yield "text", delta
+
+
+async def _run_completion(agent_name: str, user_id: str, session_id: str,
+                          turns: List[Dict[str, Any]],
+                          client_tools: List[Dict[str, Any]],
+                          completion_id: str) -> AsyncGenerator[Dict[str, Any], None]:
+    """Drive the runtime and yield OpenAI chunk dicts."""
+    base = f"http://{ADK_HOST}:{ADK_PORT}"
+    client_tool_names = {tool["name"] for tool in client_tools}
+    tracker = TextDeltaTracker()
+    created = int(time.time())
+
+    invocation_ids: List[str] = []
+    tool_call_index = 0
+    saw_tool_call = False
+
+    async with httpx.AsyncClient(timeout=_RUN_TIMEOUT_SECONDS) as client:
+        await _ensure_session(client, base, agent_name, user_id, session_id)
+
+        for turn in turns:
+            payload: Dict[str, Any] = {
+                "app_name": agent_name,
+                "user_id": user_id,
+                "session_id": session_id,
+                "new_message": turn,
+                "streaming": True,
             }
-            yield f"data: {json.dumps(final_chunk)}\n\n".encode("utf-8")
-            yield b"data: [DONE]\n\n"
-        except Exception as e:
-            logger.error("Error in OpenAI streaming completions: %s", e)
-            yield f"data: {json.dumps({'error': {'message': str(e)}})}\n\n".encode("utf-8")
-        finally:
-            await r.aclose()
-            await client.aclose()
+            if client_tools:
+                payload["custom_metadata"] = {CLIENT_TOOL_METADATA_KEY: client_tools}
+
+            outcome: Dict[str, Any] = {}
+            async for kind, value in _stream_turn(client, payload, client_tool_names,
+                                                  tracker, outcome):
+                if kind == "text":
+                    yield text_chunk(completion_id, agent_name, created, value)
+                else:
+                    saw_tool_call = True
+                    yield tool_call_chunk(completion_id, agent_name, created,
+                                          tool_call_index, value["id"], value["name"],
+                                          value["args"])
+                    tool_call_index += 1
+
+            if outcome.get("invocation_id"):
+                invocation_ids.append(outcome["invocation_id"])
+            if outcome.get("called_client_tool"):
+                # The runtime is paused on the caller's tool; anything still
+                # queued for this request has to wait for the result.
+                break
+
+    yield final_chunk(completion_id, agent_name, created,
+                      "tool_calls" if saw_tool_call else "stop",
+                      _turn_usage(invocation_ids))
+
+
+@router.post("/chat/completions")
+async def chat_completions(
+    body: ChatCompletionRequest,
+    user: User = Depends(get_pat_user)
+):
+    """Execute a MATE agent using the OpenAI completions schema."""
+    agent_name = body.model
+    messages = body.messages
+
+    if not messages:
+        raise HTTPException(status_code=400, detail="Messages list cannot be empty")
+
+    _load_exposed_agent(agent_name)
+
+    client_tools = normalize_client_tools(body.tools, body.tool_choice)
+    session_id = conversation_key(agent_name, user.user_id, messages)
+    consumed = consumed_index(messages)
+    # The caller's system prompt is context for the conversation, not a
+    # replacement for the agent's configured instruction, so it rides along with
+    # the opening message rather than overriding anything.
+    preamble = system_text(messages) if consumed == 0 else ""
+    turns = build_runtime_turns(messages, consumed, preamble)
+
+    if not turns:
+        raise HTTPException(
+            status_code=400,
+            detail="No new user message or tool result to act on"
+        )
+
+    completion_id = f"chatcmpl-{hashlib.md5(f'{session_id}_{time.time()}'.encode()).hexdigest()[:12]}"
+    chunks = _run_completion(agent_name, user.user_id, session_id, turns,
+                             client_tools, completion_id)
 
     if body.stream:
-        return StreamingResponse(sse_streamer(), media_type="text/event-stream")
-    else:
-        # For non-streaming, collect all chunks and return a single JSON response
-        full_text = ""
-        async for chunk in sse_streamer():
-            if chunk.startswith(b"data: ") and not chunk.startswith(b"data: [DONE]"):
-                try:
-                    data = json.loads(chunk[6:].decode("utf-8"))
-                    if "error" in data:
-                        raise HTTPException(status_code=500, detail=data["error"]["message"])
-                    choices = data.get("choices", [])
-                    if choices and "content" in choices[0]["delta"]:
-                        full_text += choices[0]["delta"]["content"]
-                except json.JSONDecodeError:
-                    pass
-                    
-        # Query token usage for the non-streaming final response
-        prompt_tokens = 0
-        completion_tokens = 0
-        db = get_database_client()
-        db_session = db.get_session()
-        if db_session:
+        async def sse() -> AsyncGenerator[bytes, None]:
             try:
-                from sqlalchemy import func
-                from shared.utils.models import TokenUsageLog
-                res = db_session.query(
-                    func.sum(TokenUsageLog.prompt_tokens),
-                    func.sum(TokenUsageLog.response_tokens)
-                ).filter(TokenUsageLog.session_id == session_id).first()
-                
-                if res and res[0] is not None:
-                    prompt_tokens = int(res[0])
-                if res and res[1] is not None:
-                    completion_tokens = int(res[1])
-            except Exception as db_err:
-                logger.warning("Failed to query token usage for non-streaming: %s", db_err)
-            finally:
-                db_session.close()
+                async for chunk in chunks:
+                    yield f"data: {json.dumps(chunk)}\n\n".encode("utf-8")
+            except Exception as exc:
+                logger.error("Error in OpenAI streaming completions: %s", exc)
+                error = {"error": {"message": str(exc), "type": "server_error"}}
+                yield f"data: {json.dumps(error)}\n\n".encode("utf-8")
+            yield b"data: [DONE]\n\n"
 
-        return JSONResponse({
-            "id": completion_id,
-            "object": "chat.completion",
-            "created": int(time.time()),
-            "model": agent_name,
-            "choices": [{
-                "index": 0,
-                "message": {
-                    "role": "assistant",
-                    "content": full_text
-                },
-                "finish_reason": "stop"
-            }],
-            "usage": {
-                "prompt_tokens": prompt_tokens,
-                "completion_tokens": completion_tokens,
-                "total_tokens": prompt_tokens + completion_tokens
-            }
-        })
+        return StreamingResponse(sse(), media_type="text/event-stream")
+
+    text = ""
+    tool_calls: List[Dict[str, Any]] = []
+    finish_reason = "stop"
+    usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+    try:
+        async for chunk in chunks:
+            choice = chunk["choices"][0]
+            delta = choice.get("delta") or {}
+            if delta.get("content"):
+                text += delta["content"]
+            for call in delta.get("tool_calls") or []:
+                tool_calls.append({
+                    "id": call["id"],
+                    "type": "function",
+                    "function": call["function"],
+                })
+            if choice.get("finish_reason"):
+                finish_reason = choice["finish_reason"]
+                usage = chunk.get("usage") or usage
+    except Exception as exc:
+        logger.error("Error in OpenAI completions: %s", exc)
+        raise HTTPException(status_code=502, detail=str(exc))
+
+    message: Dict[str, Any] = {"role": "assistant", "content": text or None}
+    if tool_calls:
+        message["tool_calls"] = tool_calls
+
+    return JSONResponse({
+        "id": completion_id,
+        "object": "chat.completion",
+        "created": int(time.time()),
+        "model": agent_name,
+        "choices": [{"index": 0, "message": message, "finish_reason": finish_reason}],
+        "usage": usage,
+    })

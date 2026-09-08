@@ -77,3 +77,27 @@ def extract_confirmation_response(new_message: Dict[str, Any]) -> Optional[bool]
             payload = response.get("response") or {}
             return bool(payload.get("confirmed"))
     return None
+
+
+def extract_client_tool_responses(new_message: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """
+    Tool results the caller is returning, as [{"id", "name", "result"}].
+
+    Anything that is not the HITL confirmation answer is treated as a result for
+    a client-executed tool: those are the only other function responses that can
+    reach this runtime from outside.
+    """
+    responses = []
+    for part in (new_message or {}).get("parts") or []:
+        response = part.get("function_response") or part.get("functionResponse")
+        if not response or response.get("name") == CONFIRMATION_RESPONSE_NAME:
+            continue
+        payload = response.get("response")
+        if isinstance(payload, dict) and "result" in payload:
+            payload = payload["result"]
+        responses.append({
+            "id": response.get("id"),
+            "name": response.get("name"),
+            "result": payload,
+        })
+    return responses

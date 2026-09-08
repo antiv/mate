@@ -8,7 +8,7 @@ import logging
 import time
 import uuid
 from datetime import datetime, timezone
-from typing import Any, AsyncGenerator, Dict
+from typing import Any, AsyncGenerator, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +30,9 @@ def _error_event(author: str, text: str, invocation_id: str) -> Dict[str, Any]:
 
 
 async def run_sse_stream(app_name: str, user_id: str, session_id: str,
-                         new_message: Dict[str, Any]) -> AsyncGenerator[str, None]:
+                         new_message: Dict[str, Any],
+                         custom_metadata: Optional[Dict[str, Any]] = None
+                         ) -> AsyncGenerator[str, None]:
     """Stream ADK Event JSON frames for one /run_sse invocation."""
     invocation_id = f"e-{uuid.uuid4()}"
     # This is the LangGraph equivalent of the ADK run boundary: every surface on this
@@ -47,7 +49,8 @@ async def run_sse_stream(app_name: str, user_id: str, session_id: str,
         from shared.utils.langgraph.executor import execute_run
         async for event in execute_run(app_name=app_name, user_id=user_id,
                                        session_id=session_id, new_message=new_message,
-                                       invocation_id=invocation_id):
+                                       invocation_id=invocation_id,
+                                       custom_metadata=custom_metadata):
             yield _sse_frame(event)
     except Exception as e:
         status = "ERROR"
