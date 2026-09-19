@@ -22,6 +22,13 @@ logger = logging.getLogger(__name__)
 # from a require_confirmation pause.
 CLIENT_TOOL_INTERRUPT_KEY = "clientToolCall"
 
+# The resume value a client tool is answered with: every result the caller has
+# delivered, keyed by tool call id. LangGraph hands resume values to the
+# interrupts of a task by call order, and a tool node runs its calls in
+# parallel threads, so that order is not the order of the calls. Each tool
+# picks its own result out of the map instead, whichever index it drew.
+CLIENT_TOOL_RESULTS_KEY = "results"
+
 
 def client_tools_key(declarations: Optional[List[Dict[str, Any]]]) -> str:
     """
@@ -98,16 +105,13 @@ def build_client_tools(declarations: Optional[List[Dict[str, Any]]],
 def _build_one(structured_tool_cls: Any, name: str, description: str, parameters: Any) -> Any:
     def _call(tool_call_id: str, **kwargs: Any) -> Any:
         from langgraph.types import interrupt
-        result = interrupt({
-            CLIENT_TOOL_INTERRUPT_KEY: {
-                "id": tool_call_id,
-                "name": name,
-                "args": kwargs,
-            }
-        })
-        if isinstance(result, dict) and "result" in result:
-            return result["result"]
-        return result
+        pause = {CLIENT_TOOL_INTERRUPT_KEY: {"id": tool_call_id, "name": name, "args": kwargs}}
+        while True:
+            # A value meant for a sibling call is skipped; the next interrupt()
+            # either draws the next delivered value or pauses the graph again.
+            results = interrupt(pause).get(CLIENT_TOOL_RESULTS_KEY)
+            if isinstance(results, dict) and tool_call_id in results:
+                return results[tool_call_id]
 
     _call.__name__ = name
     return structured_tool_cls.from_function(

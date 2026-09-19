@@ -144,16 +144,20 @@ def _client_tool_declarations(custom_metadata: Optional[Dict[str, Any]]) -> List
 
 
 async def _resume_map(graph: Any, config: Dict[str, Any],
-                      unanswered: Dict[str, Any]) -> Dict[str, Any]:
+                      answers: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Match the caller's outstanding tool results to the interrupts the graph is
-    paused on, consuming the ones that are delivered.
+    Resume values for the interrupts the graph is paused on, when the caller
+    has answered them.
 
-    Returns an empty map when the graph is not paused on anything the caller has
-    answered, which is what ends the resume loop.
+    Every paused client call is handed the whole answer map: the tool picks its
+    own result by call id, because LangGraph matches resume values to
+    interrupts by call order and parallel tool calls do not pause in a fixed
+    order. Returns an empty map when the graph is not paused on anything the
+    caller has answered, which is what ends the resume loop.
     """
-    from shared.utils.langgraph.client_tools import pending_client_calls
-    if not unanswered:
+    from shared.utils.langgraph.client_tools import (CLIENT_TOOL_RESULTS_KEY,
+                                                     pending_client_calls)
+    if not answers:
         return {}
     try:
         state = await graph.aget_state(config)
@@ -164,9 +168,8 @@ async def _resume_map(graph: Any, config: Dict[str, Any],
     resume_map: Dict[str, Any] = {}
     for call in pending_client_calls(state):
         call_id, interrupt_id = call.get("id"), call.get("interrupt_id")
-        if not interrupt_id or call_id not in unanswered:
-            continue
-        resume_map[interrupt_id] = {"result": unanswered.pop(call_id)}
+        if interrupt_id and call_id in answers:
+            resume_map[interrupt_id] = {CLIENT_TOOL_RESULTS_KEY: answers}
     return resume_map
 
 
@@ -208,8 +211,8 @@ async def execute_run(app_name: str, user_id: str, session_id: str,
 
     from shared.utils.langgraph.hitl import (extract_client_tool_responses,
                                              extract_confirmation_response)
-    # Client tool results still to be delivered; the resume loop below pops them.
-    unanswered: Dict[str, Any] = {}
+    # Client tool results the caller delivered, by tool call id.
+    answers: Dict[str, Any] = {}
     confirmation = extract_confirmation_response(new_message)
     tool_responses = extract_client_tool_responses(new_message)
     if confirmation is not None:
@@ -221,8 +224,8 @@ async def execute_run(app_name: str, user_id: str, session_id: str,
         # by interrupt id, which only the checkpointed state carries, so the
         # answered tool call ids have to be matched back to it.
         from langgraph.types import Command
-        unanswered.update({r["id"]: r["result"] for r in tool_responses if r.get("id")})
-        resume_map = await _resume_map(built.graph, config, unanswered)
+        answers.update({r["id"]: r["result"] for r in tool_responses if r.get("id")})
+        resume_map = await _resume_map(built.graph, config, answers)
         if not resume_map:
             yield _notice_event(app_name, invocation_id,
                                 "This conversation is not waiting on a tool result.")
@@ -269,13 +272,12 @@ async def execute_run(app_name: str, user_id: str, session_id: str,
                     _log_token_usage(event, app_name, user_id, session_id, built.model_names)
                 yield event
 
-            # A tool node runs its calls one at a time, so a turn with several
+            # A tool node surfaces one pause at a time, so a turn with several
             # client tools pauses once per call. The caller answered them all in
             # one message, so drain the rest here rather than asking again for a
-            # result it has already given.
-            if not unanswered:
-                break
-            resume_map = await _resume_map(built.graph, config, unanswered)
+            # result it has already given. Each round satisfies one more call,
+            # so this ends after at most as many rounds as there were calls.
+            resume_map = await _resume_map(built.graph, config, answers)
             if not resume_map:
                 break
             from langgraph.types import Command

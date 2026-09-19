@@ -11,7 +11,7 @@ say "no data" instead of showing a number nobody measured.
 import os
 import sys
 import unittest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -22,6 +22,11 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from shared.utils.models import AgentResponse, Base, TokenUsageLog
 from shared.utils.dashboard.dashboard_server import DashboardServer
+
+
+def _utcnow() -> datetime:
+    """Naive UTC, the way the app writes timestamps and the stats window reads them."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 class TestAgentPerformanceStats(unittest.TestCase):
@@ -56,7 +61,7 @@ class TestAgentPerformanceStats(unittest.TestCase):
             request_id=f"r-{self._seq}", session_id="s1", user_id="u1",
             agent_name=agent_name, model_name="m", prompt_tokens=10,
             response_tokens=20, status=status,
-            timestamp=datetime.now() - timedelta(hours=hours_ago)))
+            timestamp=_utcnow() - timedelta(hours=hours_ago)))
         session.commit()
         session.close()
 
@@ -68,7 +73,7 @@ class TestAgentPerformanceStats(unittest.TestCase):
         session.add(AgentResponse(
             invocation_id=f"i-{self._seq}", session_id="s1", user_id="u1",
             agent_name=agent_name, origin=origin, duration_ms=duration_ms,
-            status=status, started_at=datetime.now() - timedelta(hours=hours_ago)))
+            status=status, started_at=_utcnow() - timedelta(hours=hours_ago)))
         session.commit()
         session.close()
 
@@ -99,7 +104,7 @@ class TestAgentPerformanceStats(unittest.TestCase):
         self.assertIsNotNone(row["last_used"])
         # ISO string, parseable by the template's title attribute and the sorter
         self.assertLess(abs((datetime.fromisoformat(row["last_used"])
-                             - datetime.now()).total_seconds() + 7200), 60)
+                             - _utcnow()).total_seconds() + 7200), 60)
 
     # --- Duration and success rate --------------------------------------
 

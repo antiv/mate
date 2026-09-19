@@ -11,6 +11,7 @@ tools are added to the agent's own — they do not replace them.
 import hashlib
 import json
 import logging
+import os
 import time
 from typing import Any, AsyncGenerator, Dict, List, Optional, Tuple, Union
 
@@ -29,6 +30,7 @@ from server.pat_auth import get_pat_user
 from shared.utils.agent_invoke import _ensure_session
 from shared.utils.database_client import get_database_client
 from shared.utils.models import AgentConfig, User
+from shared.utils.rate_limit_service import get_rate_limit_service
 from shared.utils.utils import get_adk_config
 
 logger = logging.getLogger(__name__)
@@ -100,8 +102,13 @@ async def list_models(user: User = Depends(get_pat_user)):
         session.close()
 
 
-def _load_exposed_agent(agent_name: str) -> None:
-    """Refuse anything that is not an agent deliberately exposed as a model."""
+def _load_exposed_agent(agent_name: str) -> Optional[int]:
+    """
+    Refuse anything that is not an agent deliberately exposed as a model.
+
+    Returns the agent's project id, which the rate limiter needs and which
+    would otherwise cost a second query.
+    """
     db = get_database_client()
     session = db.get_session()
     if not session:
@@ -113,8 +120,43 @@ def _load_exposed_agent(agent_name: str) -> None:
                 status_code=404,
                 detail=f"Model/Agent '{agent_name}' not found or not exposed as model"
             )
+        return agent.project_id
     finally:
         session.close()
+
+
+def _rate_limiting_enabled() -> bool:
+    return os.getenv("RATE_LIMIT_ENABLED", "false").lower() in ("true", "1", "yes")
+
+
+async def _enforce_rate_limit(user_id: str, agent_name: str,
+                              project_id: Optional[int]) -> None:
+    """
+    Apply the same per-user/agent/project limits the RateLimitMiddleware
+    applies to /run_sse. The bridge talks to the runtime directly, so it never
+    passes through that middleware and has to ask the service itself.
+
+    One OpenAI request counts as one request against requests_per_minute, even
+    when a tool-calling conversation fans out into several runtime turns; token
+    budgets are charged from the usage the runtime logs, as everywhere else.
+    """
+    if not _rate_limiting_enabled():
+        return
+    svc = get_rate_limit_service()
+    result, _ = await svc.check_request_limit(
+        user_id=user_id,
+        agent_name=agent_name,
+        project_id=project_id,
+        auth_username=user_id,
+    )
+    if not result.allowed:
+        retry_after = int(result.retry_after_seconds or 60)
+        raise HTTPException(
+            status_code=429,
+            detail=result.message,
+            headers={"Retry-After": str(retry_after)},
+        )
+    await svc.record_request(user_id=user_id, agent_name=agent_name)
 
 
 def _turn_usage(invocation_ids: List[str]) -> Dict[str, int]:
@@ -283,7 +325,8 @@ async def chat_completions(
     if not messages:
         raise HTTPException(status_code=400, detail="Messages list cannot be empty")
 
-    _load_exposed_agent(agent_name)
+    project_id = _load_exposed_agent(agent_name)
+    await _enforce_rate_limit(user.user_id, agent_name, project_id)
 
     client_tools = normalize_client_tools(body.tools, body.tool_choice)
     session_id = conversation_key(agent_name, user.user_id, messages)

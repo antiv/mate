@@ -12,7 +12,7 @@ of the sample it came from.
 import os
 import sys
 import unittest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -66,7 +66,8 @@ class TestQualityStats(unittest.TestCase):
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))))))
         self.server.db_client = self.mock_db_client
 
-        self.now = datetime.now()
+        # Naive UTC, as the app writes timestamps and _get_usage_stats builds its window.
+        self.now = datetime.now(timezone.utc).replace(tzinfo=None)
         self.start = self.now - timedelta(days=7)
 
     def tearDown(self):

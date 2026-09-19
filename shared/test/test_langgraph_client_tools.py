@@ -148,10 +148,14 @@ class TestResponseExtraction(unittest.TestCase):
 
 class TestParallelCallsDrainInOneRoundTrip(unittest.TestCase):
     """
-    A tool node runs its calls one at a time, so two client tools in one
+    A tool node surfaces one pause at a time, so two client tools in one
     assistant turn pause twice. The caller answers both at once, so the executor
     has to drain the second pause itself — otherwise it would ask again for a
     result it already has.
+
+    The node runs its calls in parallel threads and LangGraph hands resume
+    values out by call order, so which call draws a value is a coin toss: the
+    result has to reach the call it was meant for whichever way the toss goes.
     """
 
     def _graph(self):
@@ -180,26 +184,28 @@ class TestParallelCallsDrainInOneRoundTrip(unittest.TestCase):
         from shared.utils.langgraph.executor import _resume_map
 
         graph, call = self._graph()
-        config = {"configurable": {"thread_id": "t1"}}
 
-        async def run():
+        async def run(thread_id):
+            config = {"configurable": {"thread_id": thread_id}}
             await graph.ainvoke({"messages": [call]}, config=config)
-            unanswered = {"call_1": "import os", "call_2": "a.py b.py"}
-            resume_map = await _resume_map(graph, config, unanswered)
+            answers = {"call_1": "import os", "call_2": "a.py b.py"}
+            resume_map = await _resume_map(graph, config, answers)
             self.assertTrue(resume_map)
             graph_input = Command(resume=resume_map)
-            while True:
+            for _ in range(10):
                 out = await graph.ainvoke(graph_input, config=config)
-                if not unanswered:
-                    return out
-                resume_map = await _resume_map(graph, config, unanswered)
+                resume_map = await _resume_map(graph, config, answers)
                 if not resume_map:
                     return out
                 graph_input = Command(resume=resume_map)
+            self.fail("the resume loop did not end")
 
-        out = asyncio.run(run())
-        results = {m.tool_call_id: m.content for m in out["messages"] if m.type == "tool"}
-        self.assertEqual(results, {"call_1": "import os", "call_2": "a.py b.py"})
+        # Repeated because the misdelivery this guards against showed on about
+        # half of the runs.
+        for attempt in range(12):
+            out = asyncio.run(run(f"t-{attempt}"))
+            results = {m.tool_call_id: m.content for m in out["messages"] if m.type == "tool"}
+            self.assertEqual(results, {"call_1": "import os", "call_2": "a.py b.py"})
 
     def test_a_result_nothing_is_waiting_for_ends_the_loop(self):
         import asyncio

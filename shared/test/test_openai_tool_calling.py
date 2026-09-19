@@ -19,7 +19,7 @@ import sys
 import threading
 import unittest
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -28,6 +28,7 @@ from fastapi.testclient import TestClient
 
 import server.openai_routes as openai_routes
 from server.pat_auth import get_pat_user
+from shared.utils.rate_limit_service import RateLimitResult
 
 RECEIVED = {"run_sse": [], "sessions": []}
 SCRIPT = {"turns": []}
@@ -92,7 +93,8 @@ READ_TOOL = {
 }
 
 
-class TestClientToolRoundTrip(unittest.TestCase):
+class StubRuntimeCase(unittest.TestCase):
+    """Drives the real router against the stub /run_sse on localhost."""
 
     @classmethod
     def setUpClass(cls):
@@ -124,6 +126,7 @@ class TestClientToolRoundTrip(unittest.TestCase):
         agent = MagicMock()
         agent.disabled = False
         agent.expose_as_model = True
+        agent.project_id = 7
         session = MagicMock()
         session.query.return_value.filter_by.return_value.first.return_value = agent
         # Usage lookup: no rows recorded by the stub runtime.
@@ -146,6 +149,9 @@ class TestClientToolRoundTrip(unittest.TestCase):
         if tools is not None:
             payload["tools"] = tools
         return self.client.post("/v1/chat/completions", json=payload)
+
+
+class TestClientToolRoundTrip(StubRuntimeCase):
 
     def test_the_caller_tools_reach_the_runtime(self):
         SCRIPT["turns"] = [[{
@@ -274,6 +280,81 @@ class TestClientToolRoundTrip(unittest.TestCase):
         with patch.object(openai_routes, "get_database_client", return_value=db):
             response = self._post([{"role": "user", "content": "hi"}])
         self.assertEqual(response.status_code, 404)
+
+
+class TestRateLimiting(StubRuntimeCase):
+    """
+    The bridge dials the runtime itself, so the RateLimitMiddleware never sees
+    it; the router has to consult the service on its own.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self._env = patch.dict(os.environ, {"RATE_LIMIT_ENABLED": "true"})
+        self._env.start()
+        self.addCleanup(self._env.stop)
+        self.svc = MagicMock()
+        self.svc.check_request_limit = AsyncMock(
+            return_value=(RateLimitResult(allowed=True, action="warn", message="ok"), None))
+        self.svc.record_request = AsyncMock()
+        self._svc = patch.object(openai_routes, "get_rate_limit_service", return_value=self.svc)
+        self._svc.start()
+        self.addCleanup(self._svc.stop)
+
+    def test_a_blocked_request_is_a_429_with_retry_after(self):
+        self.svc.check_request_limit.return_value = (
+            RateLimitResult(allowed=False, action="block", message="Too many",
+                            retry_after_seconds=42.7),
+            None,
+        )
+        response = self._post([{"role": "user", "content": "hi"}])
+        self.assertEqual(response.status_code, 429)
+        self.assertEqual(response.headers["Retry-After"], "42")
+        self.assertEqual(response.json()["detail"], "Too many")
+        self.assertEqual(RECEIVED["run_sse"], [])
+        self.svc.record_request.assert_not_called()
+
+    def test_the_limit_is_keyed_on_the_pat_user_and_the_agents_project(self):
+        SCRIPT["turns"] = [[{
+            "author": "coder", "invocationId": "e-1",
+            "content": {"role": "model", "parts": [{"text": "hello"}]},
+        }]]
+        response = self._post([{"role": "user", "content": "hi"}])
+        self.assertEqual(response.status_code, 200)
+        self.svc.check_request_limit.assert_awaited_once_with(
+            user_id="tester", agent_name="coder", project_id=7, auth_username="tester")
+        self.svc.record_request.assert_awaited_once_with(user_id="tester", agent_name="coder")
+
+    def test_a_request_that_fans_out_into_two_runtime_turns_counts_once(self):
+        SCRIPT["turns"] = [
+            [{"author": "coder", "invocationId": "e-2",
+              "content": {"role": "model", "parts": [{"text": "imports os"}]}}],
+            [{"author": "coder", "invocationId": "e-3",
+              "content": {"role": "model", "parts": [{"text": "and sys"}]}}],
+        ]
+        messages = [
+            {"role": "user", "content": "read a.py"},
+            {"role": "assistant", "content": None,
+             "tool_calls": [{"id": "adk-1", "type": "function",
+                             "function": {"name": "read", "arguments": '{"path":"a.py"}'}}]},
+            {"role": "tool", "tool_call_id": "adk-1", "name": "read", "content": "import os"},
+            {"role": "user", "content": "anything else?"},
+        ]
+        response = self._post(messages, tools=[READ_TOOL])
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(RECEIVED["run_sse"]), 2)
+        self.svc.check_request_limit.assert_awaited_once()
+        self.svc.record_request.assert_awaited_once()
+
+    def test_a_disabled_limiter_is_not_consulted(self):
+        SCRIPT["turns"] = [[{
+            "author": "coder", "invocationId": "e-1",
+            "content": {"role": "model", "parts": [{"text": "hello"}]},
+        }]]
+        with patch.dict(os.environ, {"RATE_LIMIT_ENABLED": "false"}):
+            response = self._post([{"role": "user", "content": "hi"}])
+        self.assertEqual(response.status_code, 200)
+        self.svc.check_request_limit.assert_not_called()
 
 
 class TestStreamingIsIncremental(unittest.TestCase):

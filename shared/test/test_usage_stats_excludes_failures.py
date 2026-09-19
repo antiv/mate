@@ -11,7 +11,7 @@ agent errors would otherwise have introduced.
 import os
 import sys
 import unittest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -22,6 +22,11 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from shared.utils.models import Base, TokenUsageLog
 from shared.utils.dashboard.dashboard_server import DashboardServer
+
+
+def _utcnow() -> datetime:
+    """Naive UTC, the way the app writes timestamps and the stats window reads them."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 class TestUsageStatsExcludeFailures(unittest.TestCase):
@@ -53,7 +58,7 @@ class TestUsageStatsExcludeFailures(unittest.TestCase):
             request_id=f"r-{status}-{agent_name}-{user_id}-{prompt}", session_id="s1",
             user_id=user_id, agent_name=agent_name, model_name="m",
             prompt_tokens=prompt, response_tokens=response, status=status,
-            timestamp=datetime.now() - timedelta(hours=1)))
+            timestamp=_utcnow() - timedelta(hours=1)))
         session.commit()
         session.close()
 

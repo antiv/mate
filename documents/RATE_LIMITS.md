@@ -10,6 +10,12 @@ Set in `.env`:
 RATE_LIMIT_ENABLED=true
 ```
 
+Limits apply to the dashboard chat (`/run_sse`, `/run_live`), the public widget, and the
+OpenAI-compatible `/v1/chat/completions` bridge. On the bridge the user is the PAT owner
+and the project is the exposed agent's project; one chat-completions request counts as
+one request against `requests_per_minute` even when a tool-calling turn fans out into
+several runtime calls.
+
 ## Configuration
 
 | Scope   | Scope ID   | Limits |
