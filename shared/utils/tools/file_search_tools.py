@@ -244,6 +244,9 @@ def create_file_search_tools_from_config(config: Dict[str, Any]) -> List[Any]:
             tool_config_dict = tool_config
         
         file_search_config = tool_config_dict.get('file_search')
+        # The visual builder stores a bare boolean toggle; normalise it to the dict form.
+        if isinstance(file_search_config, bool):
+            file_search_config = {'enabled': file_search_config}
         if not file_search_config or not file_search_config.get('enabled'):
             return []
         
