@@ -10,7 +10,7 @@ on their own.
 
 import hashlib
 import json
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
 # Key under RunConfig.custom_metadata carrying the caller's tool declarations.
 # ADK forwards custom_metadata verbatim; the LangGraph runtime mirrors it.
@@ -217,9 +217,51 @@ def consumed_index(messages: List[Any]) -> int:
     return 0
 
 
+def tool_result_text(message: Any) -> str:
+    """A tool result as plain text, for when it cannot travel as a function response."""
+    name = _message_field(message, "name") or "tool"
+    call_id = _message_field(message, "tool_call_id") or ""
+    body = extract_content_text(_message_field(message, "content"))
+    return f"Result of `{name}` (call {call_id}):\n{body}"
+
+
+def transcript_text(messages: Iterable[Any]) -> str:
+    """
+    The conversation as plain text, for a runtime that holds none of it.
+
+    A client can switch models mid-conversation (OpenCode lets you), and the
+    agent it lands on then gets a transcript whose history it never saw, ending
+    in results for tool calls it never made. The history rides along as text,
+    the way the system prompt does on an opening turn.
+    """
+    lines: List[str] = []
+    for message in messages:
+        role = _message_field(message, "role")
+        if role == "system":
+            continue
+        if role == "tool":
+            lines.append(tool_result_text(message))
+            continue
+        text = extract_content_text(_message_field(message, "content"))
+        if text:
+            lines.append(f"{role.capitalize()}:\n{text}")
+        if role == "assistant":
+            for call in _message_field(message, "tool_calls") or []:
+                function = _message_field(call, "function") or {}
+                name = _message_field(function, "name") or "tool"
+                arguments = _message_field(function, "arguments") or "{}"
+                lines.append(f"Assistant called `{name}` (call "
+                             f"{_message_field(call, 'id') or ''}) with {arguments}")
+    if not lines:
+        return ""
+    return ("You are joining a conversation already in progress. What was said "
+            "before this turn:\n\n" + "\n\n".join(lines))
+
+
 def build_runtime_turns(messages: List[Any], consumed: int,
                         system_preamble: str = "",
-                        vision: bool = True) -> List[Dict[str, Any]]:
+                        vision: bool = True,
+                        known_call_ids: Optional[Set[str]] = None) -> List[Dict[str, Any]]:
     """
     The `new_message` payloads the runtime still owes for this request.
 
@@ -231,6 +273,11 @@ def build_runtime_turns(messages: List[Any], consumed: int,
     Screenshots a client attaches ride with the user turn as `inline_data`,
     which is what both runtimes already consume. `vision` says whether the
     agent's model can actually look at them.
+
+    `known_call_ids` are the function calls the session actually holds. A
+    result for any other call cannot resume anything — ADK rejects the whole
+    message ("Function call not found for function response ids") — so it goes
+    with the user text instead. None means the session was not looked at.
     """
     pending = messages[consumed:] if consumed < len(messages) else []
 
@@ -241,6 +288,9 @@ def build_runtime_turns(messages: List[Any], consumed: int,
         role = _message_field(message, "role")
         if role == "tool":
             call_id = _message_field(message, "tool_call_id")
+            if known_call_ids is not None and call_id not in known_call_ids:
+                user_chunks.append(tool_result_text(message))
+                continue
             tool_parts.append({
                 "function_response": {
                     "id": call_id,
@@ -271,27 +321,38 @@ class TextDeltaTracker:
     """
     Turns an ADK text stream into OpenAI deltas.
 
-    ADK sends partial frames and then a final frame carrying the FULL cumulative
-    text of the segment, and resets when a different agent in the tree takes
-    over. Emitting frames verbatim therefore duplicates the whole answer.
+    Both runtimes stream a segment as `partial: true` frames carrying deltas,
+    then one final frame carrying the FULL text of the segment, and reset when
+    a different agent in the tree takes over. Emitting frames verbatim
+    therefore sends every answer twice. A frame without the flag is taken as
+    cumulative, so only what extends the text already sent is new.
     """
 
     def __init__(self) -> None:
         self.last_text = ""
         self.last_author = ""
+        # Whether the current segment arrived as partial deltas: its final
+        # frame is then a repeat, whatever shape it takes.
+        self.streamed = False
 
-    def feed(self, author: str, text: str) -> str:
+    def feed(self, author: str, text: str, partial: bool = False) -> str:
         if author != self.last_author:
             self.last_author = author
-            self.last_text = ""
+            self.reset_segment()
         if not text:
             return ""
+        if partial:
+            self.last_text += text
+            self.streamed = True
+            return text
+        streamed, self.streamed = self.streamed, False
         if self.last_text and text.startswith(self.last_text):
             delta = text[len(self.last_text):]
             self.last_text = text
             return delta
-        if self.last_text and self.last_text.startswith(text):
-            # A shorter repeat of what was already emitted.
+        if self.last_text and (streamed or self.last_text.startswith(text)):
+            # A repeat of what was already emitted.
+            self.last_text = text
             return ""
         self.last_text = text
         return text
@@ -299,6 +360,7 @@ class TextDeltaTracker:
     def reset_segment(self) -> None:
         """A tool call ends the current text segment."""
         self.last_text = ""
+        self.streamed = False
 
 
 def iter_sse_payloads(buffer: str) -> Tuple[List[str], str]:

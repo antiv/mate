@@ -185,6 +185,7 @@ Two consequences worth knowing:
 
 * Two conversations with the same agent that open with an identical first message share a session. Send the header if that matters.
 * If a client compacts history by replacing the opening message, MATE sees a new conversation. The agent keeps its old session but you start a fresh one — predictable, rather than the two silently interleaving.
+* When the runtime holds nothing for a conversation that already has history — you switched the model to a MATE agent mid-conversation, or the session is gone — the history is replayed once, as text, with that first turn, so the agent joins with context instead of a blank slate. A tool result for a call the agent's session never made is likewise passed as text rather than as a function response, which the runtime would reject.
 
 ---
 

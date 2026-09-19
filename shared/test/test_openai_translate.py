@@ -20,7 +20,7 @@ from server.openai_translate import (MAX_IMAGE_BYTES, TextDeltaTracker,
                                      has_image_parts, image_parts,
                                      iter_sse_payloads,
                                      normalize_client_tools, system_text,
-                                     tool_call_chunk)
+                                     tool_call_chunk, transcript_text)
 
 SYSTEM = {"role": "system", "content": "You are a coding agent."}
 
@@ -249,12 +249,82 @@ class TestWhatTheTurnStillOwes(unittest.TestCase):
                     {"role": "assistant", "content": "hello"}]
         self.assertEqual(build_runtime_turns(messages, consumed_index(messages)), [])
 
+    def test_a_result_for_a_call_the_session_lacks_travels_as_text(self):
+        # ADK rejects a function response it cannot match to a call, taking the
+        # whole message with it. Known calls resume; the rest is told as text.
+        messages = [{"role": "user", "content": "go"},
+                    {"role": "assistant", "content": None},
+                    {"role": "tool", "tool_call_id": "known", "name": "read", "content": "a"},
+                    {"role": "tool", "tool_call_id": "foreign", "name": "grep", "content": "b"}]
+        turns = build_runtime_turns(messages, consumed_index(messages),
+                                    known_call_ids={"known"})
+        self.assertEqual(len(turns), 2)
+        self.assertEqual(turns[0]["parts"][0]["function_response"]["id"], "known")
+        self.assertEqual(turns[1]["parts"],
+                         [{"text": "Result of `grep` (call foreign):\nb"}])
+
+    def test_without_a_session_look_up_every_result_is_a_function_response(self):
+        messages = [{"role": "user", "content": "go"},
+                    {"role": "assistant", "content": None},
+                    {"role": "tool", "tool_call_id": "c1", "name": "read", "content": "a"}]
+        turns = build_runtime_turns(messages, consumed_index(messages))
+        self.assertIn("function_response", turns[0]["parts"][0])
+
+
+class TestReplayingHistoryAsText(unittest.TestCase):
+
+    def test_the_transcript_names_who_said_what_and_which_tools_ran(self):
+        messages = [SYSTEM,
+                    {"role": "user", "content": "read a.py"},
+                    {"role": "assistant", "content": None,
+                     "tool_calls": [{"id": "c1", "type": "function",
+                                     "function": {"name": "read",
+                                                  "arguments": '{"path":"a.py"}'}}]},
+                    {"role": "tool", "tool_call_id": "c1", "name": "read", "content": "import os"},
+                    {"role": "assistant", "content": "it imports os"}]
+        text = transcript_text(messages)
+        self.assertNotIn("You are a coding agent.", text)  # the system prompt is carried separately
+        self.assertIn("User:\nread a.py", text)
+        self.assertIn("Assistant called `read` (call c1) with {\"path\":\"a.py\"}", text)
+        self.assertIn("Result of `read` (call c1):\nimport os", text)
+        self.assertIn("Assistant:\nit imports os", text)
+
+    def test_an_empty_history_says_nothing(self):
+        self.assertEqual(transcript_text([SYSTEM]), "")
+
 
 class TestTextDeltas(unittest.TestCase):
     """
     ADK streams partial frames and then repeats the whole segment. Emitting
     frames as-is sends the answer twice.
     """
+
+    def test_partial_deltas_are_passed_through_and_the_final_frame_adds_nothing(self):
+        # The shape both runtimes actually send: `partial` frames carry deltas,
+        # then one final frame carries the whole segment.
+        tracker = TextDeltaTracker()
+        self.assertEqual(tracker.feed("a", "one", partial=True), "one")
+        self.assertEqual(tracker.feed("a", " two three four", partial=True), " two three four")
+        self.assertEqual(tracker.feed("a", " five", partial=True), " five")
+        self.assertEqual(tracker.feed("a", "one two three four five"), "")
+
+    def test_a_final_frame_that_does_not_match_the_deltas_is_still_a_repeat(self):
+        tracker = TextDeltaTracker()
+        tracker.feed("a", "one ", partial=True)
+        tracker.feed("a", "two", partial=True)
+        self.assertEqual(tracker.feed("a", "one  two"), "")
+
+    def test_a_final_frame_longer_than_its_deltas_yields_the_rest(self):
+        tracker = TextDeltaTracker()
+        tracker.feed("a", "one", partial=True)
+        self.assertEqual(tracker.feed("a", "one two"), " two")
+
+    def test_a_second_streamed_segment_follows_a_final_frame(self):
+        tracker = TextDeltaTracker()
+        tracker.feed("a", "First", partial=True)
+        tracker.feed("a", "First")
+        self.assertEqual(tracker.feed("a", "Second", partial=True), "Second")
+        self.assertEqual(tracker.feed("a", "Second"), "")
 
     def test_a_cumulative_stream_yields_only_the_new_text(self):
         tracker = TextDeltaTracker()
