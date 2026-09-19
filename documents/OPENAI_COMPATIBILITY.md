@@ -152,6 +152,19 @@ models:
 
 * **Cline / Roo Code** work through the settings panel described above.
 
+### Screenshots and image attachments
+
+A client that attaches a screenshot sends it as an `image_url` content part; MATE forwards it to the agent as image data, so you can paste a failing screen into Cline or Continue and ask about it.
+
+Two rules the bridge enforces:
+
+* **Only inline data.** `data:image/png;base64,...` is accepted; an `https://` URL is not. Fetching an address the caller chooses would make the server issue requests on its behalf, which is an SSRF the bridge has no reason to offer. Coding agents send inline data anyway.
+* **Images larger than 5 MB are not forwarded.** Base64 inflates a screenshot by a third, and past that the image costs more context than it is worth.
+
+When an image cannot be forwarded — it was a URL, it was too large, or the agent's model has no vision support — the agent is told so in place of the image, rather than the attachment vanishing silently. An agent that never learns an image was dropped will happily answer about a screenshot it cannot see.
+
+Vision support is decided from the agent's configured model, so point the exposed agent at a vision-capable model (Gemini, GPT-4o, Claude 3+, a `-vl` model) if you intend to send screenshots.
+
 ### What MATE does not serve
 
 The bridge implements chat completions only. That is enough for an agent conversation and not enough for everything an IDE extension might ask of a model:

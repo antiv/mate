@@ -126,6 +126,7 @@ class StubRuntimeCase(unittest.TestCase):
         agent = MagicMock()
         agent.disabled = False
         agent.expose_as_model = True
+        agent.model_name = "gemini-2.0-flash"
         agent.project_id = 7
         session = MagicMock()
         session.query.return_value.filter_by.return_value.first.return_value = agent
@@ -266,6 +267,23 @@ class TestClientToolRoundTrip(StubRuntimeCase):
             {"role": "user", "content": "again"},
         ])
         self.assertEqual(response.status_code, 200)
+
+    def test_a_screenshot_reaches_the_runtime_as_inline_data(self):
+        SCRIPT["turns"] = [[{
+            "author": "coder", "invocationId": "e-1",
+            "content": {"role": "model", "parts": [{"text": "that is a null deref"}]},
+        }]]
+        response = self._post([{"role": "user", "content": [
+            {"type": "text", "text": "why does this crash"},
+            {"type": "image_url",
+             "image_url": {"url": "data:image/png;base64,aGVsbG8="}},
+        ]}])
+        self.assertEqual(response.status_code, 200)
+
+        parts = RECEIVED["run_sse"][0]["new_message"]["parts"]
+        self.assertEqual(parts[0]["text"], "why does this crash")
+        self.assertEqual(parts[1]["inline_data"],
+                         {"mime_type": "image/png", "data": "aGVsbG8="})
 
     def test_the_conversation_id_header_pins_the_session(self):
         SCRIPT["turns"] = [[{

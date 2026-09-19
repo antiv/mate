@@ -14,9 +14,10 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from server.openai_translate import (TextDeltaTracker, build_runtime_turns,
-                                     consumed_index, conversation_key,
-                                     extract_content_text, iter_sse_payloads,
+from server.openai_translate import (MAX_IMAGE_BYTES, TextDeltaTracker,
+                                     build_runtime_turns, consumed_index,
+                                     conversation_key, extract_content_text,
+                                     image_parts, iter_sse_payloads,
                                      normalize_client_tools, system_text,
                                      tool_call_chunk)
 
@@ -109,6 +110,65 @@ class TestConversationIdentity(unittest.TestCase):
         # response_metrics classifies an invocation's origin from this prefix.
         key = conversation_key("agent", "u1", [{"role": "user", "content": "hi"}])
         self.assertTrue(key.startswith("openai_sess_"))
+
+
+def _screenshot(url="data:image/png;base64,aGVsbG8="):
+    return {"type": "image_url", "image_url": {"url": url}}
+
+
+class TestScreenshots(unittest.TestCase):
+    """
+    A client that attaches a screenshot must not have it silently dropped — and
+    when it cannot be forwarded, the model has to be told, or it answers about
+    an image it never received.
+    """
+
+    def test_an_attached_image_becomes_inline_data(self):
+        parts = image_parts([{"type": "text", "text": "what is this"}, _screenshot()])
+        self.assertEqual(parts, [{"inline_data": {"mime_type": "image/png",
+                                                  "data": "aGVsbG8="}}])
+
+    def test_the_image_rides_with_the_user_turn(self):
+        messages = [{"role": "user",
+                     "content": [{"type": "text", "text": "why does this fail"},
+                                 _screenshot()]}]
+        turns = build_runtime_turns(messages, 0)
+        self.assertEqual(len(turns), 1)
+        parts = turns[0]["parts"]
+        self.assertEqual(parts[0], {"text": "why does this fail"})
+        self.assertIn("inline_data", parts[1])
+
+    def test_an_image_only_message_still_makes_a_turn(self):
+        turns = build_runtime_turns([{"role": "user", "content": [_screenshot()]}], 0)
+        self.assertEqual(len(turns), 1)
+        self.assertEqual(len(turns[0]["parts"]), 1)
+        self.assertIn("inline_data", turns[0]["parts"][0])
+
+    def test_a_remote_url_is_refused_rather_than_fetched(self):
+        # Fetching a caller-supplied URL server-side would be an SSRF.
+        parts = image_parts([_screenshot("https://example.com/shot.png")])
+        self.assertEqual(len(parts), 1)
+        self.assertIn("not a URL", parts[0]["text"])
+        self.assertNotIn("inline_data", parts[0])
+
+    def test_a_text_only_model_is_told_the_image_was_dropped(self):
+        parts = image_parts([_screenshot()], vision=False)
+        self.assertIn("no vision support", parts[0]["text"])
+
+    def test_an_oversized_image_is_described_instead_of_sent(self):
+        huge = "A" * (MAX_IMAGE_BYTES * 2)
+        parts = image_parts([_screenshot(f"data:image/png;base64,{huge}")])
+        self.assertIn("larger than", parts[0]["text"])
+
+    def test_a_plain_string_content_has_no_images(self):
+        self.assertEqual(image_parts("just text"), [])
+
+    def test_the_system_preamble_still_leads_the_turn(self):
+        messages = [SYSTEM, {"role": "user",
+                             "content": [{"type": "text", "text": "look"}, _screenshot()]}]
+        turns = build_runtime_turns(messages, 0, system_text(messages))
+        self.assertIn("You are a coding agent.", turns[0]["parts"][0]["text"])
+        self.assertIn("inline_data", turns[0]["parts"][1])
 
 
 class TestWhatTheTurnStillOwes(unittest.TestCase):

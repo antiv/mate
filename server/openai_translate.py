@@ -39,6 +39,58 @@ def extract_content_text(content: Any) -> str:
     return str(content) if content is not None else ""
 
 
+# A screenshot is big, and base64 inflates it by a third. Past this the image
+# is not worth the context it would cost, so it is described rather than sent.
+MAX_IMAGE_BYTES = 5 * 1024 * 1024
+
+
+def _data_uri_blob(url: str) -> Optional[Tuple[str, str]]:
+    """(mime_type, base64 payload) of a data: URI, or None if it is not one."""
+    if not url.startswith("data:"):
+        return None
+    header, _, payload = url[len("data:"):].partition(",")
+    if not payload or ";base64" not in header:
+        return None
+    mime = header.split(";", 1)[0] or "image/png"
+    return mime, payload
+
+
+def image_parts(content: Any, vision: bool = True) -> List[Dict[str, Any]]:
+    """
+    The image parts of an OpenAI message content, as ADK `inline_data`.
+
+    Anything that cannot be sent becomes a text note instead of vanishing: a
+    dropped screenshot the model is never told about turns into a conversation
+    where it answers about an image it cannot see.
+
+    Only `data:` URIs are accepted. Fetching an http(s) URL the caller supplied
+    would make the server issue requests to addresses the caller chooses, which
+    is an SSRF the bridge has no reason to offer.
+    """
+    if not isinstance(content, list):
+        return []
+
+    parts: List[Dict[str, Any]] = []
+    for part in content:
+        if not isinstance(part, dict) or part.get("type") != "image_url":
+            continue
+        url = (part.get("image_url") or {}).get("url") or ""
+        if not vision:
+            parts.append({"text": "[image omitted: this agent's model has no vision support]"})
+            continue
+        blob = _data_uri_blob(url)
+        if not blob:
+            parts.append({"text": "[image omitted: MATE accepts inline image data, not a URL]"})
+            continue
+        mime, payload = blob
+        # 4 base64 characters carry 3 bytes; close enough to size without decoding.
+        if len(payload) * 3 // 4 > MAX_IMAGE_BYTES:
+            parts.append({"text": f"[image omitted: larger than {MAX_IMAGE_BYTES // (1024 * 1024)} MB]"})
+            continue
+        parts.append({"inline_data": {"mime_type": mime, "data": payload}})
+    return parts
+
+
 def _message_field(message: Any, name: str, default: Any = None) -> Any:
     """Read a field off either a pydantic message model or a plain dict."""
     if isinstance(message, dict):
@@ -150,7 +202,8 @@ def consumed_index(messages: List[Any]) -> int:
 
 
 def build_runtime_turns(messages: List[Any], consumed: int,
-                        system_preamble: str = "") -> List[Dict[str, Any]]:
+                        system_preamble: str = "",
+                        vision: bool = True) -> List[Dict[str, Any]]:
     """
     The `new_message` payloads the runtime still owes for this request.
 
@@ -158,11 +211,16 @@ def build_runtime_turns(messages: List[Any], consumed: int,
     and function responses (Runner._validate_new_message): pending tool results
     resume the paused invocation, and any new user text starts the next one.
     Assistant messages are not replayed — the runtime already holds them.
+
+    Screenshots a client attaches ride with the user turn as `inline_data`,
+    which is what both runtimes already consume. `vision` says whether the
+    agent's model can actually look at them.
     """
     pending = messages[consumed:] if consumed < len(messages) else []
 
     tool_parts: List[Dict[str, Any]] = []
     user_chunks: List[str] = []
+    user_images: List[Dict[str, Any]] = []
     for message in pending:
         role = _message_field(message, "role")
         if role == "tool":
@@ -175,18 +233,21 @@ def build_runtime_turns(messages: List[Any], consumed: int,
                 }
             })
         elif role == "user":
-            text = extract_content_text(_message_field(message, "content"))
+            content = _message_field(message, "content")
+            text = extract_content_text(content)
             if text:
                 user_chunks.append(text)
+            user_images.extend(image_parts(content, vision))
 
     turns: List[Dict[str, Any]] = []
     if tool_parts:
         turns.append({"role": "user", "parts": tool_parts})
-    if user_chunks:
+    if user_chunks or user_images:
         text = "\n\n".join(user_chunks)
         if system_preamble:
-            text = f"{system_preamble}\n\n{text}"
-        turns.append({"role": "user", "parts": [{"text": text}]})
+            text = f"{system_preamble}\n\n{text}".strip()
+        parts: List[Dict[str, Any]] = [{"text": text}] if text else []
+        turns.append({"role": "user", "parts": parts + user_images})
     return turns
 
 

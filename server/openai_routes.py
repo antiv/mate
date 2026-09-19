@@ -28,6 +28,7 @@ from server.openai_translate import (build_runtime_turns, consumed_index,
                                      CLIENT_TOOL_METADATA_KEY,
                                      CONVERSATION_ID_HEADER)
 from server.pat_auth import get_pat_user
+from server.widget_routes import model_supports_vision
 from shared.utils.agent_invoke import _ensure_session
 from shared.utils.database_client import get_database_client
 from shared.utils.models import AgentConfig, User
@@ -103,12 +104,13 @@ async def list_models(user: User = Depends(get_pat_user)):
         session.close()
 
 
-def _load_exposed_agent(agent_name: str) -> Optional[int]:
+def _load_exposed_agent(agent_name: str) -> Tuple[Optional[int], str]:
     """
     Refuse anything that is not an agent deliberately exposed as a model.
 
-    Returns the agent's project id, which the rate limiter needs and which
-    would otherwise cost a second query.
+    Returns the agent's project id, which the rate limiter needs, and its model
+    name, which says whether an attached screenshot is worth forwarding — both
+    of which would otherwise cost a second query.
     """
     db = get_database_client()
     session = db.get_session()
@@ -121,7 +123,7 @@ def _load_exposed_agent(agent_name: str) -> Optional[int]:
                 status_code=404,
                 detail=f"Model/Agent '{agent_name}' not found or not exposed as model"
             )
-        return agent.project_id
+        return agent.project_id, agent.model_name or ""
     finally:
         session.close()
 
@@ -327,7 +329,7 @@ async def chat_completions(
     if not messages:
         raise HTTPException(status_code=400, detail="Messages list cannot be empty")
 
-    project_id = _load_exposed_agent(agent_name)
+    project_id, model_name = _load_exposed_agent(agent_name)
     await _enforce_rate_limit(user.user_id, agent_name, project_id)
 
     client_tools = normalize_client_tools(body.tools, body.tool_choice)
@@ -340,7 +342,8 @@ async def chat_completions(
     # replacement for the agent's configured instruction, so it rides along with
     # the opening message rather than overriding anything.
     preamble = system_text(messages) if consumed == 0 else ""
-    turns = build_runtime_turns(messages, consumed, preamble)
+    turns = build_runtime_turns(messages, consumed, preamble,
+                                model_supports_vision(model_name))
 
     if not turns:
         raise HTTPException(
