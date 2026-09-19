@@ -20,39 +20,46 @@ from server.widget_routes import (
 
 
 class TestModelSupportsVision(unittest.TestCase):
-    """Test model_supports_vision function."""
+    """
+    The contract: refuse only on positive knowledge that a model is text-only.
 
-    def test_gemini_models_support_vision(self):
-        self.assertTrue(model_supports_vision("gemini-2.0-flash"))
-        self.assertTrue(model_supports_vision("google/gemini-2.5-pro"))
-        self.assertTrue(model_supports_vision("gemini-1.5-pro-latest"))
+    These patch LiteLLM rather than asserting its dataset — the map is refreshed
+    from upstream, so pinning a test to what it currently says about a given
+    model would make the suite fail on someone else's release.
+    """
 
-    def test_openai_vision_models_support_vision(self):
-        self.assertTrue(model_supports_vision("gpt-4o"))
-        self.assertTrue(model_supports_vision("gpt-4o-mini"))
-        self.assertTrue(model_supports_vision("gpt-4-vision-preview"))
+    def _info(self, value):
+        return patch("litellm.get_model_info", return_value={"supports_vision": value})
 
-    def test_claude_vision_models_support_vision(self):
-        self.assertTrue(model_supports_vision("claude-3-opus-20240229"))
-        self.assertTrue(model_supports_vision("claude-3-5-sonnet"))
+    def test_a_vision_model_is_allowed(self):
+        with self._info(True):
+            self.assertTrue(model_supports_vision("some-vision-model"))
 
-    def test_vl_models_support_vision(self):
-        self.assertTrue(model_supports_vision("qwen-vl-max"))
-        self.assertTrue(model_supports_vision("internvl-chat-vl"))
+    def test_a_known_text_only_model_is_refused(self):
+        with self._info(False):
+            self.assertFalse(model_supports_vision("some-text-model"))
 
-    def test_text_only_models_do_not_support_vision(self):
-        self.assertFalse(model_supports_vision("deepseek-chat"))
-        self.assertFalse(model_supports_vision("deepseek-coder"))
-        self.assertFalse(model_supports_vision("gpt-3.5-turbo"))
-        self.assertFalse(model_supports_vision("llama-3-70b-instruct"))
-        self.assertFalse(model_supports_vision("mixtral-8x7b-instruct"))
+    def test_no_opinion_is_not_a_refusal(self):
+        # LiteLLM knows the model but does not populate the field. That is not
+        # evidence of anything, so the provider gets to answer.
+        with self._info(None):
+            self.assertTrue(model_supports_vision("some-model"))
 
-    def test_unknown_models_default_to_false(self):
-        self.assertFalse(model_supports_vision("my-custom-model"))
+    def test_a_model_litellm_does_not_know_is_allowed(self):
+        # A custom or self-hosted endpoint cannot be judged from its name; the
+        # substring allowlist this replaced refused every one of them.
+        with patch("litellm.get_model_info", side_effect=Exception("not found")):
+            self.assertTrue(model_supports_vision("my-self-hosted-thing"))
 
     def test_unset_model_defaults_to_true(self):
         self.assertTrue(model_supports_vision(""))
         self.assertTrue(model_supports_vision(None))
+
+    def test_a_current_vision_model_is_allowed_for_real(self):
+        # One unpatched check, on ids stable enough to rely on. gpt-4-turbo and
+        # claude-sonnet-4-5 are the regression: the old heuristic refused both.
+        for name in ("gpt-4o", "gpt-4-turbo", "claude-sonnet-4-5"):
+            self.assertTrue(model_supports_vision(name), name)
 
 
 class TestTextExtraction(unittest.TestCase):

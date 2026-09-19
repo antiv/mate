@@ -91,6 +91,22 @@ def image_parts(content: Any, vision: bool = True) -> List[Dict[str, Any]]:
     return parts
 
 
+def has_image_parts(messages: List[Any], consumed: int) -> bool:
+    """
+    Whether the turn this request still owes carries any image.
+
+    Lets the caller skip a model-capability lookup on a plain chat turn, which
+    is the overwhelming majority of them.
+    """
+    for message in messages[consumed:]:
+        content = _message_field(message, "content")
+        if isinstance(content, list) and any(
+                isinstance(part, dict) and part.get("type") == "image_url"
+                for part in content):
+            return True
+    return False
+
+
 def _message_field(message: Any, name: str, default: Any = None) -> Any:
     """Read a field off either a pydantic message model or a plain dict."""
     if isinstance(message, dict):

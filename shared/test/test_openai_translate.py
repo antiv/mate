@@ -17,7 +17,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from server.openai_translate import (MAX_IMAGE_BYTES, TextDeltaTracker,
                                      build_runtime_turns, consumed_index,
                                      conversation_key, extract_content_text,
-                                     image_parts, iter_sse_payloads,
+                                     has_image_parts, image_parts,
+                                     iter_sse_payloads,
                                      normalize_client_tools, system_text,
                                      tool_call_chunk)
 
@@ -162,6 +163,23 @@ class TestScreenshots(unittest.TestCase):
 
     def test_a_plain_string_content_has_no_images(self):
         self.assertEqual(image_parts("just text"), [])
+
+    def test_a_text_turn_carries_no_image(self):
+        # The bridge skips the capability lookup on this answer, so it has to
+        # be right about the common case.
+        messages = [SYSTEM, {"role": "user", "content": "just talking"}]
+        self.assertFalse(has_image_parts(messages, 0))
+
+    def test_an_attached_image_is_detected(self):
+        messages = [{"role": "user", "content": [{"type": "text", "text": "look"},
+                                                 _screenshot()]}]
+        self.assertTrue(has_image_parts(messages, 0))
+
+    def test_an_image_already_consumed_does_not_count(self):
+        messages = [{"role": "user", "content": [_screenshot()]},
+                    {"role": "assistant", "content": "seen it"},
+                    {"role": "user", "content": "and now"}]
+        self.assertFalse(has_image_parts(messages, consumed_index(messages)))
 
     def test_the_system_preamble_still_leads_the_turn(self):
         messages = [SYSTEM, {"role": "user",

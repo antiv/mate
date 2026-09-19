@@ -26,7 +26,7 @@ from server.openai_translate import (build_runtime_turns, consumed_index,
                                      part_function_call, system_text, text_chunk,
                                      tool_call_chunk, TextDeltaTracker,
                                      CLIENT_TOOL_METADATA_KEY,
-                                     CONVERSATION_ID_HEADER)
+                                     CONVERSATION_ID_HEADER, has_image_parts)
 from server.pat_auth import get_pat_user
 from server.widget_routes import model_supports_vision
 from shared.utils.agent_invoke import _ensure_session
@@ -342,8 +342,11 @@ async def chat_completions(
     # replacement for the agent's configured instruction, so it rides along with
     # the opening message rather than overriding anything.
     preamble = system_text(messages) if consumed == 0 else ""
-    turns = build_runtime_turns(messages, consumed, preamble,
-                                model_supports_vision(model_name))
+    # Only ask whether the model can see when there is something to see: a
+    # plain chat turn should not pay for a capability lookup.
+    vision = (not has_image_parts(messages, consumed)
+              or model_supports_vision(model_name))
+    turns = build_runtime_turns(messages, consumed, preamble, vision)
 
     if not turns:
         raise HTTPException(

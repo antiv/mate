@@ -104,30 +104,30 @@ def _build_context_prefix(cfg: dict, page_context: Optional[dict], lang: str) ->
 
 
 def model_supports_vision(model_name: str) -> bool:
+    """
+    Whether an image may be sent to this model.
+
+    Refuses only on positive knowledge that the model is text-only. LiteLLM
+    keeps the capability map — fetched from upstream when it is imported, with
+    a copy bundled in the package as the offline fallback — so there is no
+    hand-kept list here to go stale.
+
+    Anything LiteLLM does not know, or holds no opinion about, is allowed
+    through: the provider is the authority on its own models, and a wrong
+    refusal here is a hard 400 the caller cannot override. The substring
+    allowlist this replaces refused every model it had not been taught, which
+    by then included gpt-4-turbo, claude-sonnet-4-5, llama-4 and pixtral.
+    """
     if not model_name:
         return True
-    model_lower = model_name.lower()
-    # Known vision models
-    if "gemini" in model_lower:
+    try:
+        import litellm
+        info = litellm.get_model_info(model=model_name)
+    except Exception:
+        # Unknown to LiteLLM: a custom or self-hosted endpoint. Let it answer
+        # for itself rather than guessing from its name.
         return True
-    if ("gpt-4" in model_lower and "gpt-4o" in model_lower) or "vision" in model_lower:
-        return True
-    if "claude-3" in model_lower:
-        return True
-    if "-vl" in model_lower:
-        return True
-    
-    # Known text-only models
-    if "deepseek" in model_lower:
-        return False
-    if "gpt-3.5" in model_lower:
-        return False
-    if "llama" in model_lower:
-        return False
-    if "mixtral" in model_lower:
-        return False
-        
-    return False
+    return info.get("supports_vision") is not False
 
 
 def configure_widget_proxy(adk_host: str, adk_port: int):

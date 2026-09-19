@@ -163,7 +163,9 @@ Two rules the bridge enforces:
 
 When an image cannot be forwarded — it was a URL, it was too large, or the agent's model has no vision support — the agent is told so in place of the image, rather than the attachment vanishing silently. An agent that never learns an image was dropped will happily answer about a screenshot it cannot see.
 
-Vision support is decided from the agent's configured model, so point the exposed agent at a vision-capable model (Gemini, GPT-4o, Claude 3+, a `-vl` model) if you intend to send screenshots.
+Vision support is read from LiteLLM's model capability map, and an image is held back only when that map positively says the agent's model is text-only. A model LiteLLM does not know — a custom or self-hosted endpoint — is allowed through, and the provider answers for itself; MATE does not guess from the model's name.
+
+LiteLLM fetches that map from upstream when it is imported and falls back to a copy bundled in the package, so nothing here needs periodic updating. A deployment that does not want the startup fetch to `raw.githubusercontent.com` can set `LITELLM_LOCAL_MODEL_COST_MAP=True` and use the bundled copy, which is sufficient for this decision.
 
 ### What MATE does not serve
 
