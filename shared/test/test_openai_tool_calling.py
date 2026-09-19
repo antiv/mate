@@ -267,6 +267,40 @@ class TestClientToolRoundTrip(StubRuntimeCase):
         ])
         self.assertEqual(response.status_code, 200)
 
+    def test_the_conversation_id_header_pins_the_session(self):
+        SCRIPT["turns"] = [[{
+            "author": "coder", "invocationId": "e-1",
+            "content": {"role": "model", "parts": [{"text": "ok"}]},
+        }]]
+        payload = {"model": "coder", "stream": False,
+                   "messages": [{"role": "user", "content": "one"}]}
+        self.client.post("/v1/chat/completions", json=payload,
+                         headers={"X-MATE-Conversation-Id": "thread-7"})
+        payload["messages"] = [{"role": "user", "content": "a totally different opening"}]
+        self.client.post("/v1/chat/completions", json=payload,
+                         headers={"X-MATE-Conversation-Id": "thread-7"})
+
+        sessions = {body["session_id"] for body in RECEIVED["run_sse"]}
+        self.assertEqual(len(sessions), 1)
+        self.assertTrue(next(iter(sessions)).startswith("openai_sess_"))
+
+    def test_toggling_the_system_prompt_stays_in_one_session(self):
+        # Cline and Roo rewrite the system prompt between Plan and Act; that must
+        # not hand the agent a blank session mid-task.
+        SCRIPT["turns"] = [[{
+            "author": "coder", "invocationId": "e-1",
+            "content": {"role": "model", "parts": [{"text": "ok"}]},
+        }]]
+        self._post([{"role": "system", "content": "PLAN MODE"},
+                    {"role": "user", "content": "fix the parser"}])
+        self._post([{"role": "system", "content": "ACT MODE"},
+                    {"role": "user", "content": "fix the parser"},
+                    {"role": "assistant", "content": "planned"},
+                    {"role": "user", "content": "go ahead"}])
+
+        sessions = {body["session_id"] for body in RECEIVED["run_sse"]}
+        self.assertEqual(len(sessions), 1)
+
     def test_a_turn_with_nothing_new_is_refused(self):
         response = self._post([{"role": "user", "content": "go"},
                                {"role": "assistant", "content": "done"}])

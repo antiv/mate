@@ -18,6 +18,10 @@ CLIENT_TOOL_METADATA_KEY = "mate_client_tools"
 
 SESSION_PREFIX = "openai_sess_"
 
+# Optional request header: a client that tracks its own conversations can pin
+# the agent session to one, instead of it being inferred from the transcript.
+CONVERSATION_ID_HEADER = "X-MATE-Conversation-Id"
+
 
 def extract_content_text(content: Any) -> str:
     """Text of an OpenAI message content, which may be a string or a part list."""
@@ -96,21 +100,36 @@ def system_text(messages: Iterable[Any]) -> str:
     return "\n\n".join(c for c in chunks if c)
 
 
-def conversation_key(agent_name: str, user_id: str, messages: List[Any]) -> str:
+def conversation_key(agent_name: str, user_id: str, messages: List[Any],
+                     conversation_id: Optional[str] = None) -> str:
     """
     Stable id for the conversation this request belongs to.
 
-    Hashes the agent, the system prompt and the FIRST USER message. Hashing the
-    first message alone — what this used to do — collapses every conversation a
-    client opens into one session, because coding agents put a constant system
-    prompt in messages[0].
+    A client that can name its own conversation should: `conversation_id` (the
+    X-MATE-Conversation-Id header) is then the only thing that decides, and the
+    session survives anything the client does to the transcript.
+
+    Otherwise the id comes from the agent and the FIRST USER message. Two things
+    it deliberately does NOT hash:
+
+    * the first message, which is what this originally used — for a coding agent
+      that is a constant system prompt, so every conversation collapsed into one
+      session and leaked context between them;
+    * the system prompt, which looks discriminating but is the volatile part.
+      Cline and Roo rewrite it when you toggle Plan and Act, and clients change
+      it on upgrade, so hashing it drops the agent's memory of the conversation
+      mid-task.
     """
+    if conversation_id:
+        digest = hashlib.sha256(conversation_id.encode("utf-8")).hexdigest()[:16]
+        return f"{SESSION_PREFIX}{user_id}_{digest}"
+
     first_user = ""
     for message in messages:
         if _message_field(message, "role") == "user":
             first_user = extract_content_text(_message_field(message, "content"))
             break
-    seed = "\x00".join([agent_name, system_text(messages), first_user])
+    seed = "\x00".join([agent_name, first_user])
     digest = hashlib.sha256(seed.encode("utf-8")).hexdigest()[:16]
     return f"{SESSION_PREFIX}{user_id}_{digest}"
 

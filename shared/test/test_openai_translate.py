@@ -70,6 +70,27 @@ class TestConversationIdentity(unittest.TestCase):
         second = conversation_key("agent", "u1", [SYSTEM, {"role": "user", "content": "add a test"}])
         self.assertNotEqual(first, second)
 
+    def test_a_rewritten_system_prompt_keeps_the_conversation(self):
+        """
+        Cline and Roo swap the system prompt when you toggle Plan and Act, and
+        clients change it on upgrade. Hashing it dropped the agent's memory of
+        the conversation in the middle of a task.
+        """
+        plan = [{"role": "system", "content": "PLAN MODE. Do not edit files."},
+                {"role": "user", "content": "fix the parser"}]
+        act = [{"role": "system", "content": "ACT MODE. Edit files as needed."},
+               {"role": "user", "content": "fix the parser"}]
+        self.assertEqual(conversation_key("agent", "u1", plan),
+                         conversation_key("agent", "u1", act))
+
+    def test_a_client_supplied_id_decides_on_its_own(self):
+        a = [SYSTEM, {"role": "user", "content": "fix the parser"}]
+        b = [{"role": "user", "content": "something else entirely"}]
+        self.assertEqual(conversation_key("agent", "u1", a, "thread-7"),
+                         conversation_key("agent", "u1", b, "thread-7"))
+        self.assertNotEqual(conversation_key("agent", "u1", a, "thread-7"),
+                            conversation_key("agent", "u1", a, "thread-8"))
+
     def test_the_id_is_stable_across_a_conversation(self):
         start = [SYSTEM, {"role": "user", "content": "fix the parser"}]
         later = start + [{"role": "assistant", "content": "done"},

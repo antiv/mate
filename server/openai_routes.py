@@ -16,7 +16,7 @@ import time
 from typing import Any, AsyncGenerator, Dict, List, Optional, Tuple, Union
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
@@ -25,7 +25,8 @@ from server.openai_translate import (build_runtime_turns, consumed_index,
                                      iter_sse_payloads, normalize_client_tools,
                                      part_function_call, system_text, text_chunk,
                                      tool_call_chunk, TextDeltaTracker,
-                                     CLIENT_TOOL_METADATA_KEY)
+                                     CLIENT_TOOL_METADATA_KEY,
+                                     CONVERSATION_ID_HEADER)
 from server.pat_auth import get_pat_user
 from shared.utils.agent_invoke import _ensure_session
 from shared.utils.database_client import get_database_client
@@ -315,6 +316,7 @@ async def _run_completion(agent_name: str, user_id: str, session_id: str,
 
 @router.post("/chat/completions")
 async def chat_completions(
+    request: Request,
     body: ChatCompletionRequest,
     user: User = Depends(get_pat_user)
 ):
@@ -329,7 +331,10 @@ async def chat_completions(
     await _enforce_rate_limit(user.user_id, agent_name, project_id)
 
     client_tools = normalize_client_tools(body.tools, body.tool_choice)
-    session_id = conversation_key(agent_name, user.user_id, messages)
+    # A client that tracks its own conversations can say so and keep the agent
+    # session across anything it does to the transcript.
+    conversation_id = request.headers.get(CONVERSATION_ID_HEADER)
+    session_id = conversation_key(agent_name, user.user_id, messages, conversation_id)
     consumed = consumed_index(messages)
     # The caller's system prompt is context for the conversation, not a
     # replacement for the agent's configured instruction, so it rides along with
