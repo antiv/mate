@@ -261,6 +261,7 @@ class AgentManager:
                 'tool_config': tool_config,  # Use auto-configured tool_config
                 'max_iterations': config.max_iterations,
                 'parent_agents': config.get_parent_agents(),
+                'expose_as_model': config.expose_as_model,
                 'planner_config': config.planner_config,
                 'generate_content_config': config.generate_content_config,
                 'input_schema': config.input_schema,
@@ -433,6 +434,19 @@ class AgentManager:
             tool_factory = ToolFactory()
             tools = tool_factory.create_tools(config)
             logger.info(f"Created {len(tools)} tools for agent {agent_name}")
+
+            # A root agent exposed as an OpenAI model may additionally be handed
+            # tools by whoever is calling it, declared per request. Only the root
+            # gets them: a sub-agent must never hold more than its parent.
+            if config.get('expose_as_model') and not config.get('parent_agents'):
+                try:
+                    from .tools.client_toolset import ClientToolset
+                    reserved = {getattr(t, 'name', None) or getattr(t, '__name__', None)
+                                for t in tools}
+                    tools = tools + [ClientToolset(reserved_names={r for r in reserved if r})]
+                    logger.info(f"Agent {agent_name} accepts client-declared tools")
+                except Exception as e:
+                    logger.warning(f"Could not attach the client toolset to {agent_name}: {e}")
             
             # Create agent based on type
             if agent_type in ['graph']:

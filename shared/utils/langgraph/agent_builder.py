@@ -12,7 +12,7 @@ failing.
 import json
 import logging
 from pathlib import Path
-from typing import Annotated, Any, Dict, List, Optional
+from typing import Annotated, Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -218,22 +218,29 @@ class AgentBuilder:
     """Caches compiled graphs per app name; invalidated by the reload endpoints."""
 
     def __init__(self):
-        self._cache: Dict[str, BuiltAgent] = {}
+        self._cache: Dict[Tuple[str, str], BuiltAgent] = {}
 
     def invalidate(self, agent_name: str) -> None:
-        self._cache.pop(agent_name, None)
+        for key in [k for k in self._cache if k[0] == agent_name]:
+            self._cache.pop(key, None)
 
     def invalidate_all(self) -> None:
         self._cache.clear()
 
-    async def get(self, app_name: str) -> BuiltAgent:
-        if app_name in self._cache:
-            return self._cache[app_name]
-        built = await self._build(app_name)
-        self._cache[app_name] = built
+    async def get(self, app_name: str,
+                  client_tools: Optional[List[Dict[str, Any]]] = None) -> BuiltAgent:
+        # Tools the caller declares are part of the graph's identity: two callers
+        # offering different tools cannot share one compiled graph.
+        from shared.utils.langgraph.client_tools import client_tools_key
+        cache_key = (app_name, client_tools_key(client_tools))
+        if cache_key in self._cache:
+            return self._cache[cache_key]
+        built = await self._build(app_name, client_tools=client_tools)
+        self._cache[cache_key] = built
         return built
 
-    async def _build(self, app_name: str, use_checkpointer: bool = True) -> BuiltAgent:
+    async def _build(self, app_name: str, use_checkpointer: bool = True,
+                     client_tools: Optional[List[Dict[str, Any]]] = None) -> BuiltAgent:
         """use_checkpointer=False builds a graph without persistence — required when
         the graph runs under a host that provides its own (e.g. LangGraph Studio)."""
         root_config = _load_agent_config(app_name)
@@ -254,9 +261,11 @@ class AgentBuilder:
         model_names = {name: config.get("model_name") for name, config in tree.items()}
 
         if len(tree) == 1:
-            graph = await self._build_react_agent(root_config, children_of, checkpointer=checkpointer)
+            graph = await self._build_react_agent(root_config, children_of, checkpointer=checkpointer,
+                                                  client_tools=client_tools)
         else:
-            graph = await self._build_multi_agent_graph(app_name, tree, children_of, checkpointer)
+            graph = await self._build_multi_agent_graph(app_name, tree, children_of, checkpointer,
+                                                        client_tools=client_tools)
 
         logger.info(f"Built LangGraph agent '{app_name}' ({len(tree)} agent(s) in tree)")
         return BuiltAgent(name=app_name, graph=graph, model_name=root_config.get("model_name"),
@@ -299,7 +308,8 @@ class AgentBuilder:
                                  children_of: Dict[str, List[str]],
                                  checkpointer: Any = None,
                                  extra_tools: Optional[List[Any]] = None,
-                                 transfer_note: Optional[str] = None) -> Any:
+                                 transfer_note: Optional[str] = None,
+                                 client_tools: Optional[List[Dict[str, Any]]] = None) -> Any:
         from langgraph.prebuilt import create_react_agent
         from shared.utils.langgraph.model_factory import create_chat_model
         from shared.utils.utils import resolve_agent_endpoint
@@ -319,6 +329,10 @@ class AgentBuilder:
         tools = await self._build_tools(config)
         if extra_tools:
             tools.extend(extra_tools)
+        if client_tools:
+            from shared.utils.langgraph.client_tools import build_client_tools
+            reserved = {getattr(t, "name", None) for t in tools}
+            tools.extend(build_client_tools(client_tools, reserved_names={r for r in reserved if r}))
 
         return create_react_agent(
             model,
@@ -329,7 +343,8 @@ class AgentBuilder:
         )
 
     async def _build_multi_agent_graph(self, root_name: str, tree: Dict[str, Dict[str, Any]],
-                                       children_of: Dict[str, List[str]], checkpointer: Any) -> Any:
+                                       children_of: Dict[str, List[str]], checkpointer: Any,
+                                       client_tools: Optional[List[Dict[str, Any]]] = None) -> Any:
         from langgraph.graph import END, START, MessagesState, StateGraph
 
         # total=False: current_agent is routing state set by transfer_to_agent —
@@ -348,7 +363,10 @@ class AgentBuilder:
                 transfer_note = _build_transfer_note(agent_name, tree, children_of)
             node_graph = await self._build_react_agent(
                 config, children_of, checkpointer=None,
-                extra_tools=extra_tools, transfer_note=transfer_note)
+                extra_tools=extra_tools, transfer_note=transfer_note,
+                # Only the root may hold the caller's tools; a sub-agent must
+                # never end up with more than its parent.
+                client_tools=client_tools if agent_name == root_name else None)
             builder.add_node(agent_name, node_graph)
             builder.add_edge(agent_name, END)
 

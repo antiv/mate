@@ -2,14 +2,44 @@
 
 MATE provides an OpenAI-compatible API bridge, allowing external coding agents, IDE extensions, and tools to interact with MATE agents as if they were standard LLM models. 
 
-This lets you use the full agentic reasoning, memory blocks, and local tools of your MATE agents inside interfaces like **OpenCode**, **Continue**, and **Cline (Roo Code)**.
+This lets you use the full agentic reasoning, memory blocks, and local tools of your MATE agents inside interfaces like **OpenCode**, **Continue**, and **Cline (Roo Code)** — including tools the client runs on your machine.
 
 ---
 
 ## How It Works
 
 1. **Model Discovery (`GET /v1/models`)**: External clients query this endpoint to populate their model dropdown list. MATE returns the list of active root agents that have the `expose_as_model` attribute enabled.
-2. **Chat Completions (`POST /v1/chat/completions`)**: Requests are routed to the specified agent. MATE automatically creates or resumes a persistent chat session mapped to the user and the conversation's first message, executes the agent loop on the backend, and streams/returns the response in the standard OpenAI JSON/SSE structure.
+2. **Chat Completions (`POST /v1/chat/completions`)**: Requests are routed to the specified agent. MATE creates or resumes a persistent chat session for the conversation, executes the agent loop on the backend, and streams/returns the response in the standard OpenAI JSON/SSE structure.
+3. **Tool calling**: if the request carries a `tools` array, those tools are offered to the agent's model *alongside* the agent's own MATE tools. See [Tool calling](#tool-calling) below.
+
+---
+
+## Tool calling
+
+A coding agent's usefulness is its tools — reading and writing files, running commands — and those only work on the machine the client is running on. MATE therefore accepts the client's tool declarations and hands the model a merged tool set.
+
+The round trip:
+
+1. The client sends `tools` (and optionally `tool_choice`) with the request.
+2. MATE declares them to the agent's model in addition to the agent's configured tools.
+3. If the model calls one, MATE **does not execute it**. The agent turn pauses and the response comes back with `tool_calls` and `finish_reason: "tool_calls"`.
+4. The client runs the tool and sends the result back as a `role: "tool"` message.
+5. MATE resumes the paused turn with that result and the agent continues.
+
+Details worth knowing:
+
+* **Both tool sets are live.** The model may call the client's `read` and MATE's `memory_blocks` in the same conversation. MATE's own tool calls execute server-side and are never shown to the client — it cannot run them, and offering them would deadlock the conversation.
+* **Only the exposed root agent gets client tools.** Sub-agents keep exactly the tools their configuration gives them; a sub-agent must never hold more than its parent.
+* **Name collisions go to the agent.** If the client declares a tool whose name the agent already has, the agent's own tool wins and the client's is not declared. Rename the tool on the client side if you need both.
+* **`tool_choice`**: `"none"` withdraws the client's tools for that request, and `{"type": "function", "function": {"name": "..."}}` narrows to that one. `"auto"` and `"required"` pass everything through — MATE cannot force the model to call a tool.
+* **Parallel calls** are supported: the model may request several tools in one turn, and the client returns all the results in one follow-up request.
+* **Requests without `tools` behave exactly as before** — plain chat against the agent, with the agent using only its own tools.
+
+### Conversation identity
+
+MATE maps each conversation onto a persistent agent session. The session id is derived from the agent, the system prompt and the first user message, so two conversations that share a system prompt — which every coding agent has — stay separate. Each request sends only what the runtime has not seen yet; the client's history is not replayed.
+
+The client's system prompt is passed as context with the opening message. It does not replace the agent's configured instruction, which remains the operator's.
 
 ---
 
@@ -46,27 +76,31 @@ An agent must be a **root agent** (it cannot have parent agents) to be exposed.
 
 ### 3. Configure External Clients
 
-#### OpenCode (`.opencode.json`)
-OpenCode is an open-source terminal-native coding agent. Configure it to use MATE by setting the provider to `openai` and pointing to your MATE server:
+#### OpenCode (`opencode.json`)
+OpenCode is an open-source terminal-native coding agent. Register MATE as a custom provider. Use the `@ai-sdk/openai-compatible` package — the plain `openai` package targets `/v1/responses`, which MATE does not serve:
 
 ```json
 {
   "provider": {
-    "openai": {
+    "mate": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "MATE",
       "options": {
         "baseURL": "http://localhost:8000/v1",
         "apiKey": "mate_pat_your_generated_token"
+      },
+      "models": {
+        "your-exposed-agent-name": {
+          "name": "MATE Coder Agent",
+          "tool_call": true
+        }
       }
-    }
-  },
-  "agent": {
-    "coder": {
-      "model": "openai/your-exposed-agent-name",
-      "tools": { "write": true, "bash": true }
     }
   }
 }
 ```
+
+`tool_call: true` is what lets OpenCode hand the agent its own file and shell tools. MATE reports no context window of its own (see the note under `GET /v1/models`), so set OpenCode's per-model `limit` yourself if the defaults do not match the model your agent runs on.
 
 #### Continue (config.json)
 Continue is a popular VS Code and JetBrains extension. Add MATE under the `models` list:
@@ -112,17 +146,19 @@ To use it in your external tools (like **OpenCode** or **Continue**), reference 
 ```json
 {
   "provider": {
-    "openai": {
+    "mate": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "MATE",
       "options": {
         "baseURL": "http://localhost:8000/v1",
         "apiKey": "mate_pat_your_generated_token"
+      },
+      "models": {
+        "your_project_coding_root": {
+          "name": "MATE Coding Team (Qwen Coder)",
+          "tool_call": true
+        }
       }
-    }
-  },
-  "agent": {
-    "coder": {
-      "model": "openai/your_project_coding_root",
-      "tools": { "write": true, "bash": true }
     }
   }
 }
@@ -153,5 +189,5 @@ To use it in your external tools (like **OpenCode** or **Continue**), reference 
 * **`DELETE /dashboard/api/tokens/{token_id}`**: Revokes and deletes a PAT.
 
 ### OpenAI Compatibility
-* **`GET /v1/models`**: Lists exposed MATE models.
-* **`POST /v1/chat/completions`**: Executes chat completions (supports `stream: true` and `stream: false`).
+* **`GET /v1/models`**: Lists exposed MATE models. `agents_config` carries no timestamps, so `created` is a fixed placeholder rather than a real creation date, and no context-window metadata is reported — configure limits on the client side.
+* **`POST /v1/chat/completions`**: Executes chat completions (supports `stream: true` and `stream: false`, `tools`, `tool_choice`, and `role: "tool"` messages). `usage` counts only the turn being answered.

@@ -104,38 +104,22 @@ class TestOpenAIApiEndpoints(unittest.TestCase):
         self.assertEqual(result["data"][0]["id"], "exposed-root")
 
     def test_openai_stream_chunk_conversion(self):
-        # Verify that MATE ADK chunks are successfully parsed and converted to OpenAI compatible format.
-        # Sample MATE event:
-        mate_event = {
-            "author": "agent",
-            "content": {
-                "parts": [{"text": "Hello, how can I help you today?"}]
-            }
-        }
-        
-        # Test basic parsing
-        parts = mate_event["content"]["parts"]
-        self.assertEqual(len(parts), 1)
-        self.assertEqual(parts[0]["text"], "Hello, how can I help you today?")
-        
-        # Simulate delta logic
-        last_text = ""
-        text = parts[0]["text"]
-        
-        # turn 1 chunk 1: "Hello"
-        t1 = "Hello"
-        delta_t1 = t1[len(last_text):]
-        last_text = t1
-        self.assertEqual(delta_t1, "Hello")
-        
-        # turn 1 chunk 2: "Hello, how"
-        t2 = "Hello, how"
-        delta_t2 = t2[len(last_text):]
-        last_text = t2
-        self.assertEqual(delta_t2, ", how")
+        # This used to re-implement the delta arithmetic inline, so it passed no
+        # matter what the bridge did. Exercise the real tracker instead.
+        from server.openai_translate import TextDeltaTracker
+
+        tracker = TextDeltaTracker()
+        event = {"author": "agent",
+                 "content": {"parts": [{"text": "Hello, how can I help you today?"}]}}
+        parts = event["content"]["parts"]
+
+        self.assertEqual(tracker.feed("agent", "Hello"), "Hello")
+        self.assertEqual(tracker.feed("agent", "Hello, how"), ", how")
+        self.assertEqual(tracker.feed("agent", parts[0]["text"]),
+                         " can I help you today?")
 
     def test_extract_content_text(self):
-        from server.openai_routes import extract_content_text
+        from server.openai_translate import extract_content_text
         
         # Test string input
         self.assertEqual(extract_content_text("Hello string"), "Hello string")

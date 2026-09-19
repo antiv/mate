@@ -113,6 +113,9 @@ def create_app(allow_origins: Optional[List[str]] = None) -> FastAPI:
         user_id = payload.get("user_id") or payload.get("userId")
         session_id = payload.get("session_id") or payload.get("sessionId")
         new_message = payload.get("new_message") or payload.get("newMessage")
+        # Mirrors ADK's RunAgentRequest.custom_metadata, the channel the
+        # OpenAI-compatible bridge uses to declare caller-executed tools.
+        custom_metadata = payload.get("custom_metadata") or payload.get("customMetadata")
         if not all([app_name, user_id, session_id, new_message]):
             raise HTTPException(status_code=400, detail="app_name, user_id, session_id and new_message are required")
         if not store.session_exists(app_name, user_id, session_id):
@@ -121,7 +124,7 @@ def create_app(allow_origins: Optional[List[str]] = None) -> FastAPI:
         from shared.utils.langgraph.runner import run_sse_stream
         return StreamingResponse(
             run_sse_stream(app_name=app_name, user_id=user_id, session_id=session_id,
-                           new_message=new_message),
+                           new_message=new_message, custom_metadata=custom_metadata),
             media_type="text/event-stream",
             headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
         )

@@ -11,7 +11,7 @@ import base64
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import Any, AsyncGenerator, Dict, List
+from typing import Any, AsyncGenerator, Dict, List, Optional
 
 from langchain_core.messages import HumanMessage
 
@@ -132,10 +132,51 @@ def _apply_output_guardrails(event: Dict[str, Any], engines: Dict[str, Any],
             part["text"] = replacement
 
 
+def _client_tool_declarations(custom_metadata: Optional[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Tool declarations the caller sent for this request, if any."""
+    from shared.utils.tools.client_toolset import CLIENT_TOOL_METADATA_KEY
+    if not isinstance(custom_metadata, dict):
+        return []
+    declarations = custom_metadata.get(CLIENT_TOOL_METADATA_KEY)
+    if not isinstance(declarations, list):
+        return []
+    return [d for d in declarations if isinstance(d, dict)]
+
+
+async def _resume_map(graph: Any, config: Dict[str, Any],
+                      unanswered: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Match the caller's outstanding tool results to the interrupts the graph is
+    paused on, consuming the ones that are delivered.
+
+    Returns an empty map when the graph is not paused on anything the caller has
+    answered, which is what ends the resume loop.
+    """
+    from shared.utils.langgraph.client_tools import pending_client_calls
+    if not unanswered:
+        return {}
+    try:
+        state = await graph.aget_state(config)
+    except Exception:
+        logger.exception("[LangGraph] could not read the paused state to resume client tools")
+        return {}
+
+    resume_map: Dict[str, Any] = {}
+    for call in pending_client_calls(state):
+        call_id, interrupt_id = call.get("id"), call.get("interrupt_id")
+        if not interrupt_id or call_id not in unanswered:
+            continue
+        resume_map[interrupt_id] = {"result": unanswered.pop(call_id)}
+    return resume_map
+
+
 async def execute_run(app_name: str, user_id: str, session_id: str,
-                      new_message: Dict[str, Any], invocation_id: str) -> AsyncGenerator[Dict[str, Any], None]:
+                      new_message: Dict[str, Any], invocation_id: str,
+                      custom_metadata: Optional[Dict[str, Any]] = None
+                      ) -> AsyncGenerator[Dict[str, Any], None]:
     store = get_session_store()
     builder = get_agent_builder()
+    client_tools = _client_tool_declarations(custom_metadata)
 
     from shared.utils.langgraph.hooks import check_input_guardrails, check_rbac
     rbac_denial = check_rbac(user_id, app_name, session_id=session_id)
@@ -145,7 +186,7 @@ async def execute_run(app_name: str, user_id: str, session_id: str,
         return
 
     try:
-        built = await builder.get(app_name)
+        built = await builder.get(app_name, client_tools=client_tools)
     except AgentNotFoundError:
         yield _notice_event(app_name, invocation_id,
                             f"Agent '{app_name}' is not available in the langgraph runtime. "
@@ -165,12 +206,28 @@ async def execute_run(app_name: str, user_id: str, session_id: str,
         "app_name": app_name,
     }}
 
-    from shared.utils.langgraph.hitl import extract_confirmation_response
+    from shared.utils.langgraph.hitl import (extract_client_tool_responses,
+                                             extract_confirmation_response)
+    # Client tool results still to be delivered; the resume loop below pops them.
+    unanswered: Dict[str, Any] = {}
     confirmation = extract_confirmation_response(new_message)
+    tool_responses = extract_client_tool_responses(new_message)
     if confirmation is not None:
         # HITL resume: deliver the approve/reject decision to the paused interrupt
         from langgraph.types import Command
         graph_input = Command(resume={"confirmed": confirmation})
+    elif tool_responses:
+        # The caller ran the tools the graph paused on. Resume values are keyed
+        # by interrupt id, which only the checkpointed state carries, so the
+        # answered tool call ids have to be matched back to it.
+        from langgraph.types import Command
+        unanswered.update({r["id"]: r["result"] for r in tool_responses if r.get("id")})
+        resume_map = await _resume_map(built.graph, config, unanswered)
+        if not resume_map:
+            yield _notice_event(app_name, invocation_id,
+                                "This conversation is not waiting on a tool result.")
+            return
+        graph_input = Command(resume=resume_map)
     else:
         user_text = _text_of_new_message(new_message)
         root_engine = built.guardrail_engines.get(app_name)
@@ -184,31 +241,44 @@ async def execute_run(app_name: str, user_id: str, session_id: str,
         graph_input = {"messages": [_new_message_to_human_message(
             new_message, text_override=meta.get("redacted_text"))]}
 
-    stream = built.graph.astream(
-        graph_input,
-        config=config,
-        stream_mode=["messages", "updates"],
-        subgraphs=True,
-    )
-
     from shared.utils.langgraph.tool_adapter import RunContext, reset_run_context, set_run_context
     run_context = RunContext(app_name=app_name, user_id=user_id, session_id=session_id,
                              agent_name=built.name, state=store.get_state(session_id))
     context_token = set_run_context(run_context)
     try:
-        async for event, is_complete in translate_stream(stream, author=built.name, invocation_id=invocation_id):
-            if is_complete:
-                _apply_output_guardrails(event, built.guardrail_engines, meta)
-                artifact_delta = run_context.pop_artifact_delta()
-                if artifact_delta:
-                    actions = event.setdefault("actions", {})
-                    actions["artifactDelta"] = artifact_delta
-                    actions["artifact_delta"] = artifact_delta
-                state_delta = run_context.pop_state_delta()
-                if state_delta:
-                    store.update_state(session_id, state_delta)
-                store.append_event(session_id, event)
-                _log_token_usage(event, app_name, user_id, session_id, built.model_names)
-            yield event
+        while True:
+            stream = built.graph.astream(
+                graph_input,
+                config=config,
+                stream_mode=["messages", "updates"],
+                subgraphs=True,
+            )
+            async for event, is_complete in translate_stream(
+                    stream, author=built.name, invocation_id=invocation_id):
+                if is_complete:
+                    _apply_output_guardrails(event, built.guardrail_engines, meta)
+                    artifact_delta = run_context.pop_artifact_delta()
+                    if artifact_delta:
+                        actions = event.setdefault("actions", {})
+                        actions["artifactDelta"] = artifact_delta
+                        actions["artifact_delta"] = artifact_delta
+                    state_delta = run_context.pop_state_delta()
+                    if state_delta:
+                        store.update_state(session_id, state_delta)
+                    store.append_event(session_id, event)
+                    _log_token_usage(event, app_name, user_id, session_id, built.model_names)
+                yield event
+
+            # A tool node runs its calls one at a time, so a turn with several
+            # client tools pauses once per call. The caller answered them all in
+            # one message, so drain the rest here rather than asking again for a
+            # result it has already given.
+            if not unanswered:
+                break
+            resume_map = await _resume_map(built.graph, config, unanswered)
+            if not resume_map:
+                break
+            from langgraph.types import Command
+            graph_input = Command(resume=resume_map)
     finally:
         reset_run_context(context_token)
