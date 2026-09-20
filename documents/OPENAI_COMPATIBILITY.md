@@ -37,9 +37,9 @@ Details worth knowing:
 
 ### Conversation identity
 
-MATE maps each conversation onto a persistent agent session. The session id is derived from the agent, the system prompt and the first user message, so two conversations that share a system prompt — which every coding agent has — stay separate. Each request sends only what the runtime has not seen yet; the client's history is not replayed.
+MATE maps each conversation onto a persistent agent session, keyed on the agent and the first user message — so two conversations sharing a system prompt, which every coding agent has, stay separate. A client that tracks its own conversations can pin the session explicitly with the `X-MATE-Conversation-Id` header. Each request sends only what the runtime has not seen yet; the client's history is not replayed.
 
-The client's system prompt is passed as context with the opening message. It does not replace the agent's configured instruction, which remains the operator's.
+The client's system prompt is passed as context with the opening message. It does not replace the agent's configured instruction, which remains the operator's, and it is not part of the session id — see [Conversation identity across mode switches](#conversation-identity-across-mode-switches).
 
 ---
 
@@ -126,6 +126,66 @@ In your VS Code Cline/Roo Code settings panel:
 2. Set **Base URL** to `http://localhost:8000/v1`.
 3. Set **API Key** to `mate_pat_your_generated_token`.
 4. Set **Model ID** to your MATE agent's name (e.g., `chess_mate_root`).
+5. Enable the provider's function-calling / tool-use option if it is not on by default — without it the extension will not offer the agent its editor tools.
+
+---
+
+## Using it from VS Code
+
+Everything above works from VS Code; the difference is only which extension carries the conversation.
+
+* **opencode** ships a VS Code extension that runs the same agent as the terminal client and reads the same `opencode.json`, so the provider block above is all the configuration there is. This is the closest thing to the terminal experience.
+* **Continue** uses `config.yaml` in recent versions. Declare MATE as an OpenAI-compatible model and say that it can call tools, otherwise Continue keeps it in plain chat:
+
+```yaml
+models:
+  - name: MATE Coder Agent
+    provider: openai
+    model: your-exposed-agent-name
+    apiBase: http://localhost:8000/v1
+    apiKey: mate_pat_your_generated_token
+    roles:
+      - chat
+    capabilities:
+      - tool_use
+```
+
+* **Cline / Roo Code** work through the settings panel described above.
+
+### Screenshots and image attachments
+
+A client that attaches a screenshot sends it as an `image_url` content part; MATE forwards it to the agent as image data, so you can paste a failing screen into Cline or Continue and ask about it.
+
+Two rules the bridge enforces:
+
+* **Only inline data.** `data:image/png;base64,...` is accepted; an `https://` URL is not. Fetching an address the caller chooses would make the server issue requests on its behalf, which is an SSRF the bridge has no reason to offer. Coding agents send inline data anyway.
+* **Images larger than 5 MB are not forwarded.** Base64 inflates a screenshot by a third, and past that the image costs more context than it is worth.
+
+When an image cannot be forwarded — it was a URL, it was too large, or the agent's model has no vision support — the agent is told so in place of the image, rather than the attachment vanishing silently. An agent that never learns an image was dropped will happily answer about a screenshot it cannot see.
+
+Vision support is read from LiteLLM's model capability map, and an image is held back only when that map positively says the agent's model is text-only. A model LiteLLM does not know — a custom or self-hosted endpoint — is allowed through, and the provider answers for itself; MATE does not guess from the model's name.
+
+LiteLLM fetches that map from upstream when it is imported and falls back to a copy bundled in the package, so nothing here needs periodic updating. A deployment that does not want the startup fetch to `raw.githubusercontent.com` can set `LITELLM_LOCAL_MODEL_COST_MAP=True` and use the bundled copy, which is sufficient for this decision.
+
+### What MATE does not serve
+
+The bridge implements chat completions only. That is enough for an agent conversation and not enough for everything an IDE extension might ask of a model:
+
+* **No autocomplete.** Inline completion uses a different endpoint and a fill-in-the-middle model. Give Continue a separate `autocomplete` model; do not point that role at MATE.
+* **No embeddings or reranking.** `/v1/embeddings` does not exist, so codebase indexing has to use another provider.
+* **No `/v1/responses`.** Anything configured against the newer OpenAI Responses API will not find it.
+
+### Conversation identity across mode switches
+
+MATE maps a conversation onto a persistent agent session. By default the session id is derived from the agent and the first user message — deliberately **not** from the system prompt, because Cline and Roo rewrite it when you toggle Plan and Act, and a client that changes it on upgrade would otherwise hand the agent a blank session in the middle of a task.
+
+A client that tracks its own conversations can be explicit instead by sending the `X-MATE-Conversation-Id` header; when present it alone decides the session, and nothing the client does to the transcript can break it.
+
+Two consequences worth knowing:
+
+* Two conversations with the same agent that open with an identical first message share a session. Send the header if that matters.
+* If a client compacts history by replacing the opening message, MATE sees a new conversation. The agent keeps its old session but you start a fresh one — predictable, rather than the two silently interleaving.
+* When the runtime holds nothing for a conversation that already has history — you switched the model to a MATE agent mid-conversation, or the session is gone — the history is replayed once, as text, with that first turn, so the agent joins with context instead of a blank slate. A tool result for a call the agent's session never made is likewise passed as text rather than as a function response, which the runtime would reject.
 
 ---
 

@@ -13,10 +13,11 @@ import json
 import logging
 import os
 import time
-from typing import Any, AsyncGenerator, Dict, List, Optional, Tuple, Union
+from typing import (Any, AsyncGenerator, Dict, List, NamedTuple, Optional, Set,
+                    Tuple, Union)
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
@@ -24,10 +25,11 @@ from server.openai_translate import (build_runtime_turns, consumed_index,
                                      conversation_key, event_parts, final_chunk,
                                      iter_sse_payloads, normalize_client_tools,
                                      part_function_call, system_text, text_chunk,
-                                     tool_call_chunk, TextDeltaTracker,
-                                     CLIENT_TOOL_METADATA_KEY)
+                                     tool_call_chunk, transcript_text,
+                                     TextDeltaTracker, CLIENT_TOOL_METADATA_KEY,
+                                     CONVERSATION_ID_HEADER, has_image_parts)
 from server.pat_auth import get_pat_user
-from shared.utils.agent_invoke import _ensure_session
+from server.widget_routes import model_supports_vision
 from shared.utils.database_client import get_database_client
 from shared.utils.models import AgentConfig, User
 from shared.utils.rate_limit_service import get_rate_limit_service
@@ -102,12 +104,13 @@ async def list_models(user: User = Depends(get_pat_user)):
         session.close()
 
 
-def _load_exposed_agent(agent_name: str) -> Optional[int]:
+def _load_exposed_agent(agent_name: str) -> Tuple[Optional[int], str]:
     """
     Refuse anything that is not an agent deliberately exposed as a model.
 
-    Returns the agent's project id, which the rate limiter needs and which
-    would otherwise cost a second query.
+    Returns the agent's project id, which the rate limiter needs, and its model
+    name, which says whether an attached screenshot is worth forwarding — both
+    of which would otherwise cost a second query.
     """
     db = get_database_client()
     session = db.get_session()
@@ -120,7 +123,7 @@ def _load_exposed_agent(agent_name: str) -> Optional[int]:
                 status_code=404,
                 detail=f"Model/Agent '{agent_name}' not found or not exposed as model"
             )
-        return agent.project_id
+        return agent.project_id, agent.model_name or ""
     finally:
         session.close()
 
@@ -194,6 +197,39 @@ def _turn_usage(invocation_ids: List[str]) -> Dict[str, int]:
     return usage
 
 
+class _SessionState(NamedTuple):
+    has_events: bool
+    call_ids: Set[str]
+
+
+async def _session_state(client: httpx.AsyncClient, base: str, agent_name: str,
+                         user_id: str, session_id: str) -> Optional[_SessionState]:
+    """
+    What the runtime already holds for this session, creating it if missing.
+
+    None when the lookup failed: /run_sse can still create the session, and the
+    turns are then built as if the runtime held the whole transcript.
+    """
+    url = f"{base}/apps/{agent_name}/users/{user_id}/sessions/{session_id}"
+    try:
+        response = await client.get(url)
+        if response.status_code == 404:
+            await client.post(url, json={})
+            return _SessionState(False, set())
+        response.raise_for_status()
+        events = response.json().get("events") or []
+    except Exception as exc:
+        logger.warning("Failed to look up ADK session %s: %s", session_id, exc)
+        return None
+    call_ids = set()
+    for event in events:
+        for part in event_parts(event):
+            function_call = part_function_call(part)
+            if function_call and function_call.get("id"):
+                call_ids.add(function_call["id"])
+    return _SessionState(bool(events), call_ids)
+
+
 async def _stream_turn(client: httpx.AsyncClient, payload: Dict[str, Any],
                        client_tool_names: set, tracker: TextDeltaTracker,
                        outcome: Dict[str, Any]) -> AsyncGenerator[Tuple[str, Any], None]:
@@ -256,7 +292,8 @@ async def _stream_turn(client: httpx.AsyncClient, payload: Dict[str, Any],
                         continue
                     if part.get("thought"):
                         continue
-                    delta = tracker.feed(author, part.get("text") or "")
+                    delta = tracker.feed(author, part.get("text") or "",
+                                         bool(event.get("partial")))
                     if delta:
                         yield "text", delta
 
@@ -276,8 +313,6 @@ async def _run_completion(agent_name: str, user_id: str, session_id: str,
     saw_tool_call = False
 
     async with httpx.AsyncClient(timeout=_RUN_TIMEOUT_SECONDS) as client:
-        await _ensure_session(client, base, agent_name, user_id, session_id)
-
         for turn in turns:
             payload: Dict[str, Any] = {
                 "app_name": agent_name,
@@ -315,6 +350,7 @@ async def _run_completion(agent_name: str, user_id: str, session_id: str,
 
 @router.post("/chat/completions")
 async def chat_completions(
+    request: Request,
     body: ChatCompletionRequest,
     user: User = Depends(get_pat_user)
 ):
@@ -325,17 +361,34 @@ async def chat_completions(
     if not messages:
         raise HTTPException(status_code=400, detail="Messages list cannot be empty")
 
-    project_id = _load_exposed_agent(agent_name)
+    project_id, model_name = _load_exposed_agent(agent_name)
     await _enforce_rate_limit(user.user_id, agent_name, project_id)
 
     client_tools = normalize_client_tools(body.tools, body.tool_choice)
-    session_id = conversation_key(agent_name, user.user_id, messages)
+    # A client that tracks its own conversations can say so and keep the agent
+    # session across anything it does to the transcript.
+    conversation_id = request.headers.get(CONVERSATION_ID_HEADER)
+    session_id = conversation_key(agent_name, user.user_id, messages, conversation_id)
     consumed = consumed_index(messages)
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        session = await _session_state(client, f"http://{ADK_HOST}:{ADK_PORT}",
+                                       agent_name, user.user_id, session_id)
     # The caller's system prompt is context for the conversation, not a
     # replacement for the agent's configured instruction, so it rides along with
     # the opening message rather than overriding anything.
     preamble = system_text(messages) if consumed == 0 else ""
-    turns = build_runtime_turns(messages, consumed, preamble)
+    known_call_ids = session.call_ids if session else None
+    if session and consumed and not session.has_events:
+        # The runtime holds none of this conversation — the client switched
+        # models mid-way, or the session is gone — so the history it never saw
+        # is replayed as text with the opening turn.
+        preamble = "\n\n".join(filter(None, [system_text(messages),
+                                              transcript_text(messages[:consumed])]))
+    # Only ask whether the model can see when there is something to see: a
+    # plain chat turn should not pay for a capability lookup.
+    vision = (not has_image_parts(messages, consumed)
+              or model_supports_vision(model_name))
+    turns = build_runtime_turns(messages, consumed, preamble, vision, known_call_ids)
 
     if not turns:
         raise HTTPException(

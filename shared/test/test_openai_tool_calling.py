@@ -31,7 +31,9 @@ from server.pat_auth import get_pat_user
 from shared.utils.rate_limit_service import RateLimitResult
 
 RECEIVED = {"run_sse": [], "sessions": []}
-SCRIPT = {"turns": []}
+# `session` is what the runtime answers to the session look-up: None misses
+# (the bridge then creates it), a dict is the session the runtime holds.
+SCRIPT = {"turns": [], "session": None}
 
 
 def _sse(events):
@@ -45,11 +47,19 @@ class StubRuntimeHandler(BaseHTTPRequestHandler):
         pass
 
     def do_GET(self):
-        # First look-up misses so the bridge creates the session, as ADK does.
         RECEIVED["sessions"].append(("GET", self.path))
-        self.send_response(404)
-        self.send_header("Content-Length", "0")
+        if SCRIPT["session"] is None:
+            # The look-up misses so the bridge creates the session, as ADK does.
+            self.send_response(404)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
+        payload = json.dumps(SCRIPT["session"]).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(payload)))
         self.end_headers()
+        self.wfile.write(payload)
 
     def do_POST(self):
         length = int(self.headers.get("Content-Length", 0))
@@ -73,6 +83,17 @@ class StubRuntimeHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(payload)))
         self.end_headers()
         self.wfile.write(payload)
+
+
+def _session_holding_calls(*call_ids):
+    """A stored session whose last event is the model calling these tools."""
+    return {"id": "s", "events": [{
+        "author": "coder", "invocationId": "e-1",
+        "content": {"role": "model", "parts": [
+            {"functionCall": {"id": call_id, "name": "read", "args": {}}}
+            for call_id in call_ids
+        ]},
+    }]}
 
 
 def free_port():
@@ -115,6 +136,7 @@ class StubRuntimeCase(unittest.TestCase):
         RECEIVED["run_sse"] = []
         RECEIVED["sessions"] = []
         SCRIPT["turns"] = []
+        SCRIPT["session"] = None
 
         self._host = patch.object(openai_routes, "ADK_HOST", "127.0.0.1")
         self._port = patch.object(openai_routes, "ADK_PORT", self.port)
@@ -126,6 +148,7 @@ class StubRuntimeCase(unittest.TestCase):
         agent = MagicMock()
         agent.disabled = False
         agent.expose_as_model = True
+        agent.model_name = "gemini-2.0-flash"
         agent.project_id = 7
         session = MagicMock()
         session.query.return_value.filter_by.return_value.first.return_value = agent
@@ -198,6 +221,7 @@ class TestClientToolRoundTrip(StubRuntimeCase):
     def test_returning_the_result_resumes_the_turn(self):
         # The tool result is a single runtime turn: the paused invocation resumes
         # and finishes with an answer.
+        SCRIPT["session"] = _session_holding_calls("adk-1")
         SCRIPT["turns"] = [
             [{"author": "coder", "invocationId": "e-2",
               "content": {"role": "model", "parts": [{"text": "the file imports os"}]}}],
@@ -220,6 +244,58 @@ class TestClientToolRoundTrip(StubRuntimeCase):
         }])
         self.assertEqual(body["choices"][0]["finish_reason"], "stop")
         self.assertEqual(body["choices"][0]["message"]["content"], "the file imports os")
+
+    def test_a_conversation_the_runtime_never_saw_is_replayed_as_text(self):
+        # OpenCode lets you switch models mid-conversation. The agent then gets
+        # a transcript ending in a result for a call another model made; as a
+        # function response ADK rejects it ("Function call not found for
+        # function response ids"), so it becomes an opening turn that carries
+        # the history.
+        SCRIPT["turns"] = [[{
+            "author": "coder", "invocationId": "e-1",
+            "content": {"role": "model", "parts": [{"text": "imports os"}]},
+        }]]
+        messages = [
+            {"role": "system", "content": "be terse"},
+            {"role": "user", "content": "read a.py"},
+            {"role": "assistant", "content": None,
+             "tool_calls": [{"id": "01M2XGQQPBZ5C7Y9X70Q1WHQKE", "type": "function",
+                             "function": {"name": "read", "arguments": '{"path":"a.py"}'}}]},
+            {"role": "tool", "tool_call_id": "01M2XGQQPBZ5C7Y9X70Q1WHQKE",
+             "name": "read", "content": "import os"},
+        ]
+        response = self._post(messages, tools=[READ_TOOL])
+        self.assertEqual(response.status_code, 200)
+
+        self.assertEqual(len(RECEIVED["run_sse"]), 1)
+        parts = RECEIVED["run_sse"][0]["new_message"]["parts"]
+        self.assertEqual(len(parts), 1)
+        self.assertNotIn("function_response", parts[0])
+        text = parts[0]["text"]
+        self.assertIn("be terse", text)
+        self.assertIn("read a.py", text)
+        self.assertIn("import os", text)
+        self.assertEqual(response.json()["choices"][0]["message"]["content"], "imports os")
+
+    def test_a_result_for_a_call_the_session_lacks_is_not_a_function_response(self):
+        # The session is there but was made by a different call; the stray
+        # result goes with the text instead of failing the whole turn.
+        SCRIPT["session"] = _session_holding_calls("adk-1")
+        SCRIPT["turns"] = [[{
+            "author": "coder", "invocationId": "e-2",
+            "content": {"role": "model", "parts": [{"text": "ok"}]},
+        }]]
+        messages = [
+            {"role": "user", "content": "read a.py"},
+            {"role": "assistant", "content": None},
+            {"role": "tool", "tool_call_id": "stray", "name": "read", "content": "import os"},
+        ]
+        response = self._post(messages, tools=[READ_TOOL])
+        self.assertEqual(response.status_code, 200)
+        parts = RECEIVED["run_sse"][0]["new_message"]["parts"]
+        self.assertNotIn("function_response", parts[0])
+        self.assertIn("import os", parts[0]["text"])
+        self.assertNotIn("joining a conversation", parts[0]["text"])
 
     def test_the_agents_own_tool_calls_are_not_offered_to_the_caller(self):
         # The caller cannot run google_search; showing it as work it owes would
@@ -266,6 +342,57 @@ class TestClientToolRoundTrip(StubRuntimeCase):
             {"role": "user", "content": "again"},
         ])
         self.assertEqual(response.status_code, 200)
+
+    def test_a_screenshot_reaches_the_runtime_as_inline_data(self):
+        SCRIPT["turns"] = [[{
+            "author": "coder", "invocationId": "e-1",
+            "content": {"role": "model", "parts": [{"text": "that is a null deref"}]},
+        }]]
+        response = self._post([{"role": "user", "content": [
+            {"type": "text", "text": "why does this crash"},
+            {"type": "image_url",
+             "image_url": {"url": "data:image/png;base64,aGVsbG8="}},
+        ]}])
+        self.assertEqual(response.status_code, 200)
+
+        parts = RECEIVED["run_sse"][0]["new_message"]["parts"]
+        self.assertEqual(parts[0]["text"], "why does this crash")
+        self.assertEqual(parts[1]["inline_data"],
+                         {"mime_type": "image/png", "data": "aGVsbG8="})
+
+    def test_the_conversation_id_header_pins_the_session(self):
+        SCRIPT["turns"] = [[{
+            "author": "coder", "invocationId": "e-1",
+            "content": {"role": "model", "parts": [{"text": "ok"}]},
+        }]]
+        payload = {"model": "coder", "stream": False,
+                   "messages": [{"role": "user", "content": "one"}]}
+        self.client.post("/v1/chat/completions", json=payload,
+                         headers={"X-MATE-Conversation-Id": "thread-7"})
+        payload["messages"] = [{"role": "user", "content": "a totally different opening"}]
+        self.client.post("/v1/chat/completions", json=payload,
+                         headers={"X-MATE-Conversation-Id": "thread-7"})
+
+        sessions = {body["session_id"] for body in RECEIVED["run_sse"]}
+        self.assertEqual(len(sessions), 1)
+        self.assertTrue(next(iter(sessions)).startswith("openai_sess_"))
+
+    def test_toggling_the_system_prompt_stays_in_one_session(self):
+        # Cline and Roo rewrite the system prompt between Plan and Act; that must
+        # not hand the agent a blank session mid-task.
+        SCRIPT["turns"] = [[{
+            "author": "coder", "invocationId": "e-1",
+            "content": {"role": "model", "parts": [{"text": "ok"}]},
+        }]]
+        self._post([{"role": "system", "content": "PLAN MODE"},
+                    {"role": "user", "content": "fix the parser"}])
+        self._post([{"role": "system", "content": "ACT MODE"},
+                    {"role": "user", "content": "fix the parser"},
+                    {"role": "assistant", "content": "planned"},
+                    {"role": "user", "content": "go ahead"}])
+
+        sessions = {body["session_id"] for body in RECEIVED["run_sse"]}
+        self.assertEqual(len(sessions), 1)
 
     def test_a_turn_with_nothing_new_is_refused(self):
         response = self._post([{"role": "user", "content": "go"},
@@ -326,6 +453,7 @@ class TestRateLimiting(StubRuntimeCase):
         self.svc.record_request.assert_awaited_once_with(user_id="tester", agent_name="coder")
 
     def test_a_request_that_fans_out_into_two_runtime_turns_counts_once(self):
+        SCRIPT["session"] = _session_holding_calls("adk-1")
         SCRIPT["turns"] = [
             [{"author": "coder", "invocationId": "e-2",
               "content": {"role": "model", "parts": [{"text": "imports os"}]}}],
