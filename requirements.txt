@@ -1,4 +1,4 @@
-google-adk==2.3.0
+google-adk==2.9.2
 litellm
 orjson  # Required by litellm 1.81+ completion path (imports proxy utils)
 python-dotenv
@@ -25,7 +25,7 @@ langchain-mcp-adapters
 langgraph-checkpoint-sqlite
 # langgraph-checkpoint-postgres  # For PostgreSQL checkpointing (DB_TYPE=postgresql)
 # langgraph-cli[inmem]  # Dev only: LangGraph Studio bridge (langgraph dev --allow-blocking)
-google-genai
+google-genai>=2.19.0
 psutil
 # MCP dependencies for MCP servers
 mcp
