@@ -15,7 +15,7 @@ from google.adk.tools.tool_context import ToolContext
 from ..database_client import get_database_client
 from ..models import AgentConfig
 from ..user_service import get_user_service
-from ...utils.utils import reload_agent_cache
+from ...utils.utils import mask_config_secrets, reload_agent_cache
 
 logger = logging.getLogger(__name__)
 
@@ -98,7 +98,9 @@ def _get_current_agent_config(agent_name: str) -> Optional[Dict[str, Any]]:
             logger.error(f"Agent {agent_name} not found in database")
             return None
         
-        return agent_config.to_dict()
+        # read_agent returns this to the model, and whatever reaches the model can be
+        # talked out of it; the endpoint key is never needed here
+        return mask_config_secrets(agent_config.to_dict())
     except Exception as e:
         logger.error(f"Error getting agent config: {e}")
         return None

@@ -49,18 +49,9 @@ def sanitize_agent_text(text: Optional[str]) -> Optional[str]:
     return text
 
 
-# The edit form posts every field back, so the stored key has to survive a round
-# trip without being sent to the browser. A ${VAR} reference is not a secret and
-# goes out as written; anything else is replaced by this sentinel, and a save that
-# returns the sentinel unchanged leaves the stored value alone.
-STORED_SECRET_SENTINEL = "__stored__"
-
-
-def mask_api_key(value: Optional[str]) -> Optional[str]:
-    """Hide a literal key from API responses, passing ${VAR} references through."""
-    if not value or value.strip().startswith("${"):
-        return value
-    return STORED_SECRET_SENTINEL
+# Defined with the other secret handling in shared.utils.utils, so tool code that
+# returns configs to a model can mask them without importing the dashboard
+from shared.utils.utils import STORED_SECRET_SENTINEL, mask_api_key, mask_config_secrets  # noqa: F401
 
 
 def make_name_substituter(name_map: Dict[str, str]):
@@ -801,7 +792,8 @@ class DashboardServer:
             configs = query.all()
             result = []
             for config in configs:
-                config_dict = config.to_dict()
+                # Pages embed this list and the API returns it, to any signed-in user
+                config_dict = mask_config_secrets(config.to_dict())
                 # Always use the database object's ID directly to ensure it's correct
                 # This prevents any issues where to_dict() might return wrong ID
                 db_id = config.id
@@ -1451,7 +1443,12 @@ class DashboardServer:
                 .order_by(self.AgentConfigVersion.version_number.desc())
                 .all()
             )
-            return [v.to_dict() for v in versions]
+            result = []
+            for v in versions:
+                d = v.to_dict()
+                d['config_snapshot'] = mask_config_secrets(d.get('config_snapshot') or {})
+                result.append(d)
+            return result
         except Exception as e:
             logger.error(f"Error fetching agent versions: {e}")
             return []
@@ -1486,7 +1483,7 @@ class DashboardServer:
 
             session.commit()
             self._snapshot_agent_config(session, config, change_type='rollback', changed_by=changed_by)
-            return config.to_dict()
+            return mask_config_secrets(config.to_dict())
         except Exception as e:
             logger.error(f"Error rolling back agent config: {e}")
             session.rollback()
