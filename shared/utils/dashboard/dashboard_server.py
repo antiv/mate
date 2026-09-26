@@ -3066,6 +3066,23 @@ class DashboardServer:
 
         return None
 
+    def _get_session_events(self, session_id: str) -> Optional[List[Dict[str, Any]]]:
+        """
+        A session's events by id alone, from whichever runtime holds it; None when
+        neither does. A feedback row knows the session but not its app or user,
+        which the LangGraph lookup in _get_session_detail requires.
+        """
+        try:
+            from shared.utils.langgraph.session_store import get_session_store
+            events = get_session_store().get_events(session_id)
+            if events:
+                return events
+        except Exception as e:
+            logger.debug(f"No LangGraph events for session {session_id}: {e}")
+
+        detail = self._get_session_detail(runtime="adk", app_name="", user_id="", session_id=session_id)
+        return detail["events"] if detail else None
+
     def _delete_session(self, runtime: str, app_name: str, user_id: str, session_id: str) -> bool:
         """Delete a session from LangGraph or ADK session storage."""
         success = False
@@ -5966,6 +5983,38 @@ class DashboardServer:
             finally:
                 session.close()
 
+        @self.app.get("/dashboard/api/evals/feedback", tags=["Dashboard - Evals"])
+        def list_rated_down_responses(
+            request: Request,
+            agent_name: str = Query(""),
+            username: str = Depends(self._get_auth_user_dependency),
+        ):
+            """
+            Responses rated thumbs-down, with the question and answer resolved from
+            the session, so one can be turned into a test case. Admin only: this is
+            what visitors said to the agent.
+
+            Deliberately sync: it reads up to one session store per row, which
+            FastAPI then runs in its threadpool instead of on the event loop.
+            """
+            if not self._get_is_admin(request):
+                raise HTTPException(status_code=403, detail="Admin access required")
+            from shared.utils.feedback_service import extract_exchange, get_feedback_service
+
+            service = get_feedback_service()
+            rows = service.list_rated_down(agent_name=agent_name.strip() or None)
+            events_by_session: Dict[str, Optional[List[Dict[str, Any]]]] = {}
+            for row in rows:
+                sid = row["session_id"]
+                if sid not in events_by_session:
+                    events_by_session[sid] = self._get_session_events(sid)
+                events = events_by_session[sid]
+                question, answer = extract_exchange(events or [], row["message_id"])
+                row["question"] = question
+                row["answer"] = answer
+                row["session_available"] = events is not None
+            return {"responses": rows, "agents": service.rated_down_agents()}
+
         @self.app.post("/dashboard/api/evals", tags=["Dashboard - Evals"])
         async def create_test_case(request: Request, username: str = Depends(self._get_auth_user_dependency)):
             """Create a new test case."""
@@ -5980,12 +6029,29 @@ class DashboardServer:
             if eval_method not in ("exact_match", "semantic", "llm_judge"):
                 raise HTTPException(status_code=400, detail="eval_method must be exact_match, semantic, or llm_judge")
 
+            source_feedback_id = body.get("source_feedback_id")
+            if source_feedback_id is not None and (
+                    isinstance(source_feedback_id, bool) or not isinstance(source_feedback_id, int)):
+                raise HTTPException(status_code=400, detail="source_feedback_id must be an integer")
+
             if not self.db_client:
                 raise HTTPException(status_code=503, detail="Database not available")
             session = self.db_client.get_session()
             if not session:
                 raise HTTPException(status_code=503, detail="Database session not available")
             try:
+                if source_feedback_id is not None:
+                    from shared.utils.models import ResponseFeedback
+                    if not session.query(ResponseFeedback.id).filter(
+                            ResponseFeedback.id == source_feedback_id).first():
+                        raise HTTPException(status_code=400, detail="source_feedback_id does not exist")
+                    existing = session.query(self.TestCase.id).filter(
+                        self.TestCase.source_feedback_id == source_feedback_id,
+                        self.TestCase.is_active.is_(True)).first()
+                    if existing:
+                        raise HTTPException(
+                            status_code=409,
+                            detail=f"This response is already test case {existing[0]}")
                 tc = self.TestCase(
                     agent_name=agent_name,
                     version_id=body.get("version_id"),
@@ -5995,11 +6061,14 @@ class DashboardServer:
                     judge_model=body.get("judge_model"),
                     threshold=float(body.get("threshold", 0.7)),
                     created_by=username,
+                    source_feedback_id=source_feedback_id,
                 )
                 session.add(tc)
                 session.commit()
                 session.refresh(tc)
                 return {"test_case": tc.to_dict()}
+            except HTTPException:
+                raise
             except Exception as e:
                 session.rollback()
                 logger.error("Error creating test case: %s", e)

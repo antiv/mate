@@ -1037,6 +1037,8 @@ class TestCase(Base):
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     created_by = Column(String(255), nullable=True)
     is_active = Column(Boolean, nullable=False, default=True)
+    # The rated-down response this case was made from, so it is not added twice
+    source_feedback_id = Column(Integer, nullable=True)
 
     version = relationship("AgentConfigVersion")
     results = relationship("EvalResult", back_populates="test_case", cascade="all, delete-orphan")
@@ -1054,6 +1056,7 @@ class TestCase(Base):
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'created_by': self.created_by,
             'is_active': self.is_active,
+            'source_feedback_id': self.source_feedback_id,
         }
 
 

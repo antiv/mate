@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Turn a thumbs-down into an eval test case** - a 👎 used to show up only as a number in the satisfaction rate, with no way to see which responses earned it. The Evals page now lists rated-down responses with the user's question, the agent's answer and the visitor's comment, read back from the session by invocation id on either runtime. **Add to evals** opens the test case form prefilled with the agent and the question, defaulting to `llm_judge`, with the rated answer shown for reference. A test case records the rating it came from (`test_cases.source_feedback_id`, migration V032), so the same response is not added twice. The list is admin-only. See `documents/EVALS.md` (#109)
+
 ## [1.3.0] - 2026-09-26
 
 A MATE agent can now sit behind the coding tool you already use. OpenCode, Cline,
