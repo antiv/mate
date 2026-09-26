@@ -7,18 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.2] - 2026-09-26
+
+A security release: every deployment should upgrade. A dynamic subagent now
+keeps its parent's approvals and guardrails, not only its tool set, and the
+Users page no longer runs script from a visitor's user id. It also brings
+**Suggest a fix**: from a failing test case or a thumbs-down, a model proposes a
+revised instruction, which is checked against the eval suite before an admin
+applies it.
+
+**Before upgrading:** a tool listed in an agent's `require_confirmation` can no
+longer run inside that agent's dynamic subagents, which have no one to approve it.
+If an orchestrator delegated such a tool, it now has to call it itself.
+
 ### Security
 
 - **A dynamic subagent dropped its parent's approvals and guardrails.** The fix in 1.3.0 limited a subagent to the tools its parent holds, but not to the terms it holds them on. A tool the parent may only run after a person approves it (`require_confirmation`) reached the subagent without that requirement, and the parent's guardrails did not apply to the subagent's model at all: guardrails are looked up by agent name, and a subagent is a fresh name with no config of its own. A subagent now inherits `require_confirmation`, so a tool that needs approval cannot run inside one, and runs under its parent's input and output guardrails. Prompted by a comment on the 1.3.0 release discussion about identities regenerated mid-session
 - **The Users page could run script from a user id.** Its row and button handlers put the id between single quotes with an escape that left quotes alone, and user ids include widget visitors', which the visitor partly chooses. They are now passed as JSON, as on the other pages 1.3.1 fixed
+- **The remaining dashboard click handlers pass their arguments as JSON** - file search, agent builds, templates, evals, rate limits, system jobs and usage logs quoted values by hand, as the pages fixed in 1.3.1 had; the values there are set by admins. Thanks to @tayfuryldz, whose PR (#128) was the first community contribution through the new `good first issue` list
+
+### Added
+
+- **Suggest a fix for a bad response** - from a failing test case or a thumbs-down, a model proposes a revised instruction for the agent with a short reason. It can be edited, then checked: the agent's whole suite runs in memory with the current and the suggested instruction, results side by side and regressions highlighted. Apply is enabled only for the text that was checked and is a normal edit - a new version, an audit entry naming what prompted it, a reload - refused if the instruction changed meanwhile. Only the instruction can change, whatever the model or the request says; users' questions and comments reach the model as quoted data. Memory blocks are left alone for now: they are shared by the project's agents and not versioned. Uses `EVAL_IMPROVE_MODEL`, or `EVAL_JUDGE_MODEL`. See `documents/EVALS.md` (#112)
 
 ### Fixed
 
 - **Ratings from the Work Room were refused for non-admins.** Rating a reply, and since 1.3.1 adding a note to a thumbs-down, posts to `/dashboard/api/feedback`, which the dashboard authz middleware did not allow for non-admins; the chat ignored the `403`, so the thumb lit up and nothing was recorded. It is now allowed alongside renaming a conversation
 
-### Added
+### Changed
 
-- **Suggest a fix for a bad response** - from a failing test case or a thumbs-down, a model proposes a revised instruction for the agent with a short reason. It can be edited, then checked: the agent's whole suite runs in memory with the current and the suggested instruction, results side by side and regressions highlighted. Apply is enabled only for the text that was checked and is a normal edit - a new version, an audit entry naming what prompted it, a reload - refused if the instruction changed meanwhile. Only the instruction can change, whatever the model or the request says; users' questions and comments reach the model as quoted data. Memory blocks are left alone for now: they are shared by the project's agents and not versioned. Uses `EVAL_IMPROVE_MODEL`, or `EVAL_JUDGE_MODEL`. See `documents/EVALS.md` (#112)
+- A callback branch in `AgentManager` that could never run is removed, with the `parent_agent_type` parameter only it read. Its comment claimed LLM agents under a graph ran without RBAC and guardrails; they never did, and a test now keeps it that way
 
 ## [1.3.1] - 2026-09-26
 
