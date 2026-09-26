@@ -21,7 +21,7 @@ Work Room but can no longer call the dashboard's admin APIs.
 
 ### Security
 
-Details will follow in a GitHub security advisory.
+Details, and what to rotate after upgrading, are in the security advisory [GHSA-35hg-8vcr-5h6h](https://github.com/antiv/mate/security/advisories/GHSA-35hg-8vcr-5h6h).
 
 - **The interactive browser websocket required no login.** It now requires a signed-in session and serves only that user's own browser. The server-side browser, including agents' browser tools, no longer loads private, loopback or link-local addresses (`BROWSER_ALLOW_PRIVATE_NETWORK=true` lifts this for intranet deployments)
 - **Chat replies could run script.** The widget, Work Room and standalone chat now escape an agent's reply before rendering its markdown, and allow only http(s) links. The dashboard no longer keeps the password in the browser
