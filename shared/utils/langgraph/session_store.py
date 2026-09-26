@@ -80,6 +80,17 @@ class SessionStore:
         finally:
             db.close()
 
+    def get_events(self, session_id: str) -> List[Dict[str, Any]]:
+        """Events of a session by id alone, for callers that know no app or user."""
+        db = self._db_session()
+        try:
+            events = db.query(LangGraphEvent).filter(
+                LangGraphEvent.session_id == session_id
+            ).order_by(LangGraphEvent.timestamp).all()
+            return [e.to_adk_event() for e in events]
+        finally:
+            db.close()
+
     def list_sessions(self, app_name: str, user_id: str) -> List[Dict[str, Any]]:
         """List sessions for an app/user (without events), newest first."""
         db = self._db_session()

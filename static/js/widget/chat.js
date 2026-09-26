@@ -42,23 +42,23 @@
 
   // UI string translations — placeholder, send button, new-chat button, stop button, interrupted message
   const UI_STRINGS = {
-    en: { placeholder: "Type a message…", send: "Send", newChat: "New Chat", stop: "Stop", interrupted: "Response interrupted", copy: "Copy", copied: "Copied!", download: "Download", rateUp: "Helpful", rateDown: "Not helpful", access_denied: "You don't have permission to use this agent. Please contact the administrator.", error_occurred: "Hmm, I couldn't quite process that. Could you say it again?", endChat: "End chat", endConfirm: "End this conversation? Your chat will be cleared.", endYes: "Yes, end", endNo: "No", confirmTitle: "Approval required", confirmApprove: "Approve", confirmReject: "Reject", confirmApproved: "Approved", confirmRejected: "Rejected" },
-    sr: { placeholder: "Unesite poruku…", send: "Pošalji", newChat: "Nov razgovor", stop: "Prekini", interrupted: "Odgovor je prekinut", copy: "Kopiraj", copied: "Kopirano!", download: "Preuzmi", rateUp: "Koristan odgovor", rateDown: "Nije koristan", access_denied: "Nemate pristup ovom agentu. Molimo kontaktirajte administratora.", error_occurred: "Hm, nisam uspeo to da obradim. Možete li da ponovite?", endChat: "Završi", endConfirm: "Završiti razgovor? Vaš chat će biti obrisan.", endYes: "Da, završi", endNo: "Ne", confirmTitle: "Potrebna je potvrda", confirmApprove: "Potvrdi", confirmReject: "Odbaci", confirmApproved: "Potvrđeno", confirmRejected: "Odbačeno" },
-    hr: { placeholder: "Unesite poruku…", send: "Pošalji", newChat: "Novi razgovor", stop: "Prekini", interrupted: "Odgovor je prekinut", copy: "Kopiraj", copied: "Kopirano!", download: "Preuzmi", rateUp: "Koristan odgovor", rateDown: "Nije koristan", access_denied: "Nemate pristup ovom agentu. Kontaktirajte administratora.", error_occurred: "Hm, nisam uspio to obraditi. Možete li ponoviti?" },
-    bs: { placeholder: "Unesite poruku…", send: "Pošalji", newChat: "Novi razgovor", stop: "Prekini", interrupted: "Odgovor je prekinut", copy: "Kopiraj", copied: "Kopirano!", download: "Preuzmi", rateUp: "Koristan odgovor", rateDown: "Nije koristan", access_denied: "Nemate pristup ovom agentu. Kontaktirajte administratora.", error_occurred: "Hm, nisam uspio to obraditi. Možete li ponoviti?" },
-    de: { placeholder: "Nachricht eingeben…", send: "Senden", newChat: "Neuer Chat", stop: "Stoppen", interrupted: "Antwort unterbrochen", copy: "Kopieren", copied: "Kopiert!", download: "Herunterladen", rateUp: "Hilfreich", rateDown: "Nicht hilfreich", access_denied: "Sie haben keinen Zugriff auf diesen Agenten. Bitte kontaktieren Sie den Administrator.", error_occurred: "Hmm, das konnte ich nicht verarbeiten. Können Sie es wiederholen?" },
-    fr: { placeholder: "Écrivez un message…", send: "Envoyer", newChat: "Nouveau chat", stop: "Arrêter", interrupted: "Réponse interrompue", copy: "Copier", copied: "Copié !", download: "Télécharger", rateUp: "Utile", rateDown: "Pas utile", access_denied: "Vous n'avez pas accès à cet agent. Veuillez contacter l'administrateur.", error_occurred: "Hmm, je n'ai pas réussi à traiter cela. Pouvez-vous répéter ?" },
-    es: { placeholder: "Escribe un mensaje…", send: "Enviar", newChat: "Nueva conversación", stop: "Detener", interrupted: "Respuesta interrumpida", access_denied: "No tienes permiso para usar este agente. Contacta al administrador.", error_occurred: "Mmm, no pude procesar eso. ¿Puedes repetirlo?" },
-    it: { placeholder: "Scrivi un messaggio…", send: "Invia", newChat: "Nuova chat", stop: "Interrompi", interrupted: "Risposta interrotta", access_denied: "Non hai accesso a questo agente. Contatta l'amministratore.", error_occurred: "Hmm, non sono riuscito a elaborarlo. Puoi ripetere?" },
-    pt: { placeholder: "Escreva uma mensagem…", send: "Enviar", newChat: "Nova conversa", stop: "Parar", interrupted: "Resposta interrompida", access_denied: "Você não tem acesso a este agente. Contacte o administrador.", error_occurred: "Hmm, não consegui processar isso. Pode repetir?" },
-    nl: { placeholder: "Typ een bericht…", send: "Versturen", newChat: "Nieuw gesprek", stop: "Stoppen", interrupted: "Reactie onderbroken", access_denied: "U heeft geen toegang tot deze agent. Neem contact op met de beheerder.", error_occurred: "Hmm, ik kon dat niet verwerken. Kunt u het herhalen?" },
-    pl: { placeholder: "Wpisz wiadomość…", send: "Wyślij", newChat: "Nowy czat", stop: "Zatrzymaj", interrupted: "Odpowiedź przerwana", access_denied: "Nie masz dostępu do tego agenta. Skontaktuj się z administratorem.", error_occurred: "Hmm, nie udało mi się tego przetworzyć. Czy możesz powtórzyć?" },
-    ru: { placeholder: "Введите сообщение…", send: "Отправить", newChat: "Новый чат", stop: "Остановить", interrupted: "Ответ прерван", access_denied: "У вас нет доступа к этому агенту. Свяжитесь с администратором.", error_occurred: "Хм, мне не удалось это обработать. Пожалуйста, повторите." },
-    zh: { placeholder: "输入消息…", send: "发送", newChat: "新对话", stop: "停止", interrupted: "回答被中断", access_denied: "您没有访问此代理的权限。请联系管理员。", error_occurred: "嗯，我没能理解那条信息。能再说一遍吗？" },
-    ja: { placeholder: "メッセージを入力…", send: "送信", newChat: "新しいチャット", stop: "停止", interrupted: "回答が中断されました", access_denied: "このエージェントへのアクセス権がありません。管理者にお問い合わせください。", error_occurred: "うーん、うまく処理できませんでした。もう一度お願いできますか？" },
-    ar: { placeholder: "اكتب رسالة…", send: "إرسال", newChat: "محادثة جديدة", stop: "إيقاف", interrupted: "تم مقاطعة الإجابة", access_denied: "ليس لديك صلاحية الوصول إلى هذا الوكيل. يرجى التواصل مع المسؤول.", error_occurred: "لم أتمكن من معالجة ذلك. هل يمكنك تكرارها؟" },
-    he: { placeholder: "כתוב הודעה…", send: "שלח", newChat: "שיחה חדשה", stop: "עצור", interrupted: "התשובה הופסקה", access_denied: "אין לך הרשאה לשימוש בסוכן זה. אנא פנה למנהל המערכת.", error_occurred: "לא הצלחתי לעבד את זה. תוכל לחזור על כך?" },
-    tr: { placeholder: "Mesaj yazın…", send: "Gönder", newChat: "Yeni Sohbet", stop: "Durdur", interrupted: "Yanıt yarıda kesildi", access_denied: "Bu ajana erişim izniniz yok. Lütfen yönetici ile iletişime geçin.", error_occurred: "Hmm, bunu işleyemedim. Tekrar eder misiniz?" },
+    en: { placeholder: "Type a message…", send: "Send", newChat: "New Chat", stop: "Stop", interrupted: "Response interrupted", copy: "Copy", copied: "Copied!", download: "Download", rateUp: "Helpful", rateDown: "Not helpful", access_denied: "You don't have permission to use this agent. Please contact the administrator.", error_occurred: "Hmm, I couldn't quite process that. Could you say it again?", endChat: "End chat", endConfirm: "End this conversation? Your chat will be cleared.", endYes: "Yes, end", endNo: "No", confirmTitle: "Approval required", confirmApprove: "Approve", confirmReject: "Reject", confirmApproved: "Approved", confirmRejected: "Rejected", rateCommentPrompt: "What was wrong? (optional)", rateCommentSend: "Send", rateCommentSkip: "Skip", rateCommentThanks: "Thanks for the feedback" },
+    sr: { placeholder: "Unesite poruku…", send: "Pošalji", newChat: "Nov razgovor", stop: "Prekini", interrupted: "Odgovor je prekinut", copy: "Kopiraj", copied: "Kopirano!", download: "Preuzmi", rateUp: "Koristan odgovor", rateDown: "Nije koristan", access_denied: "Nemate pristup ovom agentu. Molimo kontaktirajte administratora.", error_occurred: "Hm, nisam uspeo to da obradim. Možete li da ponovite?", endChat: "Završi", endConfirm: "Završiti razgovor? Vaš chat će biti obrisan.", endYes: "Da, završi", endNo: "Ne", confirmTitle: "Potrebna je potvrda", confirmApprove: "Potvrdi", confirmReject: "Odbaci", confirmApproved: "Potvrđeno", confirmRejected: "Odbačeno", rateCommentPrompt: "Šta nije bilo u redu? (opciono)", rateCommentSend: "Pošalji", rateCommentSkip: "Preskoči", rateCommentThanks: "Hvala na povratnoj informaciji" },
+    hr: { placeholder: "Unesite poruku…", send: "Pošalji", newChat: "Novi razgovor", stop: "Prekini", interrupted: "Odgovor je prekinut", copy: "Kopiraj", copied: "Kopirano!", download: "Preuzmi", rateUp: "Koristan odgovor", rateDown: "Nije koristan", access_denied: "Nemate pristup ovom agentu. Kontaktirajte administratora.", error_occurred: "Hm, nisam uspio to obraditi. Možete li ponoviti?", rateCommentPrompt: "Što nije bilo u redu? (neobavezno)", rateCommentSend: "Pošalji", rateCommentSkip: "Preskoči", rateCommentThanks: "Hvala na povratnoj informaciji" },
+    bs: { placeholder: "Unesite poruku…", send: "Pošalji", newChat: "Novi razgovor", stop: "Prekini", interrupted: "Odgovor je prekinut", copy: "Kopiraj", copied: "Kopirano!", download: "Preuzmi", rateUp: "Koristan odgovor", rateDown: "Nije koristan", access_denied: "Nemate pristup ovom agentu. Kontaktirajte administratora.", error_occurred: "Hm, nisam uspio to obraditi. Možete li ponoviti?", rateCommentPrompt: "Šta nije bilo u redu? (opcionalno)", rateCommentSend: "Pošalji", rateCommentSkip: "Preskoči", rateCommentThanks: "Hvala na povratnoj informaciji" },
+    de: { placeholder: "Nachricht eingeben…", send: "Senden", newChat: "Neuer Chat", stop: "Stoppen", interrupted: "Antwort unterbrochen", copy: "Kopieren", copied: "Kopiert!", download: "Herunterladen", rateUp: "Hilfreich", rateDown: "Nicht hilfreich", access_denied: "Sie haben keinen Zugriff auf diesen Agenten. Bitte kontaktieren Sie den Administrator.", error_occurred: "Hmm, das konnte ich nicht verarbeiten. Können Sie es wiederholen?", rateCommentPrompt: "Was war falsch? (optional)", rateCommentSend: "Senden", rateCommentSkip: "Überspringen", rateCommentThanks: "Danke für Ihr Feedback" },
+    fr: { placeholder: "Écrivez un message…", send: "Envoyer", newChat: "Nouveau chat", stop: "Arrêter", interrupted: "Réponse interrompue", copy: "Copier", copied: "Copié !", download: "Télécharger", rateUp: "Utile", rateDown: "Pas utile", access_denied: "Vous n'avez pas accès à cet agent. Veuillez contacter l'administrateur.", error_occurred: "Hmm, je n'ai pas réussi à traiter cela. Pouvez-vous répéter ?", rateCommentPrompt: "Qu'est-ce qui n'allait pas ? (facultatif)", rateCommentSend: "Envoyer", rateCommentSkip: "Passer", rateCommentThanks: "Merci pour votre retour" },
+    es: { placeholder: "Escribe un mensaje…", send: "Enviar", newChat: "Nueva conversación", stop: "Detener", interrupted: "Respuesta interrumpida", access_denied: "No tienes permiso para usar este agente. Contacta al administrador.", error_occurred: "Mmm, no pude procesar eso. ¿Puedes repetirlo?", rateCommentPrompt: "¿Qué estuvo mal? (opcional)", rateCommentSend: "Enviar", rateCommentSkip: "Omitir", rateCommentThanks: "Gracias por tus comentarios" },
+    it: { placeholder: "Scrivi un messaggio…", send: "Invia", newChat: "Nuova chat", stop: "Interrompi", interrupted: "Risposta interrotta", access_denied: "Non hai accesso a questo agente. Contatta l'amministratore.", error_occurred: "Hmm, non sono riuscito a elaborarlo. Puoi ripetere?", rateCommentPrompt: "Cosa non andava? (facoltativo)", rateCommentSend: "Invia", rateCommentSkip: "Salta", rateCommentThanks: "Grazie per il feedback" },
+    pt: { placeholder: "Escreva uma mensagem…", send: "Enviar", newChat: "Nova conversa", stop: "Parar", interrupted: "Resposta interrompida", access_denied: "Você não tem acesso a este agente. Contacte o administrador.", error_occurred: "Hmm, não consegui processar isso. Pode repetir?", rateCommentPrompt: "O que estava errado? (opcional)", rateCommentSend: "Enviar", rateCommentSkip: "Pular", rateCommentThanks: "Obrigado pelo feedback" },
+    nl: { placeholder: "Typ een bericht…", send: "Versturen", newChat: "Nieuw gesprek", stop: "Stoppen", interrupted: "Reactie onderbroken", access_denied: "U heeft geen toegang tot deze agent. Neem contact op met de beheerder.", error_occurred: "Hmm, ik kon dat niet verwerken. Kunt u het herhalen?", rateCommentPrompt: "Wat ging er mis? (optioneel)", rateCommentSend: "Versturen", rateCommentSkip: "Overslaan", rateCommentThanks: "Bedankt voor je feedback" },
+    pl: { placeholder: "Wpisz wiadomość…", send: "Wyślij", newChat: "Nowy czat", stop: "Zatrzymaj", interrupted: "Odpowiedź przerwana", access_denied: "Nie masz dostępu do tego agenta. Skontaktuj się z administratorem.", error_occurred: "Hmm, nie udało mi się tego przetworzyć. Czy możesz powtórzyć?", rateCommentPrompt: "Co było nie tak? (opcjonalnie)", rateCommentSend: "Wyślij", rateCommentSkip: "Pomiń", rateCommentThanks: "Dziękujemy za opinię" },
+    ru: { placeholder: "Введите сообщение…", send: "Отправить", newChat: "Новый чат", stop: "Остановить", interrupted: "Ответ прерван", access_denied: "У вас нет доступа к этому агенту. Свяжитесь с администратором.", error_occurred: "Хм, мне не удалось это обработать. Пожалуйста, повторите.", rateCommentPrompt: "Что было не так? (необязательно)", rateCommentSend: "Отправить", rateCommentSkip: "Пропустить", rateCommentThanks: "Спасибо за отзыв" },
+    zh: { placeholder: "输入消息…", send: "发送", newChat: "新对话", stop: "停止", interrupted: "回答被中断", access_denied: "您没有访问此代理的权限。请联系管理员。", error_occurred: "嗯，我没能理解那条信息。能再说一遍吗？", rateCommentPrompt: "哪里有问题？（可选）", rateCommentSend: "发送", rateCommentSkip: "跳过", rateCommentThanks: "感谢您的反馈" },
+    ja: { placeholder: "メッセージを入力…", send: "送信", newChat: "新しいチャット", stop: "停止", interrupted: "回答が中断されました", access_denied: "このエージェントへのアクセス権がありません。管理者にお問い合わせください。", error_occurred: "うーん、うまく処理できませんでした。もう一度お願いできますか？", rateCommentPrompt: "何が問題でしたか？（任意）", rateCommentSend: "送信", rateCommentSkip: "スキップ", rateCommentThanks: "フィードバックありがとうございます" },
+    ar: { placeholder: "اكتب رسالة…", send: "إرسال", newChat: "محادثة جديدة", stop: "إيقاف", interrupted: "تم مقاطعة الإجابة", access_denied: "ليس لديك صلاحية الوصول إلى هذا الوكيل. يرجى التواصل مع المسؤول.", error_occurred: "لم أتمكن من معالجة ذلك. هل يمكنك تكرارها؟", rateCommentPrompt: "ما الخطأ؟ (اختياري)", rateCommentSend: "إرسال", rateCommentSkip: "تخطي", rateCommentThanks: "شكرًا على ملاحظاتك" },
+    he: { placeholder: "כתוב הודעה…", send: "שלח", newChat: "שיחה חדשה", stop: "עצור", interrupted: "התשובה הופסקה", access_denied: "אין לך הרשאה לשימוש בסוכן זה. אנא פנה למנהל המערכת.", error_occurred: "לא הצלחתי לעבד את זה. תוכל לחזור על כך?", rateCommentPrompt: "מה לא היה בסדר? (אופציונלי)", rateCommentSend: "שליחה", rateCommentSkip: "דילוג", rateCommentThanks: "תודה על המשוב" },
+    tr: { placeholder: "Mesaj yazın…", send: "Gönder", newChat: "Yeni Sohbet", stop: "Durdur", interrupted: "Yanıt yarıda kesildi", access_denied: "Bu ajana erişim izniniz yok. Lütfen yönetici ile iletişime geçin.", error_occurred: "Hmm, bunu işleyemedim. Tekrar eder misiniz?", rateCommentPrompt: "Sorun neydi? (isteğe bağlı)", rateCommentSend: "Gönder", rateCommentSkip: "Atla", rateCommentThanks: "Geri bildiriminiz için teşekkürler" },
   };
   const RTL_LANGS = ["ar", "he", "fa", "ur"];
 
@@ -1416,6 +1416,13 @@
       btn.addEventListener("click", function (e) {
         e.stopPropagation();
         _submitRating(messageEl, invocationId, rating, container);
+        if (rating === "down") {
+          _openRatingComment(messageEl, s, function (comment) {
+            _submitRating(messageEl, invocationId, "down", container, comment);
+          });
+        } else {
+          _closeRatingComment(messageEl);
+        }
       });
       return btn;
     }
@@ -1432,7 +1439,7 @@
     });
   }
 
-  function _submitRating(messageEl, invocationId, rating, container) {
+  function _submitRating(messageEl, invocationId, rating, container, comment) {
     // Optimistic: a rating is a courtesy, not a transaction — reflect the click at once
     ratings[invocationId] = rating;
     _paintRating(container, rating);
@@ -1442,6 +1449,8 @@
       message_id: invocationId,
       rating: rating,
     };
+    // Sent as a second request on the same rating, which the server updates in place
+    if (comment) payload.comment = comment;
     fetch(`${BASE}/widget/api/feedback`, {
       method: "POST",
       headers: {
@@ -1452,6 +1461,67 @@
     }).catch(function () {
       /* the visitor does not need to know; the next rating retries */
     });
+  }
+
+  // After a thumbs-down, an optional note on what was wrong. The rating is already
+  // recorded; skipping the note loses nothing.
+  function _openRatingComment(messageEl, s, onSend) {
+    if (messageEl.querySelector(".rate-comment")) return;
+    var en = UI_STRINGS["en"];
+
+    var form = document.createElement("form");
+    form.className = "rate-comment";
+    form.addEventListener("click", function (e) { e.stopPropagation(); });
+
+    var input = document.createElement("textarea");
+    input.className = "rate-comment-input";
+    input.rows = 2;
+    input.maxLength = 2000;
+    input.placeholder = s.rateCommentPrompt || en.rateCommentPrompt;
+    input.setAttribute("aria-label", input.placeholder);
+
+    var actions = document.createElement("div");
+    actions.className = "rate-comment-actions";
+    var skip = document.createElement("button");
+    skip.type = "button";
+    skip.className = "rate-comment-skip";
+    skip.textContent = s.rateCommentSkip || en.rateCommentSkip;
+    var send = document.createElement("button");
+    send.type = "submit";
+    send.className = "rate-comment-send";
+    send.textContent = s.rateCommentSend || en.rateCommentSend;
+    actions.appendChild(skip);
+    actions.appendChild(send);
+    form.appendChild(input);
+    form.appendChild(actions);
+
+    skip.addEventListener("click", function () { form.remove(); });
+    input.addEventListener("keydown", function (e) {
+      if (e.key === "Escape") {
+        form.remove();
+      } else if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        form.requestSubmit ? form.requestSubmit() : send.click();
+      }
+    });
+    form.addEventListener("submit", function (e) {
+      e.preventDefault();
+      var text = input.value.trim();
+      if (!text) { form.remove(); return; }
+      onSend(text);
+      var thanks = document.createElement("div");
+      thanks.className = "rate-comment rate-comment-thanks";
+      thanks.textContent = s.rateCommentThanks || en.rateCommentThanks;
+      form.replaceWith(thanks);
+    });
+
+    messageEl.appendChild(form);
+    input.focus();
+  }
+
+  function _closeRatingComment(messageEl) {
+    var el = messageEl.querySelector(".rate-comment");
+    if (el) el.remove();
   }
 
   function _fallbackCopy(text, btn, successLabel, normalLabel) {

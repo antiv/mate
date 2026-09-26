@@ -92,6 +92,43 @@
             Select an agent suite to view score history
         </div>
     </div>
+
+    <!-- Rated-down responses -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
+        <div class="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+                <h3 class="text-sm font-semibold text-gray-900 dark:text-white">
+                    <i class="fas fa-thumbs-down mr-1 text-red-500"></i>Rated Down
+                </h3>
+                <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Responses users gave a thumbs-down. Turn one into a test case so the same answer is caught next time.</p>
+            </div>
+            <select id="rdAgentFilter" onchange="loadRatedDown()"
+                class="px-3 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500">
+                <option value="">All agents</option>
+            </select>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-xs">
+                <thead>
+                    <tr class="text-left text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
+                        <th class="px-3 py-2 font-medium">Date</th>
+                        <th class="px-3 py-2 font-medium">Agent</th>
+                        <th class="px-3 py-2 font-medium">Question</th>
+                        <th class="px-3 py-2 font-medium">Answer</th>
+                        <th class="px-3 py-2 font-medium">Comment</th>
+                        <th class="px-3 py-2 font-medium text-center">Eval</th>
+                    </tr>
+                </thead>
+                <tbody id="rdTableBody">
+                    <tr>
+                        <td colspan="6" class="px-4 py-6 text-center text-gray-400 dark:text-gray-500">
+                            <i class="fas fa-spinner fa-spin mr-1"></i>Loading…
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
 </div>
 
 <!-- Add / Edit Test Case Modal -->
@@ -105,6 +142,7 @@
         </div>
         <div class="p-4 space-y-3">
             <input type="hidden" id="tcModalId" value="">
+            <input type="hidden" id="tcModalSourceFeedback" value="">
             <div>
                 <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Agent Name</label>
                 <input id="tcModalAgent" type="text" placeholder="agent_name"
@@ -119,6 +157,10 @@
                 <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Expected Output</label>
                 <textarea id="tcModalExpected" rows="3" placeholder="Expected agent response"
                     class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none"></textarea>
+            </div>
+            <div id="tcModalRatedAnswerRow" class="hidden">
+                <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Answer that was rated down <span class="text-gray-400">(for reference, not saved)</span></label>
+                <div id="tcModalRatedAnswer" class="max-h-32 overflow-y-auto px-3 py-2 text-xs rounded-lg bg-red-50 dark:bg-red-900/20 text-gray-700 dark:text-gray-300 whitespace-pre-wrap"></div>
             </div>
             <div class="grid grid-cols-2 gap-3">
                 <div>
@@ -405,7 +447,14 @@ function renderChart(history) {
 
 // ── Add / Edit modal ──────────────────────────────────────────────────────────
 
+function resetRatedSource() {
+    document.getElementById('tcModalSourceFeedback').value = '';
+    document.getElementById('tcModalRatedAnswer').textContent = '';
+    document.getElementById('tcModalRatedAnswerRow').classList.add('hidden');
+}
+
 function showAddModal() {
+    resetRatedSource();
     document.getElementById('tcModalId').value = '';
     document.getElementById('modalTitle').textContent = 'Add Test Case';
     document.getElementById('tcModalAgent').value = _selectedAgent || '';
@@ -420,6 +469,7 @@ function showAddModal() {
 function editTestCase(id) {
     const tc = _testCases.find(t => t.id === id);
     if (!tc) return;
+    resetRatedSource();
     document.getElementById('tcModalId').value = tc.id;
     document.getElementById('modalTitle').textContent = 'Edit Test Case';
     document.getElementById('tcModalAgent').value = tc.agent_name;
@@ -445,6 +495,8 @@ async function saveTestCase() {
         threshold:        parseFloat(document.getElementById('tcModalThreshold').value) || 0.7,
         judge_model:      document.getElementById('tcModalJudgeModel').value.trim() || null,
     };
+    const sourceFeedback = parseInt(document.getElementById('tcModalSourceFeedback').value, 10);
+    if (!id && sourceFeedback) payload.source_feedback_id = sourceFeedback;
     if (!payload.agent_name || !payload.input || !payload.expected_output) {
         showNotification('Agent name, input, and expected output are required', 'error');
         return;
@@ -456,10 +508,11 @@ async function saveTestCase() {
         } else {
             data = await apiCall('/dashboard/api/evals', 'POST', payload);
         }
-        if (data.error) { showNotification(data.error, 'error'); return; }
+        if (data.error || data.detail) { showNotification(data.error || data.detail, 'error'); return; }
         showNotification(id ? 'Test case updated' : 'Test case created', 'success');
         closeAddModal();
         loadSuites();
+        if (payload.source_feedback_id) loadRatedDown();
         if (_selectedAgent === payload.agent_name) loadTestCases(_selectedAgent);
     } catch (e) {
         showNotification('Save failed: ' + e.message, 'error');
@@ -608,8 +661,84 @@ async function submitRunSuite() {
     }
 }
 
+// ── Rated-down responses ──────────────────────────────────────────────────────
+
+let _ratedDown = [];
+
+async function loadRatedDown() {
+    const filter = document.getElementById('rdAgentFilter');
+    const agent = filter.value;
+    const tbody = document.getElementById('rdTableBody');
+    try {
+        const data = await apiCall(`/dashboard/api/evals/feedback?agent_name=${encodeURIComponent(agent)}`);
+        if (data.detail) {
+            tbody.innerHTML = `<tr><td colspan="6" class="px-4 py-6 text-center text-gray-400 dark:text-gray-500">${escHtml(data.detail)}</td></tr>`;
+            return;
+        }
+        const agents = data.agents || [];
+        filter.innerHTML = '<option value="">All agents</option>' +
+            agents.map(a => `<option value="${escHtml(a)}">${escHtml(a)}</option>`).join('');
+        filter.value = agents.includes(agent) ? agent : '';
+        _ratedDown = data.responses || [];
+        renderRatedDown();
+    } catch (e) {
+        console.error('loadRatedDown error', e);
+    }
+}
+
+function renderRatedDown() {
+    const tbody = document.getElementById('rdTableBody');
+    if (!_ratedDown.length) {
+        tbody.innerHTML = '<tr><td colspan="6" class="px-4 py-6 text-center text-gray-400 dark:text-gray-500">No thumbs-down ratings yet.</td></tr>';
+        return;
+    }
+    const unavailable = '<span class="text-gray-400 italic">session no longer available</span>';
+    tbody.innerHTML = _ratedDown.map((r, i) => {
+        const question = r.question ? escHtml(truncate(r.question, 80)) : (r.session_available ? '—' : unavailable);
+        const answer = r.answer ? escHtml(truncate(r.answer, 80)) : (r.session_available ? '—' : unavailable);
+        let action;
+        if (r.test_case_id) {
+            action = `<button onclick="selectAgent(${escAttr(JSON.stringify(r.agent_name || ''))})" class="text-green-600 hover:underline" title="Open the agent's suite"><i class="fas fa-check mr-1"></i>Test case #${r.test_case_id}</button>`;
+        } else if (r.question && r.agent_name) {
+            action = `<button onclick="addRatedToEvals(${i})" class="px-2 py-1 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded whitespace-nowrap"><i class="fas fa-plus mr-1"></i>Add to evals</button>`;
+        } else {
+            action = '<span class="text-gray-400">—</span>';
+        }
+        return `
+            <tr class="border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 align-top">
+                <td class="px-3 py-2 text-gray-500 dark:text-gray-400 whitespace-nowrap">${r.updated_at ? new Date(r.updated_at).toLocaleDateString() : '—'}</td>
+                <td class="px-3 py-2 text-gray-900 dark:text-white">${escHtml(r.agent_name || '—')}</td>
+                <td class="px-3 py-2 text-gray-700 dark:text-gray-300">${question}</td>
+                <td class="px-3 py-2 text-gray-700 dark:text-gray-300">${answer}</td>
+                <td class="px-3 py-2 text-gray-500 dark:text-gray-400">${r.comment ? escHtml(truncate(r.comment, 60)) : '—'}</td>
+                <td class="px-3 py-2 text-center">${action}</td>
+            </tr>`;
+    }).join('');
+}
+
+function addRatedToEvals(index) {
+    const r = _ratedDown[index];
+    if (!r) return;
+    showAddModal();
+    document.getElementById('tcModalAgent').value = r.agent_name || '';
+    document.getElementById('tcModalInput').value = r.question || '';
+    // A hand-written expected answer rarely matches word for word
+    document.getElementById('tcModalMethod').value = 'llm_judge';
+    document.getElementById('tcModalSourceFeedback').value = r.id;
+    document.getElementById('tcModalRatedAnswer').textContent = r.answer || '(no answer recorded)';
+    document.getElementById('tcModalRatedAnswerRow').classList.remove('hidden');
+    document.getElementById('tcModalExpected').focus();
+}
+
+function escAttr(str) {
+    return escHtml(str).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 
-document.addEventListener('DOMContentLoaded', loadSuites);
+document.addEventListener('DOMContentLoaded', () => {
+    loadSuites();
+    loadRatedDown();
+});
 </script>
 {% endblock %}
