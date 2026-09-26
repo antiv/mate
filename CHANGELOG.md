@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **The Users page could run script from a user id.** Its row and button handlers put the id between single quotes with an escape that left quotes alone, and user ids include widget visitors', which the visitor partly chooses. They are now passed as JSON, as on the other pages 1.3.1 fixed
+
 ### Fixed
 
 - **Ratings from the Work Room were refused for non-admins.** Rating a reply, and since 1.3.1 adding a note to a thumbs-down, posts to `/dashboard/api/feedback`, which the dashboard authz middleware did not allow for non-admins; the chat ignored the `403`, so the thumb lit up and nothing was recorded. It is now allowed alongside renaming a conversation
