@@ -12,6 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Turn a thumbs-down into an eval test case** - a 👎 used to show up only as a number in the satisfaction rate, with no way to see which responses earned it. The Evals page now lists rated-down responses with the user's question, the agent's answer and the visitor's comment, read back from the session by invocation id on either runtime. **Add to evals** opens the test case form prefilled with the agent and the question, defaulting to `llm_judge`, with the rated answer shown for reference. A test case records the rating it came from (`test_cases.source_feedback_id`, migration V032), so the same response is not added twice. The list is admin-only. See `documents/EVALS.md` (#109)
 - **Say what was wrong after a thumbs-down** - the rating endpoints always accepted a comment, but no chat sent one, so the owner learned *that* an answer was bad and never *why*. After a 👎 the widget and the Work Room now show an optional note under the message. The rating is recorded on the click as before; a note, if sent, is added to the same rating. Skip, Escape or an empty note close it, and switching to 👍 removes it. Translated into all 17 widget languages
 
+### Fixed
+
+- **Ratings in standalone builds went nowhere.** A standalone build uses the Work Room's chat script, which offered 👍/👎 and posted them to `/dashboard/api/feedback` — a route the standalone server does not have. Every rating was a silent 404, while the thumb lit up as if it had been recorded. A standalone build has no dashboard to read ratings in either, so the buttons are now not shown there; the Work Room is unchanged (#113)
+
 ## [1.3.0] - 2026-09-26
 
 A MATE agent can now sit behind the coding tool you already use. OpenCode, Cline,

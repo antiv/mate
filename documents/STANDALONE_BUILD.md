@@ -201,6 +201,7 @@ The standalone build uses a simplified architecture compared to the full MATE sy
 - In-memory services (session, artifact, memory, credential)
 - Single embedded SQLite database
 - Auto-opens browser on startup
+- No response ratings: the chat shows no 👍/👎, because there is no dashboard to read them in
 
 ## Troubleshooting
 
