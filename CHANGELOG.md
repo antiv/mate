@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **RBAC let a new user's first denied request through.** The ADK RBAC callback allowed any request whose check raised, "to prevent system breakage". A newly created user came back from `get_or_create_user` detached from its session, so reading its roles to log a denial raised — and the denial became an allow. The first request of every new user to an agent they may not use went through, which under the secure default includes every agent with no roles configured. The new user is now loaded before its session closes, and both runtimes deny when the check cannot complete; the LangGraph hook had copied the fail-open deliberately
+- **An agent's endpoint key reached the browser and the model.** 1.2.0 masked the key in the export, but the agent list that `GET /dashboard/api/agents` returns and the Agents page embeds, the version history, the rollback response and the `read_agent` tool all carried it in clear. The list and history are readable by any signed-in user, not only admins, and `read_agent` hands its result to the model. All four now return the same `__stored__` sentinel the edit form already sends back to keep the stored key; `${VAR}` references still show as written. Stored keys and version snapshots are unchanged, so saves, rollbacks and evals keep using the real key
+
 ### Added
 
 - **Turn a thumbs-down into an eval test case** - a 👎 used to show up only as a number in the satisfaction rate, with no way to see which responses earned it. The Evals page now lists rated-down responses with the user's question, the agent's answer and the visitor's comment, read back from the session by invocation id on either runtime. **Add to evals** opens the test case form prefilled with the agent and the question, defaulting to `llm_judge`, with the rated answer shown for reference. A test case records the rating it came from (`test_cases.source_feedback_id`, migration V032), so the same response is not added twice. The list is admin-only. See `documents/EVALS.md` (#109)
@@ -14,6 +19,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **"Score against version" scored the deployed agent.** Evals called the live runtime by agent name and filed the result under whichever version was selected, so scoring version 1 while version 2 was live scored version 2 — and the score history and regression alert compared numbers that were only right for the version active at the time. The agent is now built from the selected version's snapshot and run in memory, the way ephemeral subagents run, without touching `agents_config` or the deployed agent. Its sub-agents come from their current config. On the LangGraph runtime this returns `501` instead of silently running the deployed agent. See `documents/EVALS.md` (#111)
+- **Evals were refused on admin-only agents.** An agent with no roles configured is admin-only, and evals ran as a plain `eval_runner` user, so RBAC refused them and the eval scored the refusal instead of an answer. Eval runs are started by an admin and now skip RBAC, keyed on a context variable set only inside the in-process run
+- **An agent's own endpoint was ignored on the ADK runtime.** `initialize_agent_from_config` builds the dict it hands to `create_model_from_agent_config` field by field, and `model_base_url` and `model_api_key` were not among the fields. An agent pointed at an OpenAI-compatible endpoint (1.2.0) therefore reached the provider's default host with the provider env key instead, on the default runtime. The LangGraph runtime was not affected. The tests exercised `create_model_from_agent_config` directly, never the build path the runtime uses; one now does
 - **Ratings in standalone builds went nowhere.** A standalone build uses the Work Room's chat script, which offered 👍/👎 and posted them to `/dashboard/api/feedback` — a route the standalone server does not have. Every rating was a silent 404, while the thumb lit up as if it had been recorded. A standalone build has no dashboard to read ratings in either, so the buttons are now not shown there; the Work Room is unchanged (#113)
 
 ## [1.3.0] - 2026-09-26

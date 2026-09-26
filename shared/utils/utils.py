@@ -69,6 +69,28 @@ def _is_gemini_model(model_name: str) -> bool:
 ENV_PLACEHOLDER = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
 
 
+# The edit form posts every field back, so the stored key has to survive a round
+# trip without being sent to the browser. A ${VAR} reference is not a secret and
+# goes out as written; anything else is replaced by this sentinel, and a save that
+# returns the sentinel unchanged leaves the stored value alone.
+STORED_SECRET_SENTINEL = "__stored__"
+
+
+def mask_api_key(value: Optional[str]) -> Optional[str]:
+    """Hide a literal key from API responses, passing ${VAR} references through."""
+    if not value or value.strip().startswith("${"):
+        return value
+    return STORED_SECRET_SENTINEL
+
+
+def mask_config_secrets(config: Dict[str, Any]) -> Dict[str, Any]:
+    """A copy of an agent config dict, or a version snapshot, with its key masked."""
+    masked = dict(config)
+    if "model_api_key" in masked:
+        masked["model_api_key"] = mask_api_key(masked["model_api_key"])
+    return masked
+
+
 def resolve_env_placeholders(obj: AnyType) -> Tuple[AnyType, Set[str]]:
     """
     Replace ${VAR} references with values from the environment, recursing through

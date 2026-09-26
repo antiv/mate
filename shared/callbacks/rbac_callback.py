@@ -34,6 +34,8 @@ def rbac_before_model_callback(callback_context: CallbackContext, llm_request: L
         LlmResponse with error message if access denied, None to continue normally
     """
     span = None
+    user_id = None
+    agent_name = None
     try:
         from shared.utils.tracing.tracing_config import is_tracing_enabled
         if is_tracing_enabled():
@@ -180,7 +182,10 @@ def rbac_before_model_callback(callback_context: CallbackContext, llm_request: L
                     span.end()
                 except Exception:
                     pass
-            user_roles = user.get_roles()
+            try:
+                user_roles = user.get_roles()
+            except Exception:
+                user_roles = []
             required_roles = config_dict.get('allowed_for_roles', [])
             logger.error(f"RBAC: Access DENIED for user '{user_id}' to agent '{agent_name}'. User roles: {user_roles}, Required: {required_roles}")
             
@@ -219,8 +224,11 @@ def rbac_before_model_callback(callback_context: CallbackContext, llm_request: L
             except Exception:
                 pass
         logger.error(f"Error in RBAC callback: {e}")
-        # In case of errors, allow access to prevent system breakage
-        return None
+        # Fail closed: an access check that could not complete has not granted
+        # access. Failing open let a denial through whenever logging it raised.
+        return _create_access_denied_response(
+            "Access could not be verified. Please try again.",
+            user_id or "unknown", agent_name or "unknown")
 
 
 def _log_access_denied_event(callback_context: CallbackContext, user_id: str, agent_name: str, 
@@ -340,8 +348,14 @@ def _should_skip_rbac_check(agent_name: str) -> bool:
         'system_agent',
         'health_check_agent'
     ]
-    
-    return agent_name in skip_agents
+    if agent_name in skip_agents:
+        return True
+
+    # An eval run builds the agent in this process for an admin who started it
+    # from the dashboard. The flag is a context variable, not session state or a
+    # user id, so no request from outside can set it.
+    from shared.utils.eval_agent_runner import is_eval_run
+    return is_eval_run()
 
 
 def _create_access_denied_response(message: str, user_id: str, agent_name: str, 

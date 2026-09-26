@@ -152,5 +152,31 @@ class TestStoredKeyMasking(unittest.TestCase):
         self.assertEqual(mask_api_key(""), "")
 
 
+class TestAdkBuildHonoursTheEndpoint(unittest.TestCase):
+    """
+    The ADK runtime builds an agent from its database row through
+    initialize_agent_from_config, which used to leave the endpoint out of the dict
+    it hands to create_model_from_agent_config. The agent then talked to the
+    provider's default host with the provider env key, silently.
+    """
+
+    def test_the_built_model_uses_the_rows_endpoint(self):
+        from unittest.mock import MagicMock
+        from shared.utils.models import AgentConfig
+        with patch("shared.utils.agent_manager.get_database_client", return_value=MagicMock()):
+            from shared.utils.agent_manager import AgentManager
+            manager = AgentManager()
+        row = AgentConfig(name="ext", type="llm", model_name="openai/my-agent",
+                          instruction="hi", model_base_url="http://127.0.0.1:9000/v1",
+                          model_api_key="sk-literal")
+        with patch("shared.utils.file_search_service.FileSearchService") as fs:
+            fs.return_value.get_stores_for_agent.return_value = []
+            agent = manager.initialize_agent_from_config(row)
+
+        args = agent.model._additional_args
+        self.assertEqual(args.get("base_url"), "http://127.0.0.1:9000/v1")
+        self.assertEqual(args.get("api_key"), "sk-literal")
+
+
 if __name__ == "__main__":
     unittest.main()

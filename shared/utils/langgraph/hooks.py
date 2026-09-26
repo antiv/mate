@@ -85,8 +85,10 @@ def check_rbac(user_id: str, agent_name: str, session_id: Optional[str] = None) 
                                     user_id, agent_name, user_roles, required_roles)
     except Exception as e:
         logger.error(f"Error in RBAC hook: {e}")
-        # Match the ADK callback's fail-open behavior
-        return None
+        # Fail closed, as the ADK callback does: a check that could not complete
+        # has not granted access
+        return _access_denied_event("Access could not be verified. Please try again.",
+                                    user_id, agent_name)
 
 
 def check_rbac_message(user_id: str, agent_name: str) -> Optional[str]:

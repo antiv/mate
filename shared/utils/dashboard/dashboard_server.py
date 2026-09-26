@@ -49,18 +49,9 @@ def sanitize_agent_text(text: Optional[str]) -> Optional[str]:
     return text
 
 
-# The edit form posts every field back, so the stored key has to survive a round
-# trip without being sent to the browser. A ${VAR} reference is not a secret and
-# goes out as written; anything else is replaced by this sentinel, and a save that
-# returns the sentinel unchanged leaves the stored value alone.
-STORED_SECRET_SENTINEL = "__stored__"
-
-
-def mask_api_key(value: Optional[str]) -> Optional[str]:
-    """Hide a literal key from API responses, passing ${VAR} references through."""
-    if not value or value.strip().startswith("${"):
-        return value
-    return STORED_SECRET_SENTINEL
+# Defined with the other secret handling in shared.utils.utils, so tool code that
+# returns configs to a model can mask them without importing the dashboard
+from shared.utils.utils import STORED_SECRET_SENTINEL, mask_api_key, mask_config_secrets  # noqa: F401
 
 
 def make_name_substituter(name_map: Dict[str, str]):
@@ -165,97 +156,6 @@ class DashboardServer:
             self.user_service = None
             self.token_service = None
     
-    async def _invoke_agent_for_eval(self, agent_name: str, input_text: str, timeout: float = 120.0) -> str:
-        """
-        Create a fresh ADK session, send input_text to the agent, and collect
-        the full text response by reading the /run_sse SSE stream.
-        Uses the same partial/complete de-duplication logic as the frontend widget.
-        """
-        import httpx
-        from shared.utils.utils import get_adk_config
-
-        adk = get_adk_config()
-        host, port = adk["adk_host"], adk["adk_port"]
-        user_id = "eval_runner"
-
-        # 1. Create a fresh session
-        session_url = f"http://{host}:{port}/apps/{agent_name}/users/{user_id}/sessions"
-        async with httpx.AsyncClient(timeout=30.0) as c:
-            resp = await c.post(session_url, json={})
-            if resp.status_code != 200:
-                raise RuntimeError(f"ADK session creation failed: {resp.status_code} {resp.text[:200]}")
-            session_id = resp.json().get("id", "")
-
-        # 2. Stream /run_sse and collect text
-        run_url = f"http://{host}:{port}/run_sse"
-        payload = {
-            "app_name": agent_name,
-            "user_id": user_id,
-            "session_id": session_id,
-            "new_message": {"role": "user", "parts": [{"text": input_text}]},
-            "streaming": True,
-        }
-        headers = {"Content-Type": "application/json", "Accept": "text/event-stream"}
-
-        # Track the final text response: reset per author, skip tool call parts.
-        # At stream end, last_text holds the final reply to the user.
-        last_author = ""
-        last_text = ""
-        buffer = ""
-
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            async with client.stream("POST", run_url, json=payload, headers=headers) as r:
-                if r.status_code != 200:
-                    raise RuntimeError(f"ADK /run_sse returned {r.status_code}")
-                async for chunk in r.aiter_bytes():
-                    buffer += chunk.decode("utf-8", errors="replace")
-                    while "\n" in buffer:
-                        line, buffer = buffer.split("\n", 1)
-                        line = line.rstrip("\r")
-                        if not line.startswith("data: "):
-                            continue
-                        raw = line[6:]
-                        if raw == "[DONE]":
-                            break
-                        try:
-                            evt = json.loads(raw)
-                        except json.JSONDecodeError:
-                            continue
-
-                        # Skip transfer/routing actions
-                        actions = evt.get("actions") or {}
-                        if actions.get("transfer_to_agent") or actions.get("escalate"):
-                            continue
-
-                        author = evt.get("author", "")
-                        if author != last_author:
-                            last_author = author
-                            last_text = ""
-
-                        parts = (evt.get("content") or {}).get("parts") or []
-                        has_tool = any(
-                            p.get("functionCall") or p.get("functionResponse")
-                            or p.get("function_call") or p.get("function_response")
-                            for p in parts
-                        )
-                        if has_tool:
-                            # Tool interaction — reset text for this author turn
-                            last_text = ""
-                            continue
-
-                        for part in parts:
-                            t = part.get("text")
-                            if not t:
-                                continue
-                            # De-duplicate partial vs complete events
-                            if last_text and t.startswith(last_text):
-                                last_text = t
-                            elif last_text and last_text.startswith(t):
-                                pass
-                            else:
-                                last_text += t
-
-        return last_text.strip()
 
     @staticmethod
     def _fill_daily_gaps(rows: List[Any], start_date: Any, days: int) -> List[Dict[str, Any]]:
@@ -892,7 +792,8 @@ class DashboardServer:
             configs = query.all()
             result = []
             for config in configs:
-                config_dict = config.to_dict()
+                # Pages embed this list and the API returns it, to any signed-in user
+                config_dict = mask_config_secrets(config.to_dict())
                 # Always use the database object's ID directly to ensure it's correct
                 # This prevents any issues where to_dict() might return wrong ID
                 db_id = config.id
@@ -1542,7 +1443,12 @@ class DashboardServer:
                 .order_by(self.AgentConfigVersion.version_number.desc())
                 .all()
             )
-            return [v.to_dict() for v in versions]
+            result = []
+            for v in versions:
+                d = v.to_dict()
+                d['config_snapshot'] = mask_config_secrets(d.get('config_snapshot') or {})
+                result.append(d)
+            return result
         except Exception as e:
             logger.error(f"Error fetching agent versions: {e}")
             return []
@@ -1577,7 +1483,7 @@ class DashboardServer:
 
             session.commit()
             self._snapshot_agent_config(session, config, change_type='rollback', changed_by=changed_by)
-            return config.to_dict()
+            return mask_config_secrets(config.to_dict())
         except Exception as e:
             logger.error(f"Error rolling back agent config: {e}")
             session.rollback()
@@ -6178,14 +6084,22 @@ class DashboardServer:
                 output_map = {r["test_case_id"]: r["actual_output"] for r in submitted if r.get("actual_output")}
 
                 from shared.utils.eval_runner import EvalRunner
+                from shared.utils.eval_agent_runner import (
+                    LANGGRAPH_UNSUPPORTED, SnapshotAgent, langgraph_active)
                 runner = EvalRunner()
+
+                to_invoke = [tc for tc in test_cases if not output_map.get(tc.id)]
+                if to_invoke and langgraph_active():
+                    raise HTTPException(status_code=501, detail=LANGGRAPH_UNSUPPORTED)
+                if to_invoke:
+                    # The version's own config, not the deployed agent, answers
+                    async with SnapshotAgent(snapshot) as agent:
+                        for tc in to_invoke:
+                            output_map[tc.id] = await agent.ask(tc.input)
 
                 persisted = []
                 for tc in test_cases:
                     actual_output = output_map.get(tc.id)
-                    if not actual_output:
-                        # Auto-invoke the agent for this test case
-                        actual_output = await self._invoke_agent_for_eval(agent_name, tc.input)
                     run_result = runner.score_output(tc, actual_output, version_id)
                     er = self.EvalResult(
                         test_case_id=run_result.test_case_id,
@@ -6313,7 +6227,22 @@ class DashboardServer:
                     raise HTTPException(status_code=404, detail="Test case not found")
 
                 if not actual_output:
-                    actual_output = await self._invoke_agent_for_eval(tc.agent_name, tc.input)
+                    from shared.utils.eval_agent_runner import (
+                        LANGGRAPH_UNSUPPORTED, SnapshotAgent, langgraph_active)
+                    if langgraph_active():
+                        raise HTTPException(status_code=501, detail=LANGGRAPH_UNSUPPORTED)
+                    version = session.query(self.AgentConfigVersion).filter(
+                        self.AgentConfigVersion.id == version_id).first()
+                    if not version:
+                        raise HTTPException(status_code=404, detail="Version not found")
+                    snapshot = version.get_snapshot()
+                    # The version now decides what runs, so it has to be this agent's
+                    if snapshot.get("name") != tc.agent_name:
+                        raise HTTPException(
+                            status_code=400,
+                            detail=f"Version {version_id} is not a version of agent '{tc.agent_name}'")
+                    async with SnapshotAgent(snapshot) as agent:
+                        actual_output = await agent.ask(tc.input)
 
                 from shared.utils.eval_runner import EvalRunner
                 runner = EvalRunner()

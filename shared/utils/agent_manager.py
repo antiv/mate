@@ -255,6 +255,10 @@ class AgentManager:
                 'name': config.name,
                 'type': config.type,
                 'model_name': config.model_name,
+                # The agent's own endpoint; without these, create_model_from_agent_config
+                # falls back to the provider env vars and the endpoint is ignored
+                'model_base_url': config.model_base_url,
+                'model_api_key': config.model_api_key,
                 'description': config.description,
                 'instruction': config.instruction,
                 'mcp_servers_config': config.mcp_servers_config,
@@ -921,6 +925,21 @@ class AgentManager:
         logger.info(f"Successfully built agent tree with {len(self.initialized_agents)} total agents")
         return root_agent
     
+    def build_tree_for_config(self, config: AgentConfig) -> Optional[Any]:
+        """
+        Build an agent from a config that need not be the stored one, such as a
+        past version's snapshot, with its sub-agents as they are configured now.
+        Use a fresh AgentManager: this fills initialized_agents like any build.
+        """
+        sub_agents = []
+        for subagent_config in self.get_subagents(config.name):
+            subagent = self._build_agent_tree_recursive(subagent_config, config.name)
+            if subagent:
+                sub_agents.append(subagent)
+            else:
+                logger.error(f"Failed to build subagent {subagent_config.name}")
+        return self.initialize_agent_from_config(config, sub_agents, config.type)
+
     def _build_agent_tree_recursive(self, config: AgentConfig, parent_name: str = None) -> Optional[Any]:
         """
         Recursively build agent tree, handling multiple parent relationships.
