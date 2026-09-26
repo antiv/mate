@@ -70,12 +70,15 @@ def _get_context_metadata(callback_context: CallbackContext) -> dict:
     return meta
 
 
-def _get_guardrail_engine(callback_context: CallbackContext) -> Optional[GuardrailEngine]:
+def _get_guardrail_engine(callback_context: CallbackContext,
+                          agent_name: Optional[str] = None) -> Optional[GuardrailEngine]:
     """
-    Load the GuardrailEngine for the current agent from DB config.
+    Load the GuardrailEngine for the current agent from DB config, or for
+    agent_name when given: an ephemeral subagent has no row of its own and is
+    bound to its parent's guardrails that way.
     Does not cache in session state (state gets serialized; GuardrailEngine is not JSON-serializable).
     """
-    agent_name = getattr(callback_context, "agent_name", None)
+    agent_name = agent_name or getattr(callback_context, "agent_name", None)
     if not agent_name:
         if hasattr(callback_context, "agent") and callback_context.agent:
             agent_name = getattr(callback_context.agent, "name", None)
@@ -131,14 +134,16 @@ def _log_guardrail_results(results, agent_name, meta):
 def guardrail_before_model_callback(
     callback_context: CallbackContext,
     llm_request: LlmRequest,
+    guardrail_agent: Optional[str] = None,
 ) -> Optional[LlmResponse]:
     """
     Input guardrail: runs before the model call.
     If action=block and triggered, returns an LlmResponse that prevents the call.
     If action=redact, modifies the request text in place.
+    guardrail_agent: whose guardrail config applies, when not the calling agent's.
     """
     try:
-        engine = _get_guardrail_engine(callback_context)
+        engine = _get_guardrail_engine(callback_context, guardrail_agent)
         if not engine:
             return None
 
@@ -188,14 +193,16 @@ def guardrail_before_model_callback(
 def guardrail_after_model_callback(
     callback_context: CallbackContext,
     llm_response: LlmResponse,
+    guardrail_agent: Optional[str] = None,
 ) -> Optional[LlmResponse]:
     """
     Output guardrail: runs after the model call.
     If action=block, replaces the response with a safe message.
     If action=redact, modifies the response text.
+    guardrail_agent: whose guardrail config applies, when not the calling agent's.
     """
     try:
-        engine = _get_guardrail_engine(callback_context)
+        engine = _get_guardrail_engine(callback_context, guardrail_agent)
         if not engine:
             return None
 

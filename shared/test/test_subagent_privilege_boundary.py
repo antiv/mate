@@ -154,5 +154,68 @@ class TestExistingBehaviourSurvives(unittest.TestCase):
         self.assertIn("google_search", assigned)
 
 
+class TestChildKeepsParentSafeguards(unittest.TestCase):
+    """
+    Beyond its tool set, a child has to keep what the parent enforces on those
+    tools and on its model. A subagent is a fresh identity with no row of its
+    own, and both of these were keyed so that a fresh identity lost them.
+    """
+
+    def setUp(self):
+        self._guard = patch(
+            "shared.utils.tools.tool_factory.ToolFactory._agent_has_widget_key",
+            return_value=False)
+        self._guard.start()
+        self.addCleanup(self._guard.stop)
+
+    def test_a_tool_that_needs_approval_in_the_parent_needs_it_in_the_child(self):
+        from google.adk.tools.function_tool import FunctionTool
+        tools, _ = _build_subagent_tools(
+            ["code_executor"],
+            parent(code_executor=True, require_confirmation=["execute_python_code"]))
+        wrapped = [t for t in tools if getattr(t, "name", None) == "execute_python_code"]
+        self.assertEqual(len(wrapped), 1)
+        self.assertIsInstance(wrapped[0], FunctionTool)
+        self.assertTrue(wrapped[0]._require_confirmation)
+
+    def test_the_parents_guardrails_apply_to_the_child(self):
+        import asyncio
+        from typing import AsyncGenerator
+        from google.adk.models.base_llm import BaseLlm
+        from google.adk.models.llm_request import LlmRequest
+        from google.adk.models.llm_response import LlmResponse
+        from google.genai import types
+        from shared.utils.guardrails.engine import GuardrailEngine
+        from shared.utils.tools.subagent_delegation_tool import SubtaskSpec, _run_single_subagent
+
+        class LeakyLlm(BaseLlm):
+            model: str = "leaky"
+
+            async def generate_content_async(
+                    self, llm_request: LlmRequest, stream: bool = False) -> AsyncGenerator[LlmResponse, None]:
+                yield LlmResponse(content=types.Content(
+                    role="model", parts=[types.Part(text="Write to alice@corp.com for access.")]))
+
+        redact_pii = GuardrailEngine({"guardrails": [{
+            "type": "pii_detection", "enabled": True, "action": "redact",
+            "config": {"detect_email": True}}]})
+        asked_for = []
+
+        def engine_for(callback_context, agent_name=None):
+            asked_for.append(agent_name)
+            return redact_pii if agent_name == "orchestrator_agent" else None
+
+        task = SubtaskSpec(name="lookup", role="researcher", instruction="Find the contact.", tools=[])
+        with patch("shared.utils.tools.subagent_delegation_tool.create_model", return_value=LeakyLlm()), \
+                patch("shared.callbacks.guardrail_callback._get_guardrail_engine", side_effect=engine_for), \
+                patch("shared.callbacks.token_usage_callback.log_token_usage_callback", return_value=None):
+            result = asyncio.run(_run_single_subagent(
+                task, "app", "u", "s", parent(), None, 30.0, None))
+
+        self.assertEqual(result["status"], "success", result)
+        self.assertNotIn("alice@corp.com", result["output"])
+        self.assertIn("orchestrator_agent", asked_for)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- **A dynamic subagent dropped its parent's approvals and guardrails.** The fix in 1.3.0 limited a subagent to the tools its parent holds, but not to the terms it holds them on. A tool the parent may only run after a person approves it (`require_confirmation`) reached the subagent without that requirement, and the parent's guardrails did not apply to the subagent's model at all: guardrails are looked up by agent name, and a subagent is a fresh name with no config of its own. A subagent now inherits `require_confirmation`, so a tool that needs approval cannot run inside one, and runs under its parent's input and output guardrails. Prompted by a comment on the 1.3.0 release discussion about identities regenerated mid-session
 - **The Users page could run script from a user id.** Its row and button handlers put the id between single quotes with an escape that left quotes alone, and user ids include widget visitors', which the visitor partly chooses. They are now passed as JSON, as on the other pages 1.3.1 fixed
 
 ### Fixed

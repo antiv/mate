@@ -237,6 +237,11 @@ def _build_subagent_tools(
         sub_tool_config[canon] = parent_tool_config[canon]
         assigned_tool_names.append(canon)
 
+    # A tool the parent may only run with a person's approval needs it in the
+    # child too; the list is not a tool family, so the loop above never copies it.
+    if parent_tool_config.get("require_confirmation"):
+        sub_tool_config["require_confirmation"] = parent_tool_config["require_confirmation"]
+
     subagent_config = {
         "name": f"subagent_{uuid.uuid4().hex[:6]}",
         "project_id": parent_config.get("project_id") if parent_config else None,
@@ -356,14 +361,33 @@ async def _run_single_subagent(
             }
         return None
 
+    # The child has no agents_config row, and guardrails are looked up by agent
+    # name, so it would run with none. It is bound to its parent's instead.
+    from shared.callbacks.guardrail_callback import (
+        guardrail_after_model_callback, guardrail_before_model_callback)
+    guardrail_owner = parent_config.get("name") if parent_config else None
+
+    def _before_model(callback_context, llm_request):
+        capture_model_name_callback(callback_context, llm_request)
+        return guardrail_before_model_callback(callback_context, llm_request,
+                                               guardrail_agent=guardrail_owner)
+
+    def _after_model(callback_context, llm_response):
+        guarded = guardrail_after_model_callback(callback_context, llm_response,
+                                                 guardrail_agent=guardrail_owner)
+        if guarded is not None:
+            log_token_usage_callback(callback_context, guarded)
+            return guarded
+        return log_token_usage_callback(callback_context, llm_response)
+
     subagent = Agent(
         name=subagent_name,
         model=model_instance,
         description=task.role or clean_task_name,
         instruction=full_instruction,
         tools=subagent_tools,
-        before_model_callback=capture_model_name_callback,
-        after_model_callback=log_token_usage_callback,
+        before_model_callback=_before_model,
+        after_model_callback=_after_model,
         before_tool_callback=_limit_subagent_tool_steps,
     )
 
