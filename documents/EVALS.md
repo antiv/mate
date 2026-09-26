@@ -83,18 +83,18 @@ The judge model default is `gemini/gemini-2.0-flash`. Any LiteLLM model string w
 
 ## Agent Auto-Invocation
 
-When you run an eval, MATE calls the live agent for you — no need to copy-paste agent responses.
+When you run an eval, MATE runs the agent for you — no need to copy-paste agent responses — and it runs **the version you selected**, not whichever one is deployed.
 
-The flow per test case:
+The agent is built from the selected version's config snapshot and run in the dashboard process through an ADK `Runner` with an in-memory session (`shared/utils/eval_agent_runner.py`). Nothing is written to `agents_config`, and the deployed agent is not touched, so a version can be scored before, after or instead of being rolled back to.
 
-1. Create a fresh ADK session (`POST /apps/{agent_name}/users/eval_runner_{uuid}/sessions`)
-2. Stream `/run_sse` with the test case `input`
-3. Parse SSE events, tracking the last author and accumulated text
-4. Skip events that contain `functionCall` or `functionResponse` parts (tool calls, sub-agent intermediate steps)
-5. Reset accumulated text whenever the author changes
-6. Return the final accumulated text as `actual_output`
+- **The agent itself comes from the version.** Instruction, model, endpoint, tools, guardrails — everything in the snapshot.
+- **Its sub-agents come from their current config.** They are separate rows with versions of their own; a version records one agent.
+- **One build per suite run.** Each test case gets a fresh session; MCP toolsets start once and are closed when the run ends.
+- **RBAC is skipped for eval runs.** Evals are started by an admin from the dashboard, and an agent with no roles configured is admin-only, which would refuse the eval user. The skip is keyed on a context variable set only inside the in-process eval run, which no request from outside can set.
+- **LangGraph is not supported yet.** With `AGENT_FRAMEWORK=langgraph`, running against a version returns `501` rather than silently running the deployed agent. Supplying `actual_output` yourself still works.
+- A single-case run refuses a `version_id` that belongs to a different agent (`400`).
 
-This ensures only the **final user-facing reply** is scored, not intermediate tool calls or orchestration output.
+Only the **final user-facing reply** is scored: text is tracked per author and reset when the author changes or a tool call or response appears, and routing events are ignored.
 
 ## Running Evals
 

@@ -340,8 +340,14 @@ def _should_skip_rbac_check(agent_name: str) -> bool:
         'system_agent',
         'health_check_agent'
     ]
-    
-    return agent_name in skip_agents
+    if agent_name in skip_agents:
+        return True
+
+    # An eval run builds the agent in this process for an admin who started it
+    # from the dashboard. The flag is a context variable, not session state or a
+    # user id, so no request from outside can set it.
+    from shared.utils.eval_agent_runner import is_eval_run
+    return is_eval_run()
 
 
 def _create_access_denied_response(message: str, user_id: str, agent_name: str, 

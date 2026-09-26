@@ -925,6 +925,21 @@ class AgentManager:
         logger.info(f"Successfully built agent tree with {len(self.initialized_agents)} total agents")
         return root_agent
     
+    def build_tree_for_config(self, config: AgentConfig) -> Optional[Any]:
+        """
+        Build an agent from a config that need not be the stored one, such as a
+        past version's snapshot, with its sub-agents as they are configured now.
+        Use a fresh AgentManager: this fills initialized_agents like any build.
+        """
+        sub_agents = []
+        for subagent_config in self.get_subagents(config.name):
+            subagent = self._build_agent_tree_recursive(subagent_config, config.name)
+            if subagent:
+                sub_agents.append(subagent)
+            else:
+                logger.error(f"Failed to build subagent {subagent_config.name}")
+        return self.initialize_agent_from_config(config, sub_agents, config.type)
+
     def _build_agent_tree_recursive(self, config: AgentConfig, parent_name: str = None) -> Optional[Any]:
         """
         Recursively build agent tree, handling multiple parent relationships.
