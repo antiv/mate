@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Suggest a fix for a bad response** - from a failing test case or a thumbs-down, a model proposes a revised instruction for the agent with a short reason. It can be edited, then checked: the agent's whole suite runs in memory with the current and the suggested instruction, results side by side and regressions highlighted. Apply is enabled only for the text that was checked and is a normal edit - a new version, an audit entry naming what prompted it, a reload - refused if the instruction changed meanwhile. Only the instruction can change, whatever the model or the request says; users' questions and comments reach the model as quoted data. Memory blocks are left alone for now: they are shared by the project's agents and not versioned. Uses `EVAL_IMPROVE_MODEL`, or `EVAL_JUDGE_MODEL`. See `documents/EVALS.md` (#112)
+
 ## [1.3.1] - 2026-09-26
 
 A security release: every deployment of 1.2.0 or 1.3.0 should upgrade. It also
