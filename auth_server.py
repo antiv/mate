@@ -242,6 +242,30 @@ if _trusted_proxy_hosts != "*":
     _trusted_proxy_hosts = [h.strip() for h in _trusted_proxy_hosts.split(",") if h.strip()]
 app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=_trusted_proxy_hosts)
 
+# Content Security Policy (CSP) middleware
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    path = request.url.path
+    if path.startswith("/widget/"):
+        frame_ancestors = "*"
+    else:
+        frame_ancestors = "'self'"
+
+    csp_policy = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval' cdn.tailwindcss.com cdn.jsdelivr.net cdnjs.cloudflare.com; "
+        "style-src 'self' 'unsafe-inline' cdn.tailwindcss.com cdnjs.cloudflare.com fonts.googleapis.com; "
+        "font-src 'self' cdnjs.cloudflare.com fonts.gstatic.com data:; "
+        "img-src 'self' data: https: blob:; "
+        "connect-src 'self' ws: wss:; "
+        f"frame-ancestors {frame_ancestors}; "
+        "base-uri 'self'; "
+        "object-src 'none';"
+    )
+    response.headers["Content-Security-Policy"] = csp_policy
+    return response
+
 # Deny-by-default authorization for mutating /dashboard/api requests.  Added
 # BEFORE SessionMiddleware on purpose: add_middleware inserts at the front, so
 # the session middleware ends up outside this one and request.session is set.
