@@ -1159,7 +1159,8 @@
           return;
         }
         
-        fetch(url)
+        // Artifacts are the visitor's conversation content; the key authorises them
+        fetch(url, { headers: { "X-Widget-Key": API_KEY } })
           .then(function(r) { return r.json(); })
           .then(function(data) {
              var inlineData = data.inlineData || data.inline_data;

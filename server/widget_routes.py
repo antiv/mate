@@ -11,7 +11,6 @@ Provides:
 
 import json
 import logging
-import mimetypes
 import os
 import secrets
 import tempfile
@@ -1085,30 +1084,65 @@ async def get_embed_code(
 
 
 # ---------------------------------------------------------------------------
-# Public Widget Artifacts Proxy & Fallback
+# Widget Artifacts Proxy
 # ---------------------------------------------------------------------------
 
 public_artifacts_router = APIRouter(tags=["Widget - Artifacts"])
 
+
+def _artifact_owner(request: Request, app_name: str, user_id: str) -> str:
+    """
+    The user id whose artifact this caller may read, or raise.
+
+    Artifacts are conversation content, so this was never meant to be public:
+    - a widget, by its key: only its own agent, and only its own visitors,
+      whose ids the server scopes as widget_{key id}_{uid} as the chat does
+    - a dashboard login: an admin reads any user's, anyone else only their own
+    """
+    key = request.headers.get("X-Widget-Key")
+    if key:
+        wk = _lookup_widget_key(key)
+        if wk is None or (wk.agent_name or "").strip() != app_name:
+            raise HTTPException(status_code=403, detail="Not allowed")
+        prefix = f"widget_{wk.id}_"
+        return user_id if user_id.startswith(prefix) else prefix + user_id
+
+    from server.auth import get_dashboard_auth_user, is_admin_user
+    identity = get_dashboard_auth_user(request)
+    if not identity:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    if not is_admin_user(request) and user_id != identity:
+        raise HTTPException(status_code=403, detail="Not allowed")
+    return user_id
+
+
 @public_artifacts_router.get("/api/widget/artifacts/{app_name}/{user_id}/{session_id}/{filename}/{version_id}")
 async def get_widget_artifact_proxy(
+    request: Request,
     app_name: str,
     user_id: str,
     session_id: str,
     filename: str,
     version_id: str,
 ):
-    """Proxy widget artifact retrieval to ADK server without requiring auth."""
-    target_url = f"http://{ADK_HOST}:{ADK_PORT}/apps/{app_name}/users/{user_id}/sessions/{session_id}/artifacts/{filename}/versions/{version_id}"
+    """Proxy one artifact from the agent server, for its owner or an admin."""
+    from urllib.parse import quote
+    segments = (app_name, user_id, session_id, filename, version_id)
+    # Dot segments would be normalised away on the way to the agent server and
+    # land on a different route there
+    if any(seg in ("", ".", "..") for seg in segments):
+        raise HTTPException(status_code=400, detail="Invalid artifact path")
+    owner = _artifact_owner(request, app_name, user_id)
+
+    app_q, user_q, session_q, file_q, version_q = (
+        quote(seg, safe="") for seg in (app_name, owner, session_id, filename, version_id))
+    target_url = (f"http://{ADK_HOST}:{ADK_PORT}/apps/{app_q}/users/{user_q}/sessions/{session_q}"
+                  f"/artifacts/{file_q}/versions/{version_q}")
     client = httpx.AsyncClient(timeout=60.0)
     try:
         req = client.build_request("GET", target_url)
         r = await client.send(req, stream=True)
-        if r.status_code == 404:
-            await r.aclose()
-            await client.aclose()
-            return await get_widget_artifact_fallback(filename)
-            
+
         async def streamer():
             try:
                 async for chunk in r.aiter_bytes():
@@ -1125,39 +1159,5 @@ async def get_widget_artifact_proxy(
         )
     except httpx.RequestError:
         await client.aclose()
-        return await get_widget_artifact_fallback(filename)
-
-
-@public_artifacts_router.get("/api/widget/artifacts/{filename}")
-async def get_widget_artifact_fallback(filename: str):
-    """Fallback to search the local artifacts directory recursively for the filename."""
-    artifacts_dir = project_root / "artifacts"
-    if not artifacts_dir.exists():
-        raise HTTPException(status_code=404, detail="Artifacts directory not found")
-    
-    # Search recursively for the filename
-    matched_paths = list(artifacts_dir.rglob(filename))
-    if not matched_paths:
-        raise HTTPException(status_code=404, detail="Artifact file not found")
-    
-    # Sort by mtime, newest first
-    matched_paths.sort(key=lambda p: p.stat().st_mtime, reverse=True)
-    target_path = matched_paths[0]
-    
-    try:
-        data = target_path.read_bytes()
-        mime_type, _ = mimetypes.guess_type(filename)
-        if not mime_type:
-            mime_type = "image/png"
-            
-        import base64
-        base64_data = base64.b64encode(data).decode("utf-8")
-        return {
-            "inline_data": {
-                "data": base64_data,
-                "mime_type": mime_type
-            }
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error reading artifact: {str(e)}")
+        raise HTTPException(status_code=503, detail="Agent server is not available")
 
