@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Ratings from the Work Room were refused for non-admins.** Rating a reply, and since 1.3.1 adding a note to a thumbs-down, posts to `/dashboard/api/feedback`, which the dashboard authz middleware did not allow for non-admins; the chat ignored the `403`, so the thumb lit up and nothing was recorded. It is now allowed alongside renaming a conversation
+
 ### Added
 
 - **Suggest a fix for a bad response** - from a failing test case or a thumbs-down, a model proposes a revised instruction for the agent with a short reason. It can be edited, then checked: the agent's whole suite runs in memory with the current and the suggested instruction, results side by side and regressions highlighted. Apply is enabled only for the text that was checked and is a normal edit - a new version, an audit entry naming what prompted it, a reload - refused if the instruction changed meanwhile. Only the instruction can change, whatever the model or the request says; users' questions and comments reach the model as quoted data. Memory blocks are left alone for now: they are shared by the project's agents and not versioned. Uses `EVAL_IMPROVE_MODEL`, or `EVAL_JUDGE_MODEL`. See `documents/EVALS.md` (#112)

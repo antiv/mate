@@ -28,9 +28,10 @@ WRITE_METHODS = {"POST", "PUT", "DELETE", "PATCH"}
 PROTECTED_PREFIX = "/dashboard/api/"
 
 # Routes a non-admin (regular SSO user) may write to. Work Room is the non-admin
-# space and renaming a conversation is its only write.
+# space: renaming a conversation, and rating a reply (with an optional note).
 USER_WRITABLE_PATHS = [
     re.compile(r"^/dashboard/api/workroom/title/?$"),
+    re.compile(r"^/dashboard/api/feedback/?$"),
 ]
 
 # Routes a non-admin may read. The Work Room shows their own ratings, and the

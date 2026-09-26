@@ -47,6 +47,10 @@ def _app() -> FastAPI:
     async def list_tokens():
         return {"ok": True}
 
+    @app.post("/dashboard/api/feedback")
+    async def submit_feedback():
+        return {"ok": True}
+
     @app.post("/dashboard/api/workroom/title")
     async def workroom_title():
         return {"ok": True}
@@ -104,13 +108,18 @@ class TestDashboardAuthz(unittest.TestCase):
         with self._as(False):
             self.assertEqual(self.client.post("/dashboard/api/workroom/title").status_code, 200)
 
+    def test_rating_a_reply_allowlisted_for_users(self):
+        # The Work Room's thumbs and note were refused for non-admins, silently
+        with self._as(False):
+            self.assertEqual(self.client.post("/dashboard/api/feedback").status_code, 200)
+
     def test_non_dashboard_routes_untouched(self):
         with self._as(False):
             self.assertEqual(self.client.post("/run_sse").status_code, 200)
 
     def test_allowlist_stays_small(self):
         # Every entry here is a route a non-admin may write to; keep it deliberate.
-        self.assertEqual(len(USER_WRITABLE_PATHS), 1)
+        self.assertEqual(len(USER_WRITABLE_PATHS), 2)
         self.assertEqual(len(USER_READABLE_PATHS), 2)
 
 

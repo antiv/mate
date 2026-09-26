@@ -38,7 +38,7 @@ coverage run -m unittest discover -s shared/test -p "test_*.py"
 coverage report
 ```
 
-Tests live in `shared/test/` — 506 tests covering agent management, tool factory, model switching, RBAC, authorization, migrations, guardrails, tracing, and more.
+Tests live in `shared/test/`, covering agent management, tool factory, model switching, RBAC, authorization, migrations, guardrails, tracing, and more.
 
 ## Database Migrations
 
