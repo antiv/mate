@@ -16,7 +16,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from server.dashboard_authz import DashboardAuthzMiddleware, USER_WRITABLE_PATHS
+from server.dashboard_authz import DashboardAuthzMiddleware, USER_READABLE_PATHS, USER_WRITABLE_PATHS
 
 
 def _app() -> FastAPI:
@@ -39,6 +39,14 @@ def _app() -> FastAPI:
     async def list_users():
         return {"ok": True}
 
+    @app.get("/dashboard/api/feedback")
+    async def list_feedback():
+        return {"ok": True}
+
+    @app.get("/dashboard/api/tokens")
+    async def list_tokens():
+        return {"ok": True}
+
     @app.post("/dashboard/api/workroom/title")
     async def workroom_title():
         return {"ok": True}
@@ -51,7 +59,7 @@ def _app() -> FastAPI:
 
 
 class TestDashboardAuthz(unittest.TestCase):
-    """Writes require admin; reads and allowlisted routes do not."""
+    """Everything requires admin, except the allowlisted routes."""
 
     def setUp(self):
         self.client = TestClient(_app())
@@ -77,9 +85,20 @@ class TestDashboardAuthz(unittest.TestCase):
             self.assertEqual(self.client.post("/dashboard/api/users").status_code, 200)
             self.assertEqual(self.client.put("/dashboard/api/agents/1").status_code, 200)
 
-    def test_reads_are_not_gated(self):
+    def test_non_admin_cannot_read(self):
+        # The user list, audit log, conversations and widget admin keys were
+        # readable by any signed-in user while only writes were gated
         with self._as(False):
+            self.assertEqual(self.client.get("/dashboard/api/users").status_code, 403)
+
+    def test_admin_can_read(self):
+        with self._as(True):
             self.assertEqual(self.client.get("/dashboard/api/users").status_code, 200)
+
+    def test_own_ratings_and_tokens_readable_for_users(self):
+        with self._as(False):
+            self.assertEqual(self.client.get("/dashboard/api/feedback").status_code, 200)
+            self.assertEqual(self.client.get("/dashboard/api/tokens").status_code, 200)
 
     def test_workroom_title_allowlisted_for_users(self):
         with self._as(False):
@@ -92,6 +111,7 @@ class TestDashboardAuthz(unittest.TestCase):
     def test_allowlist_stays_small(self):
         # Every entry here is a route a non-admin may write to; keep it deliberate.
         self.assertEqual(len(USER_WRITABLE_PATHS), 1)
+        self.assertEqual(len(USER_READABLE_PATHS), 2)
 
 
 if __name__ == "__main__":
