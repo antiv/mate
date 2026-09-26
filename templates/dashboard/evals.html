@@ -328,7 +328,7 @@ async function loadSuites() {
             return;
         }
         tbody.innerHTML = suites.map(s => `
-            <tr onclick="selectAgent('${s.agent_name}')"
+            <tr onclick="selectAgent(${escAttr(JSON.stringify(s.agent_name || ''))})"
                 class="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 border-b border-gray-100 dark:border-gray-700 transition-colors ${_selectedAgent === s.agent_name ? 'bg-blue-50 dark:bg-blue-900/20' : ''}">
                 <td class="px-4 py-2 font-medium text-gray-900 dark:text-white">${s.agent_name}</td>
                 <td class="px-4 py-2 text-center text-gray-600 dark:text-gray-400">${s.test_case_count}</td>
