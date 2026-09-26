@@ -255,6 +255,10 @@ class AgentManager:
                 'name': config.name,
                 'type': config.type,
                 'model_name': config.model_name,
+                # The agent's own endpoint; without these, create_model_from_agent_config
+                # falls back to the provider env vars and the endpoint is ignored
+                'model_base_url': config.model_base_url,
+                'model_api_key': config.model_api_key,
                 'description': config.description,
                 'instruction': config.instruction,
                 'mcp_servers_config': config.mcp_servers_config,

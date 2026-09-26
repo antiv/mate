@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **An agent's own endpoint was ignored on the ADK runtime.** `initialize_agent_from_config` builds the dict it hands to `create_model_from_agent_config` field by field, and `model_base_url` and `model_api_key` were not among the fields. An agent pointed at an OpenAI-compatible endpoint (1.2.0) therefore reached the provider's default host with the provider env key instead, on the default runtime. The LangGraph runtime was not affected. The tests exercised `create_model_from_agent_config` directly, never the build path the runtime uses; one now does
 - **Ratings in standalone builds went nowhere.** A standalone build uses the Work Room's chat script, which offered 👍/👎 and posted them to `/dashboard/api/feedback` — a route the standalone server does not have. Every rating was a silent 404, while the thumb lit up as if it had been recorded. A standalone build has no dashboard to read ratings in either, so the buttons are now not shown there; the Work Room is unchanged (#113)
 
 ## [1.3.0] - 2026-09-26
