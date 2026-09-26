@@ -15,6 +15,8 @@
   var BASE = window.location.origin;
   var STORAGE_PREFIX = "mate_standalone_" + AGENT_NAME;
   var IMAGE_EXTENSIONS = [".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".bmp"];
+  // Off in standalone builds, which have no feedback route and no dashboard to read ratings in
+  var RATINGS_ENABLED = window.STANDALONE_RATINGS !== false;
 
   // --- State -----------------------------------------------------------
   var sessionId = localStorage.getItem(STORAGE_PREFIX + "_sid") || "";
@@ -1236,6 +1238,7 @@
   }
 
   function _addRatingButtons(container, messageEl, s) {
+    if (!RATINGS_ENABLED) return;
     // Only a response the server can identify is rateable; restored history without an
     // invocation id simply gets no thumbs rather than a button that fails on click.
     var invocationId = messageEl.getAttribute("data-invocation");

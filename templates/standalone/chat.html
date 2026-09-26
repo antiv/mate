@@ -56,8 +56,10 @@
   <script>
     // Standalone mode — talks directly to local ADK endpoints
     window.STANDALONE_AGENT_NAME = "{{ agent_name }}";
+    // Nothing here stores or shows ratings, so offering thumbs would only lose them
+    window.STANDALONE_RATINGS = false;
   </script>
-  <script src="/static/js/standalone/chat.js?v=7"></script>
+  <script src="/static/js/standalone/chat.js?v=8"></script>
 </body>
 
 </html>
