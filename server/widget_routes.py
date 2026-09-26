@@ -724,10 +724,38 @@ async def update_widget_agent(request: Request, wk: WidgetApiKey = Depends(verif
         ).first()
         if not agent:
             raise HTTPException(status_code=404, detail="Agent not found")
+        changed = {}
         for field in ("instruction", "model_name", "description"):
             if field in data:
                 setattr(agent, field, data[field])
+                changed[field] = data[field]
         session.commit()
+
+        if changed:
+            # Recorded like a dashboard edit: a version to roll back to, and an
+            # audit entry naming the widget key that made it
+            actor = f"widget_admin:{wk.id}"
+            try:
+                import json as _json
+                from sqlalchemy import func
+                from shared.utils.dashboard.dashboard_server import DashboardServer
+                from shared.utils.models import AgentConfigVersion
+                last = session.query(func.max(AgentConfigVersion.version_number)).filter(
+                    AgentConfigVersion.agent_config_id == agent.id).scalar() or 0
+                session.add(AgentConfigVersion(
+                    agent_config_id=agent.id, version_number=last + 1,
+                    config_snapshot=_json.dumps(DashboardServer._build_config_snapshot(agent)),
+                    changed_by=actor, change_type="update"))
+                session.commit()
+            except Exception:
+                session.rollback()
+                logger.exception("Could not version the agent change from widget key id=%s", wk.id)
+            try:
+                from shared.utils.audit_service import log, ACTION_AGENT_UPDATE, RESOURCE_AGENT
+                log(actor, ACTION_AGENT_UPDATE, RESOURCE_AGENT, resource_id=agent.name,
+                    details={"fields": sorted(changed)}, request=request)
+            except Exception as e:
+                logger.debug("Audit log widget agent update: %s", e)
         return {"success": True, "agent": _widget_agent_view(agent)}
     except HTTPException:
         session.rollback()

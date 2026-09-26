@@ -1380,7 +1380,8 @@ class DashboardServer:
     
     # ─── Agent Config Versioning ──────────────────────────────────────────
 
-    def _build_config_snapshot(self, config) -> dict:
+    @staticmethod
+    def _build_config_snapshot(config) -> dict:
         """Build a plain dict snapshot of an AgentConfig (no relationships)."""
         return {
             'name': config.name,
