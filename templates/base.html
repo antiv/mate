@@ -972,16 +972,18 @@
             });
         }
 
+        // Earlier versions kept the dashboard password here; remove it where it lingers
+        try { localStorage.removeItem('auth_password'); } catch (e) {}
+
         async function apiCall(url, method = 'GET', data = null) {
             const options = {
                 method: method,
                 credentials: 'same-origin'  // Use same-origin credentials instead of manual auth
             };
 
-            // Add auth headers from localStorage
+            // The session cookie authenticates; the token is a fallback. The
+            // password is never kept in the browser, where any script could read it.
             const token = localStorage.getItem('auth_token');
-            const username = localStorage.getItem('auth_username');
-            const password = localStorage.getItem('auth_password');
 
             if (!options.headers) {
                 options.headers = {};
@@ -989,8 +991,6 @@
 
             if (token) {
                 options.headers['Authorization'] = `Bearer ${token}`;
-            } else if (username && password) {
-                options.headers['Authorization'] = 'Basic ' + btoa(username + ':' + password);
             }
 
             if (data && method !== 'GET') {
@@ -1103,15 +1103,10 @@
             event.preventDefault();
 
             const token = localStorage.getItem('auth_token');
-            const username = localStorage.getItem('auth_username');
-            const password = localStorage.getItem('auth_password');
 
-            // Build auth header - prefer token, fall back to basic auth
             let authHeader = null;
             if (token) {
                 authHeader = `Bearer ${token}`;
-            } else if (username && password) {
-                authHeader = 'Basic ' + btoa(username + ':' + password);
             }
 
             // Prepare headers
@@ -1122,13 +1117,8 @@
                 headers['Authorization'] = authHeader;
             }
 
-            // Send credentials in body so server can mark basic auth as logged out
-            // even when Bearer token is used
+            // The session and token are revoked server-side; no credentials needed
             const body = {};
-            if (username && password) {
-                body.username = username;
-                body.password = password;
-            }
 
             // Try to revoke token and invalidate basic auth on server
             try {

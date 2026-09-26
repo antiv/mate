@@ -9,8 +9,10 @@ Handles proxying requests to the ADK backend server, including:
 - Generic catch-all proxy for all ADK API routes
 """
 
+import json
 import logging
 import os
+import re
 import asyncio
 from typing import Optional, Dict, Any
 from pathlib import Path
@@ -22,7 +24,7 @@ from fastapi.responses import StreamingResponse, Response, FileResponse, JSONRes
 from fastapi.openapi.docs import get_swagger_ui_html, get_redoc_html
 
 from shared.utils.auth_utils import verify_token
-from server.auth import get_auth_user, AUTH_USERNAME, AUTH_PASSWORD
+from server.auth import get_auth_user
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +44,30 @@ def _inject_trace_headers(headers: Dict[str, str]) -> Dict[str, str]:
         return headers
 
 router = APIRouter()
+
+
+# What a signed-in user who is not an admin may reach on the agent server. ADK
+# takes the user id from the URL and the request body, and RBAC, session history
+# and the user profile all key on it, so it has to be theirs, not whatever the
+# browser sends. Everything else ADK serves is for admins.
+_USER_PATH = re.compile(r"^apps/[^/]+/users/([^/]+)(/.*)?$")
+_RUN_PATHS = ("run", "run_sse")
+
+
+def _non_admin_refusal(path: str, identity: str, body: Optional[bytes]) -> Optional[str]:
+    """Why a non-admin request is refused, or None when it may go through."""
+    if path == "list-apps":
+        return None
+    match = _USER_PATH.match(path)
+    if match:
+        return None if match.group(1) == identity else "not your user id"
+    if path in _RUN_PATHS:
+        try:
+            payload = json.loads(body or b"{}")
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            return "malformed request"
+        return None if payload.get("user_id") == identity else "not your user id"
+    return "admin only"
 
 project_root = Path(__file__).parent.parent
 
@@ -131,9 +157,27 @@ async def websocket_run_live(
 ):
     """Proxy WebSocket connection to ADK server's /run_live endpoint."""
     authenticated = False
+    is_admin = False
 
     if token and verify_token(token):
         authenticated = True
+        is_admin = True
+
+    # A signed-in dashboard session. A non-admin may only run as themselves.
+    if not authenticated:
+        try:
+            session_user = websocket.session.get("user") if "session" in websocket.scope else None
+        except Exception:
+            session_user = None
+        if session_user:
+            from server.auth import _oauth_user_has_admin_role, AUTH_USERNAME as _admin_name
+            identity = session_user.get("user_id") or session_user.get("email") or ""
+            if session_user.get("provider") in ("google", "github", "microsoft", "gitlab"):
+                is_admin = bool(identity) and (identity == _admin_name or _oauth_user_has_admin_role(identity))
+            else:
+                is_admin = True
+            if is_admin or (identity and user_id == identity):
+                authenticated = True
 
     if not authenticated:
         auth_header = websocket.headers.get("authorization", "")
@@ -143,10 +187,11 @@ async def websocket_run_live(
         elif auth_header.startswith("Basic "):
             try:
                 import base64
+                from server.auth import credentials_match
                 encoded_credentials = auth_header[6:]
                 decoded_credentials = base64.b64decode(encoded_credentials).decode("utf-8")
                 username, password = decoded_credentials.split(":", 1)
-                if username == AUTH_USERNAME and password == AUTH_PASSWORD:
+                if credentials_match(username, password):
                     authenticated = True
             except Exception:
                 pass
@@ -242,6 +287,13 @@ async def proxy_adk(request: Request, path: str, username: str = Depends(get_aut
 
     target_url = f"http://{ADK_HOST}:{ADK_PORT}/{path}"
     body = await request.body() if request.method in ["POST", "PUT", "PATCH"] else None
+
+    from server.auth import is_admin_user
+    if not is_admin_user(request):
+        refusal = _non_admin_refusal(path, username, body)
+        if refusal:
+            logger.warning("Proxy refused %s %s for %s: %s", request.method, path, username, refusal)
+            raise HTTPException(status_code=403, detail="Not allowed")
 
     # Intercept run_sse post requests to preprocess attachments and check model capability
     if path == "run_sse" and request.method == "POST" and body:

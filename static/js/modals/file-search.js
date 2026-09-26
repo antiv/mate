@@ -163,7 +163,7 @@ function updateFileSearchModalContent(prefix, stores, files, agentName, allStore
                                     Remove
                                 </button>
                                 <button 
-                                    onclick="event.stopPropagation(); event.preventDefault(); deleteFileSearchStore('${prefix}', '${escapeHtml(store.store_name)}', '${escapeHtml(store.display_name || store.store_name)}')"
+                                    onclick="event.stopPropagation(); event.preventDefault(); deleteFileSearchStore(${jsArg(prefix)}, ${jsArg(store.store_name)}, ${jsArg(store.display_name || store.store_name)})"
                                     class="px-2 py-1 text-xs text-red-600 hover:text-red-700 border border-red-300 rounded"
                                     title="Delete store completely"
                                     type="button"
@@ -223,7 +223,7 @@ function updateFileSearchModalContent(prefix, stores, files, agentName, allStore
                                                 <p class="text-xs text-gray-500 dark:text-gray-400">${file.status || 'unknown'}${file.file_size ? ` • ${formatFileSize(file.file_size)}` : ''}</p>
                                             </div>
                                             <button 
-                                                onclick="event.stopPropagation(); event.preventDefault(); deleteFileFromStore('${prefix}', '${store.store_name}', '${file.document_name}')"
+                                                onclick="event.stopPropagation(); event.preventDefault(); deleteFileFromStore(${jsArg(prefix)}, ${jsArg(store.store_name)}, ${jsArg(file.document_name)})"
                                                 class="ml-2 px-2 py-1 text-xs text-red-600 hover:text-red-700 border border-red-300 rounded flex-shrink-0"
                                                 title="Delete file"
                                                 type="button"
@@ -374,7 +374,7 @@ function filterStoreFiles(storeId, storeName) {
                     <p class="text-xs text-gray-500 dark:text-gray-400">${file.status || 'unknown'}${file.file_size ? ` • ${formatFileSize(file.file_size)}` : ''}</p>
                 </div>
                 <button 
-                    onclick="event.stopPropagation(); event.preventDefault(); deleteFileFromStore('${prefix}', '${actualStoreName}', '${file.document_name}')"
+                    onclick="event.stopPropagation(); event.preventDefault(); deleteFileFromStore(${jsArg(prefix)}, ${jsArg(actualStoreName)}, ${jsArg(file.document_name)})"
                     class="ml-2 px-2 py-1 text-xs text-red-600 hover:text-red-700 border border-red-300 rounded flex-shrink-0"
                     title="Delete file"
                     type="button"
@@ -416,7 +416,7 @@ function filterStoreFiles(storeId, storeName) {
                 <p class="text-xs text-gray-500 dark:text-gray-400">${file.status || 'unknown'}${file.file_size ? ` • ${formatFileSize(file.file_size)}` : ''}</p>
             </div>
             <button 
-                onclick="event.stopPropagation(); event.preventDefault(); deleteFileFromStore('${prefix}', '${actualStoreName}', '${file.document_name}')"
+                onclick="event.stopPropagation(); event.preventDefault(); deleteFileFromStore(${jsArg(prefix)}, ${jsArg(actualStoreName)}, ${jsArg(file.document_name)})"
                 class="ml-2 px-2 py-1 text-xs text-red-600 hover:text-red-700 border border-red-300 rounded flex-shrink-0"
                 title="Delete file"
                 type="button"
@@ -474,7 +474,7 @@ function showAllStoreFiles(storeId, storeName, totalCount) {
                 <p class="text-xs text-gray-500 dark:text-gray-400">${file.status || 'unknown'}${file.file_size ? ` • ${formatFileSize(file.file_size)}` : ''}</p>
             </div>
             <button 
-                onclick="event.stopPropagation(); event.preventDefault(); deleteFileFromStore('${prefix}', '${actualStoreName}', '${file.document_name}')"
+                onclick="event.stopPropagation(); event.preventDefault(); deleteFileFromStore(${jsArg(prefix)}, ${jsArg(actualStoreName)}, ${jsArg(file.document_name)})"
                 class="ml-2 px-2 py-1 text-xs text-red-600 hover:text-red-700 border border-red-300 rounded flex-shrink-0"
                 title="Delete file"
                 type="button"
@@ -483,6 +483,14 @@ function showAllStoreFiles(storeId, storeName, totalCount) {
             </button>
         </div>
     `).join('');
+}
+
+// A value as a JavaScript argument inside a double-quoted onclick attribute.
+// JSON quotes and escapes it for JS; the entity escaping keeps it inside the
+// attribute. Hand-quoting with '...' let a quote in the value end the string.
+function jsArg(value) {
+    return JSON.stringify(value == null ? '' : String(value))
+        .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 function escapeHtml(text) {

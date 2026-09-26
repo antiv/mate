@@ -140,11 +140,11 @@ function renderMemoryBlocks(blocks) {
                         <i class="fas fa-database text-gray-400"></i>
                         <span class="font-medium text-gray-900 dark:text-white">${escapeHtml(label)}</span>
                         <span class="text-xs text-gray-500 dark:text-gray-400">block...${shortId.substring(Math.max(0, shortId.length - 12))}</span>
-                        <button onclick="copyToClipboard('${identifier}')" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300" title="Copy block ID">
+                        <button onclick="copyToClipboard(${jsArg(identifier)})" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300" title="Copy block ID">
                             <i class="fas fa-copy text-xs"></i>
                         </button>
                     </div>
-                    <button onclick="editMemoryBlock('${identifier}', '${escapeHtml(label)}')" class="px-3 py-1 text-xs font-medium text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300">
+                    <button onclick="editMemoryBlock(${jsArg(identifier)}, ${jsArg(label)})" class="px-3 py-1 text-xs font-medium text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300">
                         Edit
                     </button>
                 </div>
@@ -445,6 +445,14 @@ function copyToClipboard(text) {
 }
 
 // Escape HTML
+// A value as a JavaScript argument inside a double-quoted onclick attribute.
+// JSON quotes and escapes it for JS; the entity escaping keeps it inside the
+// attribute. Hand-quoting with '...' let a quote in the value end the string.
+function jsArg(value) {
+    return JSON.stringify(value == null ? '' : String(value))
+        .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
 function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;

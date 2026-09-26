@@ -483,7 +483,7 @@
               var publicUrl = BASE + "/api/widget/artifacts/" + AGENT_NAME + "/" + userId + "/" + sessionId + "/" + artFilename + "/" + artVersion;
               var alreadyAdded = activeAgentImages.some(function(img) { return img.url === publicUrl; });
               if (!alreadyAdded) {
-                var imgHtml = '<img class="widget-msg-image widget-generated-image art-lazy-load" data-art-url="' + publicUrl + '" alt="' + artFilename + '">';
+                var imgHtml = _artifactImg(publicUrl, artFilename);
                 activeAgentImages.push({ url: publicUrl, html: imgHtml });
               }
               _updateMessage(activeAgentEl, activeAgentText);
@@ -554,7 +554,7 @@
             
             var exists = activeAgentImages.some(function(img) { return img.src === imgSrc; });
             if (!exists) {
-              var imgHtml = '<img src="' + imgSrc + '" class="widget-msg-image widget-generated-image" alt="Generated image">';
+              var imgHtml = '<img src="' + _escText(imgSrc) + '" class="widget-msg-image widget-generated-image" alt="Generated image">';
               activeAgentImages.push({ type: "inline", src: imgSrc, html: imgHtml });
             }
             _updateMessage(activeAgentEl, activeAgentText);
@@ -748,7 +748,7 @@
         if (ext === "PDF") icon = "📕";
         else if (["JSON", "PY", "JS", "TS", "HTML", "CSS", "YAML", "YML"].indexOf(ext) !== -1) icon = "💻";
         
-        badgeEl.innerHTML = '<span class="file-icon">' + icon + '</span><span class="file-name">' + f.name + '</span>';
+        badgeEl.innerHTML = '<span class="file-icon">' + icon + '</span><span class="file-name">' + _escText(f.name) + '</span>';
         item.appendChild(badgeEl);
       }
 
@@ -816,7 +816,7 @@
             var icon = "📄";
             if (ext === "PDF") icon = "📕";
             
-            fileLink.innerHTML = '<span class="file-icon">' + icon + '</span><span class="file-name">' + fileObj.name + '</span>';
+            fileLink.innerHTML = '<span class="file-icon">' + icon + '</span><span class="file-name">' + _escText(fileObj.name) + '</span>';
             el.appendChild(fileLink);
           }
         });
@@ -944,10 +944,10 @@
     if (c.subtitle) body += '<div style="font-size:13px;color:#475569;margin-top:2px">' + e(c.subtitle) + "</div>";
     (c.lines || []).forEach(function (l) { body += '<div style="font-size:13px;color:#475569">' + e(l) + "</div>"; });
     if (c.location) body += '<div style="font-size:13px;color:#475569">📍 ' + e(c.location) + "</div>";
-    var img = c.image ? '<img src="' + a(c.image) + '" style="width:48px;height:48px;object-fit:cover;border-radius:8px;flex-shrink:0">' : "";
+    var img = c.image ? '<img src="' + a(_safeUrl(c.image, true)) + '" style="width:48px;height:48px;object-fit:cover;border-radius:8px;flex-shrink:0">' : "";
     var inner = img ? '<div style="display:flex;gap:10px">' + img + "<div>" + body + "</div></div>" : body;
     var actions = (c.actions || []).map(function (act) {
-      if (act.kind === "link") return '<a href="' + a(act.value) + '" target="_blank" rel="noopener" style="font-size:13px;color:var(--w-primary,#2563eb);text-decoration:none;padding:6px 0">' + e(act.label) + "</a>";
+      if (act.kind === "link") return '<a href="' + a(_safeUrl(act.value, false)) + '" target="_blank" rel="noopener" style="font-size:13px;color:var(--w-primary,#2563eb);text-decoration:none;padding:6px 0">' + e(act.label) + "</a>";
       var attrs = 'data-kind="' + a(act.kind) + '" data-value="' + a(act.value || "") + '"';
       if (act.kind === "ics" && c.ics) attrs += ' data-summary="' + a(c.ics.summary) + '" data-start="' + a(c.ics.start) + '" data-end="' + a(c.ics.end || "") + '" data-desc="' + a(c.ics.description || "") + '" data-loc="' + a(c.ics.location || "") + '"';
       return '<button type="button" class="wz-card-act" ' + attrs + ' style="background:var(--w-primary,#2563eb);color:#fff;border:0;border-radius:8px;padding:6px 12px;font-size:13px;cursor:pointer">' + e(act.label) + "</button>";
@@ -1051,7 +1051,8 @@
       var author = el.getAttribute("data-author") || "";
       var textContent = "";
       if (role === "agent") {
-        textContent = el._rawMarkdown || el.innerHTML;
+        // Never innerHTML: history is rendered again on reload, as markdown
+        textContent = el._rawMarkdown || el.innerText;
       } else {
         textContent = el.textContent;
       }
@@ -1101,51 +1102,61 @@
   }
 
   // --- Lightweight markdown renderer -----------------------------------
+  // Agent text is untrusted: a web page, a document or a memory block can put
+  // markup in it. So it is escaped first, and only the markdown below becomes
+  // HTML. Pieces built here are held aside and put back after escaping.
   function _renderMarkdown(text) {
     if (!text) return "";
-    
+    var held = [];
+    function hold(html) { held.push(html); return "\u0000" + (held.length - 1) + "\u0000"; }
+    text = String(text).replace(/\u0000/g, "");
+
     // Pre-process any MATE image artifacts to use lazy-loading img tags
     // 1. Markdown images pointing to artifacts
     text = text.replace(/!\[([^\]]*)\]\((.*?\/api\/widget\/artifacts\/[^\s)]+)\)/gi, function(_, alt, url) {
-        return '<img class="widget-msg-image widget-generated-image art-lazy-load" data-art-url="' + url + '" alt="' + alt + '">';
+      return hold(_artifactImg(url, alt));
     });
 
     // 2. Markdown links pointing to image artifacts
-    text = text.replace(/\[([^\]]*)\]\((.*?\/api\/widget\/artifacts\/[^\s)]+)\)/gi, function(_, label, url) {
-        var lowerUrl = url.toLowerCase();
-        var isImage = lowerUrl.indexOf('.png') !== -1 || lowerUrl.indexOf('.jpg') !== -1 || lowerUrl.indexOf('.jpeg') !== -1 || lowerUrl.indexOf('.webp') !== -1;
-        if (isImage) {
-            return '<img class="widget-msg-image widget-generated-image art-lazy-load" data-art-url="' + url + '" alt="' + label + '">';
-        }
-        return '[' + label + '](' + url + ')';
+    text = text.replace(/\[([^\]]*)\]\((.*?\/api\/widget\/artifacts\/[^\s)]+)\)/gi, function(match, label, url) {
+      var lowerUrl = url.toLowerCase();
+      var isImage = lowerUrl.indexOf('.png') !== -1 || lowerUrl.indexOf('.jpg') !== -1 || lowerUrl.indexOf('.jpeg') !== -1 || lowerUrl.indexOf('.webp') !== -1;
+      return isImage ? hold(_artifactImg(url, label)) : match;
     });
 
     // 3. Raw URLs in text pointing to image artifacts (e.g. printed as text by the agent)
     text = text.replace(/(^|\s)(\/api\/widget\/artifacts\/[^\s"')]+\.(?:png|jpg|jpeg|webp)(?:\/\d+)?)/gi, function(match, space, url) {
-        return space + '<img class="widget-msg-image widget-generated-image art-lazy-load" data-art-url="' + url + '" alt="Screenshot">';
+      return space + hold(_artifactImg(url, "Screenshot"));
     });
 
-    var html = text
-      .replace(/```(\w*)\n([\s\S]*?)```/g, function (_, lang, code) {
-        var raw = code.trim();
-        var escaped = _escapeHtml(raw);
-        var l = lang || "code";
-        // Store raw code URI-encoded so newlines survive the final \n→<br> pass
-        var dataRaw = encodeURIComponent(raw);
-        return '<div class="mate-code-block" data-lang="' + l + '" data-rawcode="' + dataRaw + '">'
-          + '<div class="mate-code-header">'
-          + '<span class="mate-code-lang">' + l + '</span>'
-          + '<span class="mate-canvas-indicator">open in canvas</span>'
-          + '<button class="mate-canvas-btn" onclick="if(window.mateOpenCanvas)window.mateOpenCanvas(this.closest(\'.mate-code-block\'))">Open in Canvas</button>'
-          + '</div>'
-          + '<pre><code>' + escaped + '</code></pre>'
-          + '</div>';
-      })
+    text = text.replace(/```(\w*)\n([\s\S]*?)```/g, function (_, lang, code) {
+      var raw = code.trim();
+      var escaped = _escapeHtml(raw);
+      var l = lang || "code";
+      // Store raw code URI-encoded so newlines survive the final \n→<br> pass
+      var dataRaw = encodeURIComponent(raw);
+      return hold('<div class="mate-code-block" data-lang="' + l + '" data-rawcode="' + dataRaw + '">'
+        + '<div class="mate-code-header">'
+        + '<span class="mate-code-lang">' + l + '</span>'
+        + '<span class="mate-canvas-indicator">open in canvas</span>'
+        + '<button class="mate-canvas-btn" onclick="if(window.mateOpenCanvas)window.mateOpenCanvas(this.closest(\'.mate-code-block\'))">Open in Canvas</button>'
+        + '</div>'
+        + '<pre><code>' + escaped + '</code></pre>'
+        + '</div>');
+    });
+
+    var html = _escText(text)
       .replace(/`([^`]+)`/g, "<code>$1</code>")
       .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
       .replace(/\*(.+?)\*/g, "<em>$1</em>")
-      .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" class="widget-msg-image widget-generated-image">')
-      .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
+      .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, function (match, alt, src) {
+        var safe = _safeUrl(src, true);
+        return safe ? '<img src="' + safe + '" alt="' + alt + '" class="widget-msg-image widget-generated-image">' : match;
+      })
+      .replace(/\[([^\]]+)\]\(([^)]+)\)/g, function (match, label, href) {
+        var safe = _safeUrl(href, false);
+        return safe ? '<a href="' + safe + '" target="_blank" rel="noopener">' + label + '</a>' : match;
+      })
       .replace(/^### (.+)$/gm, "<strong>$1</strong>")
       .replace(/^## (.+)$/gm, "<strong>$1</strong>")
       .replace(/^# (.+)$/gm, "<strong>$1</strong>")
@@ -1157,6 +1168,7 @@
     html = html.replace(/(<li>.*?<\/li>)+/gs, function (match) {
       return "<ul>" + match + "</ul>";
     });
+    html = html.replace(/\u0000(\d+)\u0000/g, function (_, i) { return held[+i]; });
 
     return "<p>" + html + "</p>";
   }
@@ -1165,6 +1177,28 @@
     var d = document.createElement("div");
     d.textContent = text;
     return d.innerHTML;
+  }
+
+  // Escapes text for both element content and quoted attribute values.
+  function _escText(text) {
+    return String(text == null ? "" : text)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+  }
+
+  // A URL an agent's reply may link or embed, or "" when its scheme could run
+  // script (javascript:, vbscript:, data:text/html). Relative URLs stay on MATE.
+  function _safeUrl(url, isImage) {
+    var u = String(url == null ? "" : url).trim();
+    if (/^(https?:\/\/|\/|#)/i.test(u)) return u;
+    if (!isImage && /^mailto:/i.test(u)) return u;
+    if (isImage && /^data:image\/(png|jpe?g|gif|webp);/i.test(u)) return u;
+    return "";
+  }
+
+  function _artifactImg(url, alt) {
+    return '<img class="widget-msg-image widget-generated-image art-lazy-load" data-art-url="' +
+      _escText(url) + '" alt="' + _escText(alt) + '">';
   }
 
   // --- SVG Icons & Actions ----------------------------------------------

@@ -115,7 +115,20 @@ BROWSER_HEADLESS=true
 
 # Remote CDP debugger URL (only if BROWSER_MODE=cdp)
 BROWSER_CDP_URL=http://localhost:9222
+
+# Let the browser load private, loopback and link-local addresses (default: false)
+BROWSER_ALLOW_PRIVATE_NETWORK=false
 ```
+
+The browser runs on the MATE server, so by default it refuses any request — a
+navigation, a redirect or a page's own fetch — to an address inside the server's
+network: `127.0.0.1`, `10.x`, `192.168.x`, cloud metadata at `169.254.169.254`,
+and so on. Without that, an agent steered by a web page or a chat message could
+reach the internal agent server or the database host. Set
+`BROWSER_ALLOW_PRIVATE_NETWORK=true` only if agents must browse an intranet.
+
+The live interactive view requires a signed-in dashboard session and always
+shows the signed-in user's own browser.
 
 ---
 

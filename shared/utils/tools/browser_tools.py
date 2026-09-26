@@ -8,12 +8,80 @@ import json
 import logging
 import time
 import asyncio
+import hashlib
+import ipaddress
+import re
+import socket
 from typing import Dict, Any, List, Optional, Tuple
+from urllib.parse import urlparse
 
 from google.adk.tools.tool_context import ToolContext
 from playwright.async_api import async_playwright, Browser, BrowserContext, Page
 
 logger = logging.getLogger(__name__)
+
+
+# The browser runs on the server, so without this an agent — steered by a web
+# page or a chat message — or anyone driving the interactive view could reach the
+# internal ADK server, the database host or cloud metadata. Checked for every
+# request the browser makes, redirects and in-page fetches included.
+_SAFE_SCHEMES = ("http", "https")
+_PASSTHROUGH_SCHEMES = ("data", "blob", "about")
+
+
+def _private_network_allowed() -> bool:
+    return os.getenv("BROWSER_ALLOW_PRIVATE_NETWORK", "false").lower() in ("true", "1", "yes")
+
+
+def _is_internal_address(ip: str) -> bool:
+    addr = ipaddress.ip_address(ip.split("%", 1)[0])
+    if getattr(addr, "ipv4_mapped", None):
+        addr = addr.ipv4_mapped
+    return (addr.is_private or addr.is_loopback or addr.is_link_local or addr.is_reserved
+            or addr.is_multicast or addr.is_unspecified)
+
+
+async def url_block_reason(url: str) -> Optional[str]:
+    """Why the browser may not load this URL, or None when it may."""
+    parsed = urlparse(url)
+    scheme = (parsed.scheme or "").lower()
+    if scheme in _PASSTHROUGH_SCHEMES:
+        return None
+    if scheme not in _SAFE_SCHEMES:
+        return f"scheme '{scheme}' is not allowed"
+    if _private_network_allowed():
+        return None
+    host = parsed.hostname
+    if not host:
+        return "no host"
+    try:
+        infos = await asyncio.get_running_loop().getaddrinfo(host, None)
+    except socket.gaierror:
+        return None  # unresolvable: the browser will fail to load it anyway
+    for info in infos:
+        if _is_internal_address(info[4][0]):
+            return f"{host} resolves to an internal address"
+    return None
+
+
+async def _guard_route(route) -> None:
+    reason = await url_block_reason(route.request.url)
+    if reason:
+        logger.warning("Browser blocked %s: %s", route.request.url[:200], reason)
+        await route.abort("blockedbyclient")
+    else:
+        await route.continue_()
+
+
+def _profile_dir_name(user_id: str) -> str:
+    """
+    A directory name for the user's browser profile. Widget visitor ids come from
+    the client, so one containing a path separator or '..' is hashed rather than
+    joined into the path. Plain ids keep their old directory and saved logins.
+    """
+    if re.fullmatch(r"[A-Za-z0-9_@.+-]+", user_id or "") and ".." not in user_id:
+        return f"user_{user_id}"
+    return "user_" + hashlib.sha256((user_id or "").encode("utf-8")).hexdigest()[:32]
 
 
 class SessionBrowser:
@@ -27,7 +95,7 @@ class SessionBrowser:
         self.context = None
         self.page = None
         self.last_activity = time.time()
-        self.profile_dir = os.path.abspath(f"data/browser_profiles/user_{user_id}")
+        self.profile_dir = os.path.abspath(os.path.join("data/browser_profiles", _profile_dir_name(user_id)))
 
     async def get_page(self) -> Page:
         """Acquires and initializes the active Playwright page, launching the browser if needed."""
@@ -96,6 +164,8 @@ class SessionBrowser:
                 self.page = self.context.pages[0]
             else:
                 self.page = await self.context.new_page()
+
+        await self.context.route("**/*", _guard_route)
 
         # Set default timeouts
         self.page.set_default_timeout(30000)  # 30 seconds

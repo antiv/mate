@@ -25,14 +25,25 @@ async def websocket_browser_interactive(
     """
     WebSocket endpoint for real-time interactive browser session.
     Streams page screenshot frames to the client and accepts input events (click, keyboard, scroll).
+
+    Only for a signed-in dashboard session, and only ever the signed-in user's own
+    browser: the user_id query parameter is ignored. The browser runs on the
+    server, so an open socket was a remote-controlled browser inside the network.
     """
-    # Try to extract authenticated user_id from session if available
+    authenticated_user = None
     try:
-        user_session = websocket.session.get("user") if hasattr(websocket, "session") else None
+        user_session = websocket.session.get("user") if "session" in websocket.scope else None
         if user_session:
-            user_id = user_session.get("user_id") or user_session.get("email") or user_id
+            authenticated_user = (user_session.get("user_id") or user_session.get("email")
+                                  or user_session.get("display_name"))
     except Exception as e:
         logger.debug(f"Failed to read session inside websocket: {e}")
+
+    if not authenticated_user:
+        logger.warning("Browser websocket refused: no signed-in session")
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+    user_id = authenticated_user
 
     await websocket.accept()
     logger.info(f"WebSocket browser connection established for user: {user_id}, session: {session_id}")
@@ -148,7 +159,13 @@ async def websocket_browser_interactive(
                     if url:
                         if not url.startswith(("http://", "https://")):
                             url = "https://" + url
-                        await page.goto(url, wait_until="load")
+                        # The context-wide route guard blocks it too; this says why
+                        from shared.utils.tools.browser_tools import url_block_reason
+                        reason = await url_block_reason(url)
+                        if reason:
+                            await websocket.send_json({"type": "error", "message": f"Blocked: {reason}"})
+                        else:
+                            await page.goto(url, wait_until="load")
 
                 elif event_type == "clear_site_data":
                     current_url = page.url

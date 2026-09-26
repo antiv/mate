@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+Upgrading is strongly recommended. Details will follow in a GitHub security advisory.
+
+- **The interactive browser websocket required no login.** It now requires a signed-in session and serves only that user's own browser. The server-side browser, including agents' browser tools, no longer loads private, loopback or link-local addresses (`BROWSER_ALLOW_PRIVATE_NETWORK=true` lifts this for intranet deployments)
+- **Chat replies could run script.** The widget, Work Room and standalone chat now escape an agent's reply before rendering its markdown, and allow only http(s) links. The dashboard no longer keeps the password in the browser
+- **A signed-in user who was not an admin could act as another user** on the agent server, and **read admin-only dashboard data**. The proxy now pins a non-admin to their own user id, and dashboard reads require admin outside the Work Room's own routes
+- **Artifacts were readable without a login.** They now require the widget's key or a login, for the owner or an admin
+- Agent changes made through the widget admin API are now versioned and audited
 - **RBAC let a new user's first denied request through.** The ADK RBAC callback allowed any request whose check raised, "to prevent system breakage". A newly created user came back from `get_or_create_user` detached from its session, so reading its roles to log a denial raised — and the denial became an allow. The first request of every new user to an agent they may not use went through, which under the secure default includes every agent with no roles configured. The new user is now loaded before its session closes, and both runtimes deny when the check cannot complete; the LangGraph hook had copied the fail-open deliberately
 - **An agent's endpoint key reached the browser and the model.** 1.2.0 masked the key in the export, but the agent list that `GET /dashboard/api/agents` returns and the Agents page embeds, the version history, the rollback response and the `read_agent` tool all carried it in clear. The list and history are readable by any signed-in user, not only admins, and `read_agent` hands its result to the model. All four now return the same `__stored__` sentinel the edit form already sends back to keep the stored key; `${VAR}` references still show as written. Stored keys and version snapshots are unchanged, so saves, rollbacks and evals keep using the real key
 

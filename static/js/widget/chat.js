@@ -543,7 +543,7 @@
         var avatarEl = document.createElement("div");
         avatarEl.className = "widget-agent-avatar";
         if (CFG.icon_url) {
-          avatarEl.innerHTML = '<img src="' + CFG.icon_url + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%">';
+          avatarEl.innerHTML = '<img src="' + _escText(_safeUrl(CFG.icon_url, true)) + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%">';
           avatarEl.style.backgroundColor = "transparent";
         } else {
           avatarEl.style.backgroundColor = avatarColor;
@@ -617,7 +617,7 @@
               var publicUrl = BASE + "/api/widget/artifacts/" + AGENT_NAME + "/" + userId + "/" + sessionId + "/" + artFilename + "/" + artVersion;
               var alreadyAdded = activeAgentImages.some(function(img) { return img.url === publicUrl; });
               if (!alreadyAdded) {
-                var imgHtml = '<img class="widget-msg-image widget-generated-image art-lazy-load" data-art-url="' + publicUrl + '" alt="' + artFilename + '">';
+                var imgHtml = _artifactImg(publicUrl, artFilename);
                 activeAgentImages.push({ url: publicUrl, html: imgHtml });
               }
               _updateMessage(activeAgentEl, activeAgentText, true);
@@ -682,7 +682,7 @@
 
             var exists = activeAgentImages.some(function(img) { return img.src === imgSrc; });
             if (!exists) {
-              var imgHtml = '<img src="' + imgSrc + '" class="widget-msg-image widget-generated-image" alt="Generated image">';
+              var imgHtml = '<img src="' + _escText(imgSrc) + '" class="widget-msg-image widget-generated-image" alt="Generated image">';
               activeAgentImages.push({ type: "inline", src: imgSrc, html: imgHtml });
             }
             _updateMessage(activeAgentEl, activeAgentText, true);
@@ -876,7 +876,7 @@
         if (ext === "PDF") icon = "📕";
         else if (["JSON", "PY", "JS", "TS", "HTML", "CSS", "YAML", "YML"].indexOf(ext) !== -1) icon = "💻";
         
-        badgeEl.innerHTML = '<span class="file-icon">' + icon + '</span><span class="file-name">' + f.name + '</span>';
+        badgeEl.innerHTML = '<span class="file-icon">' + icon + '</span><span class="file-name">' + _escText(f.name) + '</span>';
         item.appendChild(badgeEl);
       }
 
@@ -912,7 +912,7 @@
       var avatarEl = document.createElement("div");
       avatarEl.className = "widget-agent-avatar";
       if (CFG.icon_url) {
-        avatarEl.innerHTML = '<img src="' + CFG.icon_url + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%">';
+        avatarEl.innerHTML = '<img src="' + _escText(_safeUrl(CFG.icon_url, true)) + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%">';
         avatarEl.style.backgroundColor = "transparent";
       } else {
         avatarEl.style.backgroundColor = avatarColor;
@@ -949,7 +949,7 @@
             var icon = "📄";
             if (ext === "PDF") icon = "📕";
             
-            fileLink.innerHTML = '<span class="file-icon">' + icon + '</span><span class="file-name">' + fileObj.name + '</span>';
+            fileLink.innerHTML = '<span class="file-icon">' + icon + '</span><span class="file-name">' + _escText(fileObj.name) + '</span>';
             el.appendChild(fileLink);
           }
         });
@@ -1105,11 +1105,11 @@
     if (c.subtitle) body += '<div style="font-size:13px;color:#475569;margin-top:2px">' + e(c.subtitle) + "</div>";
     (c.lines || []).forEach(function (l) { body += '<div style="font-size:13px;color:#475569">' + e(l) + "</div>"; });
     if (c.location) body += '<div style="font-size:13px;color:#475569">📍 ' + e(c.location) + "</div>";
-    var img = c.image ? '<img src="' + a(c.image) + '" style="width:48px;height:48px;object-fit:cover;border-radius:8px;flex-shrink:0">' : "";
+    var img = c.image ? '<img src="' + a(_safeUrl(c.image, true)) + '" style="width:48px;height:48px;object-fit:cover;border-radius:8px;flex-shrink:0">' : "";
     var inner = img ? '<div style="display:flex;gap:10px">' + img + "<div>" + body + "</div></div>" : body;
     var actions = (c.actions || []).map(function (act) {
       if (act.kind === "link") {
-        return '<a href="' + a(act.value) + '" target="_blank" rel="noopener" style="font-size:13px;color:var(--w-primary,#2563eb);text-decoration:none;padding:6px 0">' + e(act.label) + "</a>";
+        return '<a href="' + a(_safeUrl(act.value, false)) + '" target="_blank" rel="noopener" style="font-size:13px;color:var(--w-primary,#2563eb);text-decoration:none;padding:6px 0">' + e(act.label) + "</a>";
       }
       var attrs = 'data-kind="' + a(act.kind) + '" data-value="' + a(act.value || "") + '"';
       if (act.kind === "ics" && c.ics) {
@@ -1159,7 +1159,8 @@
           return;
         }
         
-        fetch(url)
+        // Artifacts are the visitor's conversation content; the key authorises them
+        fetch(url, { headers: { "X-Widget-Key": API_KEY } })
           .then(function(r) { return r.json(); })
           .then(function(data) {
              var inlineData = data.inlineData || data.inline_data;
@@ -1220,7 +1221,8 @@
       var author = el.getAttribute("data-author") || "";
       var textContent = "";
       if (role === "agent") {
-        textContent = el._rawMarkdown || el.innerHTML;
+        // Never innerHTML: history is rendered again on reload, as markdown
+        textContent = el._rawMarkdown || el.innerText;
       } else {
         textContent = el.textContent;
       }
@@ -1267,69 +1269,92 @@
     return "u_" + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
   }
 
+  // Agent text is untrusted: a web page, a document or a memory block can put
+  // markup in it. So it is escaped first, and only the markdown below becomes
+  // HTML. Pieces built here are held aside and put back after escaping.
   function _renderMarkdown(text) {
     if (!text) return "";
+    var held = [];
+    function hold(html) { held.push(html); return "\u0000" + (held.length - 1) + "\u0000"; }
+    text = String(text).replace(/\u0000/g, "");
 
     // Pre-process any MATE image artifacts to use lazy-loading img tags
     // 1. Markdown images pointing to artifacts
     text = text.replace(/!\[([^\]]*)\]\((.*?\/api\/widget\/artifacts\/[^\s)]+)\)/gi, function(_, alt, url) {
-        return '<img class="widget-msg-image widget-generated-image art-lazy-load" data-art-url="' + url + '" alt="' + alt + '">';
+      return hold(_artifactImg(url, alt));
     });
 
     // 2. Markdown links pointing to image artifacts
-    text = text.replace(/\[([^\]]*)\]\((.*?\/api\/widget\/artifacts\/[^\s)]+)\)/gi, function(_, label, url) {
-        var lowerUrl = url.toLowerCase();
-        var isImage = lowerUrl.indexOf('.png') !== -1 || lowerUrl.indexOf('.jpg') !== -1 || lowerUrl.indexOf('.jpeg') !== -1 || lowerUrl.indexOf('.webp') !== -1;
-        if (isImage) {
-            return '<img class="widget-msg-image widget-generated-image art-lazy-load" data-art-url="' + url + '" alt="' + label + '">';
-        }
-        return '[' + label + '](' + url + ')';
+    text = text.replace(/\[([^\]]*)\]\((.*?\/api\/widget\/artifacts\/[^\s)]+)\)/gi, function(match, label, url) {
+      var lowerUrl = url.toLowerCase();
+      var isImage = lowerUrl.indexOf('.png') !== -1 || lowerUrl.indexOf('.jpg') !== -1 || lowerUrl.indexOf('.jpeg') !== -1 || lowerUrl.indexOf('.webp') !== -1;
+      return isImage ? hold(_artifactImg(url, label)) : match;
     });
 
     // 3. Raw URLs in text pointing to image artifacts (e.g. printed as text by the agent)
     text = text.replace(/(^|\s)(\/api\/widget\/artifacts\/[^\s"')]+\.(?:png|jpg|jpeg|webp)(?:\/\d+)?)/gi, function(match, space, url) {
-        return space + '<img class="widget-msg-image widget-generated-image art-lazy-load" data-art-url="' + url + '" alt="Screenshot">';
+      return space + hold(_artifactImg(url, "Screenshot"));
     });
 
-    var html = text
-      // Code blocks
-      .replace(/```(\w*)\n([\s\S]*?)```/g, function (_, lang, code) {
-        return '<pre><code>' + _escapeHtml(code.trim()) + '</code></pre>';
+    // Code blocks
+    text = text.replace(/```(\w*)\n([\s\S]*?)```/g, function (_, lang, code) {
+      return hold('<pre><code>' + _escapeHtml(code.trim()) + '</code></pre>');
+    });
+
+    var html = _escText(text)
+      .replace(/`([^`]+)`/g, "<code>$1</code>")
+      .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+      .replace(/\*(.+?)\*/g, "<em>$1</em>")
+      .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, function (match, alt, src) {
+        var safe = _safeUrl(src, true);
+        return safe ? '<img src="' + safe + '" alt="' + alt + '" class="widget-msg-image widget-generated-image">' : match;
       })
-      // Inline code
-      .replace(/`([^`]+)`/g, '<code>$1</code>')
-      // Bold
-      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-      // Italic
-      .replace(/\*(.+?)\*/g, '<em>$1</em>')
-      // Inline images
-      .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" class="widget-msg-image widget-generated-image">')
-      // Links
-      .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
-      // Headers (h3 max inside chat)
-      .replace(/^### (.+)$/gm, '<strong>$1</strong>')
-      .replace(/^## (.+)$/gm, '<strong>$1</strong>')
-      .replace(/^# (.+)$/gm, '<strong>$1</strong>')
-      // Unordered lists
-      .replace(/^[*-] (.+)$/gm, '<li>$1</li>')
-      // Ordered lists
-      .replace(/^\d+\. (.+)$/gm, '<li>$1</li>')
-      // Paragraphs
-      .replace(/\n{2,}/g, '</p><p>')
-      .replace(/\n/g, '<br>');
+      .replace(/\[([^\]]+)\]\(([^)]+)\)/g, function (match, label, href) {
+        var safe = _safeUrl(href, false);
+        return safe ? '<a href="' + safe + '" target="_blank" rel="noopener">' + label + '</a>' : match;
+      })
+      .replace(/^### (.+)$/gm, "<strong>$1</strong>")
+      .replace(/^## (.+)$/gm, "<strong>$1</strong>")
+      .replace(/^# (.+)$/gm, "<strong>$1</strong>")
+      .replace(/^[*-] (.+)$/gm, "<li>$1</li>")
+      .replace(/^\d+\. (.+)$/gm, "<li>$1</li>")
+      .replace(/\n{2,}/g, "</p><p>")
+      .replace(/\n/g, "<br>");
 
-    // Wrap consecutive <li> in <ul>
     html = html.replace(/(<li>.*?<\/li>)+/gs, function (match) {
-      return '<ul>' + match + '</ul>';
+      return "<ul>" + match + "</ul>";
     });
+    html = html.replace(/\u0000(\d+)\u0000/g, function (_, i) { return held[+i]; });
 
-    return '<p>' + html + '</p>';
+    return "<p>" + html + "</p>";
   }
 
   function _escapeHtml(text) {
     var d = document.createElement("div");
     d.textContent = text;
     return d.innerHTML;
+  }
+
+  // Escapes text for both element content and quoted attribute values.
+  function _escText(text) {
+    return String(text == null ? "" : text)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+  }
+
+  // A URL an agent's reply may link or embed, or "" when its scheme could run
+  // script (javascript:, vbscript:, data:text/html). Relative URLs stay on MATE.
+  function _safeUrl(url, isImage) {
+    var u = String(url == null ? "" : url).trim();
+    if (/^(https?:\/\/|\/|#)/i.test(u)) return u;
+    if (!isImage && /^mailto:/i.test(u)) return u;
+    if (isImage && /^data:image\/(png|jpe?g|gif|webp);/i.test(u)) return u;
+    return "";
+  }
+
+  function _artifactImg(url, alt) {
+    return '<img class="widget-msg-image widget-generated-image art-lazy-load" data-art-url="' +
+      _escText(url) + '" alt="' + _escText(alt) + '">';
   }
 
   // --- SVG Icons & Actions ----------------------------------------------
