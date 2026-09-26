@@ -814,10 +814,12 @@
                         return lowerName.endsWith(ext);
                     });
                     if (isImage) {
-                        var artUrl = window.location.origin + "/apps/" + AGENT + "/users/" + 
-                            localStorage.getItem(PREFIX + "_uid") + "/sessions/" + SESSION + 
-                            "/artifacts/" + artFilename + "/versions/" + artVersion;
-                        artifactHtml += '<img data-art-url="' + artUrl + '" alt="' + artFilename + '" class="widget-msg-image widget-generated-image art-lazy-load" style="opacity: 0.5;">';
+                        // As markdown, not HTML: chat.js escapes message text and turns
+                        // an artifacts link into an image itself
+                        var artUrl = "/api/widget/artifacts/" + encodeURIComponent(AGENT) + "/" +
+                            encodeURIComponent(localStorage.getItem(PREFIX + "_uid")) + "/" + encodeURIComponent(SESSION) +
+                            "/" + encodeURIComponent(artFilename) + "/" + encodeURIComponent(artVersion);
+                        artifactHtml += "\n![" + artFilename.replace(/[\[\]]/g, "") + "](" + artUrl + ")\n";
                     }
                 }
             }

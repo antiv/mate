@@ -270,8 +270,9 @@
                 if (response.ok) {
                     const data = await response.json();
 
+                    // Never the password: any script on this origin can read localStorage
                     localStorage.setItem('auth_username', username);
-                    localStorage.setItem('auth_password', password);
+                    localStorage.removeItem('auth_password');
                     localStorage.setItem('auth_token', data.access_token);
 
                     // Cookie for server-side auth checks (24 h)

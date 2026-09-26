@@ -7,6 +7,14 @@
     const limit = 50;
     let currentSessionData = null;
 
+    // A value as a JS argument in a double-quoted onclick attribute. escapeHtml
+    // inside '...' did not hold: the browser decodes &#039; back to a quote
+    // before the handler is parsed, and a visitor chooses their own user_id.
+    function jsArg(value) {
+        return JSON.stringify(value == null ? '' : String(value))
+            .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
     function escapeHtml(str) {
         if (str === null || str === undefined) return '';
         return String(str)
@@ -99,7 +107,7 @@
                 <td class="px-3 py-3 text-xs font-mono text-gray-900 dark:text-white" title="${escapeHtml(s.id)}">
                     <div class="flex items-center space-x-1">
                         <span>${escapeHtml(shortId)}</span>
-                        <button onclick="navigator.clipboard.writeText('${escapeHtml(s.id)}')" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-0.5" title="Copy Session ID">
+                        <button onclick="navigator.clipboard.writeText(${jsArg(s.id)})" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-0.5" title="Copy Session ID">
                             <i class="fas fa-copy text-[10px]"></i>
                         </button>
                     </div>
@@ -114,10 +122,10 @@
                 </td>
                 <td class="px-3 py-3 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">${formatTime(s.updated_at)}</td>
                 <td class="px-3 py-3 text-xs text-right whitespace-nowrap space-x-2">
-                    <button onclick="window.sessionsApp.inspectSession('${escapeHtml(s.runtime)}', '${escapeHtml(s.app_name)}', '${escapeHtml(s.user_id)}', '${escapeHtml(s.id)}')" class="px-2.5 py-1 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded shadow-sm inline-flex items-center touch-target">
+                    <button onclick="window.sessionsApp.inspectSession(${jsArg(s.runtime)}, ${jsArg(s.app_name)}, ${jsArg(s.user_id)}, ${jsArg(s.id)})" class="px-2.5 py-1 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded shadow-sm inline-flex items-center touch-target">
                         <i class="fas fa-eye mr-1"></i>Inspect
                     </button>
-                    <button onclick="window.sessionsApp.deleteSession('${escapeHtml(s.runtime)}', '${escapeHtml(s.app_name)}', '${escapeHtml(s.user_id)}', '${escapeHtml(s.id)}')" class="px-2 py-1 text-xs bg-red-100 hover:bg-red-200 text-red-700 dark:bg-red-900/30 dark:hover:bg-red-900/50 dark:text-red-300 rounded inline-flex items-center touch-target">
+                    <button onclick="window.sessionsApp.deleteSession(${jsArg(s.runtime)}, ${jsArg(s.app_name)}, ${jsArg(s.user_id)}, ${jsArg(s.id)})" class="px-2 py-1 text-xs bg-red-100 hover:bg-red-200 text-red-700 dark:bg-red-900/30 dark:hover:bg-red-900/50 dark:text-red-300 rounded inline-flex items-center touch-target">
                         <i class="fas fa-trash-alt"></i>
                     </button>
                 </td>
