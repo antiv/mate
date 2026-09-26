@@ -191,6 +191,42 @@
     </div>
 </div>
 
+<!-- Suggest a Fix Modal -->
+<div id="improveModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-5xl mx-4 max-h-[90vh] flex flex-col">
+        <div class="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+            <h3 class="text-sm font-semibold text-gray-900 dark:text-white">
+                <i class="fas fa-wand-magic-sparkles mr-1 text-purple-500"></i>Suggest a fix <span id="imAgent" class="text-gray-400 font-normal"></span>
+            </h3>
+            <button onclick="closeImprove()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="p-4 space-y-3 overflow-y-auto">
+            <div id="imLoading" class="text-sm text-gray-500 dark:text-gray-400"><i class="fas fa-spinner fa-spin mr-1"></i>Asking the model for a suggestion…</div>
+            <div id="imBody" class="hidden space-y-3">
+                <div class="text-xs text-gray-600 dark:text-gray-300"><span class="font-medium">Question:</span> <span id="imQuestion"></span></div>
+                <div class="text-xs p-2 rounded bg-purple-50 dark:bg-purple-900/20 text-gray-700 dark:text-gray-200"><span class="font-medium">Why:</span> <span id="imReason"></span></div>
+                <p class="text-xs text-gray-500 dark:text-gray-400">Only the instruction changes. Edit the suggestion if you like, check it against the suite, then apply — it becomes a new version you can roll back.</p>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Current instruction</label>
+                        <textarea id="imCurrent" rows="14" readonly class="w-full px-3 py-2 text-xs font-mono border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-700 dark:text-gray-300 resize-y"></textarea>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Suggested instruction</label>
+                        <textarea id="imProposed" rows="14" oninput="improveEdited()" class="w-full px-3 py-2 text-xs font-mono border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white resize-y focus:outline-none focus:ring-1 focus:ring-purple-500"></textarea>
+                    </div>
+                </div>
+                <div id="imCheck" class="hidden text-xs space-y-2"></div>
+            </div>
+        </div>
+        <div class="px-4 py-3 border-t border-gray-200 dark:border-gray-700 flex justify-end space-x-2">
+            <button onclick="closeImprove()" class="px-3 py-1.5 text-xs text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700">Cancel</button>
+            <button id="imCheckBtn" onclick="checkImprove()" disabled class="px-3 py-1.5 text-xs bg-gray-700 hover:bg-gray-800 text-white rounded disabled:opacity-50"><i class="fas fa-vial mr-1"></i>Check against suite</button>
+            <button id="imApplyBtn" onclick="applyImprove()" disabled title="Check the suggestion against the suite first" class="px-3 py-1.5 text-xs bg-purple-600 hover:bg-purple-700 text-white rounded disabled:opacity-50"><i class="fas fa-check mr-1"></i>Apply</button>
+        </div>
+    </div>
+</div>
+
 <!-- Run Single Test Case Modal -->
 <div id="runSingleModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50">
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-lg mx-4">
@@ -346,6 +382,7 @@ function renderTestCases() {
                 <td class="px-3 py-2 text-center whitespace-nowrap">
                     <button onclick="editTestCase(${tc.id})" class="px-1.5 py-0.5 text-xs text-blue-600 hover:underline" title="Edit"><i class="fas fa-edit"></i></button>
                     <button onclick="openRunModal(${tc.id})" class="px-1.5 py-0.5 text-xs text-green-600 hover:underline" title="Run"><i class="fas fa-play"></i></button>
+                    <button onclick="openImprove({test_case_id: ${tc.id}})" class="px-1.5 py-0.5 text-xs text-purple-600 hover:underline" title="Suggest a fix"><i class="fas fa-wand-magic-sparkles"></i></button>
                     <button onclick="deleteTestCase(${tc.id})" class="px-1.5 py-0.5 text-xs text-red-500 hover:underline" title="Delete"><i class="fas fa-trash"></i></button>
                 </td>
             </tr>
@@ -704,6 +741,9 @@ function renderRatedDown() {
         } else {
             action = '<span class="text-gray-400">—</span>';
         }
+        if (r.question && r.agent_name) {
+            action += ` <button onclick="openImprove({feedback_id: ${r.id}})" class="px-2 py-1 mt-1 text-xs text-purple-600 hover:underline whitespace-nowrap" title="Suggest a fix"><i class="fas fa-wand-magic-sparkles mr-1"></i>Suggest fix</button>`;
+        }
         return `
             <tr class="border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 align-top">
                 <td class="px-3 py-2 text-gray-500 dark:text-gray-400 whitespace-nowrap">${r.updated_at ? new Date(r.updated_at).toLocaleDateString() : '—'}</td>
@@ -728,6 +768,116 @@ function addRatedToEvals(index) {
     document.getElementById('tcModalRatedAnswer').textContent = r.answer || '(no answer recorded)';
     document.getElementById('tcModalRatedAnswerRow').classList.remove('hidden');
     document.getElementById('tcModalExpected').focus();
+}
+
+// ── Suggest a fix ─────────────────────────────────────────────────────────────
+
+let _improve = null;  // {agent_name, source, current_instruction, checkedText}
+
+async function openImprove(source) {
+    _improve = null;
+    document.getElementById('imAgent').textContent = '';
+    document.getElementById('imLoading').classList.remove('hidden');
+    document.getElementById('imLoading').innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>Asking the model for a suggestion…';
+    document.getElementById('imBody').classList.add('hidden');
+    document.getElementById('imCheck').classList.add('hidden');
+    document.getElementById('imCheckBtn').disabled = true;
+    document.getElementById('imApplyBtn').disabled = true;
+    document.getElementById('improveModal').classList.remove('hidden');
+    try {
+        const data = await apiCall('/dashboard/api/evals/improve/propose', 'POST', source);
+        if (data.detail) {
+            document.getElementById('imLoading').textContent = data.detail;
+            return;
+        }
+        _improve = {agent_name: data.agent_name, source: data.source,
+                    current_instruction: data.current_instruction, checkedText: null};
+        document.getElementById('imAgent').textContent = '— ' + data.agent_name;
+        document.getElementById('imQuestion').textContent = data.question || '';
+        document.getElementById('imReason').textContent = data.reason || '—';
+        document.getElementById('imCurrent').value = data.current_instruction || '';
+        document.getElementById('imProposed').value = data.instruction || '';
+        document.getElementById('imLoading').classList.add('hidden');
+        document.getElementById('imBody').classList.remove('hidden');
+        document.getElementById('imCheckBtn').disabled = false;
+    } catch (e) {
+        document.getElementById('imLoading').textContent = 'Suggestion failed: ' + e.message;
+    }
+}
+
+function closeImprove() {
+    document.getElementById('improveModal').classList.add('hidden');
+}
+
+function improveEdited() {
+    // Apply only what was checked: an edit after the check needs a new one
+    if (!_improve) return;
+    document.getElementById('imApplyBtn').disabled = document.getElementById('imProposed').value !== _improve.checkedText;
+}
+
+function _checkCell(r) {
+    if (!r) return '—';
+    if (r.error) return '<span class="text-red-500" title="' + escAttr(r.error) + '">error</span>';
+    const mark = r.passed ? '<span class="text-green-600">pass</span>' : '<span class="text-red-500">fail</span>';
+    return mark + ' ' + scoreBadge(r.score);
+}
+
+async function checkImprove() {
+    if (!_improve) return;
+    const text = document.getElementById('imProposed').value;
+    const btn = document.getElementById('imCheckBtn');
+    const area = document.getElementById('imCheck');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>Running both versions…';
+    area.classList.remove('hidden');
+    area.textContent = 'Running the suite with the current and the suggested instruction. This calls the agent twice per test case.';
+    try {
+        const data = await apiCall('/dashboard/api/evals/improve/check', 'POST',
+                                   {agent_name: _improve.agent_name, instruction: text});
+        if (data.detail) { area.textContent = data.detail; return; }
+        const b = data.before, a = data.after;
+        const regressions = data.cases.filter(c => c.before.passed && !c.after.passed).length;
+        let html = `<div class="font-medium text-gray-800 dark:text-gray-200">Passed: ${b.passed}/${b.total} now → ${a.passed}/${a.total} with the suggestion`
+                 + ` &nbsp;·&nbsp; avg ${scoreBadge(b.avg_score)} → ${scoreBadge(a.avg_score)}`
+                 + (regressions ? ` &nbsp;<span class="text-red-600"><i class="fas fa-exclamation-triangle mr-1"></i>${regressions} case(s) that passed now fail</span>` : '')
+                 + '</div>';
+        html += '<table class="w-full"><thead><tr class="text-left text-gray-500 dark:text-gray-400"><th class="py-1 pr-2 font-medium">Input</th><th class="py-1 pr-2 font-medium">Now</th><th class="py-1 font-medium">Suggested</th></tr></thead><tbody>';
+        html += data.cases.map(c => {
+            const worse = c.before.passed && !c.after.passed;
+            return `<tr class="border-t border-gray-100 dark:border-gray-700 ${worse ? 'bg-red-50 dark:bg-red-900/20' : ''}">`
+                 + `<td class="py-1 pr-2 text-gray-700 dark:text-gray-300" title="${escAttr(c.input)}">${escHtml(truncate(c.input, 70))}</td>`
+                 + `<td class="py-1 pr-2 whitespace-nowrap">${_checkCell(c.before)}</td>`
+                 + `<td class="py-1 whitespace-nowrap">${_checkCell(c.after)}</td></tr>`;
+        }).join('');
+        html += '</tbody></table>';
+        area.innerHTML = html;
+        _improve.checkedText = text;
+        improveEdited();
+    } catch (e) {
+        area.textContent = 'Check failed: ' + e.message;
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-vial mr-1"></i>Check against suite';
+    }
+}
+
+async function applyImprove() {
+    if (!_improve || document.getElementById('imProposed').value !== _improve.checkedText) return;
+    if (!confirm('Replace the instruction of ' + _improve.agent_name + '? A new version is created, so it can be rolled back.')) return;
+    try {
+        const data = await apiCall('/dashboard/api/evals/improve/apply', 'POST', Object.assign({
+            agent_name: _improve.agent_name,
+            instruction: _improve.checkedText,
+            base_instruction: _improve.current_instruction,
+        }, _improve.source));
+        if (data.detail) { showNotification(data.detail, 'error'); return; }
+        showNotification('Instruction updated — new version created', 'success');
+        closeImprove();
+        loadSuites();
+        if (_selectedAgent) { loadTestCases(_selectedAgent); loadHistory(_selectedAgent); }
+    } catch (e) {
+        showNotification('Apply failed: ' + e.message, 'error');
+    }
 }
 
 function escAttr(str) {

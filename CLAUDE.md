@@ -103,6 +103,7 @@ Follow PEP 8 with type hints on all function signatures. Use f-strings for forma
 | `ADK_HOST` / `ADK_PORT` | ADK server address (default `127.0.0.1:8001`) |
 | `ARTIFACT_SERVICE` | `local_folder`, `supabase`, or `s3` |
 | `TAVILY_API_KEY` | Web search for `google_search`; falls back to DuckDuckGo when unset |
+| `EVAL_JUDGE_MODEL` / `EVAL_IMPROVE_MODEL` | Judge for `llm_judge` evals / model that suggests instruction fixes (falls back to the judge) |
 | `EMBEDDING_MODEL` | Embedding model for memory block semantic search (litellm format, default `gemini/gemini-embedding-001`) |
 | `RATE_LIMIT_ENABLED` | Enable per-user/agent/project budgets |
 | `ALERTS_ENABLED` / `ALERTS_INTERVAL_SECONDS` | Alert rules on agent errors, guardrail bursts and budget thresholds |

@@ -14,7 +14,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 from sqlalchemy.exc import IntegrityError
-from fastapi import FastAPI, Request, HTTPException, Depends, Form, File, UploadFile, Query
+from fastapi import Body, FastAPI, Request, HTTPException, Depends, Form, File, UploadFile, Query
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
@@ -5921,6 +5921,186 @@ class DashboardServer:
                 row["answer"] = answer
                 row["session_available"] = events is not None
             return {"responses": rows, "agents": service.rated_down_agents()}
+
+        # ── Suggested fixes: propose an instruction change, check it, apply it ──
+        # Only the instruction is ever changed here. The request bodies carry no
+        # other config field, and apply writes nothing else.
+
+        def _improve_context(session, body: Dict[str, Any]) -> Dict[str, Any]:
+            """The agent and the bad exchange a suggestion is for."""
+            from shared.utils.models import EvalResult, ResponseFeedback
+            test_case_id, feedback_id = body.get("test_case_id"), body.get("feedback_id")
+            if isinstance(test_case_id, int) and not isinstance(test_case_id, bool):
+                tc = session.query(self.TestCase).filter(self.TestCase.id == test_case_id).first()
+                if not tc:
+                    raise HTTPException(status_code=404, detail="Test case not found")
+                latest = (session.query(EvalResult).filter(EvalResult.test_case_id == tc.id)
+                          .order_by(EvalResult.run_at.desc()).first())
+                return {"agent_name": tc.agent_name, "question": tc.input,
+                        "answer": latest.actual_output if latest else None,
+                        "expected": tc.expected_output, "comment": None,
+                        "source": {"test_case_id": tc.id}}
+            if isinstance(feedback_id, int) and not isinstance(feedback_id, bool):
+                from shared.utils.feedback_service import extract_exchange
+                fb = session.query(ResponseFeedback).filter(ResponseFeedback.id == feedback_id).first()
+                if not fb or not fb.agent_name:
+                    raise HTTPException(status_code=404, detail="Rating not found")
+                question, answer = extract_exchange(self._get_session_events(fb.session_id) or [],
+                                                    fb.message_id)
+                if not question:
+                    raise HTTPException(status_code=400, detail="The rated conversation is no longer available")
+                return {"agent_name": fb.agent_name, "question": question, "answer": answer,
+                        "expected": None, "comment": fb.comment, "source": {"feedback_id": fb.id}}
+            raise HTTPException(status_code=400, detail="test_case_id or feedback_id is required")
+
+        def _agent_row(session, agent_name: str):
+            config = session.query(self.AgentConfig).filter(self.AgentConfig.name == agent_name).first()
+            if not config:
+                raise HTTPException(status_code=404, detail=f"Agent '{agent_name}' not found")
+            return config
+
+        def _proposed_instruction(body: Dict[str, Any]) -> str:
+            from shared.utils.agent_improver import MAX_INSTRUCTION_CHARS
+            instruction = body.get("instruction")
+            if not isinstance(instruction, str) or not instruction.strip():
+                raise HTTPException(status_code=400, detail="instruction is required")
+            if len(instruction) > MAX_INSTRUCTION_CHARS:
+                raise HTTPException(status_code=400, detail="instruction is too long")
+            return instruction
+
+        @self.app.post("/dashboard/api/evals/improve/propose", tags=["Dashboard - Evals"])
+        def propose_improvement(request: Request, username: str = Depends(self._get_auth_user_dependency),
+                                body: Dict[str, Any] = Body(...)):
+            """
+            Suggest a revised instruction for the agent behind a failing test case
+            or a thumbs-down. Nothing is saved. Sync: it waits on a model call.
+            """
+            from shared.utils.agent_improver import ImproveError, propose_instruction
+            session = self.db_client.get_session() if self.db_client else None
+            if not session:
+                raise HTTPException(status_code=503, detail="Database not available")
+            try:
+                ctx = _improve_context(session, body)
+                config = _agent_row(session, ctx["agent_name"])
+                current = config.instruction or ""
+                description = config.description or ""
+            finally:
+                session.close()
+            try:
+                proposal = propose_instruction(current, description, ctx["question"], ctx["answer"],
+                                               ctx["expected"], ctx["comment"])
+            except ImproveError as e:
+                raise HTTPException(status_code=400, detail=str(e))
+            return {"agent_name": ctx["agent_name"], "source": ctx["source"],
+                    "question": ctx["question"], "answer": ctx["answer"],
+                    "current_instruction": current, **proposal}
+
+        @self.app.post("/dashboard/api/evals/improve/check", tags=["Dashboard - Evals"])
+        async def check_improvement(request: Request, username: str = Depends(self._get_auth_user_dependency),
+                                    body: Dict[str, Any] = Body(...)):
+            """
+            Run the agent's active eval suite with its current config and with the
+            proposed instruction, both in memory, and return the results side by side.
+            Nothing is deployed or saved.
+            """
+            from shared.utils.eval_agent_runner import LANGGRAPH_UNSUPPORTED, SnapshotAgent, langgraph_active
+            from shared.utils.eval_runner import EvalRunner
+            if langgraph_active():
+                raise HTTPException(status_code=501, detail=LANGGRAPH_UNSUPPORTED)
+            agent_name = body.get("agent_name")
+            instruction = _proposed_instruction(body)
+            session = self.db_client.get_session() if self.db_client else None
+            if not session:
+                raise HTTPException(status_code=503, detail="Database not available")
+            try:
+                config = _agent_row(session, agent_name if isinstance(agent_name, str) else "")
+                before = self._build_config_snapshot(config)
+                cases = (session.query(self.TestCase)
+                         .filter(self.TestCase.agent_name == config.name, self.TestCase.is_active.is_(True))
+                         .order_by(self.TestCase.id).all())
+                session.expunge_all()
+            finally:
+                session.close()
+            if not cases:
+                raise HTTPException(status_code=400, detail="This agent has no active test cases to check against")
+            after = dict(before, instruction=instruction)
+
+            runner = EvalRunner()
+
+            async def _score(snapshot):
+                results = {}
+                async with SnapshotAgent(snapshot) as agent:
+                    for tc in cases:
+                        try:
+                            output = await agent.ask(tc.input)
+                        except Exception as e:
+                            results[tc.id] = {"output": None, "score": None, "passed": False,
+                                              "error": f"{type(e).__name__}: {e}"}
+                            continue
+                        r = runner.score_output(tc, output, None)
+                        results[tc.id] = {"output": output, "score": r.score, "passed": r.passed,
+                                          "error": r.error}
+                return results
+
+            before_results = await _score(before)
+            after_results = await _score(after)
+
+            def _summary(results):
+                scored = [r["score"] for r in results.values() if r["score"] is not None]
+                return {"passed": sum(1 for r in results.values() if r["passed"]),
+                        "total": len(results),
+                        "avg_score": round(sum(scored) / len(scored), 3) if scored else None}
+
+            return {
+                "agent_name": config.name,
+                "cases": [{"id": tc.id, "input": tc.input, "expected_output": tc.expected_output,
+                           "before": before_results[tc.id], "after": after_results[tc.id]}
+                          for tc in cases],
+                "before": _summary(before_results),
+                "after": _summary(after_results),
+            }
+
+        @self.app.post("/dashboard/api/evals/improve/apply", tags=["Dashboard - Evals"])
+        async def apply_improvement(request: Request, username: str = Depends(self._get_auth_user_dependency),
+                                    body: Dict[str, Any] = Body(...)):
+            """
+            Replace the agent's instruction with the reviewed one: a new config
+            version, an audit entry naming what prompted it, and a runtime reload.
+            Refused if the instruction changed since the suggestion was made.
+            """
+            agent_name = body.get("agent_name")
+            instruction = _proposed_instruction(body)
+            base = body.get("base_instruction")
+            session = self.db_client.get_session() if self.db_client else None
+            if not session:
+                raise HTTPException(status_code=503, detail="Database not available")
+            try:
+                config = _agent_row(session, agent_name if isinstance(agent_name, str) else "")
+                config_id, name, current = config.id, config.name, config.instruction or ""
+            finally:
+                session.close()
+            if not isinstance(base, str) or base != current:
+                raise HTTPException(status_code=409,
+                                    detail="The agent's instruction changed since this suggestion was made")
+            if not self._update_agent_config(config_id, {"instruction": instruction}, changed_by=username):
+                raise HTTPException(status_code=500, detail="Failed to update the agent")
+
+            source = {k: body[k] for k in ("test_case_id", "feedback_id") if isinstance(body.get(k), int)}
+            audit_service.log(username, audit_service.ACTION_AGENT_UPDATE, audit_service.RESOURCE_AGENT,
+                              resource_id=name,
+                              details={"config_id": config_id, "fields": ["instruction"],
+                                       "via": "suggested_fix", **source},
+                              request=request)
+            try:
+                import httpx
+                from shared.utils.utils import get_adk_config
+                adk_config = get_adk_config()
+                async with httpx.AsyncClient(timeout=5.0) as client:
+                    await client.post(f"http://{adk_config['adk_host']}:{adk_config['adk_port']}"
+                                      f"/api/reload-agent/{name}")
+            except Exception as reload_e:
+                logger.info("Agent '%s' reload after suggested fix deferred: %s", name, reload_e)
+            return {"success": True, "agent_name": name}
 
         @self.app.post("/dashboard/api/evals", tags=["Dashboard - Evals"])
         async def create_test_case(request: Request, username: str = Depends(self._get_auth_user_dependency)):

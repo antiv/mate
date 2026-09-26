@@ -126,6 +126,40 @@ The **Rated Down** section at the bottom of the Evals page lists responses users
 
 The list is admin-only, because it shows what visitors said to the agent.
 
+## Suggest a Fix
+
+A failing test case (the wand icon in its row) or a row in **Rated Down** can ask a
+model for a revised **instruction** for the agent:
+
+1. **Propose** — the model sees the agent's current instruction and description,
+   the question, the answer it gave, the expected output (for a test case) and the
+   user's comment (for a thumbs-down), and returns a revised instruction with a
+   short reason. Nothing is saved.
+2. **Review** — the current and suggested instruction are shown side by side; the
+   suggestion can be edited.
+3. **Check against suite** — the agent's whole active suite runs twice in memory,
+   with the current config and with the suggested instruction, and the results are
+   shown side by side, cases that passed before and fail now highlighted. Nothing
+   is deployed.
+4. **Apply** — enabled only for the exact text that was checked. The instruction is
+   replaced as a normal edit: a new config version to roll back to, an
+   `agent.update` audit entry with `"via": "suggested_fix"` and the test case or
+   rating that prompted it, and a reload of the agent. It is refused (`409`) if the
+   instruction changed since the suggestion was made.
+
+**Only the instruction** can change. The model's reply is reduced to two strings,
+the instruction and the reason, and the apply route writes no other field, so tools,
+model, roles and the rest of the config are out of reach whatever the model or the
+request says. The question and the comment come from the agent's users — widget
+visitors included — and reach the model as quoted data, not instructions. Memory
+blocks are not changed: they belong to the project, are shared by its agents and
+are not versioned.
+
+The model is `EVAL_IMPROVE_MODEL`, falling back to `EVAL_JUDGE_MODEL` (LiteLLM
+format). Checking a suggestion calls the agent twice per active test case, and
+`llm_judge` cases also call the judge. Not available on the LangGraph runtime
+(`501`), for the same reason as running against a version.
+
 ## Regression Alerts
 
 After each full suite run (`POST /dashboard/api/evals/version/{version_id}/run`), the server:
@@ -169,6 +203,9 @@ All endpoints require HTTP Basic Auth (same credentials as the dashboard).
 | `DELETE` | `/dashboard/api/evals/{id}` | Soft-delete (sets `is_active=False`) |
 | `POST` | `/dashboard/api/evals/{id}/run` | Run one test case; body: `{version_id}` |
 | `POST` | `/dashboard/api/evals/version/{version_id}/run` | Run all active cases for the agent; body: `{results: []}` |
+| `POST` | `/dashboard/api/evals/improve/propose` | Suggest an instruction; body: `{test_case_id}` or `{feedback_id}` |
+| `POST` | `/dashboard/api/evals/improve/check` | Run the suite with the current and a proposed instruction; body: `{agent_name, instruction}` |
+| `POST` | `/dashboard/api/evals/improve/apply` | Replace the instruction; body: `{agent_name, instruction, base_instruction}`, optional `test_case_id` / `feedback_id` |
 
 ### Create Test Case
 
@@ -257,5 +294,7 @@ These thresholds apply to the badge colours in both the Evals dashboard and the 
 | Variable | Purpose |
 |----------|---------|
 | `EVAL_REGRESSION_WEBHOOK_URL` | Webhook URL for regression alerts (optional) |
+| `EVAL_JUDGE_MODEL` | Default judge for `llm_judge` test cases without their own |
+| `EVAL_IMPROVE_MODEL` | Model that suggests fixes; falls back to `EVAL_JUDGE_MODEL` |
 
 The `judge_model` and `threshold` are configured per test case in the database, not via env vars.
