@@ -126,6 +126,10 @@
 
 <script src="/static/js/triggers-page.js"></script>
 <script>
+function jsArg(value) {
+    return JSON.stringify(value == null ? '' : String(value))
+        .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
     window._triggerPageData = {
         projects: {{ projects | tojson }},
         agents: {{ agents | tojson }},
@@ -154,14 +158,14 @@
 
                 const isEnabled = j.next_run_time !== null;
                 const enabledToggle = `
-                    <button onclick="toggleSystemJob('${j.id}')" title="${isEnabled ? 'Pause Task' : 'Resume Task'}"
+                    <button onclick="toggleSystemJob(${jsArg(j.id)})" title="${isEnabled ? 'Pause Task' : 'Resume Task'}"
                         class="relative inline-flex items-center h-4 rounded-full w-7 transition-colors focus:outline-none ${isEnabled ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-600'}">
                         <span class="inline-block w-3 h-3 transform bg-white rounded-full transition-transform shadow ${isEnabled ? 'translate-x-3.5' : 'translate-x-0.5'}"></span>
                     </button>`;
 
                 const actions = `
                     <div class="flex items-center justify-end gap-2">
-                        <button onclick="rescheduleSystemJob('${j.id}')" title="Edit Schedule (Cron)" class="text-blue-600 dark:text-blue-400 hover:text-blue-800">
+                        <button onclick="rescheduleSystemJob(${jsArg(j.id)})" title="Edit Schedule (Cron)" class="text-blue-600 dark:text-blue-400 hover:text-blue-800">
                             <i class="fas fa-edit text-xs"></i>
                         </button>
                     </div>`;

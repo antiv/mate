@@ -106,6 +106,11 @@
 
 {% block scripts %}
 <script>
+    function jsArg(value) {
+        return JSON.stringify(value == null ? '' : String(value))
+            .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
     let editingId = null;
     let configsCache = [];
 
@@ -129,9 +134,9 @@
                     </span>
                 </div>
                 <div class="flex gap-1">
-                    <button onclick="loadUsageFor('${esc(c.scope)}', '${esc(c.scope_id)}')" class="text-blue-600 dark:text-blue-400 text-xs px-2 py-1 hover:underline">Usage</button>
+                    <button onclick="loadUsageFor(${jsArg(c.scope)}, ${jsArg(c.scope_id)})" class="text-blue-600 dark:text-blue-400 text-xs px-2 py-1 hover:underline">Usage</button>
                     <button onclick="editConfigByIndex(${i})" class="text-gray-600 dark:text-gray-400 text-xs px-2 py-1 hover:underline">Edit</button>
-                    <button onclick="deleteConfig('${esc(c.scope)}', '${esc(c.scope_id)}')" class="text-red-600 dark:text-red-400 text-xs px-2 py-1 hover:underline">Delete</button>
+                    <button onclick="deleteConfig(${jsArg(c.scope)}, ${jsArg(c.scope_id)})" class="text-red-600 dark:text-red-400 text-xs px-2 py-1 hover:underline">Delete</button>
                 </div>
             </div>
         `).join('');

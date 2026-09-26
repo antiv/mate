@@ -440,7 +440,7 @@ function _completeBuildBanner(filename, fileSize, buildId) {
             </div>
         </div>
         <div class="flex items-center gap-2">
-            <button onclick="_triggerBuildDownload('${buildId}', '${filename}')" class="bg-white text-green-700 font-semibold text-sm px-4 py-1.5 rounded-lg hover:bg-green-50 transition-colors">
+            <button onclick="_triggerBuildDownload(${jsArg(buildId)}, ${jsArg(filename)})" class="bg-white text-green-700 font-semibold text-sm px-4 py-1.5 rounded-lg hover:bg-green-50 transition-colors">
                 <i class="fas fa-download mr-1.5"></i> Download
             </button>
             <button onclick="_cancelBuildBanner()" class="text-green-200 hover:text-white text-sm px-2 py-1 rounded hover:bg-green-700">
@@ -506,6 +506,11 @@ async function _pollBuildStatus(buildId) {
     };
 
     poll();
+}
+
+function jsArg(value) {
+    return JSON.stringify(value == null ? '' : String(value))
+        .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 async function _triggerBuildDownload(buildId, filename) {

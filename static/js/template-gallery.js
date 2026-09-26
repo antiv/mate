@@ -69,16 +69,22 @@ function renderTemplates(templates) {
                 ${t.version ? `<p class="text-xs text-gray-500 dark:text-gray-500 mt-2">v${escapeHtml(t.version)}</p>` : ''}
             </div>
             <div class="mt-4 flex gap-2">
-                <button onclick="importTemplate('${escapeHtml(t.id)}')" class="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg flex items-center justify-center">
+                <button onclick="importTemplate(${jsArg(t.id)})" class="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg flex items-center justify-center">
                     <i class="fas fa-download mr-1"></i>Import
                 </button>
-                <button onclick="deleteTemplate('${escapeHtml(t.id)}', '${escapeHtml(t.name || t.id)}')" class="px-3 py-2 bg-red-100 hover:bg-red-200 text-red-700 dark:bg-red-900/30 dark:hover:bg-red-900/50 dark:text-red-400 text-sm rounded-lg flex items-center justify-center" title="Delete Template">
+                <button onclick="deleteTemplate(${jsArg(t.id)}, ${jsArg(t.name || t.id)})" class="px-3 py-2 bg-red-100 hover:bg-red-200 text-red-700 dark:bg-red-900/30 dark:hover:bg-red-900/50 dark:text-red-400 text-sm rounded-lg flex items-center justify-center" title="Delete Template">
                     <i class="fas fa-trash-alt"></i>
                 </button>
             </div>
         `;
         grid.appendChild(card);
     });
+}
+
+
+function jsArg(value) {
+    return JSON.stringify(value == null ? '' : String(value))
+        .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 function escapeHtml(text) {

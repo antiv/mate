@@ -144,7 +144,7 @@ function updateFileSearchModalContent(prefix, stores, files, agentName, allStore
                     <div class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
                         <!-- Store Header (Always Visible) -->
                         <div class="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-900/50 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800/50" 
-                             onclick="toggleStoreFiles('${storeId}', '${prefix}', '${store.store_name}')"
+                             onclick="toggleStoreFiles(${jsArg(storeId)}, ${jsArg(prefix)}, ${jsArg(store.store_name)})"
                              data-store-name="${store.store_name}">
                             <div class="flex items-center space-x-2 flex-1">
                                 <i class="fas fa-chevron-${isExpanded ? 'down' : 'right'} text-xs text-gray-500 dark:text-gray-400 transition-transform" id="${storeId}-icon"></i>
@@ -155,7 +155,7 @@ function updateFileSearchModalContent(prefix, stores, files, agentName, allStore
                             </div>
                             <div class="flex items-center space-x-1" onclick="event.stopPropagation()">
                                 <button 
-                                    onclick="event.stopPropagation(); event.preventDefault(); unassignFileSearchStore('${prefix}', '${agentName}', '${store.store_name}')"
+                                    onclick="event.stopPropagation(); event.preventDefault(); unassignFileSearchStore(${jsArg(prefix)}, ${jsArg(agentName)}, ${jsArg(store.store_name)})"
                                     class="px-2 py-1 text-xs text-orange-600 hover:text-orange-700 border border-orange-300 rounded"
                                     title="Remove from this agent"
                                     type="button"
@@ -186,7 +186,7 @@ function updateFileSearchModalContent(prefix, stores, files, agentName, allStore
                                     <button 
                                         type="button" 
                                         id="${storeId}-upload-button"
-                                        onclick="uploadFileToStoreById('${storeId}', '${prefix}', '${store.store_name}')"
+                                        onclick="uploadFileToStoreById(${jsArg(storeId)}, ${jsArg(prefix)}, ${jsArg(store.store_name)})"
                                         class="px-3 py-1 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
                                     >
                                         <i class="fas fa-upload text-[10px] mr-1"></i>
@@ -235,7 +235,7 @@ function updateFileSearchModalContent(prefix, stores, files, agentName, allStore
                                     ${!showAll ? `
                                         <div class="p-2 text-center border-t border-gray-200 dark:border-gray-700" id="${storeId}-show-all-container" data-show-all="true">
                                             <button 
-                                                onclick="showAllStoreFiles('${storeId}', '${store.store_name}', ${storeFiles.length})"
+                                                onclick="showAllStoreFiles(${jsArg(storeId)}, ${jsArg(store.store_name)}, ${storeFiles.length})"
                                                 class="text-xs text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
                                                 type="button"
                                             >
@@ -389,7 +389,7 @@ function filterStoreFiles(storeId, storeName) {
             filesList.innerHTML += `
                 <div class="p-2 text-center border-t border-gray-200 dark:border-gray-700" id="${storeId}-show-all-container" data-show-all="true">
                     <button 
-                        onclick="showAllStoreFiles('${storeId}', '${actualStoreName}', ${storeFiles.length})"
+                        onclick="showAllStoreFiles(${jsArg(storeId)}, ${jsArg(actualStoreName)}, ${storeFiles.length})"
                         class="text-xs text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
                         type="button"
                     >
