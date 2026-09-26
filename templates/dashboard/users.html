@@ -270,6 +270,14 @@
             .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
 
+    // A value as a JS argument in a double-quoted onclick attribute. User ids
+    // include widget visitors', which the visitor partly chooses, and esc()
+    // inside '...' left a quote free to end the string.
+    function jsArg(value) {
+        return JSON.stringify(value == null ? '' : String(value))
+            .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
     function render() {
         const tp    = totalPages();
         const start = pageSize === 0 ? 0 : (page - 1) * pageSize;
@@ -315,7 +323,7 @@
                     nameEmail += `<div class="text-gray-400 dark:text-gray-500 truncate">${esc(u.email)}</div>`;
             }
 
-            return `<tr class="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700" onclick="event.stopPropagation(); editUser('${esc(u.user_id)}')">
+            return `<tr class="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700" onclick="event.stopPropagation(); editUser(${jsArg(u.user_id)})">
                 <td class="px-3 py-1.5 text-xs font-medium text-gray-900 dark:text-white truncate" data-label="User ID">${esc(u.user_id)}</td>
                 <td class="px-3 py-1.5 text-xs text-gray-700 dark:text-gray-300" data-label="Name / Email">${nameEmail}</td>
                 <td class="px-3 py-1.5 text-xs" data-label="Provider">${providerBadge(provider)}</td>
@@ -327,10 +335,10 @@
                 </td>
                 <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate" data-label="Created">${createdAt}</td>
                 <td class="px-3 py-1.5 text-xs font-medium space-x-1" data-label="Actions">
-                    <button onclick="event.stopPropagation(); editUser('${esc(u.user_id)}')" class="text-blue-600 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300 min-h-[44px] min-w-[44px] touch-target px-2">
+                    <button onclick="event.stopPropagation(); editUser(${jsArg(u.user_id)})" class="text-blue-600 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300 min-h-[44px] min-w-[44px] touch-target px-2">
                         <i class="fas fa-edit"></i> Edit
                     </button>
-                    <button onclick="event.stopPropagation(); deleteUser('${esc(u.user_id)}')" class="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300 min-h-[44px] min-w-[44px] touch-target px-2">
+                    <button onclick="event.stopPropagation(); deleteUser(${jsArg(u.user_id)})" class="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300 min-h-[44px] min-w-[44px] touch-target px-2">
                         <i class="fas fa-trash"></i> Delete
                     </button>
                 </td>
