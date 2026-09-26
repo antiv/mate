@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-09-26
+
+A MATE agent can now sit behind the coding tool you already use. OpenCode, Cline,
+Continue and Roo can call it as a model over `/v1/chat/completions` — including
+their own client-side tools and screenshots — while RBAC, rate limits, cost
+tracking and guardrails still apply. An orchestrator can also fan work out to
+short-lived subagents that never hold more tools than it does.
+
 ### Security
 
 - **A subagent can no longer exceed the tools its parent holds.** `_build_subagent_tools` equipped a child with any tool family named in a subtask, defaulting to enabled when the parent had no such entry — so the orchestrator's prompt decided the child's privileges rather than the parent's configuration. Since that prompt can be influenced by anyone talking to the agent, a child with `execute_shell_command` running as the server user was one injected instruction away. The widget guard did not help: it keys off the agent name, and a subagent gets a fresh one, so an agent refused the executor for being widget-exposed could obtain it on a child. The same route granted `delete_agent` and `place_order`. Child tools are now intersected with the parent's effective set, with the widget refusal inherited. Reported privately against 695c735 by Rafael Asor (Attenu), https://github.com/attenu-io/attenu-guard. No released version was affected: the delegation tool landed after v1.2.0 was tagged, so the issue existed only on `main`
@@ -16,6 +24,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Dynamic subagent delegation** (`subagent_delegation`) - an orchestrator agent can spawn ephemeral subagents and run them in parallel within a single turn. They execute in memory via `InMemorySessionService` and an ADK `Runner`, so they create no rows in `agents_config`; each is equipped only with the tools its subtask needs; and only the distilled result returns to the parent, keeping raw search and tool output out of the root agent's context window. Token usage is recorded against the parent session and user. Configurable per agent from the dashboard. See `documents/DYNAMIC_SUBAGENTS.md`
 - **Real-time web search** - `google_search` uses the Tavily API when `TAVILY_API_KEY` is set, and falls back to DuckDuckGo when it is not
 - **Client-side tool calling on the OpenAI bridge** - `/v1/chat/completions` now accepts `tools` and `tool_choice`, so an external coding agent (OpenCode, Continue, Cline) can hand a MATE agent the tools that only run on the caller's machine. They are declared to the model *alongside* the agent's own tools; when the model calls one, MATE emits OpenAI `tool_calls` with `finish_reason: "tool_calls"` and pauses the turn, and the caller's `role: "tool"` reply resumes it. Parallel calls are supported. Both runtimes carry it: on ADK a `ClientToolset` resolves the caller's declarations off `RunConfig.custom_metadata` into long-running tools on every LLM step, so no agent is rebuilt and no cache is invalidated; on LangGraph they become tools whose body interrupts the graph, with the compiled-graph cache keyed by the declared tool set. Only the exposed root agent receives them — a sub-agent must never hold more than its parent — and the agent's own tool wins any name collision. Requests without `tools` behave exactly as before. See `documents/OPENAI_COMPATIBILITY.md`
+- **Rate limits on the OpenAI bridge** - with `RATE_LIMIT_ENABLED=true`, the per-user, per-agent and per-project limits and token budgets now apply to `/v1/chat/completions` as they already did to the dashboard chat and the widget. The user is the PAT owner and the project is the exposed agent's project; a blocked request gets `429` with a `Retry-After` header. One chat-completions request counts once against `requests_per_minute`, even when a tool-calling turn fans out into several runtime calls. See `documents/RATE_LIMITS.md`
+
+### Changed
+
+- **google-adk upgraded from 2.3.0 to 2.9.2**, and `google-genai` is now constrained to `>=2.19.0`. If you pin dependencies downstream, move both together
 
 ### Fixed
 
@@ -30,6 +43,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **An assistant message with `content: null` was rejected.** Clients replay their own history, and an assistant message that only makes tool calls has no content, so the whole request failed validation with a 422
 - **Streamed text could be duplicated.** The bridge's delta bookkeeping appended to the accumulator instead of replacing it, so after a segment that did not extend the previous one every later comparison failed and text was re-sent. The corrected logic is shared with `agent_invoke`
 - **A runtime that refused the connection raised `UnboundLocalError`** from the stream's `finally` block instead of reporting the failure
+- **Building an agent from the visual builder logged a spurious File Search traceback.** The builder stores `file_search` as a bare boolean toggle, while the tool factory expected a `{"enabled": ...}` dict and failed with `AttributeError: 'bool' object has no attribute 'get'`. A boolean is now normalised to the dict form
 
 ## [1.2.0] - 2026-09-02
 
