@@ -60,6 +60,9 @@ class UserService:
 
             session.add(new_user)
             session.commit()
+            # commit() expires the instance and close() below detaches it, so any
+            # attribute read by the caller would raise. Load it while still attached.
+            session.refresh(new_user)
             logger.info(f"Created new user {user_id} with default '{default_role}' role")
             return new_user
             
