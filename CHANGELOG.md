@@ -7,9 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-09-26
+
+A security release: every deployment of 1.2.0 or 1.3.0 should upgrade. It also
+makes evals score the version you select rather than the deployed agent, and
+turns a user's thumbs-down, with their note on what was wrong, into an eval test
+case in one click.
+
+**Before upgrading:** the server-side browser now refuses private, loopback and
+link-local addresses. If your agents browse an intranet, set
+`BROWSER_ALLOW_PRIVATE_NETWORK=true`. Signed-in users who are not admins keep the
+Work Room but can no longer call the dashboard's admin APIs.
+
 ### Security
 
-Upgrading is strongly recommended. Details will follow in a GitHub security advisory.
+Details will follow in a GitHub security advisory.
 
 - **The interactive browser websocket required no login.** It now requires a signed-in session and serves only that user's own browser. The server-side browser, including agents' browser tools, no longer loads private, loopback or link-local addresses (`BROWSER_ALLOW_PRIVATE_NETWORK=true` lifts this for intranet deployments)
 - **Chat replies could run script.** The widget, Work Room and standalone chat now escape an agent's reply before rendering its markdown, and allow only http(s) links. The dashboard no longer keeps the password in the browser
