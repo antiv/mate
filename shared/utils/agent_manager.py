@@ -203,7 +203,7 @@ class AgentManager:
         """Get all agents that have a specific parent agent."""
         return self.get_subagents(parent_name)
     
-    def initialize_agent_from_config(self, config: AgentConfig, sub_agents: List[Any] = None, parent_agent_type: str = None) -> Any:
+    def initialize_agent_from_config(self, config: AgentConfig, sub_agents: List[Any] = None) -> Any:
         """Initialize an agent from its configuration."""
         print(f"[AGENT_MANAGER] initialize_agent_from_config called for agent: {config.name}")
         logger.info(f"initialize_agent_from_config called for agent: {config.name}")
@@ -278,7 +278,7 @@ class AgentManager:
             
             # Initialize agent based on type
             if config.type in ["llm", "graph", "loop"]:
-                agent = self._initialize_agent(agent_config, sub_agents, parent_agent_type)
+                agent = self._initialize_agent(agent_config, sub_agents)
             else:
                 logger.error(f"Unknown agent type: {config.type}")
                 return None
@@ -355,12 +355,12 @@ class AgentManager:
             logger.error(f"Error creating planner: {e}")
             return None
     
-    def _initialize_agent(self, config: Dict[str, Any], sub_agents: List[Any] = None, parent_agent_type: str = None) -> Any:
+    def _initialize_agent(self, config: Dict[str, Any], sub_agents: List[Any] = None) -> Any:
         """Initialize an agent of any type."""
         # Import here to avoid circular imports
         from google.adk.agents import Agent
         from .utils import create_model_from_agent_config
-        from ..callbacks.token_usage_callback import capture_model_name_callback, log_token_usage_callback
+        from ..callbacks.token_usage_callback import log_token_usage_callback
         from ..callbacks.rbac_callback import combined_rbac_and_token_callback
         from ..callbacks.user_profile_callback import combined_user_profile_and_rbac_callback
         from ..callbacks.guardrail_callback import guardrail_after_model_callback
@@ -659,7 +659,6 @@ class AgentManager:
                         logger.error(f"MATE plugin unavailable ({e}); keeping per-agent callbacks")
                         plugins_enabled = False
 
-                # For sub-agents of graph agents, use simpler callbacks to avoid TaskGroup issues
                 # ADK runs plugin error callbacks first and only short-circuits on a
                 # non-None return; ours returns None, so wiring the per-agent callback
                 # while the plugin is on would record every model error twice.
@@ -668,9 +667,6 @@ class AgentManager:
                 if plugins_enabled:
                     before_callback = None
                     after_callback = None
-                elif parent_agent_type == 'graph':
-                    before_callback = capture_model_name_callback
-                    after_callback = log_token_usage_callback
                 else:
                     # Full callbacks: user profile + RBAC + guardrails (before) and guardrails + token logging (after)
                     before_callback = combined_user_profile_and_rbac_callback
@@ -873,7 +869,7 @@ class AgentManager:
                 logger.error(f"Failed to initialize subagent {subagent_config.name}")
         
         # Initialize the current agent with its subagents
-        agent = self.initialize_agent_from_config(config, initialized_subagents, config.type)
+        agent = self.initialize_agent_from_config(config, initialized_subagents)
         if agent:
             self.initialized_agents[config.name] = agent
             logger.info(f"Successfully initialized agent: {config.name} with {len(initialized_subagents)} subagents")
@@ -938,7 +934,7 @@ class AgentManager:
                 sub_agents.append(subagent)
             else:
                 logger.error(f"Failed to build subagent {subagent_config.name}")
-        return self.initialize_agent_from_config(config, sub_agents, config.type)
+        return self.initialize_agent_from_config(config, sub_agents)
 
     def _build_agent_tree_recursive(self, config: AgentConfig, parent_name: str = None) -> Optional[Any]:
         """
@@ -968,7 +964,7 @@ class AgentManager:
                 logger.error(f"Failed to build subagent {subagent_config.name}")
         
         # Initialize the current agent with its subagents
-        agent = self.initialize_agent_from_config(config, initialized_subagents, config.type)
+        agent = self.initialize_agent_from_config(config, initialized_subagents)
         if agent:
             self.initialized_agents[config.name] = agent
             logger.info(f"Successfully built agent: {config.name} with {len(initialized_subagents)} subagents")
@@ -990,7 +986,7 @@ class AgentManager:
             for config in all_configs:
                 if config.name not in self.initialized_agents:
                     logger.info(f"Creating agent independently: {config.name}")
-                    agent = self.initialize_agent_from_config(config, [], config.type)
+                    agent = self.initialize_agent_from_config(config, [])
                     if agent:
                         self.initialized_agents[config.name] = agent
                         logger.info(f"Successfully created independent agent: {config.name}")
@@ -1071,7 +1067,7 @@ class AgentManager:
                         'allowed_for_roles': subagent_config.allowed_for_roles
                     }
                     
-                    new_agent = self._initialize_agent(agent_config_dict, [], subagent_config.type)
+                    new_agent = self._initialize_agent(agent_config_dict, [])
                     if new_agent:
                         self.initialized_agents[instance_name] = new_agent
                         logger.info(f"Successfully created new instance: {instance_name}")
