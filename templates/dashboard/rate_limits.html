@@ -106,10 +106,10 @@
 
 {% block scripts %}
 <script>
-function jsArg(value) {
-    return JSON.stringify(value == null ? '' : String(value))
-        .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
+    function jsArg(value) {
+        return JSON.stringify(value == null ? '' : String(value))
+            .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
 
     let editingId = null;
     let configsCache = [];
