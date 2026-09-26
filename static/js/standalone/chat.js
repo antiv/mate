@@ -39,23 +39,23 @@
 
   // UI string translations
   var UI_STRINGS = {
-    en: { placeholder: "Type a message…", send: "Send", newChat: "New Chat", stop: "Stop", interrupted: "Response interrupted", copy: "Copy", copied: "Copied!", download: "Download", rateUp: "Helpful", rateDown: "Not helpful", confirmTitle: "Approval required", confirmApprove: "Approve", confirmReject: "Reject", confirmApproved: "Approved", confirmRejected: "Rejected" },
-    sr: { placeholder: "Unesite poruku…", send: "Pošalji", newChat: "Nov razgovor", stop: "Prekini", interrupted: "Odgovor je prekinut", copy: "Kopiraj", copied: "Kopirano!", download: "Preuzmi", rateUp: "Koristan odgovor", rateDown: "Nije koristan", confirmTitle: "Potrebna je potvrda", confirmApprove: "Potvrdi", confirmReject: "Odbaci", confirmApproved: "Potvrđeno", confirmRejected: "Odbačeno" },
-    hr: { placeholder: "Unesite poruku…", send: "Pošalji", newChat: "Novi razgovor", stop: "Prekini", interrupted: "Odgovor je prekinut", copy: "Kopiraj", copied: "Kopirano!", download: "Preuzmi", rateUp: "Koristan odgovor", rateDown: "Nije koristan", confirmTitle: "Potrebna je potvrda", confirmApprove: "Potvrdi", confirmReject: "Odbaci", confirmApproved: "Potvrđeno", confirmRejected: "Odbačeno" },
-    bs: { placeholder: "Unesite poruku…", send: "Pošalji", newChat: "Novi razgovor", stop: "Prekini", interrupted: "Odgovor je prekinut", copy: "Kopiraj", copied: "Kopirano!", download: "Preuzmi", rateUp: "Koristan odgovor", rateDown: "Nije koristan", confirmTitle: "Potrebna je potvrda", confirmApprove: "Potvrdi", confirmReject: "Odbaci", confirmApproved: "Potvrđeno", confirmRejected: "Odbačeno" },
-    de: { placeholder: "Nachricht eingeben…", send: "Senden", newChat: "Neuer Chat", stop: "Stoppen", interrupted: "Antwort unterbrochen", copy: "Kopieren", copied: "Kopiert!", download: "Herunterladen", rateUp: "Hilfreich", rateDown: "Nicht hilfreich" },
-    fr: { placeholder: "Écrivez un message…", send: "Envoyer", newChat: "Nouveau chat", stop: "Arrêter", interrupted: "Réponse interrompue", copy: "Copier", copied: "Copié !", download: "Télécharger", rateUp: "Utile", rateDown: "Pas utile" },
-    es: { placeholder: "Escribe un mensaje…", send: "Enviar", newChat: "Nueva conversación", stop: "Detener", interrupted: "Respuesta interrumpida" },
-    it: { placeholder: "Scrivi un messaggio…", send: "Invia", newChat: "Nuova chat", stop: "Interrompi", interrupted: "Risposta interrotta" },
-    pt: { placeholder: "Escreva uma mensagem…", send: "Enviar", newChat: "Nova conversa", stop: "Parar", interrupted: "Resposta interrompida" },
-    nl: { placeholder: "Typ een bericht…", send: "Versturen", newChat: "Nieuw gesprek", stop: "Stoppen", interrupted: "Reactie onderbroken" },
-    pl: { placeholder: "Wpisz wiadomość…", send: "Wyślij", newChat: "Nowy czat", stop: "Zatrzymaj", interrupted: "Odpowiedź przerwana" },
-    ru: { placeholder: "Введите сообщение…", send: "Отправить", newChat: "Новый чат", stop: "Остановить", interrupted: "Ответ прерван" },
-    zh: { placeholder: "输入消息…", send: "发送", newChat: "新对话", stop: "停止", interrupted: "回答被中断" },
-    ja: { placeholder: "メッセージを入力…", send: "送信", newChat: "新しいチャット", stop: "停止", interrupted: "回答が中断されました" },
-    ar: { placeholder: "اكتب رسالة…", send: "إرسال", newChat: "محادثة جديدة", stop: "إيقاف", interrupted: "تم مقاطعة الإجابة" },
-    he: { placeholder: "כתוב הודעה…", send: "שלח", newChat: "שיחה חדשה", stop: "עצור", interrupted: "התשובה הופסקה" },
-    tr: { placeholder: "Mesaj yazın…", send: "Gönder", newChat: "Yeni Sohbet", stop: "Durdur", interrupted: "Yanıt yarıda kesildi" },
+    en: { placeholder: "Type a message…", send: "Send", newChat: "New Chat", stop: "Stop", interrupted: "Response interrupted", copy: "Copy", copied: "Copied!", download: "Download", rateUp: "Helpful", rateDown: "Not helpful", confirmTitle: "Approval required", confirmApprove: "Approve", confirmReject: "Reject", confirmApproved: "Approved", confirmRejected: "Rejected", rateCommentPrompt: "What was wrong? (optional)", rateCommentSend: "Send", rateCommentSkip: "Skip", rateCommentThanks: "Thanks for the feedback" },
+    sr: { placeholder: "Unesite poruku…", send: "Pošalji", newChat: "Nov razgovor", stop: "Prekini", interrupted: "Odgovor je prekinut", copy: "Kopiraj", copied: "Kopirano!", download: "Preuzmi", rateUp: "Koristan odgovor", rateDown: "Nije koristan", confirmTitle: "Potrebna je potvrda", confirmApprove: "Potvrdi", confirmReject: "Odbaci", confirmApproved: "Potvrđeno", confirmRejected: "Odbačeno", rateCommentPrompt: "Šta nije bilo u redu? (opciono)", rateCommentSend: "Pošalji", rateCommentSkip: "Preskoči", rateCommentThanks: "Hvala na povratnoj informaciji" },
+    hr: { placeholder: "Unesite poruku…", send: "Pošalji", newChat: "Novi razgovor", stop: "Prekini", interrupted: "Odgovor je prekinut", copy: "Kopiraj", copied: "Kopirano!", download: "Preuzmi", rateUp: "Koristan odgovor", rateDown: "Nije koristan", confirmTitle: "Potrebna je potvrda", confirmApprove: "Potvrdi", confirmReject: "Odbaci", confirmApproved: "Potvrđeno", confirmRejected: "Odbačeno", rateCommentPrompt: "Što nije bilo u redu? (neobavezno)", rateCommentSend: "Pošalji", rateCommentSkip: "Preskoči", rateCommentThanks: "Hvala na povratnoj informaciji" },
+    bs: { placeholder: "Unesite poruku…", send: "Pošalji", newChat: "Novi razgovor", stop: "Prekini", interrupted: "Odgovor je prekinut", copy: "Kopiraj", copied: "Kopirano!", download: "Preuzmi", rateUp: "Koristan odgovor", rateDown: "Nije koristan", confirmTitle: "Potrebna je potvrda", confirmApprove: "Potvrdi", confirmReject: "Odbaci", confirmApproved: "Potvrđeno", confirmRejected: "Odbačeno", rateCommentPrompt: "Šta nije bilo u redu? (opcionalno)", rateCommentSend: "Pošalji", rateCommentSkip: "Preskoči", rateCommentThanks: "Hvala na povratnoj informaciji" },
+    de: { placeholder: "Nachricht eingeben…", send: "Senden", newChat: "Neuer Chat", stop: "Stoppen", interrupted: "Antwort unterbrochen", copy: "Kopieren", copied: "Kopiert!", download: "Herunterladen", rateUp: "Hilfreich", rateDown: "Nicht hilfreich", rateCommentPrompt: "Was war falsch? (optional)", rateCommentSend: "Senden", rateCommentSkip: "Überspringen", rateCommentThanks: "Danke für Ihr Feedback" },
+    fr: { placeholder: "Écrivez un message…", send: "Envoyer", newChat: "Nouveau chat", stop: "Arrêter", interrupted: "Réponse interrompue", copy: "Copier", copied: "Copié !", download: "Télécharger", rateUp: "Utile", rateDown: "Pas utile", rateCommentPrompt: "Qu'est-ce qui n'allait pas ? (facultatif)", rateCommentSend: "Envoyer", rateCommentSkip: "Passer", rateCommentThanks: "Merci pour votre retour" },
+    es: { placeholder: "Escribe un mensaje…", send: "Enviar", newChat: "Nueva conversación", stop: "Detener", interrupted: "Respuesta interrumpida", rateCommentPrompt: "¿Qué estuvo mal? (opcional)", rateCommentSend: "Enviar", rateCommentSkip: "Omitir", rateCommentThanks: "Gracias por tus comentarios" },
+    it: { placeholder: "Scrivi un messaggio…", send: "Invia", newChat: "Nuova chat", stop: "Interrompi", interrupted: "Risposta interrotta", rateCommentPrompt: "Cosa non andava? (facoltativo)", rateCommentSend: "Invia", rateCommentSkip: "Salta", rateCommentThanks: "Grazie per il feedback" },
+    pt: { placeholder: "Escreva uma mensagem…", send: "Enviar", newChat: "Nova conversa", stop: "Parar", interrupted: "Resposta interrompida", rateCommentPrompt: "O que estava errado? (opcional)", rateCommentSend: "Enviar", rateCommentSkip: "Pular", rateCommentThanks: "Obrigado pelo feedback" },
+    nl: { placeholder: "Typ een bericht…", send: "Versturen", newChat: "Nieuw gesprek", stop: "Stoppen", interrupted: "Reactie onderbroken", rateCommentPrompt: "Wat ging er mis? (optioneel)", rateCommentSend: "Versturen", rateCommentSkip: "Overslaan", rateCommentThanks: "Bedankt voor je feedback" },
+    pl: { placeholder: "Wpisz wiadomość…", send: "Wyślij", newChat: "Nowy czat", stop: "Zatrzymaj", interrupted: "Odpowiedź przerwana", rateCommentPrompt: "Co było nie tak? (opcjonalnie)", rateCommentSend: "Wyślij", rateCommentSkip: "Pomiń", rateCommentThanks: "Dziękujemy za opinię" },
+    ru: { placeholder: "Введите сообщение…", send: "Отправить", newChat: "Новый чат", stop: "Остановить", interrupted: "Ответ прерван", rateCommentPrompt: "Что было не так? (необязательно)", rateCommentSend: "Отправить", rateCommentSkip: "Пропустить", rateCommentThanks: "Спасибо за отзыв" },
+    zh: { placeholder: "输入消息…", send: "发送", newChat: "新对话", stop: "停止", interrupted: "回答被中断", rateCommentPrompt: "哪里有问题？（可选）", rateCommentSend: "发送", rateCommentSkip: "跳过", rateCommentThanks: "感谢您的反馈" },
+    ja: { placeholder: "メッセージを入力…", send: "送信", newChat: "新しいチャット", stop: "停止", interrupted: "回答が中断されました", rateCommentPrompt: "何が問題でしたか？（任意）", rateCommentSend: "送信", rateCommentSkip: "スキップ", rateCommentThanks: "フィードバックありがとうございます" },
+    ar: { placeholder: "اكتب رسالة…", send: "إرسال", newChat: "محادثة جديدة", stop: "إيقاف", interrupted: "تم مقاطعة الإجابة", rateCommentPrompt: "ما الخطأ؟ (اختياري)", rateCommentSend: "إرسال", rateCommentSkip: "تخطي", rateCommentThanks: "شكرًا على ملاحظاتك" },
+    he: { placeholder: "כתוב הודעה…", send: "שלח", newChat: "שיחה חדשה", stop: "עצור", interrupted: "התשובה הופסקה", rateCommentPrompt: "מה לא היה בסדר? (אופציונלי)", rateCommentSend: "שליחה", rateCommentSkip: "דילוג", rateCommentThanks: "תודה על המשוב" },
+    tr: { placeholder: "Mesaj yazın…", send: "Gönder", newChat: "Yeni Sohbet", stop: "Durdur", interrupted: "Yanıt yarıda kesildi", rateCommentPrompt: "Sorun neydi? (isteğe bağlı)", rateCommentSend: "Gönder", rateCommentSkip: "Atla", rateCommentThanks: "Geri bildiriminiz için teşekkürler" },
   };
 
   // --- DOM refs --------------------------------------------------------
@@ -1249,6 +1249,13 @@
       btn.addEventListener("click", function (e) {
         e.stopPropagation();
         _submitRating(invocationId, rating, container);
+        if (rating === "down") {
+          _openRatingComment(messageEl, s || UI_STRINGS["en"], function (comment) {
+            _submitRating(invocationId, "down", container, comment);
+          });
+        } else {
+          _closeRatingComment(messageEl);
+        }
       });
       return btn;
     }
@@ -1265,24 +1272,88 @@
     });
   }
 
-  function _submitRating(invocationId, rating, container) {
+  function _submitRating(invocationId, rating, container, comment) {
     // Optimistic: a rating is a courtesy, not a transaction — reflect the click at once
     ratings[invocationId] = rating;
     _paintRating(container, rating);
 
+    var payload = {
+      session_id: sessionId,
+      message_id: invocationId,
+      rating: rating,
+      agent_name: AGENT_NAME,
+    };
+    // Sent as a second request on the same rating, which the server updates in place
+    if (comment) payload.comment = comment;
     fetch("/dashboard/api/feedback", {
       method: "POST",
       credentials: "same-origin",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        session_id: sessionId,
-        message_id: invocationId,
-        rating: rating,
-        agent_name: AGENT_NAME,
-      }),
+      body: JSON.stringify(payload),
     }).catch(function () {
       /* the next rating retries; no need to interrupt the conversation */
     });
+  }
+
+  // After a thumbs-down, an optional note on what was wrong. The rating is already
+  // recorded; skipping the note loses nothing.
+  function _openRatingComment(messageEl, s, onSend) {
+    if (messageEl.querySelector(".rate-comment")) return;
+    var en = UI_STRINGS["en"];
+
+    var form = document.createElement("form");
+    form.className = "rate-comment";
+    form.addEventListener("click", function (e) { e.stopPropagation(); });
+
+    var input = document.createElement("textarea");
+    input.className = "rate-comment-input";
+    input.rows = 2;
+    input.maxLength = 2000;
+    input.placeholder = s.rateCommentPrompt || en.rateCommentPrompt;
+    input.setAttribute("aria-label", input.placeholder);
+
+    var actions = document.createElement("div");
+    actions.className = "rate-comment-actions";
+    var skip = document.createElement("button");
+    skip.type = "button";
+    skip.className = "rate-comment-skip";
+    skip.textContent = s.rateCommentSkip || en.rateCommentSkip;
+    var send = document.createElement("button");
+    send.type = "submit";
+    send.className = "rate-comment-send";
+    send.textContent = s.rateCommentSend || en.rateCommentSend;
+    actions.appendChild(skip);
+    actions.appendChild(send);
+    form.appendChild(input);
+    form.appendChild(actions);
+
+    skip.addEventListener("click", function () { form.remove(); });
+    input.addEventListener("keydown", function (e) {
+      if (e.key === "Escape") {
+        form.remove();
+      } else if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        form.requestSubmit ? form.requestSubmit() : send.click();
+      }
+    });
+    form.addEventListener("submit", function (e) {
+      e.preventDefault();
+      var text = input.value.trim();
+      if (!text) { form.remove(); return; }
+      onSend(text);
+      var thanks = document.createElement("div");
+      thanks.className = "rate-comment rate-comment-thanks";
+      thanks.textContent = s.rateCommentThanks || en.rateCommentThanks;
+      form.replaceWith(thanks);
+    });
+
+    messageEl.appendChild(form);
+    input.focus();
+  }
+
+  function _closeRatingComment(messageEl) {
+    var el = messageEl.querySelector(".rate-comment");
+    if (el) el.remove();
   }
 
   function _fallbackCopy(text, btn, successLabel, normalLabel) {

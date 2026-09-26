@@ -577,4 +577,65 @@ html, body {
   color: #dc2626;
 }
 
+/* Optional note after a thumbs-down */
+.rate-comment {
+  margin-top: 8px;
+}
+
+.rate-comment-input {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  padding: 6px 8px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--w-text);
+  background: var(--w-bg);
+  border: 1px solid var(--w-border);
+  border-radius: 6px;
+}
+
+.rate-comment-input:focus {
+  outline: none;
+  border-color: var(--w-primary);
+}
+
+.rate-comment-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.rate-comment-actions button {
+  font: inherit;
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.rate-comment-skip {
+  background: none;
+  border: 1px solid var(--w-border);
+  color: var(--w-text-secondary);
+}
+
+.rate-comment-send {
+  background: var(--w-primary);
+  border: 1px solid var(--w-primary);
+  color: #ffffff;
+}
+
+.rate-comment-send:hover {
+  background: var(--w-primary-hover);
+}
+
+.rate-comment-thanks {
+  font-size: 12px;
+  color: var(--w-text-secondary);
+  text-align: right;
+}
+
 

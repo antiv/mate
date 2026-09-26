@@ -120,7 +120,7 @@ Click the **Run** button on any individual test case row in the Evals dashboard.
 
 ### From a Thumbs-Down
 
-The **Rated Down** section at the bottom of the Evals page lists responses users gave a 👎 in the widget, the standalone build or the Work Room, newest first and filterable by agent. A rating stores only the session and the invocation id, so the question and the answer are read back from the session history (ADK or LangGraph). If the session has since been deleted, the rating is still listed, with the question and answer shown as unavailable.
+The **Rated Down** section at the bottom of the Evals page lists responses users gave a 👎 in the widget or the Work Room, newest first and filterable by agent. After a 👎 the chat offers an optional *What was wrong?* note; the rating is recorded on the click, and the note, if one is sent, is added to the same rating and shown here as the comment. A rating stores only the session and the invocation id, so the question and the answer are read back from the session history (ADK or LangGraph). If the session has since been deleted, the rating is still listed, with the question and answer shown as unavailable.
 
 **Add to evals** opens the test case form with the agent and the question filled in and `llm_judge` selected, since a hand-written expected answer rarely matches word for word. Expected output is left for you to write; the answer that was rated down is shown beside it for reference and is not saved. Once saved, the row links to the test case, and the same response cannot be added a second time (`409`) while that test case is active.
 
