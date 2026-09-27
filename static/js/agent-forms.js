@@ -485,6 +485,7 @@ function clearJsonField(prefix, fieldSuffix) {
 
 function resetToolConfig(prefix) {
     const ids = ['GoogleDrive', 'CvTools', 'ImageTools', 'MemoryBlocks', 'CreateAgent', 'CodeExecutor', 'ImageDataExtraction', 'Shop', 'SubagentDelegation'];
+    ids.forEach(id => {
         const checkbox = document.getElementById(prefix + id);
         if (checkbox) {
             checkbox.checked = false;
@@ -493,6 +494,7 @@ function resetToolConfig(prefix) {
     const shopHint = document.getElementById(prefix + 'ShopHint');
     if (shopHint) shopHint.style.display = 'none';
     const saHint = document.getElementById(prefix + 'SubagentDelegationHint');
+    if (saHint) saHint.style.display = 'none';
     const imageModelContainer = document.getElementById(prefix + 'ImageModelContainer');
     if (imageModelContainer) {
         imageModelContainer.style.display = 'none';
