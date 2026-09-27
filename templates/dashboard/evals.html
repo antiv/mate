@@ -205,7 +205,7 @@
             <div id="imBody" class="hidden space-y-3">
                 <div class="text-xs text-gray-600 dark:text-gray-300"><span class="font-medium">Question:</span> <span id="imQuestion"></span></div>
                 <div class="text-xs p-2 rounded bg-purple-50 dark:bg-purple-900/20 text-gray-700 dark:text-gray-200"><span class="font-medium">Why:</span> <span id="imReason"></span></div>
-                <p class="text-xs text-gray-500 dark:text-gray-400">Only the instruction changes. Edit the suggestion if you like, check it against the suite, then apply — it becomes a new version you can roll back.</p>
+                <p class="text-xs text-gray-500 dark:text-gray-400">Only the instruction and the memory blocks you tick below can change. Edit the suggestion if you like, check it against the suite, then apply. Each change becomes a new version you can roll back.</p>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div>
                         <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Current instruction</label>
@@ -215,6 +215,15 @@
                         <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Suggested instruction</label>
                         <textarea id="imProposed" rows="14" oninput="improveEdited()" class="w-full px-3 py-2 text-xs font-mono border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white resize-y focus:outline-none focus:ring-1 focus:ring-purple-500"></textarea>
                     </div>
+                </div>
+                <div id="imBlocks" class="hidden space-y-2 border-t border-gray-200 dark:border-gray-700 pt-3">
+                    <div class="text-xs font-medium text-gray-700 dark:text-gray-300">Memory blocks the agent read</div>
+                    <div class="flex flex-wrap items-center gap-3 text-xs text-gray-700 dark:text-gray-300">
+                        <div id="imCandidates" class="flex flex-wrap gap-3"></div>
+                        <button onclick="resuggestImprove()" class="px-2 py-1 text-xs text-purple-600 border border-purple-300 dark:border-purple-700 rounded hover:bg-purple-50 dark:hover:bg-purple-900/20"><i class="fas fa-rotate mr-1"></i>Suggest again with these</button>
+                    </div>
+                    <p id="imShared" class="hidden text-xs text-amber-700 dark:text-amber-400"><i class="fas fa-exclamation-triangle mr-1"></i><span></span></p>
+                    <div id="imBlockEditors" class="space-y-3"></div>
                 </div>
                 <div id="imCheck" class="hidden text-xs space-y-2"></div>
             </div>
@@ -772,9 +781,11 @@ function addRatedToEvals(index) {
 
 // ── Suggest a fix ─────────────────────────────────────────────────────────────
 
-let _improve = null;  // {agent_name, source, current_instruction, checkedText}
+// {agent_name, source, current_instruction, candidates, current_blocks, checkedState}
+let _improve = null;
 
-async function openImprove(source) {
+async function openImprove(source, blockLabels) {
+    const candidates = blockLabels && _improve ? _improve.candidates : null;
     _improve = null;
     document.getElementById('imAgent').textContent = '';
     document.getElementById('imLoading').classList.remove('hidden');
@@ -785,13 +796,20 @@ async function openImprove(source) {
     document.getElementById('imApplyBtn').disabled = true;
     document.getElementById('improveModal').classList.remove('hidden');
     try {
-        const data = await apiCall('/dashboard/api/evals/improve/propose', 'POST', source);
+        const body = Object.assign({}, source, blockLabels ? {block_labels: blockLabels} : {});
+        const data = await apiCall('/dashboard/api/evals/improve/propose', 'POST', body);
         if (data.detail) {
             document.getElementById('imLoading').textContent = data.detail;
             return;
         }
-        _improve = {agent_name: data.agent_name, source: data.source,
-                    current_instruction: data.current_instruction, checkedText: null};
+        // A second suggestion keeps the candidate list of the first
+        const all = candidates || (data.candidate_blocks || []);
+        const selected = new Set((data.candidate_blocks || []).filter(b => b.selected).map(b => b.label));
+        _improve = {agent_name: data.agent_name, source: source,
+                    current_instruction: data.current_instruction,
+                    candidates: all.map(b => ({label: b.label, value: b.value, selected: selected.has(b.label)})),
+                    current_blocks: {}, checkedState: null};
+        _renderImproveBlocks(data.blocks || {}, data.shared_with || []);
         document.getElementById('imAgent').textContent = '— ' + data.agent_name;
         document.getElementById('imQuestion').textContent = data.question || '';
         document.getElementById('imReason').textContent = data.reason || '—';
@@ -809,10 +827,80 @@ function closeImprove() {
     document.getElementById('improveModal').classList.add('hidden');
 }
 
+// Candidate checkboxes and, per ticked block, its current and suggested value.
+// Built with DOM nodes: labels and values are data, never markup.
+function _renderImproveBlocks(suggested, sharedWith) {
+    const wrap = document.getElementById('imBlocks');
+    const boxes = document.getElementById('imCandidates');
+    const editors = document.getElementById('imBlockEditors');
+    boxes.innerHTML = '';
+    editors.innerHTML = '';
+    wrap.classList.toggle('hidden', !_improve.candidates.length);
+    for (const b of _improve.candidates) {
+        const label = document.createElement('label');
+        label.className = 'inline-flex items-center gap-1';
+        const box = document.createElement('input');
+        box.type = 'checkbox';
+        box.checked = b.selected;
+        box.dataset.label = b.label;
+        label.append(box, document.createTextNode(b.label));
+        boxes.appendChild(label);
+        if (!b.selected) continue;
+        _improve.current_blocks[b.label] = b.value;
+        const grid = document.createElement('div');
+        grid.className = 'grid grid-cols-1 md:grid-cols-2 gap-3';
+        const cls = 'w-full px-3 py-2 text-xs font-mono border border-gray-300 dark:border-gray-600 rounded-lg resize-y ';
+        const current = document.createElement('textarea');
+        current.rows = 6;
+        current.readOnly = true;
+        current.className = cls + 'bg-gray-50 dark:bg-gray-900 text-gray-700 dark:text-gray-300';
+        current.value = b.value;
+        const proposed = document.createElement('textarea');
+        proposed.rows = 6;
+        proposed.className = cls + 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white';
+        proposed.value = b.label in suggested ? suggested[b.label] : b.value;
+        proposed.dataset.label = b.label;
+        proposed.oninput = improveEdited;
+        for (const [area, text] of [[current, 'Current: '], [proposed, 'Suggested: ']]) {
+            const col = document.createElement('div');
+            const head = document.createElement('div');
+            head.className = 'text-xs font-medium text-gray-700 dark:text-gray-300 mb-1';
+            head.textContent = text + b.label;
+            col.append(head, area);
+            grid.appendChild(col);
+        }
+        editors.appendChild(grid);
+    }
+    const shared = document.getElementById('imShared');
+    const anySelected = _improve.candidates.some(b => b.selected);
+    shared.classList.toggle('hidden', !(anySelected && sharedWith.length));
+    shared.querySelector('span').textContent = 'Memory blocks are shared by the project. A change also affects '
+        + sharedWith.join(', ') + ', whose suites are not checked here.';
+}
+
+function resuggestImprove() {
+    if (!_improve) return;
+    const labels = Array.from(document.querySelectorAll('#imCandidates input:checked')).map(b => b.dataset.label);
+    openImprove(_improve.source, labels);
+}
+
+// The blocks whose suggested value differs from the current one
+function _changedBlocks() {
+    const out = {};
+    document.querySelectorAll('#imBlockEditors textarea[data-label]').forEach(t => {
+        if (t.value !== _improve.current_blocks[t.dataset.label]) out[t.dataset.label] = t.value;
+    });
+    return out;
+}
+
+function _improveState() {
+    return JSON.stringify({instruction: document.getElementById('imProposed').value, blocks: _changedBlocks()});
+}
+
 function improveEdited() {
     // Apply only what was checked: an edit after the check needs a new one
     if (!_improve) return;
-    document.getElementById('imApplyBtn').disabled = document.getElementById('imProposed').value !== _improve.checkedText;
+    document.getElementById('imApplyBtn').disabled = _improveState() !== _improve.checkedState;
 }
 
 function _checkCell(r) {
@@ -825,15 +913,17 @@ function _checkCell(r) {
 async function checkImprove() {
     if (!_improve) return;
     const text = document.getElementById('imProposed').value;
+    const blocks = _changedBlocks();
+    const state = _improveState();
     const btn = document.getElementById('imCheckBtn');
     const area = document.getElementById('imCheck');
     btn.disabled = true;
     btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>Running both versions…';
     area.classList.remove('hidden');
-    area.textContent = 'Running the suite with the current and the suggested instruction. This calls the agent twice per test case.';
+    area.textContent = 'Running the suite with the current and the suggested version. This calls the agent twice per test case.';
     try {
         const data = await apiCall('/dashboard/api/evals/improve/check', 'POST',
-                                   {agent_name: _improve.agent_name, instruction: text});
+                                   {agent_name: _improve.agent_name, instruction: text, blocks: blocks});
         if (data.detail) { area.textContent = data.detail; return; }
         const b = data.before, a = data.after;
         const regressions = data.cases.filter(c => c.before.passed && !c.after.passed).length;
@@ -851,7 +941,7 @@ async function checkImprove() {
         }).join('');
         html += '</tbody></table>';
         area.innerHTML = html;
-        _improve.checkedText = text;
+        _improve.checkedState = state;
         improveEdited();
     } catch (e) {
         area.textContent = 'Check failed: ' + e.message;
@@ -862,16 +952,25 @@ async function checkImprove() {
 }
 
 async function applyImprove() {
-    if (!_improve || document.getElementById('imProposed').value !== _improve.checkedText) return;
-    if (!confirm('Replace the instruction of ' + _improve.agent_name + '? A new version is created, so it can be rolled back.')) return;
+    if (!_improve || _improveState() !== _improve.checkedState) return;
+    const checked = JSON.parse(_improve.checkedState);
+    const labels = Object.keys(checked.blocks);
+    const what = labels.length ? 'the instruction of ' + _improve.agent_name + ' and the block(s) ' + labels.join(', ')
+                               : 'the instruction of ' + _improve.agent_name;
+    if (!confirm('Update ' + what + '? Each change becomes a new version, so it can be rolled back.')) return;
+    const baseBlocks = {};
+    labels.forEach(l => { baseBlocks[l] = _improve.current_blocks[l]; });
     try {
         const data = await apiCall('/dashboard/api/evals/improve/apply', 'POST', Object.assign({
             agent_name: _improve.agent_name,
-            instruction: _improve.checkedText,
+            instruction: checked.instruction,
             base_instruction: _improve.current_instruction,
+            blocks: checked.blocks,
+            base_blocks: baseBlocks,
         }, _improve.source));
         if (data.detail) { showNotification(data.detail, 'error'); return; }
-        showNotification('Instruction updated — new version created', 'success');
+        showNotification(labels.length ? 'Agent and memory blocks updated; new versions created'
+                                       : 'Instruction updated; new version created', 'success');
         closeImprove();
         loadSuites();
         if (_selectedAgent) { loadTestCases(_selectedAgent); loadHistory(_selectedAgent); }

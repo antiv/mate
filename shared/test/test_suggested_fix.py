@@ -47,7 +47,8 @@ class TestProposeInstruction(unittest.TestCase):
     def test_only_instruction_and_reason_are_taken(self):
         result, _ = self._propose(json.dumps({"instruction": "Be helpful. We close on Sundays.",
                                               "reason": "added hours", "tool_config": {"shell": True}}))
-        self.assertEqual(result, {"instruction": "Be helpful. We close on Sundays.", "reason": "added hours"})
+        self.assertEqual(result, {"instruction": "Be helpful. We close on Sundays.", "blocks": {},
+                                  "reason": "added hours"})
 
     def test_a_fenced_reply_is_parsed(self):
         result, _ = self._propose('```json\n{"instruction": "X", "reason": "r"}\n```')
