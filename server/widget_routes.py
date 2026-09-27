@@ -807,6 +807,7 @@ async def create_widget_memory_block(request: Request, wk: WidgetApiKey = Depend
         value=data.get("value", ""),
         description=data.get("description"),
         metadata=metadata if metadata else None,
+        changed_by=f"widget_admin:{wk.id}",
     )
     if result.get("status") == "success":
         return {"success": True, "block": result}
@@ -826,6 +827,7 @@ async def update_widget_memory_block(
         block_id=block_id,
         value=data.get("value"),
         description=data.get("description"),
+        changed_by=f"widget_admin:{wk.id}",
     )
     if result.get("status") == "success":
         return {"success": True, "block": result}
@@ -837,7 +839,8 @@ async def delete_widget_memory_block(block_id: str, wk: WidgetApiKey = Depends(v
     from shared.utils.memory_blocks_service import MemoryBlocksService
     db = get_database_client()
     svc = MemoryBlocksService(db)
-    result = svc.delete_block(project_id=wk.project_id, block_id=block_id)
+    result = svc.delete_block(project_id=wk.project_id, block_id=block_id,
+                              changed_by=f"widget_admin:{wk.id}")
     if result.get("status") == "success":
         return {"success": True}
     return {"success": False, "error": result.get("error_message", "Failed")}

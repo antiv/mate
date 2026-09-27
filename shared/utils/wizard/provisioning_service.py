@@ -333,6 +333,7 @@ class WizardProvisioningService:
                 label=label,
                 value=value,
                 description=(pg.get("url") or "")[:255],
+                changed_by="wizard",
             )
             if result.get("status") == "success":
                 created += 1
@@ -346,5 +347,6 @@ class WizardProvisioningService:
                 "get_shared_block(block_id=\"<label>\"):\n" + "\n".join(index_lines)
             ),
             description="Index of crawled website pages",
+            changed_by="wizard",
         )
         return created

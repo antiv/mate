@@ -13,7 +13,8 @@ from pathlib import Path
 
 from shared.utils.database_client import get_database_client
 from shared.utils.models import (
-    AgentConfig, AgentConfigVersion, Credential, MemoryBlock, Project, WidgetApiKey, WizardLead, WizardSession,
+    AgentConfig, AgentConfigVersion, Credential, MemoryBlock, MemoryBlockVersion, Project, WidgetApiKey,
+    WizardLead, WizardSession,
 )
 
 logger = logging.getLogger(__name__)
@@ -102,6 +103,7 @@ def _delete_trial_project(session, pid: int) -> list:
 
     session.query(WidgetApiKey).filter(WidgetApiKey.project_id == pid).delete(synchronize_session=False)
     session.query(MemoryBlock).filter(MemoryBlock.project_id == pid).delete(synchronize_session=False)
+    session.query(MemoryBlockVersion).filter(MemoryBlockVersion.project_id == pid).delete(synchronize_session=False)
     if agent_names:
         session.query(Credential).filter(Credential.app_name.in_(agent_names)).delete(synchronize_session=False)
     # Delete version snapshots then agents explicitly (avoids the ORM nulling the

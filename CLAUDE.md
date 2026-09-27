@@ -72,7 +72,7 @@ Agents can be **database-driven** (configured via dashboard, stored in `agents_c
 `shared/utils/mcp/` exposes agents as MCP servers and implements MCP client consumption. Agents can both serve and consume MCP protocol tools.
 
 ### Database Layer
-SQLAlchemy ORM models in `shared/utils/models.py`. Supports SQLite (default), PostgreSQL, and MySQL via `DB_TYPE` env var. Key tables: `agents_config`, `projects`, `users`, `token_usage_logs`, `guardrail_logs`, `audit_logs`, `rate_limit_config`, `memory_blocks`, `widget_api_keys`, `agent_config_versions`.
+SQLAlchemy ORM models in `shared/utils/models.py`. Supports SQLite (default), PostgreSQL, and MySQL via `DB_TYPE` env var. Key tables: `agents_config`, `projects`, `users`, `token_usage_logs`, `guardrail_logs`, `audit_logs`, `rate_limit_config`, `memory_blocks`, `memory_block_versions`, `widget_api_keys`, `agent_config_versions`.
 
 ### Frontend
 Dashboard templates in `templates/dashboard/`, static assets in `static/`. Vue-style JavaScript with no build step required. PWA-ready with `static/manifest.json`.
