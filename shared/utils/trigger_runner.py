@@ -492,9 +492,12 @@ class TriggerRunner:
         label = cfg.get("label") or f"trigger_{trigger.id}_output"
         description = cfg.get("description") or f"Auto-updated by trigger '{trigger.name}'"
         svc = MemoryBlocksService(get_database_client())
-        result = svc.modify_block(trigger.project_id, label, value=text, description=description)
+        changed_by = f"trigger:{trigger.id}"
+        result = svc.modify_block(trigger.project_id, label, value=text, description=description,
+                                  changed_by=changed_by)
         if result.get("status") == "error":
-            svc.create_block(trigger.project_id, label, value=text, description=description)
+            svc.create_block(trigger.project_id, label, value=text, description=description,
+                             changed_by=changed_by)
 
     def _output_http_callback(self, cfg: dict, text: str) -> None:
         """POST agent response as JSON to a configured URL.

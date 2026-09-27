@@ -144,9 +144,14 @@ function renderMemoryBlocks(blocks) {
                             <i class="fas fa-copy text-xs"></i>
                         </button>
                     </div>
-                    <button onclick="editMemoryBlock(${jsArg(identifier)}, ${jsArg(label)})" class="px-3 py-1 text-xs font-medium text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300">
-                        Edit
-                    </button>
+                    <div class="flex items-center">
+                        <button onclick="showMemoryBlockHistory(${jsArg(identifier)}, ${jsArg(label)}, false)" class="px-3 py-1 text-xs font-medium text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200">
+                            History
+                        </button>
+                        <button onclick="editMemoryBlock(${jsArg(identifier)}, ${jsArg(label)})" class="px-3 py-1 text-xs font-medium text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300">
+                            Edit
+                        </button>
+                    </div>
                 </div>
                 ${description ? `<p class="text-sm text-gray-600 dark:text-gray-400 mb-2">${escapeHtml(description)}</p>` : ''}
                 <div class="bg-white dark:bg-gray-800 rounded p-3 border border-gray-200 dark:border-gray-600">
@@ -420,6 +425,124 @@ async function createMemoryBlock() {
     } catch (error) {
         console.error('Error creating memory block:', error);
         showNotification('Error creating memory block', 'error');
+    }
+}
+
+// History and restore. Every write to a block (dashboard, widget admin API,
+// agents, triggers) records a version; the last 20 are kept per block.
+
+const CHANGE_LABELS = {
+    create: 'Created', update: 'Updated', delete: 'Deleted',
+    restore: 'Restored', baseline: 'Before versioning',
+};
+
+function hideMemoryBlockHistory() {
+    document.getElementById('memoryBlockHistoryModal').classList.add('hidden');
+}
+
+function _openHistoryModal(title, note) {
+    document.getElementById('memoryBlockHistoryTitle').textContent = title;
+    document.getElementById('memoryBlockHistoryNote').textContent = note;
+    document.getElementById('memoryBlockHistoryList').innerHTML =
+        '<div class="text-center py-6"><i class="fas fa-spinner fa-spin text-xl text-gray-400"></i></div>';
+    document.getElementById('memoryBlockHistoryModal').classList.remove('hidden');
+}
+
+function _versionCard(v, actions) {
+    const when = v.created_at ? new Date(v.created_at).toLocaleString() : '';
+    const who = v.changed_by ? ` &middot; ${escapeHtml(v.changed_by)}` : '';
+    const description = v.description
+        ? `<p class="text-xs text-gray-600 dark:text-gray-400 mb-2">${escapeHtml(v.description)}</p>` : '';
+    return `
+        <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 border border-gray-200 dark:border-gray-600">
+            <div class="flex items-start justify-between mb-2">
+                <div class="text-sm">
+                    <span class="font-medium text-gray-900 dark:text-white">${escapeHtml(v.label)}</span>
+                    <span class="text-xs text-gray-500 dark:text-gray-400 ml-2">v${v.version_number} &middot; ${escapeHtml(CHANGE_LABELS[v.change_type] || v.change_type)}${who} &middot; ${escapeHtml(when)}</span>
+                </div>
+                <div class="flex items-center">${actions}</div>
+            </div>
+            ${description}
+            <pre class="text-xs text-gray-700 dark:text-gray-300 whitespace-pre-wrap font-mono bg-white dark:bg-gray-800 rounded p-3 border border-gray-200 dark:border-gray-600 max-h-48 overflow-y-auto">${escapeHtml(v.value || '')}</pre>
+        </div>`;
+}
+
+function _restoreButton(v) {
+    return `<button onclick="restoreMemoryBlockVersion(${v.id}, ${jsArg(v.label)}, ${v.version_number})" class="px-3 py-1 text-xs font-medium text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300">Restore</button>`;
+}
+
+// History of one block. `deleted` is true when the block no longer exists, in
+// which case its newest version can be restored too.
+async function showMemoryBlockHistory(blockId, label, deleted) {
+    _openHistoryModal(`History: ${label}`, 'Restoring a version saves it as a new version; nothing is lost.');
+    const listEl = document.getElementById('memoryBlockHistoryList');
+    try {
+        const response = await fetch(`/dashboard/api/agents/${encodeURIComponent(currentAgentName)}/memory-blocks/${encodeURIComponent(blockId)}/versions`, {
+            credentials: 'same-origin'
+        });
+        const data = await response.json();
+        if (!data.success) {
+            listEl.innerHTML = `<p class="text-sm text-red-600">${escapeHtml(data.error || 'Failed to load history')}</p>`;
+            return;
+        }
+        if (!data.versions.length) {
+            listEl.innerHTML = '<p class="text-sm text-gray-500 dark:text-gray-400">No history yet. The next change to this block starts it.</p>';
+            return;
+        }
+        listEl.innerHTML = data.versions.map((v, i) =>
+            _versionCard(v, (i === 0 && !deleted) ? '<span class="text-xs text-green-600 dark:text-green-400">Current</span>' : _restoreButton(v))
+        ).join('');
+    } catch (error) {
+        console.error('Error loading block history:', error);
+        listEl.innerHTML = '<p class="text-sm text-red-600">Error loading history</p>';
+    }
+}
+
+async function showDeletedMemoryBlocks() {
+    _openHistoryModal('Deleted blocks', 'Restore brings a block back as it was when deleted, under its old ID.');
+    const listEl = document.getElementById('memoryBlockHistoryList');
+    try {
+        const response = await fetch(`/dashboard/api/agents/${encodeURIComponent(currentAgentName)}/memory-blocks-deleted`, {
+            credentials: 'same-origin'
+        });
+        const data = await response.json();
+        if (!data.success) {
+            listEl.innerHTML = `<p class="text-sm text-red-600">${escapeHtml(data.error || 'Failed to load deleted blocks')}</p>`;
+            return;
+        }
+        if (!data.blocks.length) {
+            listEl.innerHTML = '<p class="text-sm text-gray-500 dark:text-gray-400">No deleted blocks.</p>';
+            return;
+        }
+        listEl.innerHTML = data.blocks.map(v => _versionCard(v,
+            `<button onclick="showMemoryBlockHistory(${jsArg(v.block_id)}, ${jsArg(v.label)}, true)" class="px-3 py-1 text-xs font-medium text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200">History</button>` + _restoreButton(v)
+        )).join('');
+    } catch (error) {
+        console.error('Error loading deleted blocks:', error);
+        listEl.innerHTML = '<p class="text-sm text-red-600">Error loading deleted blocks</p>';
+    }
+}
+
+async function restoreMemoryBlockVersion(versionId, label, versionNumber) {
+    if (!confirm(`Restore "${label}" to version ${versionNumber}?`)) {
+        return;
+    }
+    try {
+        const response = await fetch(`/dashboard/api/agents/${encodeURIComponent(currentAgentName)}/memory-block-versions/${versionId}/restore`, {
+            method: 'POST',
+            credentials: 'same-origin'
+        });
+        const data = await response.json();
+        if (data.success) {
+            showNotification(data.block && data.block.unchanged ? 'The block already matches this version' : 'Memory block restored');
+            hideMemoryBlockHistory();
+            loadMemoryBlocks(currentLabelSearch, currentValueSearch);
+        } else {
+            showNotification(data.error || 'Failed to restore memory block', 'error');
+        }
+    } catch (error) {
+        console.error('Error restoring memory block:', error);
+        showNotification('Error restoring memory block', 'error');
     }
 }
 

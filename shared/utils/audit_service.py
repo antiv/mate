@@ -61,6 +61,7 @@ ACTION_FILE_STORE_DELETE = "file_store.delete"
 ACTION_MEMORY_BLOCK_CREATE = "memory_block.create"
 ACTION_MEMORY_BLOCK_UPDATE = "memory_block.update"
 ACTION_MEMORY_BLOCK_DELETE = "memory_block.delete"
+ACTION_MEMORY_BLOCK_RESTORE = "memory_block.restore"
 
 RESOURCE_AGENT = "agent"
 RESOURCE_USER = "user"

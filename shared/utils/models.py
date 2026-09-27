@@ -508,6 +508,9 @@ class MemoryBlock(Base):
     """Model for local memory blocks (dynamic instructions, user facts, etc.)."""
 
     __tablename__ = 'memory_blocks'
+    # Never reuse a deleted block's id: its history in memory_block_versions is
+    # keyed on it. The migrations already say AUTOINCREMENT; this covers create_all.
+    __table_args__ = {'sqlite_autoincrement': True}
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     project_id = Column(Integer, ForeignKey('projects.id'), nullable=False)
@@ -547,6 +550,46 @@ class MemoryBlock(Base):
             'metadata': self.get_metadata(),
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class MemoryBlockVersion(Base):
+    """A memory block as it was after one write, for history and restore.
+
+    block_id has no foreign key: a deleted block keeps its history, which is what
+    lets it be restored.
+    """
+
+    __tablename__ = 'memory_block_versions'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    project_id = Column(Integer, ForeignKey('projects.id', ondelete='CASCADE'), nullable=False)
+    block_id = Column(Integer, nullable=False)
+    version_number = Column(Integer, nullable=False)
+    label = Column(String(500), nullable=False)
+    value = Column(Text, nullable=False, default='')
+    description = Column(Text, nullable=True)
+    block_metadata = Column('metadata', Text, nullable=True)
+    changed_by = Column(String(255), nullable=True)
+    change_type = Column(String(50), nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+
+    def to_dict(self) -> dict:
+        try:
+            metadata = json.loads(self.block_metadata) if self.block_metadata else None
+        except json.JSONDecodeError:
+            metadata = None
+        return {
+            'id': self.id,
+            'block_id': str(self.block_id),
+            'version_number': self.version_number,
+            'label': self.label,
+            'value': self.value,
+            'description': self.description,
+            'metadata': metadata,
+            'changed_by': self.changed_by,
+            'change_type': self.change_type,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
         }
 
 

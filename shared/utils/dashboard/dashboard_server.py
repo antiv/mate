@@ -731,9 +731,13 @@ class DashboardServer:
                     self.FileSearchStore.id.in_(store_ids)
                 ).delete(synchronize_session=False)
 
-            # 3. Delete Memory Blocks
+            # 3. Delete Memory Blocks and their history
             session.query(self.MemoryBlock).filter(
                 self.MemoryBlock.project_id == project_id
+            ).delete(synchronize_session=False)
+            from shared.utils.models import MemoryBlockVersion
+            session.query(MemoryBlockVersion).filter(
+                MemoryBlockVersion.project_id == project_id
             ).delete(synchronize_session=False)
 
             # 4. Delete Widget API Keys
@@ -1798,6 +1802,7 @@ class DashboardServer:
             memory_blocks_skipped = 0
             if "memory_blocks" in import_data and import_data["memory_blocks"]:
                 try:
+                    from shared.utils.memory_blocks_service import block_state, record_block_version
                     from shared.utils.models import MemoryBlock
                     for block_data in import_data["memory_blocks"]:
                         try:
@@ -1813,10 +1818,14 @@ class DashboardServer:
                             
                             if existing:
                                 if overwrite:
+                                    previous = block_state(existing)
                                     existing.value = block_data.get("value", "")
                                     existing.description = block_data.get("description")
                                     md = block_data.get("metadata")
                                     existing.set_metadata(md if isinstance(md, dict) else None)
+                                    if block_state(existing) != previous:
+                                        record_block_version(session, existing, "update", "import",
+                                                             previous=previous)
                                     memory_blocks_imported += 1
                                 else:
                                     memory_blocks_skipped += 1
@@ -1831,6 +1840,7 @@ class DashboardServer:
                                 if isinstance(md, dict):
                                     new_block.set_metadata(md)
                                 session.add(new_block)
+                                record_block_version(session, new_block, "create", "import")
                                 memory_blocks_imported += 1
                         except Exception as e:
                             errors.append(f"Error importing memory block '{block_data.get('label', 'Unknown')}': {str(e)}")
@@ -2019,7 +2029,8 @@ class DashboardServer:
                         continue
                     result = mem_service.create_block(
                         project_id=target_project_id, label=block.label,
-                        value=block.value, description=block.description)
+                        value=block.value, description=block.description,
+                        changed_by=changed_by)
                     if result.get("status") == "success":
                         memory_blocks_copied += 1
 
@@ -2200,7 +2211,8 @@ class DashboardServer:
                 continue
             value = sub_names(block.get("value", ""))
             desc = block.get("description")
-            result = mem_service.create_block(project_id=project_id, label=label, value=value, description=desc)
+            result = mem_service.create_block(project_id=project_id, label=label, value=value, description=desc,
+                                              changed_by=changed_by)
             if result.get("status") == "success":
                 memory_blocks_created += 1
         
@@ -2596,7 +2608,8 @@ class DashboardServer:
             # Sync memory blocks
             memory_blocks_added = 0
             memory_blocks_updated = 0
-            from shared.utils.memory_blocks_service import MemoryBlocksService
+            from shared.utils.memory_blocks_service import (MemoryBlocksService, block_state,
+                                                            record_block_version)
             from shared.utils.models import MemoryBlock
             mem_service = MemoryBlocksService(self.db_client)
             
@@ -2613,16 +2626,19 @@ class DashboardServer:
                 desc = block.get("description")
                 
                 if label not in db_block_map:
-                    result = mem_service.create_block(project_id=project_id, label=label, value=value, description=desc)
+                    result = mem_service.create_block(project_id=project_id, label=label, value=value, description=desc,
+                                                      changed_by=changed_by)
                     if result.get("status") == "success":
                         memory_blocks_added += 1
                 else:
                     # Update existing block value
                     existing = db_block_map[label]
                     if value != (existing.value or ""):
+                        previous = block_state(existing)
                         existing.value = value
                         if desc:
                             existing.description = desc
+                        record_block_version(session, existing, "update", changed_by, previous=previous)
                         memory_blocks_updated += 1
             
             # Update project template version
@@ -2678,6 +2694,27 @@ class DashboardServer:
         """Return True if the current request comes from an admin user."""
         from server.auth import is_admin_user
         return is_admin_user(request)
+
+    def _memory_blocks_project(self, agent_name: str):
+        """(project_id, None) for an agent with memory blocks, else (None, error response)."""
+        if not self.db_client:
+            return None, {"success": False, "error": "Database not available"}
+        session = self.db_client.get_session()
+        if not session:
+            return None, {"success": False, "error": "Database session not available"}
+        try:
+            agent = session.query(self.AgentConfig).filter_by(name=agent_name).first()
+            if not agent:
+                return None, {"success": False, "error": f"Agent {agent_name} not found"}
+            try:
+                tool_config = json.loads(agent.tool_config) if isinstance(agent.tool_config, str) else agent.tool_config
+            except json.JSONDecodeError:
+                tool_config = {}
+            if not self._has_memory_blocks(tool_config or {}):
+                return None, {"success": False, "error": "Agent does not have memory blocks tool configured"}
+            return agent.project_id, None
+        finally:
+            session.close()
 
     def _has_memory_blocks(self, tool_config_dict):
         """Return True if agent has memory_blocks tool enabled."""
@@ -5317,6 +5354,7 @@ class DashboardServer:
                     value=value,
                     description=description,
                     metadata=metadata if metadata else None,
+                    changed_by=username,
                 )
                 
                 if result.get("status") == "success":
@@ -5374,6 +5412,7 @@ class DashboardServer:
                     block_id=block_id,
                     value=value,
                     description=description,
+                    changed_by=username,
                 )
                 
                 if result.get("status") == "success":
@@ -5417,7 +5456,8 @@ class DashboardServer:
                 
                 from shared.utils.memory_blocks_service import MemoryBlocksService
                 svc = MemoryBlocksService(self.db_client)
-                result = svc.delete_block(project_id=agent.project_id, block_id=block_id)
+                result = svc.delete_block(project_id=agent.project_id, block_id=block_id,
+                                          changed_by=username)
                 
                 if result.get("status") == "success":
                     return {"success": True, "message": result.get("message", "Block deleted successfully")}
@@ -5427,6 +5467,66 @@ class DashboardServer:
             finally:
                 session.close()
         
+        @self.app.get("/dashboard/api/agents/{agent_name}/memory-blocks/{block_id}/versions",
+                      tags=["Dashboard - Memory Blocks"])
+        async def list_memory_block_versions(
+            agent_name: str,
+            block_id: str,
+            username: str = Depends(self._get_auth_user_dependency)
+        ):
+            """A memory block's history, newest first. Works for a deleted block by its id."""
+            project_id, error = self._memory_blocks_project(agent_name)
+            if error:
+                return error
+            from shared.utils.memory_blocks_service import MemoryBlocksService
+            result = MemoryBlocksService(self.db_client).list_versions(project_id, block_id)
+            if result.get("status") != "success":
+                return {"success": False, "error": result.get("error_message", "Failed to load history")}
+            return {"success": True, "versions": result["versions"]}
+
+        @self.app.get("/dashboard/api/agents/{agent_name}/memory-blocks-deleted", tags=["Dashboard - Memory Blocks"])
+        async def list_deleted_memory_blocks(
+            agent_name: str,
+            username: str = Depends(self._get_auth_user_dependency)
+        ):
+            """Deleted blocks of the agent's project that can still be restored."""
+            project_id, error = self._memory_blocks_project(agent_name)
+            if error:
+                return error
+            from shared.utils.memory_blocks_service import MemoryBlocksService
+            result = MemoryBlocksService(self.db_client).list_deleted_blocks(project_id)
+            if result.get("status") != "success":
+                return {"success": False, "error": result.get("error_message", "Failed to load deleted blocks")}
+            return {"success": True, "blocks": result["blocks"]}
+
+        @self.app.post("/dashboard/api/agents/{agent_name}/memory-block-versions/{version_id}/restore",
+                       tags=["Dashboard - Memory Blocks"])
+        async def restore_memory_block_version(
+            agent_name: str,
+            version_id: int,
+            request: Request,
+            username: str = Depends(self._get_auth_user_dependency)
+        ):
+            """Put a block back as it was in a version, recreating it if it was deleted."""
+            project_id, error = self._memory_blocks_project(agent_name)
+            if error:
+                return error
+            from shared.utils.memory_blocks_service import MemoryBlocksService
+            result = MemoryBlocksService(self.db_client).restore_version(project_id, version_id, changed_by=username)
+            if result.get("status") != "success":
+                code = {"not_found": 404, "conflict": 409}.get(result.get("error_code"), 500)
+                return JSONResponse(status_code=code, content={
+                    "success": False, "error": result.get("error_message", "Failed to restore block")})
+            if not result.get("unchanged"):
+                audit_service.log(
+                    username, audit_service.ACTION_MEMORY_BLOCK_RESTORE, audit_service.RESOURCE_MEMORY_BLOCK,
+                    resource_id=result["block_id"],
+                    details={"project_id": project_id, "label": result["label"],
+                             "restored_from": result["restored_from"], "recreated": result["recreated"]},
+                    request=request,
+                )
+            return {"success": True, "block": result}
+
         @self.app.get("/dashboard/api/file-search/stores/agents", tags=["Dashboard - File Search"])
         async def get_store_agents(
             request: Request,

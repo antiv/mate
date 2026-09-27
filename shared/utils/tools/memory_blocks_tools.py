@@ -64,6 +64,11 @@ def create_memory_blocks_tools_from_config(config: Dict[str, Any]) -> List[Any]:
     if project_id is None:
         logger.warning("memory_blocks tools: project_id missing in config, using 1")
         project_id = 1
+    agent_name = config.get('name', 'unknown')
+
+    def changed_by(tool_context: ToolContext) -> str:
+        """The agent, and whose conversation steered it, for the block's history."""
+        return f"agent:{agent_name} user:{_get_user_id_from_context(tool_context) or 'unknown'}"
 
     def list_shared_blocks(
         limit: int = 100,
@@ -161,6 +166,7 @@ def create_memory_blocks_tools_from_config(config: Dict[str, Any]) -> List[Any]:
             value=value or "",
             description=description,
             metadata=metadata,
+            changed_by=changed_by(tool_context),
         )
 
     def modify_shared_block(
@@ -183,6 +189,7 @@ def create_memory_blocks_tools_from_config(config: Dict[str, Any]) -> List[Any]:
             block_id=str(block_id),
             value=value,
             description=description,
+            changed_by=changed_by(tool_context),
         )
 
     def delete_shared_block(
@@ -198,7 +205,8 @@ def create_memory_blocks_tools_from_config(config: Dict[str, Any]) -> List[Any]:
         if not block_id:
             return {"status": "error", "error_message": "block_id is required"}
         svc = _get_service()
-        return svc.delete_block(project_id=project_id, block_id=str(block_id))
+        return svc.delete_block(project_id=project_id, block_id=str(block_id),
+                                changed_by=changed_by(tool_context))
 
     return [
         list_shared_blocks,

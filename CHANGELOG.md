@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Memory block history and restore** - a memory block's old value used to be gone once overwritten, whoever overwrote it: an admin, the widget admin API, a trigger, or an agent steered by a chat message. Every write now records a version with the block's label, value, description and metadata and who made it (`agent:{name} user:{id}` for an agent's tools, `widget_admin:{key id}`, `trigger:{id}`, the dashboard user, `import`). Writes that change nothing record none, and the last 20 versions per block are kept. A block written before this release gets its prior state recorded the first time it changes. The Memory Blocks modal gains **History** with **Restore**, and a list of **Deleted blocks**, which come back under their old ID. A restore is a new version and an audit entry, refused if another block took the label meanwhile. Migration V033. See `documents/DYNAMIC_MEMORY_INSTRUCTIONS.md` (#122)
+
+### Fixed
+
+- **Edit, copy and delete did nothing on the Agents page.** A line lost from `agent-forms.js` in 1.3.0 left the script unparseable, so none of its functions existed, the config modals included, and the browser only logged a syntax error. A test now parses every dashboard script with `node --check` when Node is installed
+
 ## [1.3.2] - 2026-09-27
 
 A security release: every deployment should upgrade. A dynamic subagent now

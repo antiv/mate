@@ -1,6 +1,9 @@
 """
 Local memory blocks service: CRUD for memory_blocks table.
 Used by agent tools and dashboard API.
+
+Every write records a version (memory_block_versions) in the same transaction,
+naming who made it, so any change can be undone and a deleted block restored.
 """
 
 import json
@@ -11,6 +14,63 @@ from typing import Dict, Any, List, Optional
 from sqlalchemy.exc import IntegrityError
 
 logger = logging.getLogger(__name__)
+
+# Versions kept per block. A trigger writing a block every hour would otherwise
+# add hundreds a month.
+MAX_VERSIONS_PER_BLOCK = 20
+
+
+def block_state(row) -> Dict[str, Any]:
+    return {"label": row.label, "value": row.value or "",
+            "description": row.description, "metadata": row.block_metadata}
+
+
+def record_block_version(session, row, change_type: str, changed_by: Optional[str] = None,
+                         previous: Optional[Dict[str, Any]] = None) -> int:
+    """
+    Add a version holding *row* as it is now, inside the caller's transaction.
+
+    *previous* is the block's state before this write. A block written before
+    versioning existed has no history, so that state is recorded first as a
+    ``baseline``, and the change can still be undone. Older versions beyond
+    MAX_VERSIONS_PER_BLOCK are removed. Returns the new version number.
+    """
+    from sqlalchemy import func
+    from shared.utils.models import MemoryBlockVersion
+
+    if row.id is None:
+        session.flush()
+    if change_type == "create":
+        # A new block has no history. Rows under its id belong to a deleted block
+        # whose id the database handed out again (MySQL before 8.0 can).
+        session.query(MemoryBlockVersion).filter(
+            MemoryBlockVersion.block_id == row.id).delete(synchronize_session=False)
+    latest = session.query(func.max(MemoryBlockVersion.version_number)).filter(
+        MemoryBlockVersion.block_id == row.id).scalar() or 0
+
+    def add(state, kind, who):
+        nonlocal latest
+        latest += 1
+        session.add(MemoryBlockVersion(
+            project_id=row.project_id, block_id=row.id, version_number=latest,
+            label=state["label"], value=state["value"] or "", description=state["description"],
+            block_metadata=state["metadata"], change_type=kind,
+            changed_by=who[:255] if who else None,
+        ))
+
+    if previous is not None and latest == 0:
+        add(previous, "baseline", None)
+    add(block_state(row), change_type, changed_by)
+    session.flush()
+
+    stale = [v.id for v in session.query(MemoryBlockVersion.id).filter(
+        MemoryBlockVersion.block_id == row.id,
+        MemoryBlockVersion.version_number <= latest - MAX_VERSIONS_PER_BLOCK,
+    )]
+    if stale:
+        session.query(MemoryBlockVersion).filter(
+            MemoryBlockVersion.id.in_(stale)).delete(synchronize_session=False)
+    return latest
 
 
 @contextmanager
@@ -141,6 +201,7 @@ class MemoryBlocksService:
         value: str = "",
         description: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None,
+        changed_by: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Create a memory block. Label must be unique per project."""
         from shared.utils.models import MemoryBlock
@@ -161,6 +222,8 @@ class MemoryBlocksService:
                     block.set_metadata(metadata)
                 self._set_block_embedding(block)
                 session.add(block)
+                session.flush()
+                record_block_version(session, block, "create", changed_by)
                 session.commit()
                 session.refresh(block)
                 return {
@@ -186,8 +249,10 @@ class MemoryBlocksService:
         block_id: str,
         value: Optional[str] = None,
         description: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        changed_by: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Update block by id or label."""
+        """Update block by id or label. *metadata* replaces the stored metadata when given."""
         from shared.utils.models import MemoryBlock
 
         with _memory_blocks_span("modify"):
@@ -208,11 +273,17 @@ class MemoryBlocksService:
                     ).first()
                 if not row:
                     return {"status": "error", "error_message": f"Block not found: {block_id}"}
+                previous = block_state(row)
                 if value is not None:
                     row.value = value
                 if description is not None:
                     row.description = description
+                if metadata is not None:
+                    row.set_metadata(metadata)
+                if block_state(row) == previous:
+                    return {"status": "success", "block_id": str(row.id), "message": f"Block {block_id} unchanged"}
                 self._set_block_embedding(row)
+                record_block_version(session, row, "update", changed_by, previous=previous)
                 session.commit()
                 return {"status": "success", "block_id": str(row.id), "message": f"Modified block {block_id}"}
             except Exception as e:
@@ -290,8 +361,9 @@ class MemoryBlocksService:
             finally:
                 session.close()
 
-    def delete_block(self, project_id: int, block_id: str) -> Dict[str, Any]:
-        """Delete block by id or label."""
+    def delete_block(self, project_id: int, block_id: str,
+                     changed_by: Optional[str] = None) -> Dict[str, Any]:
+        """Delete block by id or label. Its history is kept, so it can be restored."""
         from shared.utils.models import MemoryBlock
 
         with _memory_blocks_span("delete"):
@@ -312,6 +384,7 @@ class MemoryBlocksService:
                     ).first()
                 if not row:
                     return {"status": "error", "error_message": f"Block not found: {block_id}"}
+                record_block_version(session, row, "delete", changed_by)
                 session.delete(row)
                 session.commit()
                 return {"status": "success", "block_id": block_id, "message": f"Deleted block {block_id}"}
@@ -321,3 +394,117 @@ class MemoryBlocksService:
                 return {"status": "error", "error_message": str(e)}
             finally:
                 session.close()
+
+    def list_versions(self, project_id: int, block_id: str) -> Dict[str, Any]:
+        """A block's versions, newest first. *block_id* is an id, or a label for a block that exists."""
+        from shared.utils.models import MemoryBlock, MemoryBlockVersion
+
+        session = self._get_session()
+        if not session:
+            return {"status": "error", "error_message": "Database session not available"}
+        try:
+            if block_id.isdigit():
+                numeric_id = int(block_id)
+            else:
+                row = session.query(MemoryBlock).filter(
+                    MemoryBlock.project_id == project_id, MemoryBlock.label == block_id).first()
+                if not row:
+                    return {"status": "error", "error_code": "not_found",
+                            "error_message": f"Block not found: {block_id}"}
+                numeric_id = row.id
+            versions = session.query(MemoryBlockVersion).filter(
+                MemoryBlockVersion.project_id == project_id,
+                MemoryBlockVersion.block_id == numeric_id,
+            ).order_by(MemoryBlockVersion.version_number.desc()).all()
+            return {"status": "success", "versions": [v.to_dict() for v in versions]}
+        except Exception as e:
+            logger.exception("list_versions failed")
+            return {"status": "error", "error_message": str(e)}
+        finally:
+            session.close()
+
+    def list_deleted_blocks(self, project_id: int) -> Dict[str, Any]:
+        """Blocks of the project that were deleted, each as its last recorded version."""
+        from shared.utils.models import MemoryBlock, MemoryBlockVersion
+
+        session = self._get_session()
+        if not session:
+            return {"status": "error", "error_message": "Database session not available"}
+        try:
+            existing = session.query(MemoryBlock.id).filter(MemoryBlock.project_id == project_id)
+            versions = session.query(MemoryBlockVersion).filter(
+                MemoryBlockVersion.project_id == project_id,
+                ~MemoryBlockVersion.block_id.in_(existing),
+            ).order_by(MemoryBlockVersion.version_number.desc()).all()
+            latest: Dict[int, Any] = {}
+            for v in versions:
+                latest.setdefault(v.block_id, v)
+            blocks = sorted((v.to_dict() for v in latest.values()),
+                            key=lambda b: b["created_at"] or "", reverse=True)
+            return {"status": "success", "blocks": blocks}
+        except Exception as e:
+            logger.exception("list_deleted_blocks failed")
+            return {"status": "error", "error_message": str(e)}
+        finally:
+            session.close()
+
+    def restore_version(self, project_id: int, version_id: int,
+                        changed_by: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Put a block back as it was in one of its versions, recreating it under its
+        old id if it was deleted. The restore is itself a version. Refused with
+        ``error_code: conflict`` when another block now holds the label.
+        """
+        from shared.utils.models import MemoryBlock, MemoryBlockVersion
+
+        session = self._get_session()
+        if not session:
+            return {"status": "error", "error_message": "Database session not available"}
+        try:
+            version = session.query(MemoryBlockVersion).filter(
+                MemoryBlockVersion.project_id == project_id,
+                MemoryBlockVersion.id == version_id,
+            ).first()
+            if not version:
+                return {"status": "error", "error_code": "not_found",
+                        "error_message": f"Version not found: {version_id}"}
+
+            taken = session.query(MemoryBlock).filter(
+                MemoryBlock.project_id == project_id,
+                MemoryBlock.label == version.label,
+                MemoryBlock.id != version.block_id,
+            ).first()
+            if taken:
+                return {"status": "error", "error_code": "conflict",
+                        "error_message": f"Another block is now labelled '{version.label}'"}
+
+            row = session.query(MemoryBlock).filter(
+                MemoryBlock.project_id == project_id, MemoryBlock.id == version.block_id).first()
+            previous = block_state(row) if row else None
+            if not row:
+                row = MemoryBlock(id=version.block_id, project_id=project_id)
+                session.add(row)
+            row.label = version.label
+            row.value = version.value or ""
+            row.description = version.description
+            row.block_metadata = version.block_metadata
+            if previous is not None and block_state(row) == previous:
+                return {"status": "success", "block_id": str(row.id), "unchanged": True,
+                        "message": "The block already matches this version"}
+
+            self._set_block_embedding(row)
+            number = record_block_version(session, row, "restore", changed_by, previous=previous)
+            session.commit()
+            return {"status": "success", "block_id": str(row.id), "label": row.label,
+                    "version_number": number, "restored_from": version.version_number,
+                    "recreated": previous is None}
+        except IntegrityError:
+            session.rollback()
+            return {"status": "error", "error_code": "conflict",
+                    "error_message": "The block could not be restored because its label is taken"}
+        except Exception as e:
+            session.rollback()
+            logger.exception("restore_version failed")
+            return {"status": "error", "error_message": str(e)}
+        finally:
+            session.close()

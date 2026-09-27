@@ -255,3 +255,35 @@ RESPONSE PROTOCOL (Historian):
 -   **Zero Deployment Updates**: Change agent behavior by editing a memory block in the dashboard (Memory Blocks modal) or via tools. No code deploys needed. Use **Memory Blocks (local DB)** tool for project-scoped blocks stored in your database.
 -   **Context Efficiency**: The agent only loads these tokens when it needs to reference them (or you can force it to load them once at startup).
 -   **Shared Knowledge**: Multiple agents can subscribe to the same `system_instruction_shared_escalation` block.
+
+## History and Restore
+
+Every write to a memory block records a version: the block's label, value,
+description and metadata as they were after the write, when it happened, and who
+made it. That covers every writer:
+
+| Writer | Recorded as |
+|---|---|
+| Dashboard, template import and sync, agent cloning | the dashboard user |
+| Widget admin API | `widget_admin:{key id}` |
+| An agent's memory tools | `agent:{agent name} user:{user id}`, the user whose conversation led to the write |
+| Trigger output | `trigger:{trigger id}` |
+| Agent import | `import` |
+| Website wizard | `wizard` |
+
+A write that changes nothing records no version. The last 20 versions of each block
+are kept. A block written before versioning existed gets its old state recorded as a
+**Before versioning** version the first time it changes, so that change can still
+be undone.
+
+In the Memory Blocks modal, **History** on a block lists its versions and
+**Restore** puts one back. **Deleted blocks** lists deleted blocks, which come back
+under their old ID as they were when deleted. A restore is itself a new version and
+an audit log entry (`memory_block.restore`), so nothing is lost by restoring. It is
+refused if another block has taken the label in the meantime.
+
+The same is available over the dashboard API:
+
+- `GET /dashboard/api/agents/{agent}/memory-blocks/{block_id}/versions`
+- `GET /dashboard/api/agents/{agent}/memory-blocks-deleted`
+- `POST /dashboard/api/agents/{agent}/memory-block-versions/{version_id}/restore`
