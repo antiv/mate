@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.3.2] - 2026-09-26
+## [1.3.2] - 2026-09-27
 
 A security release: every deployment should upgrade. A dynamic subagent now
 keeps its parent's approvals and guardrails, not only its tool set, and the
