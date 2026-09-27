@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.3] - 2026-09-27
+
+Restores editing agents from the Agents page, broken since 1.3.0: the Edit, Copy
+and Delete buttons there and in the visual builder did nothing. It also brings
+**memory block history**: every write to a block, by an admin, the widget admin
+API, an agent or a trigger, is recorded with who made it, and any version,
+including a deleted block, can be restored from the dashboard.
+
+Migration V033 applies on startup. History starts with this release; a block's
+value from before it is recorded the first time the block changes.
+
 ### Added
 
 - **Memory block history and restore** - a memory block's old value used to be gone once overwritten, whoever overwrote it: an admin, the widget admin API, a trigger, or an agent steered by a chat message. Every write now records a version with the block's label, value, description and metadata and who made it (`agent:{name} user:{id}` for an agent's tools, `widget_admin:{key id}`, `trigger:{id}`, the dashboard user, `import`). Writes that change nothing record none, and the last 20 versions per block are kept. A block written before this release gets its prior state recorded the first time it changes. The Memory Blocks modal gains **History** with **Restore**, and a list of **Deleted blocks**, which come back under their old ID. A restore is a new version and an audit entry, refused if another block took the label meanwhile. Migration V033. See `documents/DYNAMIC_MEMORY_INSTRUCTIONS.md` (#122)
