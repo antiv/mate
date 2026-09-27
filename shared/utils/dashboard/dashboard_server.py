@@ -3,6 +3,7 @@ Dashboard Server Implementation
 Basic dashboard endpoints without complex service dependencies
 """
 
+import asyncio
 import json
 import logging
 import math
@@ -6039,18 +6040,20 @@ class DashboardServer:
                 return {"agent_name": tc.agent_name, "question": tc.input,
                         "answer": latest.actual_output if latest else None,
                         "expected": tc.expected_output, "comment": None,
-                        "source": {"test_case_id": tc.id}}
+                        "source": {"test_case_id": tc.id}, "blocks_read": None}
             if isinstance(feedback_id, int) and not isinstance(feedback_id, bool):
                 from shared.utils.feedback_service import extract_exchange
                 fb = session.query(ResponseFeedback).filter(ResponseFeedback.id == feedback_id).first()
                 if not fb or not fb.agent_name:
                     raise HTTPException(status_code=404, detail="Rating not found")
-                question, answer = extract_exchange(self._get_session_events(fb.session_id) or [],
-                                                    fb.message_id)
+                from shared.utils.agent_improver import blocks_read
+                events = self._get_session_events(fb.session_id) or []
+                question, answer = extract_exchange(events, fb.message_id)
                 if not question:
                     raise HTTPException(status_code=400, detail="The rated conversation is no longer available")
                 return {"agent_name": fb.agent_name, "question": question, "answer": answer,
-                        "expected": None, "comment": fb.comment, "source": {"feedback_id": fb.id}}
+                        "expected": None, "comment": fb.comment, "source": {"feedback_id": fb.id},
+                        "blocks_read": blocks_read(events, fb.message_id)}
             raise HTTPException(status_code=400, detail="test_case_id or feedback_id is required")
 
         def _agent_row(session, agent_name: str):
@@ -6068,14 +6071,43 @@ class DashboardServer:
                 raise HTTPException(status_code=400, detail="instruction is too long")
             return instruction
 
+        def _editable_blocks(project_id: int, labels) -> Dict[str, str]:
+            """{label: value} for those of *labels* that exist in the project and are not read-only."""
+            if not labels:
+                return {}
+            session = self.db_client.get_session()
+            try:
+                rows = session.query(self.MemoryBlock).filter(
+                    self.MemoryBlock.project_id == project_id, self.MemoryBlock.label.in_(list(labels))).all()
+                values = {r.label: r.value or "" for r in rows if not (r.get_metadata() or {}).get("read_only")}
+            finally:
+                session.close()
+            return {label: values[label] for label in labels if label in values}
+
+        def _proposed_blocks(project_id: int, body: Dict[str, Any]) -> Dict[str, str]:
+            from shared.utils.agent_improver import MAX_BLOCK_CHARS
+            blocks = body.get("blocks") or {}
+            if not isinstance(blocks, dict) or not all(
+                    isinstance(k, str) and isinstance(v, str) for k, v in blocks.items()):
+                raise HTTPException(status_code=400, detail="blocks must map labels to values")
+            if any(len(v) > MAX_BLOCK_CHARS for v in blocks.values()):
+                raise HTTPException(status_code=400, detail="A block value is too long")
+            missing = set(blocks) - set(_editable_blocks(project_id, list(blocks)))
+            if missing:
+                raise HTTPException(status_code=400,
+                                    detail=f"Not an editable block of this project: {', '.join(sorted(missing))}")
+            return blocks
+
         @self.app.post("/dashboard/api/evals/improve/propose", tags=["Dashboard - Evals"])
-        def propose_improvement(request: Request, username: str = Depends(self._get_auth_user_dependency),
-                                body: Dict[str, Any] = Body(...)):
+        async def propose_improvement(request: Request, username: str = Depends(self._get_auth_user_dependency),
+                                      body: Dict[str, Any] = Body(...)):
             """
             Suggest a revised instruction for the agent behind a failing test case
-            or a thumbs-down. Nothing is saved. Sync: it waits on a model call.
+            or a thumbs-down, and revised values for the memory blocks it read while
+            answering that the admin picked (`block_labels`; by default those named
+            system_instruction_*). Nothing is saved.
             """
-            from shared.utils.agent_improver import ImproveError, propose_instruction
+            from shared.utils.agent_improver import ImproveError, blocks_read, propose_instruction
             session = self.db_client.get_session() if self.db_client else None
             if not session:
                 raise HTTPException(status_code=503, detail="Database not available")
@@ -6084,24 +6116,67 @@ class DashboardServer:
                 config = _agent_row(session, ctx["agent_name"])
                 current = config.instruction or ""
                 description = config.description or ""
+                project_id = config.project_id
+                try:
+                    tool_config = json.loads(config.tool_config) if config.tool_config else {}
+                except (json.JSONDecodeError, TypeError):
+                    tool_config = {}
+                uses_blocks = self._has_memory_blocks(tool_config or {})
+                snapshot = self._build_config_snapshot(config)
+                shared_with = []
+                for other in session.query(self.AgentConfig).filter(
+                        self.AgentConfig.project_id == project_id, self.AgentConfig.name != config.name):
+                    try:
+                        if self._has_memory_blocks(json.loads(other.tool_config) if other.tool_config else {}):
+                            shared_with.append(other.name)
+                    except (json.JSONDecodeError, TypeError):
+                        pass
             finally:
                 session.close()
+
+            requested = body.get("block_labels")
+            labels = ctx["blocks_read"] or []
+            if isinstance(requested, list):
+                # A second suggestion with other blocks ticked: the admin picks among
+                # the candidates the first one listed, so the test case is not rerun.
+                labels = [label for label in requested if isinstance(label, str)]
+            elif ctx["blocks_read"] is None and uses_blocks:
+                from shared.utils.eval_agent_runner import SnapshotAgent, langgraph_active
+                if not langgraph_active():
+                    events: List[Dict[str, Any]] = []
+                    try:
+                        async with SnapshotAgent(snapshot) as agent:
+                            await agent.ask(ctx["question"], events=events)
+                    except Exception as e:
+                        logger.info("Could not rerun the test case to find the blocks it reads: %s", e)
+                    labels = blocks_read(events)
+            candidates = _editable_blocks(project_id, labels) if uses_blocks else {}
+            if isinstance(requested, list):
+                selected = candidates
+            else:
+                selected = {k: v for k, v in candidates.items() if k.startswith("system_instruction_")}
+
             try:
-                proposal = propose_instruction(current, description, ctx["question"], ctx["answer"],
-                                               ctx["expected"], ctx["comment"])
+                proposal = await asyncio.to_thread(
+                    propose_instruction, current, description, ctx["question"], ctx["answer"],
+                    ctx["expected"], ctx["comment"], None, selected)
             except ImproveError as e:
                 raise HTTPException(status_code=400, detail=str(e))
             return {"agent_name": ctx["agent_name"], "source": ctx["source"],
                     "question": ctx["question"], "answer": ctx["answer"],
-                    "current_instruction": current, **proposal}
+                    "current_instruction": current, **proposal,
+                    "candidate_blocks": [{"label": k, "value": v, "selected": k in selected}
+                                         for k, v in candidates.items()],
+                    "shared_with": shared_with}
 
         @self.app.post("/dashboard/api/evals/improve/check", tags=["Dashboard - Evals"])
         async def check_improvement(request: Request, username: str = Depends(self._get_auth_user_dependency),
                                     body: Dict[str, Any] = Body(...)):
             """
             Run the agent's active eval suite with its current config and with the
-            proposed instruction, both in memory, and return the results side by side.
-            Nothing is deployed or saved.
+            proposed instruction and block values, both in memory, and return the
+            results side by side. Block values stand in for the stored ones only
+            inside the run. Nothing is deployed or saved.
             """
             from shared.utils.eval_agent_runner import LANGGRAPH_UNSUPPORTED, SnapshotAgent, langgraph_active
             from shared.utils.eval_runner import EvalRunner
@@ -6114,6 +6189,7 @@ class DashboardServer:
                 raise HTTPException(status_code=503, detail="Database not available")
             try:
                 config = _agent_row(session, agent_name if isinstance(agent_name, str) else "")
+                project_id = config.project_id
                 before = self._build_config_snapshot(config)
                 cases = (session.query(self.TestCase)
                          .filter(self.TestCase.agent_name == config.name, self.TestCase.is_active.is_(True))
@@ -6123,6 +6199,7 @@ class DashboardServer:
                 session.close()
             if not cases:
                 raise HTTPException(status_code=400, detail="This agent has no active test cases to check against")
+            blocks = _proposed_blocks(project_id, body)
             after = dict(before, instruction=instruction)
 
             runner = EvalRunner()
@@ -6142,8 +6219,10 @@ class DashboardServer:
                                           "error": r.error}
                 return results
 
+            from shared.utils.memory_blocks_service import block_overrides
             before_results = await _score(before)
-            after_results = await _score(after)
+            with block_overrides(project_id, blocks):
+                after_results = await _score(after)
 
             def _summary(results):
                 scored = [r["score"] for r in results.values() if r["score"] is not None]
@@ -6164,9 +6243,10 @@ class DashboardServer:
         async def apply_improvement(request: Request, username: str = Depends(self._get_auth_user_dependency),
                                     body: Dict[str, Any] = Body(...)):
             """
-            Replace the agent's instruction with the reviewed one: a new config
-            version, an audit entry naming what prompted it, and a runtime reload.
-            Refused if the instruction changed since the suggestion was made.
+            Replace the agent's instruction and block values with the reviewed ones:
+            a new config version and a version per block, an audit entry naming what
+            prompted it and every block version, and a runtime reload. Refused if the
+            instruction or any of the blocks changed since the suggestion was made.
             """
             agent_name = body.get("agent_name")
             instruction = _proposed_instruction(body)
@@ -6177,20 +6257,39 @@ class DashboardServer:
             try:
                 config = _agent_row(session, agent_name if isinstance(agent_name, str) else "")
                 config_id, name, current = config.id, config.name, config.instruction or ""
+                project_id = config.project_id
             finally:
                 session.close()
             if not isinstance(base, str) or base != current:
                 raise HTTPException(status_code=409,
                                     detail="The agent's instruction changed since this suggestion was made")
-            if not self._update_agent_config(config_id, {"instruction": instruction}, changed_by=username):
-                raise HTTPException(status_code=500, detail="Failed to update the agent")
+            blocks = _proposed_blocks(project_id, body)
+            base_blocks = body.get("base_blocks") or {}
+            stored = _editable_blocks(project_id, list(blocks))
+            if not isinstance(base_blocks, dict) or any(base_blocks.get(k) != stored.get(k) for k in blocks):
+                raise HTTPException(status_code=409,
+                                    detail="A memory block changed since this suggestion was made")
+
+            fields = []
+            if instruction != current or not blocks:
+                if not self._update_agent_config(config_id, {"instruction": instruction}, changed_by=username):
+                    raise HTTPException(status_code=500, detail="Failed to update the agent")
+                fields.append("instruction")
+            from shared.utils.memory_blocks_service import MemoryBlocksService
+            svc = MemoryBlocksService(self.db_client)
+            block_versions = {}
+            for label, value in blocks.items():
+                result = svc.modify_block(project_id, label, value=value, changed_by=username)
+                if result.get("status") != "success":
+                    raise HTTPException(status_code=500, detail=f"Failed to update the block '{label}'")
+                block_versions[label] = result.get("version_number")
 
             source = {k: body[k] for k in ("test_case_id", "feedback_id") if isinstance(body.get(k), int)}
+            details = {"config_id": config_id, "fields": fields, "via": "suggested_fix", **source}
+            if block_versions:
+                details["memory_blocks"] = block_versions
             audit_service.log(username, audit_service.ACTION_AGENT_UPDATE, audit_service.RESOURCE_AGENT,
-                              resource_id=name,
-                              details={"config_id": config_id, "fields": ["instruction"],
-                                       "via": "suggested_fix", **source},
-                              request=request)
+                              resource_id=name, details=details, request=request)
             try:
                 import httpx
                 from shared.utils.utils import get_adk_config
@@ -6200,7 +6299,7 @@ class DashboardServer:
                                       f"/api/reload-agent/{name}")
             except Exception as reload_e:
                 logger.info("Agent '%s' reload after suggested fix deferred: %s", name, reload_e)
-            return {"success": True, "agent_name": name}
+            return {"success": True, "agent_name": name, "fields": fields, "memory_blocks": block_versions}
 
         @self.app.post("/dashboard/api/evals", tags=["Dashboard - Evals"])
         async def create_test_case(request: Request, username: str = Depends(self._get_auth_user_dependency)):

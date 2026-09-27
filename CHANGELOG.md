@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Suggest a fix can change the memory blocks the agent read** - when a wrong answer came from a block, such as outdated opening hours, the fix could only patch the instruction around it. The suggestion now also lists the blocks the agent read in that answer (from the rated turn, or by running the test case once in memory), and the model may revise the values of the ones you tick; read-only blocks are never offered. The check runs the suite with the new values standing in for the stored ones inside the in-memory run, without writing them, and warns which other agents of the project share the blocks. Apply is refused if a block changed meanwhile, and writes each block as a block version under your name, listed in the audit entry. See `documents/EVALS.md` (#136)
+
 ## [1.3.3] - 2026-09-27
 
 Restores editing agents from the Agents page, broken since 1.3.0: the Edit, Copy

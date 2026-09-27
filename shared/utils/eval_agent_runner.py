@@ -16,7 +16,7 @@ import asyncio
 import contextvars
 import logging
 import os
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from google.genai import types
 
@@ -151,7 +151,9 @@ class SnapshotAgent:
             except Exception as e:
                 logger.warning("Closing eval runner for %s failed: %s", self._app_name, e)
 
-    async def ask(self, input_text: str, timeout: float = DEFAULT_TIMEOUT) -> str:
+    async def ask(self, input_text: str, timeout: float = DEFAULT_TIMEOUT,
+                  events: Optional[List[Dict[str, Any]]] = None) -> str:
+        """The agent's reply. Pass a list as *events* to also collect the turn's events."""
         session = await self._session_service.create_session(
             app_name=self._app_name, user_id=EVAL_USER_ID)
         message = types.Content(role="user", parts=[types.Part.from_text(text=input_text)])
@@ -160,7 +162,10 @@ class SnapshotAgent:
         async def _run() -> None:
             async for event in self._runner.run_async(
                     user_id=EVAL_USER_ID, session_id=session.id, new_message=message):
-                collector.feed(event.model_dump(mode="json", exclude_none=True))
+                dumped = event.model_dump(mode="json", exclude_none=True)
+                collector.feed(dumped)
+                if events is not None:
+                    events.append(dumped)
 
         token = _EVAL_RUN.set(True)
         try:

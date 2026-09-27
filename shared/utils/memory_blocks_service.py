@@ -6,6 +6,7 @@ Every write records a version (memory_block_versions) in the same transaction,
 naming who made it, so any change can be undone and a deleted block restored.
 """
 
+import contextvars
 import json
 import logging
 from contextlib import contextmanager
@@ -14,6 +15,28 @@ from typing import Dict, Any, List, Optional
 from sqlalchemy.exc import IntegrityError
 
 logger = logging.getLogger(__name__)
+
+# Values that stand in for stored ones while a suggested fix is checked:
+# (project_id, {label: value}). Reads see them, the database never does.
+_BLOCK_OVERRIDES = contextvars.ContextVar("mate_block_overrides", default=None)
+
+
+@contextmanager
+def block_overrides(project_id: int, values: Dict[str, str]):
+    """Within this context, reads of the project's blocks return *values* for their labels."""
+    token = _BLOCK_OVERRIDES.set((project_id, dict(values)) if values else None)
+    try:
+        yield
+    finally:
+        _BLOCK_OVERRIDES.reset(token)
+
+
+def _overridden(project_id: int, block: Dict[str, Any]) -> Dict[str, Any]:
+    current = _BLOCK_OVERRIDES.get()
+    if current and current[0] == project_id and block.get("label") in current[1]:
+        return dict(block, value=current[1][block["label"]])
+    return block
+
 
 # Versions kept per block. A trigger writing a block every hour would otherwise
 # add hundreds a month.
@@ -153,7 +176,7 @@ class MemoryBlocksService:
                 if value_search:
                     q = q.filter(MemoryBlock.value.contains(value_search))
                 rows = q.limit(limit).all()
-                blocks = [row.to_dict() for row in rows]
+                blocks = [_overridden(project_id, row.to_dict()) for row in rows]
                 return {"status": "success", "blocks": blocks, "block_count": len(blocks)}
             except Exception as e:
                 logger.exception("list_blocks failed")
@@ -187,7 +210,7 @@ class MemoryBlocksService:
                     ).first()
                 if not row:
                     return {"status": "error", "error_message": f"Block not found: {block_id}"}
-                return {"status": "success", **row.to_dict()}
+                return {"status": "success", **_overridden(project_id, row.to_dict())}
             except Exception as e:
                 logger.exception("get_block failed")
                 return {"status": "error", "error_message": str(e)}
@@ -283,9 +306,10 @@ class MemoryBlocksService:
                 if block_state(row) == previous:
                     return {"status": "success", "block_id": str(row.id), "message": f"Block {block_id} unchanged"}
                 self._set_block_embedding(row)
-                record_block_version(session, row, "update", changed_by, previous=previous)
+                number = record_block_version(session, row, "update", changed_by, previous=previous)
                 session.commit()
-                return {"status": "success", "block_id": str(row.id), "message": f"Modified block {block_id}"}
+                return {"status": "success", "block_id": str(row.id), "version_number": number,
+                        "message": f"Modified block {block_id}"}
             except Exception as e:
                 session.rollback()
                 logger.exception("modify_block failed")
@@ -345,7 +369,7 @@ class MemoryBlocksService:
                         vector = json.loads(row.embedding)
                     except (json.JSONDecodeError, TypeError):
                         continue
-                    block = row.to_dict()
+                    block = _overridden(project_id, row.to_dict())
                     value = block.pop("value", "") or ""
                     block["value_preview"] = value[:200]
                     block["score"] = round(emb.cosine_similarity(query_vec, vector), 4)

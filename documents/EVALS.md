@@ -129,7 +129,8 @@ The list is admin-only, because it shows what visitors said to the agent.
 ## Suggest a Fix
 
 A failing test case (the wand icon in its row) or a row in **Rated Down** can ask a
-model for a revised **instruction** for the agent:
+model for a revised **instruction** for the agent, and revised values for the
+**memory blocks** it read while answering:
 
 1. **Propose** — the model sees the agent's current instruction and description,
    the question, the answer it gave, the expected output (for a test case) and the
@@ -147,13 +148,34 @@ model for a revised **instruction** for the agent:
    rating that prompted it, and a reload of the agent. It is refused (`409`) if the
    instruction changed since the suggestion was made.
 
-**Only the instruction** can change. The model's reply is reduced to two strings,
-the instruction and the reason, and the apply route writes no other field, so tools,
-model, roles and the rest of the config are out of reach whatever the model or the
-request says. The question and the comment come from the agent's users — widget
-visitors included — and reach the model as quoted data, not instructions. Memory
-blocks are not changed: they belong to the project, are shared by its agents and
-are not versioned.
+**Only the instruction and the ticked blocks' values** can change. The model's reply
+is reduced to the instruction, a value per ticked block and the reason, and the apply
+route writes no other field, so tools, model, roles, other blocks and the rest of the
+config are out of reach whatever the model or the request says. The question and the
+comment come from the agent's users — widget visitors included — and reach the model
+as quoted data, not instructions; so do block values.
+
+### Memory blocks
+
+When the wrong answer comes from a block, such as an outdated fact, the fix belongs in
+the block rather than in the instruction.
+
+- **Candidates** are the blocks the agent read in the bad answer through
+  `get_shared_block` or `list_shared_blocks`. For a thumbs-down they come from the
+  rated turn in the conversation; for a test case, proposing runs the case once in
+  memory to see what it reads. Read-only blocks are never candidates.
+- **Ticked blocks** are the ones the model may change. By default only blocks named
+  `system_instruction_*` are ticked, so per-user data stays out unless you pick it;
+  **Suggest again with these** asks again with your choice.
+- **Check** runs the suite with the suggested values standing in for the stored ones
+  inside the in-memory run only. Nothing is written. Blocks are shared by the
+  project's agents, and only this agent's suite is checked: the other agents with
+  memory blocks in the project are named in a warning.
+- **Apply** is refused (`409`) if a block changed since the suggestion. Each block is
+  written as a block version under your name (see *History and Restore* in
+  `DYNAMIC_MEMORY_INSTRUCTIONS.md`), and the audit entry lists the block versions
+  under `memory_blocks`. The instruction gets a new config version only if it
+  changed.
 
 The model is `EVAL_IMPROVE_MODEL`, falling back to `EVAL_JUDGE_MODEL` (LiteLLM
 format). Checking a suggestion calls the agent twice per active test case, and
@@ -203,9 +225,9 @@ All endpoints require HTTP Basic Auth (same credentials as the dashboard).
 | `DELETE` | `/dashboard/api/evals/{id}` | Soft-delete (sets `is_active=False`) |
 | `POST` | `/dashboard/api/evals/{id}/run` | Run one test case; body: `{version_id}` |
 | `POST` | `/dashboard/api/evals/version/{version_id}/run` | Run all active cases for the agent; body: `{results: []}` |
-| `POST` | `/dashboard/api/evals/improve/propose` | Suggest an instruction; body: `{test_case_id}` or `{feedback_id}` |
-| `POST` | `/dashboard/api/evals/improve/check` | Run the suite with the current and a proposed instruction; body: `{agent_name, instruction}` |
-| `POST` | `/dashboard/api/evals/improve/apply` | Replace the instruction; body: `{agent_name, instruction, base_instruction}`, optional `test_case_id` / `feedback_id` |
+| `POST` | `/dashboard/api/evals/improve/propose` | Suggest an instruction and block values; body: `{test_case_id}` or `{feedback_id}`, optional `block_labels` |
+| `POST` | `/dashboard/api/evals/improve/check` | Run the suite with the current and a proposed version; body: `{agent_name, instruction}`, optional `blocks: {label: value}` |
+| `POST` | `/dashboard/api/evals/improve/apply` | Replace the instruction and block values; body: `{agent_name, instruction, base_instruction}`, optional `blocks` / `base_blocks` and `test_case_id` / `feedback_id` |
 
 ### Create Test Case
 
