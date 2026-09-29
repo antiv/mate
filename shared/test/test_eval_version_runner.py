@@ -260,6 +260,28 @@ class TestLangGraphSnapshotAgent(unittest.TestCase):
         asyncio.run(_ask_and_check())
         self.assertFalse(is_eval_run())
 
+    def test_artifacts_stay_in_memory(self):
+        from shared.utils.langgraph.tool_adapter import MateToolContext, get_run_context
+
+        async def _ask_and_list():
+            async with LangGraphSnapshotAgent(_snapshot("VERSION ONE")) as agent:
+                with patch.object(agent._built, "graph", MagicMock()) as graph:
+                    async def _stream(*a, **k):
+                        # What a tool such as generate_image does mid-run
+                        await MateToolContext(get_run_context()).save_artifact(
+                            "chart.png", types.Part.from_text(text="png"))
+                        return
+                        yield
+                    graph.astream.side_effect = _stream
+                    await agent.ask("draw it")
+                return list(agent._artifacts._service.artifacts)
+
+        with patch("shared.utils.langgraph.artifact_adapter.get_artifact_adapter") as deployed:
+            saved = asyncio.run(_ask_and_list())
+        deployed.assert_not_called()
+        self.assertEqual(len(saved), 1)
+        self.assertTrue(saved[0].endswith("/chart.png"), saved)
+
     def test_a_snapshot_without_a_name_is_refused(self):
         with self.assertRaises(ValueError):
             LangGraphSnapshotAgent({})
