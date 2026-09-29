@@ -21,7 +21,11 @@ def check_rbac(user_id: str, agent_name: str, session_id: Optional[str] = None) 
 
     Mirrors shared/callbacks/rbac_callback.py: gets/creates the user, loads the
     agent's allowed_for_roles, audits denials and logs an ACCESS_DENIED token event.
+    Skipped during an eval run, which an admin started.
     """
+    from shared.utils.eval_agent_runner import is_eval_run
+    if is_eval_run():
+        return None
     try:
         from shared.utils.user_service import get_user_service
         from shared.utils.rbac_middleware import get_rbac_middleware

@@ -10,6 +10,9 @@ agents_config and the deployed agent is untouched.
 Only the agent the version belongs to comes from the snapshot. Its sub-agents are
 built from their current config: they are separate rows with versions of their
 own, and this is also what checking a proposed change before applying it needs.
+
+On AGENT_FRAMEWORK=langgraph the same interface is served by
+shared/utils/langgraph/snapshot_agent.py.
 """
 
 import asyncio
@@ -27,12 +30,6 @@ logger = logging.getLogger(__name__)
 EVAL_USER_ID = "eval_runner"
 DEFAULT_TIMEOUT = 120.0
 
-LANGGRAPH_UNSUPPORTED = (
-    "Running evals against a stored version is not supported on the LangGraph runtime yet. "
-    "It would otherwise run the deployed agent and file the result under the selected version."
-)
-
-
 # Set only while SnapshotAgent.ask runs. Evals are started by an admin, so RBAC,
 # which would refuse the eval user on an admin-only agent, is skipped for them.
 _EVAL_RUN = contextvars.ContextVar("mate_eval_run", default=False)
@@ -40,10 +37,6 @@ _EVAL_RUN = contextvars.ContextVar("mate_eval_run", default=False)
 
 def is_eval_run() -> bool:
     return _EVAL_RUN.get()
-
-
-class LangGraphNotSupported(RuntimeError):
-    """Raised instead of silently falling back to the deployed agent."""
 
 
 def langgraph_active() -> bool:
@@ -103,7 +96,15 @@ def config_from_snapshot(snapshot: Dict[str, Any]) -> AgentConfig:
     return AgentConfig(**{k: v for k, v in snapshot.items() if k in columns})
 
 
-class SnapshotAgent:
+def SnapshotAgent(snapshot: Dict[str, Any], manager: Optional[Any] = None) -> Any:
+    """The snapshot agent for the active runtime; *manager* applies to ADK only."""
+    if langgraph_active():
+        from .langgraph.snapshot_agent import LangGraphSnapshotAgent
+        return LangGraphSnapshotAgent(snapshot)
+    return AdkSnapshotAgent(snapshot, manager=manager)
+
+
+class AdkSnapshotAgent:
     """
     One agent built from a snapshot, asked any number of questions, each in a
     fresh session. Build once per suite: MCP toolsets start with the agent.
@@ -113,8 +114,6 @@ class SnapshotAgent:
     """
 
     def __init__(self, snapshot: Dict[str, Any], manager: Optional[Any] = None):
-        if langgraph_active():
-            raise LangGraphNotSupported(LANGGRAPH_UNSUPPORTED)
         if not snapshot or not snapshot.get("name"):
             raise ValueError("The version has no usable config snapshot")
         self.snapshot = snapshot
@@ -123,7 +122,7 @@ class SnapshotAgent:
         self._session_service = None
         self._app_name = None
 
-    async def __aenter__(self) -> "SnapshotAgent":
+    async def __aenter__(self) -> "AdkSnapshotAgent":
         from google.adk.artifacts.in_memory_artifact_service import InMemoryArtifactService
         from google.adk.runners import Runner
         from google.adk.sessions.in_memory_session_service import InMemorySessionService

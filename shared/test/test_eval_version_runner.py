@@ -15,7 +15,7 @@ import sys
 import unittest
 from pathlib import Path
 from typing import AsyncGenerator
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -23,14 +23,18 @@ from google.adk.models.base_llm import BaseLlm
 from google.adk.models.llm_request import LlmRequest
 from google.adk.models.llm_response import LlmResponse
 from google.genai import types
+from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.messages import AIMessage, SystemMessage
+from langchain_core.outputs import ChatGeneration, ChatResult
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from shared.utils.eval_agent_runner import (LangGraphNotSupported, ReplyCollector,
-                                            SnapshotAgent, config_from_snapshot)
+from shared.utils.eval_agent_runner import (AdkSnapshotAgent, ReplyCollector, SnapshotAgent,
+                                            config_from_snapshot, is_eval_run)
+from shared.utils.langgraph.snapshot_agent import LangGraphSnapshotAgent
 from shared.utils.models import (AgentConfig, AgentConfigVersion, Base, EvalResult,
                                  TestCase)
 
@@ -47,6 +51,22 @@ class EchoInstructionLlm(BaseLlm):
         instruction = str(llm_request.config.system_instruction or "")
         yield LlmResponse(content=types.Content(
             role="model", parts=[types.Part(text=instruction.strip().splitlines()[0])]))
+
+
+class EchoInstructionChatModel(BaseChatModel):
+    """LangChain twin of EchoInstructionLlm, for the LangGraph runtime."""
+
+    @property
+    def _llm_type(self) -> str:
+        return "echo"
+
+    def bind_tools(self, tools, **kwargs):
+        return self
+
+    def _generate(self, messages, stop=None, run_manager=None, **kwargs) -> ChatResult:
+        system = next((m.content for m in messages if isinstance(m, SystemMessage)), "")
+        text = system.strip().splitlines()[0]
+        return ChatResult(generations=[ChatGeneration(message=AIMessage(content=text))])
 
 
 def _snapshot(instruction, name="support_bot", **extra):
@@ -158,14 +178,91 @@ class TestSnapshotAgent(unittest.TestCase):
         from shared.callbacks.rbac_callback import _should_skip_rbac_check
         self.assertFalse(_should_skip_rbac_check("support_bot"))
 
-    def test_langgraph_is_refused_rather_than_falling_back(self):
+    def test_the_runtime_picks_the_implementation(self):
+        self.assertIsInstance(SnapshotAgent(_snapshot("x")), AdkSnapshotAgent)
         with patch.dict(os.environ, {"AGENT_FRAMEWORK": "langgraph"}):
-            with self.assertRaises(LangGraphNotSupported):
-                SnapshotAgent(_snapshot("x"))
+            self.assertIsInstance(SnapshotAgent(_snapshot("x")), LangGraphSnapshotAgent)
 
     def test_a_snapshot_without_a_name_is_refused(self):
         with self.assertRaises(ValueError):
             SnapshotAgent({})
+
+
+class TestLangGraphSnapshotAgent(unittest.TestCase):
+
+    def setUp(self):
+        self.children = {}
+        patches = [
+            patch("shared.utils.langgraph.model_factory.create_chat_model",
+                  side_effect=lambda *a, **k: EchoInstructionChatModel()),
+            patch("shared.utils.langgraph.agent_builder.AgentBuilder._build_tools",
+                  new=AsyncMock(return_value=[])),
+            patch("shared.utils.langgraph.agent_builder._load_child_configs",
+                  side_effect=lambda name: self.children.get(name, [])),
+            patch("shared.utils.langgraph.hooks.get_user_profile_block", return_value=None),
+        ]
+        for p in patches:
+            p.start()
+            self.addCleanup(p.stop)
+
+    async def _ask(self, snapshot):
+        async with LangGraphSnapshotAgent(snapshot) as agent:
+            return await agent.ask("What are your opening hours?")
+
+    def test_each_version_answers_with_its_own_config(self):
+        v1 = asyncio.run(self._ask(_snapshot("VERSION ONE instruction")))
+        v2 = asyncio.run(self._ask(_snapshot("VERSION TWO instruction")))
+        self.assertIn("VERSION ONE", v1)
+        self.assertIn("VERSION TWO", v2)
+
+    def test_sub_agents_come_from_the_current_config(self):
+        self.children = {"support_bot": [{
+            "name": "sub_bot", "type": "llm", "model_name": "echo", "instruction": "SUB current",
+            "description": "the sub", "parent_agents": '["support_bot"]'}]}
+
+        async def _built():
+            async with LangGraphSnapshotAgent(_snapshot("root from version")) as agent:
+                return agent._built
+
+        built = asyncio.run(_built())
+        self.assertEqual(built.config["instruction"], "root from version")
+        self.assertEqual(set(built.model_names), {"support_bot", "sub_bot"})
+
+    def test_the_deployed_graph_and_session_tables_are_untouched(self):
+        from shared.utils.langgraph.agent_builder import get_agent_builder
+        deployed = get_agent_builder()
+        with patch("shared.utils.langgraph.agent_builder.get_checkpointer") as checkpointer, \
+                patch("shared.utils.langgraph.session_store.get_session_store") as store, \
+                patch.object(deployed, "get") as get:
+            asyncio.run(self._ask(_snapshot("VERSION ONE")))
+        checkpointer.assert_not_called()
+        store.assert_not_called()
+        get.assert_not_called()
+        self.assertEqual(deployed._cache, {})
+
+    def test_an_admin_only_agent_is_not_refused_to_the_eval(self):
+        from shared.utils.langgraph import hooks
+
+        async def _ask_and_check():
+            async with LangGraphSnapshotAgent(_snapshot("VERSION ONE")) as agent:
+                with patch("shared.utils.user_service.get_user_service") as users:
+                    # The transfer tool calls check_rbac while the eval runs
+                    with patch.object(agent._built, "graph", MagicMock()) as graph:
+                        async def _stream(*a, **k):
+                            self.assertTrue(is_eval_run())
+                            self.assertIsNone(hooks.check_rbac("eval_runner", "support_bot"))
+                            return
+                            yield
+                        graph.astream.side_effect = _stream
+                        await agent.ask("hi")
+                users.assert_not_called()
+
+        asyncio.run(_ask_and_check())
+        self.assertFalse(is_eval_run())
+
+    def test_a_snapshot_without_a_name_is_refused(self):
+        with self.assertRaises(ValueError):
+            LangGraphSnapshotAgent({})
 
 
 class FakeSnapshotAgent:
@@ -254,15 +351,14 @@ class TestEvalEndpoints(unittest.TestCase):
         self.assertEqual(resp.status_code, 400)
         self.assertEqual(FakeSnapshotAgent.runs, [])
 
-    def test_langgraph_is_refused_by_both_endpoints(self):
+    def test_langgraph_runs_the_selected_version_too(self):
         with patch.dict(os.environ, {"AGENT_FRAMEWORK": "langgraph"}):
             single = self.client.post(f"/dashboard/api/evals/{self.tc}/run",
                                       json={"version_id": self.v1})
             suite = self.client.post(f"/dashboard/api/evals/version/{self.v1}/run",
                                      json={"results": []})
-        self.assertEqual((single.status_code, suite.status_code), (501, 501))
-        self.assertIn("LangGraph", single.json()["detail"])
-        self.assertEqual(FakeSnapshotAgent.runs, [])
+        self.assertEqual((single.status_code, suite.status_code), (200, 200))
+        self.assertEqual(FakeSnapshotAgent.runs, [("VERSION ONE", "hours?")] * 2)
 
     def test_a_supplied_output_needs_no_agent(self):
         resp = self.client.post(f"/dashboard/api/evals/{self.tc}/run",
