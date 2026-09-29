@@ -167,11 +167,13 @@ class TestImproveEndpoints(unittest.TestCase):
         self.assertEqual(data["cases"][0]["after"]["output"], "NEW")
         self.assertEqual(self._row().instruction, "OLD")
 
-    def test_check_is_refused_on_langgraph(self):
-        with patch.dict(os.environ, {"AGENT_FRAMEWORK": "langgraph"}):
+    def test_check_runs_on_langgraph(self):
+        with patch.dict(os.environ, {"AGENT_FRAMEWORK": "langgraph"}), \
+                patch("shared.utils.eval_agent_runner.SnapshotAgent", FakeSnapshotAgent):
             resp = self.client.post("/dashboard/api/evals/improve/check",
                                     json={"agent_name": "bot", "instruction": "NEW"})
-        self.assertEqual(resp.status_code, 501)
+        self.assertEqual(resp.status_code, 200, resp.text)
+        self.assertEqual(resp.json()["after"]["passed"], 1)
 
     def test_apply_changes_only_the_instruction(self):
         resp = self.client.post("/dashboard/api/evals/improve/apply", json={

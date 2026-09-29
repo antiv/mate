@@ -63,6 +63,7 @@ Unlike ADK, an agent that appears under multiple parents is a single node (no
   input + output, logged to `guardrail_logs`), user-profile injection
 - Token usage tracking (`token_usage_logs`, same fields)
 - Human-in-the-loop `require_confirmation` (approve/reject round-trip)
+- Evals against a stored version and "Check against suite" (see `EVALS.md`)
 
 ## Not supported in v1 (use `AGENT_FRAMEWORK=adk`)
 

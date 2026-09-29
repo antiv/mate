@@ -6141,15 +6141,14 @@ class DashboardServer:
                 # the candidates the first one listed, so the test case is not rerun.
                 labels = [label for label in requested if isinstance(label, str)]
             elif ctx["blocks_read"] is None and uses_blocks:
-                from shared.utils.eval_agent_runner import SnapshotAgent, langgraph_active
-                if not langgraph_active():
-                    events: List[Dict[str, Any]] = []
-                    try:
-                        async with SnapshotAgent(snapshot) as agent:
-                            await agent.ask(ctx["question"], events=events)
-                    except Exception as e:
-                        logger.info("Could not rerun the test case to find the blocks it reads: %s", e)
-                    labels = blocks_read(events)
+                from shared.utils.eval_agent_runner import SnapshotAgent
+                events: List[Dict[str, Any]] = []
+                try:
+                    async with SnapshotAgent(snapshot) as agent:
+                        await agent.ask(ctx["question"], events=events)
+                except Exception as e:
+                    logger.info("Could not rerun the test case to find the blocks it reads: %s", e)
+                labels = blocks_read(events)
             candidates = _editable_blocks(project_id, labels) if uses_blocks else {}
             if isinstance(requested, list):
                 selected = candidates
@@ -6178,10 +6177,8 @@ class DashboardServer:
             results side by side. Block values stand in for the stored ones only
             inside the run. Nothing is deployed or saved.
             """
-            from shared.utils.eval_agent_runner import LANGGRAPH_UNSUPPORTED, SnapshotAgent, langgraph_active
+            from shared.utils.eval_agent_runner import SnapshotAgent
             from shared.utils.eval_runner import EvalRunner
-            if langgraph_active():
-                raise HTTPException(status_code=501, detail=LANGGRAPH_UNSUPPORTED)
             agent_name = body.get("agent_name")
             instruction = _proposed_instruction(body)
             session = self.db_client.get_session() if self.db_client else None
@@ -6464,13 +6461,10 @@ class DashboardServer:
                 output_map = {r["test_case_id"]: r["actual_output"] for r in submitted if r.get("actual_output")}
 
                 from shared.utils.eval_runner import EvalRunner
-                from shared.utils.eval_agent_runner import (
-                    LANGGRAPH_UNSUPPORTED, SnapshotAgent, langgraph_active)
+                from shared.utils.eval_agent_runner import SnapshotAgent
                 runner = EvalRunner()
 
                 to_invoke = [tc for tc in test_cases if not output_map.get(tc.id)]
-                if to_invoke and langgraph_active():
-                    raise HTTPException(status_code=501, detail=LANGGRAPH_UNSUPPORTED)
                 if to_invoke:
                     # The version's own config, not the deployed agent, answers
                     async with SnapshotAgent(snapshot) as agent:
@@ -6607,10 +6601,7 @@ class DashboardServer:
                     raise HTTPException(status_code=404, detail="Test case not found")
 
                 if not actual_output:
-                    from shared.utils.eval_agent_runner import (
-                        LANGGRAPH_UNSUPPORTED, SnapshotAgent, langgraph_active)
-                    if langgraph_active():
-                        raise HTTPException(status_code=501, detail=LANGGRAPH_UNSUPPORTED)
+                    from shared.utils.eval_agent_runner import SnapshotAgent
                     version = session.query(self.AgentConfigVersion).filter(
                         self.AgentConfigVersion.id == version_id).first()
                     if not version:

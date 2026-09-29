@@ -246,7 +246,16 @@ class AgentBuilder:
         root_config = _load_agent_config(app_name)
         if root_config is None:
             raise AgentNotFoundError(f"No enabled agent config found for '{app_name}'")
+        checkpointer = await get_checkpointer() if use_checkpointer else None
+        return await self.build_for_config(root_config, checkpointer, client_tools=client_tools)
 
+    async def build_for_config(self, root_config: Dict[str, Any], checkpointer: Any = None,
+                               client_tools: Optional[List[Dict[str, Any]]] = None) -> BuiltAgent:
+        """Build the tree for a given root config, e.g. a stored version's snapshot.
+
+        Sub-agents are loaded from their current config. The result is not cached.
+        """
+        app_name = root_config["name"]
         agent_type = (root_config.get("type") or "llm").lower()
         if agent_type != "llm":
             raise UnsupportedAgentTypeError(app_name, agent_type)
@@ -256,7 +265,6 @@ class AgentBuilder:
         children_of: Dict[str, List[str]] = {}
         self._collect_tree(root_config, tree, children_of)
 
-        checkpointer = await get_checkpointer() if use_checkpointer else None
         guardrail_engines = self._build_guardrail_engines(tree)
         model_names = {name: config.get("model_name") for name, config in tree.items()}
 
