@@ -214,6 +214,12 @@ def _make_handoff_tool(source_name: str, targets: Dict[str, str]):
     )
 
 
+def _require_llm(config: Dict[str, Any]) -> None:
+    agent_type = (config.get("type") or "llm").lower()
+    if agent_type != "llm":
+        raise UnsupportedAgentTypeError(config["name"], agent_type)
+
+
 class AgentBuilder:
     """Caches compiled graphs per app name; invalidated by the reload endpoints."""
 
@@ -246,6 +252,8 @@ class AgentBuilder:
         root_config = _load_agent_config(app_name)
         if root_config is None:
             raise AgentNotFoundError(f"No enabled agent config found for '{app_name}'")
+        # Before the checkpointer: an unsupported agent must not open its database
+        _require_llm(root_config)
         checkpointer = await get_checkpointer() if use_checkpointer else None
         return await self.build_for_config(root_config, checkpointer, client_tools=client_tools)
 
@@ -256,9 +264,7 @@ class AgentBuilder:
         Sub-agents are loaded from their current config. The result is not cached.
         """
         app_name = root_config["name"]
-        agent_type = (root_config.get("type") or "llm").lower()
-        if agent_type != "llm":
-            raise UnsupportedAgentTypeError(app_name, agent_type)
+        _require_llm(root_config)
 
         # Collect the whole tree (children may themselves have children)
         tree: Dict[str, Dict[str, Any]] = {}
