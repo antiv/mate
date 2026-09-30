@@ -5,7 +5,8 @@ The counterpart of the ADK SnapshotAgent in shared/utils/eval_agent_runner.py:
 the root agent is built from the version's snapshot and its sub-agents from
 their current config. The graph is built outside the builder's cache and runs
 against an in-memory checkpointer. Events are not written to the LangGraph
-session tables. The deployed graph is untouched.
+session tables, and artifacts the tools save go to an in-memory artifact
+service, as on ADK. The deployed graph is untouched.
 """
 
 import asyncio
@@ -36,15 +37,19 @@ class LangGraphSnapshotAgent:
         self.snapshot = snapshot
         self._builder = builder
         self._built = None
+        self._artifacts = None
 
     async def __aenter__(self) -> "LangGraphSnapshotAgent":
+        from google.adk.artifacts.in_memory_artifact_service import InMemoryArtifactService
         from langgraph.checkpoint.memory import InMemorySaver
         from shared.utils.langgraph.agent_builder import AgentBuilder
+        from shared.utils.langgraph.artifact_adapter import ArtifactAdapter
 
         # A fresh builder: build_for_config does not cache, and the shared
         # builder's cache of deployed graphs is never touched.
         builder = self._builder or AgentBuilder()
         self._built = await builder.build_for_config(dict(self.snapshot), InMemorySaver())
+        self._artifacts = ArtifactAdapter(InMemoryArtifactService())
         return self
 
     async def __aexit__(self, *exc) -> None:
@@ -88,7 +93,8 @@ class LangGraphSnapshotAgent:
                     events.append(event)
 
         run_context = RunContext(app_name=built.name, user_id=EVAL_USER_ID,
-                                 session_id=session_id, agent_name=built.name)
+                                 session_id=session_id, agent_name=built.name,
+                                 artifact_adapter=self._artifacts)
         context_token = set_run_context(run_context)
         eval_token = _EVAL_RUN.set(True)
         try:

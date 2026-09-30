@@ -50,8 +50,8 @@ def _create_service() -> Any:
 
 class ArtifactAdapter:
 
-    def __init__(self):
-        self._service = _create_service()
+    def __init__(self, service: Optional[Any] = None):
+        self._service = service if service is not None else _create_service()
 
     async def save(self, app_name: str, user_id: str, session_id: str,
                    filename: str, artifact: Any) -> int:

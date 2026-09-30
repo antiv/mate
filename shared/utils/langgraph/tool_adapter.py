@@ -71,8 +71,7 @@ class MateToolContext:
         self.function_call_id = None
 
     async def save_artifact(self, filename: str, artifact: Any) -> int:
-        from shared.utils.langgraph.artifact_adapter import get_artifact_adapter
-        version = await get_artifact_adapter().save(
+        version = await self._run_context.get_artifact_adapter().save(
             app_name=self._run_context.app_name,
             user_id=self._run_context.user_id,
             session_id=self._run_context.session_id,
@@ -83,8 +82,7 @@ class MateToolContext:
         return version
 
     async def load_artifact(self, filename: str, version: Optional[int] = None) -> Any:
-        from shared.utils.langgraph.artifact_adapter import get_artifact_adapter
-        return await get_artifact_adapter().load(
+        return await self._run_context.get_artifact_adapter().load(
             app_name=self._run_context.app_name,
             user_id=self._run_context.user_id,
             session_id=self._run_context.session_id,
@@ -102,13 +100,22 @@ class RunContext:
     """Per-/run_sse-invocation context shared by all tool calls in that run."""
 
     def __init__(self, app_name: str, user_id: str, session_id: str,
-                 agent_name: str, state: Optional[Dict[str, Any]] = None):
+                 agent_name: str, state: Optional[Dict[str, Any]] = None,
+                 artifact_adapter: Optional[Any] = None):
         self.app_name = app_name
         self.user_id = user_id
         self.session_id = session_id
         self.agent_name = agent_name
         self.state = MateState(state)
         self.artifact_delta: Dict[str, int] = {}
+        # None means the runtime's configured artifact service
+        self.artifact_adapter = artifact_adapter
+
+    def get_artifact_adapter(self) -> Any:
+        if self.artifact_adapter is not None:
+            return self.artifact_adapter
+        from shared.utils.langgraph.artifact_adapter import get_artifact_adapter
+        return get_artifact_adapter()
 
     def pop_artifact_delta(self) -> Dict[str, int]:
         delta, self.artifact_delta = self.artifact_delta, {}
