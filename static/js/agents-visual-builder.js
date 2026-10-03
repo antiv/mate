@@ -2371,12 +2371,8 @@
                                         }
                                     }
                                     
-                                    window.chatRequestedFullscreen = true;
                                     if (typeof window.openAgentChat === 'function') {
                                         window.openAgentChat(rootAgent);
-                                    } else if (typeof window.presentChatUserSelectionModal === 'function') {
-                                        window.pendingChatAgentName = rootAgent;
-                                        window.presentChatUserSelectionModal();
                                     } else {
                                         if (typeof window.showNotification === 'function') window.showNotification('Chat initialization failed. Please refresh.', 'error');
                                     }

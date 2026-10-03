@@ -131,7 +131,6 @@ projects_list=projects
 {% include 'dashboard/modals/widget_keys_modal.html' %}
 {% include 'dashboard/modals/template_sync_modal.html' %}
 {% include 'dashboard/modals/save_template_modal.html' %}
-{% include 'dashboard/modals/chat_modals.html' %}
 {% include 'dashboard/modals/edit_instruction_modal.html' %}
 <textarea id="vbInstruction" class="hidden"></textarea>
 {% endblock %}
@@ -208,11 +207,6 @@ projects_list=projects
         document.getElementById('saveTemplateCategory').value = 'custom';
         document.getElementById('saveTemplateModal').classList.remove('hidden');
     };
-
-    // Initialize chat user selection handlers
-    if (typeof initializeChatUserSelectionHandlers === 'function') {
-        initializeChatUserSelectionHandlers();
-    }
 
     function loadVisualBuilderProject() {
         var sel = document.getElementById('vbProjectSelect');
