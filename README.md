@@ -69,7 +69,7 @@ Set a regression threshold and MATE fires a webhook if a new version scores more
 ```bash
 git clone https://github.com/antiv/mate.git && cd mate
 python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements.lock
 
 cp .env.example .env
 # Set GOOGLE_API_KEY (or any supported provider key)
@@ -82,6 +82,17 @@ Or with Docker:
 
 ```bash
 docker-compose up
+```
+
+### Dependencies
+
+`requirements.txt` lists the direct dependencies; `requirements.lock` pins every package, with hashes, and is what Docker, CI and the Quick Start install. After editing `requirements.txt`, or to pick up new releases, regenerate the lock with [uv](https://docs.astral.sh/uv/) and run the tests before committing both files:
+
+```bash
+uv pip compile requirements.txt -o requirements.lock --universal --python-version 3.11 --generate-hashes
+# add --upgrade to move everything to the latest allowed versions,
+# or --upgrade-package litellm to move just one
+python -m unittest discover -s shared/test -p "test_*.py"
 ```
 
 Migrations run automatically on startup. Default database is SQLite.

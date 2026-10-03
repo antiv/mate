@@ -16,10 +16,10 @@ RUN apt-get update \
 
 RUN pip install uv
 # Copy requirements first for better caching
-COPY requirements.txt ./requirements.txt
+COPY requirements.lock ./requirements.lock
 
-# Install Python dependencies
-RUN uv pip install --no-cache-dir --system -r ./requirements.txt
+# Install the pinned dependency set (see "Dependencies" in README.md)
+RUN uv pip install --no-cache-dir --system --require-hashes -r ./requirements.lock
 
 # Set Playwright browser path to a shared directory accessible by non-root user
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
