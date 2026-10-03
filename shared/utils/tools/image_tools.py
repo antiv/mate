@@ -204,10 +204,8 @@ def validate_image_generation_setup() -> Tuple[bool, str, Dict[str, Any]]:
     # Test Google Generative AI connectivity if available
     if has_google_key and details["google_generativeai_package"]:
         try:
-            genai.configure(api_key=google_api_key)
-            # Test with a simple model list (this is a lightweight request)
-            # Note: Google's API doesn't have a direct models.list() equivalent, so we'll test with a simple generation
-            client = genai.GenerativeModel("gemini-2.0-flash-exp")
+            # google-genai has no module-level configure(); creating a client validates the setup
+            genai.Client(api_key=google_api_key)
             details["gemini_models_available"] = ["gemini-2.0-flash-exp"]
             details["api_key_source"] = "GOOGLE_API_KEY"
             
@@ -602,14 +600,14 @@ async def generate_image_nano_banana(prompt: str, tool_context: ToolContext = No
         
         # Check if Google Generative AI package is available
         if genai is None or types is None:
-            error_msg = "Google Generative AI package not installed. Please install it with: pip install google-generativeai"
+            error_msg = "Google Generative AI package not installed. Please install it with: pip install google-genai"
             logger.error(error_msg)
             return {
                 "error": error_msg,
                 "prompt": prompt,
                 "error_type": "missing_dependency",
                 "success": False,
-                "help": "Run 'pip install google-generativeai' to install the required package for Gemini image generation"
+                "help": "Run 'pip install google-genai' to install the required package for Gemini image generation"
             }
         
         # Get API key based on configuration

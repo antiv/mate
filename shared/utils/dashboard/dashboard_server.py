@@ -2794,7 +2794,7 @@ class DashboardServer:
                 if uri.startswith("sqlite+aiosqlite://"):
                     uri = uri.replace("sqlite+aiosqlite://", "sqlite://")
                 elif uri.startswith("postgresql+asyncpg://"):
-                    uri = uri.replace("postgresql+asyncpg://", "postgresql://")
+                    uri = uri.replace("postgresql+asyncpg://", "postgresql+psycopg2://")
                 elif uri.startswith("mysql+aiomysql://"):
                     uri = uri.replace("mysql+aiomysql://", "mysql://")
                 
@@ -2859,7 +2859,7 @@ class DashboardServer:
             if uri.startswith("sqlite+aiosqlite://"):
                 uri = uri.replace("sqlite+aiosqlite://", "sqlite://")
             elif uri.startswith("postgresql+asyncpg://"):
-                uri = uri.replace("postgresql+asyncpg://", "postgresql://")
+                uri = uri.replace("postgresql+asyncpg://", "postgresql+psycopg2://")
             elif uri.startswith("mysql+aiomysql://"):
                 uri = uri.replace("mysql+aiomysql://", "mysql://")
             if uri.startswith("sqlite:///") and not uri.startswith("sqlite:////"):
@@ -2957,7 +2957,7 @@ class DashboardServer:
                 if uri.startswith("sqlite+aiosqlite://"):
                     uri = uri.replace("sqlite+aiosqlite://", "sqlite://")
                 elif uri.startswith("postgresql+asyncpg://"):
-                    uri = uri.replace("postgresql+asyncpg://", "postgresql://")
+                    uri = uri.replace("postgresql+asyncpg://", "postgresql+psycopg2://")
                 elif uri.startswith("mysql+aiomysql://"):
                     uri = uri.replace("mysql+aiomysql://", "mysql://")
                 
@@ -3051,7 +3051,7 @@ class DashboardServer:
                 if uri.startswith("sqlite+aiosqlite://"):
                     uri = uri.replace("sqlite+aiosqlite://", "sqlite://")
                 elif uri.startswith("postgresql+asyncpg://"):
-                    uri = uri.replace("postgresql+asyncpg://", "postgresql://")
+                    uri = uri.replace("postgresql+asyncpg://", "postgresql+psycopg2://")
                 elif uri.startswith("mysql+aiomysql://"):
                     uri = uri.replace("mysql+aiomysql://", "mysql://")
                 
