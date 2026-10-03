@@ -317,7 +317,9 @@ async def widget_chat_page(request: Request, key: str = Query(...)):
         "request": request,
         "api_key": key,
         "agent_name": wk.agent_name,
-        "widget_config": json.dumps(widget_cfg),
+        # A dict, rendered with tojson: the config is written through the widget
+        # admin API, and json.dumps leaves "</script>" in it intact.
+        "widget_config": widget_cfg,
     })
     # Customer sites frame this page, so it cannot take the dashboard's
     # frame-ancestors 'self'. The key's allowlist says which sites may.

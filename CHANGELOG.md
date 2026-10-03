@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- **Script in a widget's config** - the widget chat page put the key's config into an inline `<script>` with `json.dumps`, which leaves `</script>` intact. Whoever holds a widget's admin key could set a title that closed the script and ran their own on MATE's origin, the dashboard's, when an admin opened the widget preview. The config, agent name and key are rendered with `tojson` now
 - **Script in the dashboard home's Recent Activity** - the list put an audit entry's actor, action and resource into the page unescaped. The actor can come from a chat: a widget visitor picks their own `user_id`, which an RBAC denial (and now a model fallback) records. A visitor could thus store script that ran when an admin opened the dashboard. The fields are escaped now, as on the Audit Logs page
 
 ## [1.3.3] - 2026-09-27
