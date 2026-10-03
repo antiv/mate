@@ -23,22 +23,39 @@ def _ensure_gemini_env() -> None:
         os.environ["GEMINI_API_KEY"] = os.environ["GOOGLE_API_KEY"]
 
 
+_LOCAL_PROVIDERS = ("lm_studio", "llamacpp", "llama_cpp", "localai", "llamafile")
+
+
+def litellm_model_name(model_name: Optional[str] = None) -> str:
+    """The model string create_chat_model() hands litellm for `model_name`.
+
+    It is also what ChatLiteLLM reports as response_metadata["model_name"], which
+    is how a run tells which of an agent's models answered.
+    """
+    name = (model_name or os.getenv("GEMINI_MODEL", "gemini-2.5-flash")).strip()
+    if _is_gemini_model(name):
+        return f"gemini/{name.removeprefix('models/')}"
+    if _detect_provider(name) in _LOCAL_PROVIDERS:
+        model_parts = name.split("/", 1)
+        return f"openai/{model_parts[1] if len(model_parts) > 1 else 'default'}"
+    return name
+
+
 def create_chat_model(model_name: Optional[str] = None,
                       generate_content_config: Optional[Dict[str, Any]] = None,
                       api_key: Optional[str] = None,
                       base_url: Optional[str] = None) -> ChatLiteLLM:
     """Create a ChatLiteLLM model using the same routing rules as create_model()."""
-    effective_model_name = (model_name or os.getenv("GEMINI_MODEL", "gemini-2.5-flash")).strip()
+    requested_name = (model_name or os.getenv("GEMINI_MODEL", "gemini-2.5-flash")).strip()
+    effective_model_name = litellm_model_name(requested_name)
     # streaming=True so token deltas reach the graph's "messages" stream mode
     kwargs: Dict[str, Any] = {"request_timeout": 1200, "streaming": True}
 
-    if _is_gemini_model(effective_model_name):
+    if _is_gemini_model(requested_name):
         _ensure_gemini_env()
-        bare_name = effective_model_name.removeprefix("models/")
-        effective_model_name = f"gemini/{bare_name}"
 
     else:
-        provider = _detect_provider(effective_model_name)
+        provider = _detect_provider(requested_name)
 
         if provider == "openrouter":
             kwargs["api_key"] = api_key or os.getenv("OPENROUTER_API_KEY")
@@ -54,11 +71,7 @@ def create_chat_model(model_name: Optional[str] = None,
             if base_url:
                 kwargs["api_base"] = base_url
 
-        elif provider in ("lm_studio", "llamacpp", "llama_cpp", "localai", "llamafile"):
-            model_parts = effective_model_name.split("/", 1)
-            model_suffix = model_parts[1] if len(model_parts) > 1 else "default"
-            effective_model_name = f"openai/{model_suffix}"
-
+        elif provider in _LOCAL_PROVIDERS:
             if provider == "lm_studio":
                 kwargs["api_base"] = base_url or os.getenv("LM_STUDIO_BASE_URL", "http://localhost:1234/v1")
             elif provider in ("llamacpp", "llama_cpp"):

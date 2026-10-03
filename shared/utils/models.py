@@ -195,6 +195,9 @@ class AgentConfig(Base):
     # and none can point at an agent you already run elsewhere.
     model_base_url = Column(String(1024), nullable=True)
     model_api_key = Column(String(1024), nullable=True)  # Literal, or ${VAR} read from the environment
+    # Re-run a request on this model when model_name still fails after retries.
+    # Reached through the provider env vars, never model_base_url / model_api_key.
+    fallback_model = Column(String(255), nullable=True)
     # EU AI Act Art. 50: people must be told they are interacting with an AI.
     # NULL text means the default disclosure is shown. Setting a waiver turns the
     # disclosure off, and the column holds the reason — so it cannot be switched
@@ -296,6 +299,7 @@ class AgentConfig(Base):
             'model_name': self.model_name,
             'model_base_url': self.model_base_url,
             'model_api_key': self.model_api_key,
+            'fallback_model': self.fallback_model,
             'ai_disclosure': self.ai_disclosure,
             'ai_disclosure_waiver': self.ai_disclosure_waiver,
             'description': self.description,

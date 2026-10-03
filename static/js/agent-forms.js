@@ -701,6 +701,7 @@ function editAgent(config) {
     document.getElementById('editAgentType').value = config.type;
     document.getElementById('editAgentModel').value = config.model_name || '';
     document.getElementById('editAgentModelBaseUrl').value = config.model_base_url || '';
+    document.getElementById('editAgentFallbackModel').value = config.fallback_model || '';
     document.getElementById('editAgentAiDisclosure').value = config.ai_disclosure || '';
     document.getElementById('editAgentAiDisclosureWaiver').value = config.ai_disclosure_waiver || '';
     document.getElementById('editAgentModelApiKey').value = config.model_api_key || '';
@@ -823,6 +824,7 @@ function copyAgent(config) {
     document.getElementById('copyAgentType').value = config.type;
     document.getElementById('copyAgentModel').value = config.model_name || '';
     document.getElementById('copyAgentModelBaseUrl').value = config.model_base_url || '';
+    document.getElementById('copyAgentFallbackModel').value = config.fallback_model || '';
     document.getElementById('copyAgentAiDisclosure').value = config.ai_disclosure || '';
     document.getElementById('copyAgentAiDisclosureWaiver').value = config.ai_disclosure_waiver || '';
     // The browser never saw the original key, so leave the copy's field empty

@@ -130,6 +130,17 @@ container_class='', projects_list=None, current_project_id=None) %}
                                 stored in the database and in this agent's version history.</p>
                         </div>
                     </div>
+                    <div>
+                        <label for="{{ id_prefix }}FallbackModel"
+                            class="block text-xs font-medium text-gray-700 dark:text-gray-300">Fallback Model
+                            <span class="text-gray-400 font-normal">(optional)</span></label>
+                        <input type="text" id="{{ id_prefix }}FallbackModel" name="{{ id_prefix }}FallbackModel"
+                            placeholder="openai/gpt-4o-mini"
+                            class="mt-0.5 block w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500">
+                        <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Answers instead when the model
+                            above fails, so a provider outage does not reach the person chatting. Uses the provider's
+                            server key, not the base URL or key above.</p>
+                    </div>
                     <div class="grid grid-cols-2 gap-2">
                         <div>
                             <label for="{{ id_prefix }}AiDisclosure"

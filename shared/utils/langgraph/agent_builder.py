@@ -38,7 +38,8 @@ class BuiltAgent:
 
     def __init__(self, name: str, graph: Any, model_name: str, config: Dict[str, Any],
                  guardrail_engines: Optional[Dict[str, Any]] = None,
-                 model_names: Optional[Dict[str, str]] = None):
+                 model_names: Optional[Dict[str, str]] = None,
+                 fallback_models: Optional[Dict[str, str]] = None):
         self.name = name
         self.graph = graph
         self.model_name = model_name
@@ -46,6 +47,8 @@ class BuiltAgent:
         self.guardrail_engines = guardrail_engines or {}
         # author (agent name) → model name, for token logging in multi-agent trees
         self.model_names = model_names or {name: model_name}
+        # author → configured fallback model, for agents that have one
+        self.fallback_models = fallback_models or {}
 
 
 _checkpointer = None
@@ -113,6 +116,17 @@ def _json_field(config: Dict[str, Any], key: str) -> Dict[str, Any]:
         return json.loads(raw)
     except (json.JSONDecodeError, TypeError):
         return {}
+
+
+def _fallback_model(config: Dict[str, Any]) -> Optional[str]:
+    """The agent's fallback model, or None when unset or the same as its own model."""
+    from shared.utils.langgraph.model_factory import litellm_model_name
+
+    fallback = (config.get("fallback_model") or "").strip()
+    # Compared as litellm sees them: a run tells the two apart by that name.
+    if not fallback or litellm_model_name(fallback) == litellm_model_name(config.get("model_name")):
+        return None
+    return fallback
 
 
 def _make_prompt(instruction: Optional[str], transfer_note: Optional[str] = None):
@@ -273,6 +287,8 @@ class AgentBuilder:
 
         guardrail_engines = self._build_guardrail_engines(tree)
         model_names = {name: config.get("model_name") for name, config in tree.items()}
+        fallback_models = {name: fallback for name, config in tree.items()
+                           if (fallback := _fallback_model(config))}
 
         if len(tree) == 1:
             graph = await self._build_react_agent(root_config, children_of, checkpointer=checkpointer,
@@ -284,7 +300,7 @@ class AgentBuilder:
         logger.info(f"Built LangGraph agent '{app_name}' ({len(tree)} agent(s) in tree)")
         return BuiltAgent(name=app_name, graph=graph, model_name=root_config.get("model_name"),
                           config=root_config, guardrail_engines=guardrail_engines,
-                          model_names=model_names)
+                          model_names=model_names, fallback_models=fallback_models)
 
     def _collect_tree(self, config: Dict[str, Any], tree: Dict[str, Dict[str, Any]],
                       children_of: Dict[str, List[str]]) -> None:
@@ -340,6 +356,12 @@ class AgentBuilder:
             api_key=api_key,
             base_url=base_url,
         )
+        fallback = _fallback_model(config)
+        if fallback:
+            # Provider env vars only: the agent's endpoint and key belong to its own
+            # model, and the fallback is usually on another provider's host.
+            model = model.with_fallbacks([create_chat_model(
+                fallback, generate_content_config=_json_field(config, "generate_content_config"))])
         tools = await self._build_tools(config)
         if extra_tools:
             tools.extend(extra_tools)

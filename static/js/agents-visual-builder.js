@@ -373,6 +373,7 @@
         formData.append('project_id', projectId != null ? String(projectId) : '');
         formData.append('model_name', agent.model_name || '');
                         formData.append('model_base_url', agent.model_base_url || '');
+        formData.append('fallback_model', agent.fallback_model || '');
                         formData.append('model_api_key', agent.model_api_key || '');
         formData.append('description', agent.description || '');
         formData.append('instruction', agent.instruction || '');
@@ -1209,6 +1210,21 @@
                     null,
                     React.createElement(
                         'label',
+                        { className: 'block text-[11px] font-semibold mb-1' },
+                        'Fallback model',
+                    ),
+                    React.createElement('input', {
+                        className: 'w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-xs',
+                        value: agent.fallback_model || '',
+                        placeholder: 'Used when the model fails',
+                        onChange: handleInput('fallback_model'),
+                    }),
+                ),
+                React.createElement(
+                    'div',
+                    null,
+                    React.createElement(
+                        'label',
                         { className: 'block text-[11px] font-semibold mb-1 text-gray-700 dark:text-gray-300' },
                         'Description ',
                         React.createElement('span', { className: 'text-red-500 font-bold' }, '*')
@@ -1637,6 +1653,7 @@
                 formData.append('type', document.getElementById('editAgentType').value);
                 formData.append('model_name', document.getElementById('editAgentModel').value || '');
                 formData.append('model_base_url', document.getElementById('editAgentModelBaseUrl').value || '');
+                formData.append('fallback_model', document.getElementById('editAgentFallbackModel').value || '');
                 formData.append('model_api_key', document.getElementById('editAgentModelApiKey').value || '');
                 formData.append('description', description);
                 formData.append('instruction', instruction);
