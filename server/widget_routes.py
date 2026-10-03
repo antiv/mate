@@ -225,7 +225,7 @@ def _check_origin(request: Request, widget_key: WidgetApiKey, require_origin: bo
             raise HTTPException(status_code=403, detail="Origin required for this request")
         return
 
-    if any(_origin_matches(origin, entry) for entry in allowed):
+    if any(isinstance(entry, str) and _origin_matches(origin, entry) for entry in allowed):
         return
 
     if not ORIGIN_STRICT:

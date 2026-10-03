@@ -42,7 +42,14 @@ WARNING [server.csp] CSP violation: script-src-elem blocked 'https://cdn.example
 ```
 
 Query strings are removed from the logged URLs, since a page URL can carry a
-widget key. At most 500 distinct violations are logged until restart.
+widget key. The endpoint needs no login, as browsers send reports without one,
+so its input is treated as hostile:
+
+- A report body over 16 KB is refused before it is read.
+- Logging works in 10-minute windows. Each distinct violation is logged once
+  per window, and at most 100 are logged per window. When a window ends, the
+  log says how many reports it dropped. A flood of fake reports can therefore
+  hide real ones for one window at most, not until a restart.
 
 Once the log stays quiet in normal use, switch to enforcing:
 

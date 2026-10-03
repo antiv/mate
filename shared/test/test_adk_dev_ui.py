@@ -41,6 +41,13 @@ class TestAdkDevUiEnabled(unittest.TestCase):
             with self.subTest(value=value):
                 self.assertFalse(self._enabled(ADK_DEV_UI=value))
 
+    def test_an_unknown_value_cannot_turn_it_on_in_production(self):
+        with self.assertLogs("shared.utils.utils", level="WARNING"):
+            self.assertFalse(self._enabled(MATE_ENV="production", ADK_DEV_UI="disabled"))
+        for value in ("1", "yes", "on", "TRUE"):
+            with self.subTest(value=value):
+                self.assertTrue(self._enabled(MATE_ENV="production", ADK_DEV_UI=value))
+
     def test_an_empty_value_means_the_default(self):
         self.assertFalse(self._enabled(MATE_ENV="production", ADK_DEV_UI=""))
 

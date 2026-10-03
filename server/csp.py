@@ -20,6 +20,7 @@ import json
 import logging
 import os
 import re
+import time
 from typing import Iterable, List, Optional
 from urllib.parse import urlparse
 
@@ -136,7 +137,7 @@ def widget_frame_ancestors(allowed_origins: Optional[List[str]]) -> str:
         return "'self'"  # a malformed allowlist allows no one, as _check_origin does
     sources = ["'self'"]
     for entry in allowed_origins:
-        source = _origin_to_source(entry)
+        source = _origin_to_source(entry) if isinstance(entry, str) else None
         if source and source not in sources:
             sources.append(source)
     return " ".join(sources)
@@ -212,53 +213,89 @@ def set_csp_header(response: Response, frame_ancestors: str) -> Response:
 
 report_router = APIRouter(tags=["Security"])
 
-# Reports come unauthenticated from any browser, so the body and the number of
-# distinct reports logged are both capped.
+# Reports come unauthenticated from any browser. The body is capped before it is
+# read, and logging works in windows: each distinct violation is logged once per
+# window, and at most MAX_REPORTS_PER_WINDOW lines are. A budget for the life of
+# the process would let a flood of fake reports silence real ones until restart;
+# a window mutes them only until it ends, and its end says how many were dropped.
 MAX_REPORT_BYTES = 16 * 1024
-MAX_DISTINCT_REPORTS = 500
+REPORT_WINDOW_SECONDS = 600
+MAX_REPORTS_PER_WINDOW = 100
 _seen_reports: set = set()
+_window = {"started": 0.0, "dropped": 0}
 
 
 def _clean(value, limit: int = 300) -> str:
-    """One line of report text for the log: no control characters, bounded."""
-    return re.sub(r"[\x00-\x1f\x7f]", " ", str(value or ""))[:limit]
+    """One line of report text for the log: no line breaks or control characters, bounded."""
+    return re.sub(r"[\x00-\x1f\x7f\x85\u2028\u2029]", " ", str(value or ""))[:limit]
+
+
+def _text(value) -> str:
+    """A report field as text; anything but a string is ignored."""
+    return value if isinstance(value, str) else ""
 
 
 def _strip_query(url: str) -> str:
     """Drop query and fragment: the page URL can carry a widget key or a token."""
-    return str(url or "").split("?", 1)[0].split("#", 1)[0]
+    return url.split("?", 1)[0].split("#", 1)[0]
+
+
+def _start_window_if_due() -> None:
+    now = time.monotonic()
+    if now - _window["started"] < REPORT_WINDOW_SECONDS:
+        return
+    if _window["dropped"]:
+        logger.warning(f"CSP: {_window['dropped']} more violation report(s) were not logged "
+                       f"in the last {REPORT_WINDOW_SECONDS // 60} minutes")
+    _seen_reports.clear()
+    _window.update(started=now, dropped=0)
+
+
+async def _read_capped(request: Request) -> Optional[bytes]:
+    """The request body, or None once it exceeds MAX_REPORT_BYTES (without reading the rest)."""
+    declared = request.headers.get("content-length")
+    if declared is not None:
+        try:
+            if int(declared) > MAX_REPORT_BYTES:
+                return None
+        except ValueError:
+            return None
+    body = bytearray()
+    async for chunk in request.stream():
+        body += chunk
+        if len(body) > MAX_REPORT_BYTES:
+            return None
+    return bytes(body)
 
 
 @report_router.post(REPORT_PATH, include_in_schema=False)
 async def csp_report(request: Request) -> Response:
-    """Log a CSP violation the browser reports, once per distinct violation."""
-    body = await request.body()
-    if len(body) > MAX_REPORT_BYTES:
+    """Log a CSP violation the browser reports, once per distinct violation and window."""
+    body = await _read_capped(request)
+    if body is None:
         return Response(status_code=413)
     try:
         payload = json.loads(body or b"{}")
-    except ValueError:
+    except (ValueError, RecursionError):
         return Response(status_code=400)
     # report-uri sends {"csp-report": {...}}; the Reporting API sends a list
     reports = payload if isinstance(payload, list) else [payload]
+    _start_window_if_due()
     for item in reports:
         if not isinstance(item, dict):
             continue
         report = item.get("csp-report") or item.get("body") or {}
         if not isinstance(report, dict):
             continue
-        directive = report.get("effective-directive") or report.get("effectiveDirective") \
-            or report.get("violated-directive") or ""
-        blocked = _strip_query(report.get("blocked-uri") or report.get("blockedURL") or "")
-        page = urlparse(_strip_query(report.get("document-uri") or report.get("documentURL") or "")).path
+        directive = _text(report.get("effective-directive")) or _text(report.get("effectiveDirective")) \
+            or _text(report.get("violated-directive"))
+        blocked = _strip_query(_text(report.get("blocked-uri")) or _text(report.get("blockedURL")))
+        page = urlparse(_strip_query(_text(report.get("document-uri")) or _text(report.get("documentURL")))).path
         key = (directive, blocked, page)
         if key in _seen_reports:
             continue
-        if len(_seen_reports) >= MAX_DISTINCT_REPORTS:
-            if len(_seen_reports) == MAX_DISTINCT_REPORTS:
-                _seen_reports.add(None)
-                logger.warning(f"CSP: {MAX_DISTINCT_REPORTS} distinct violations logged; "
-                               "ignoring further ones until restart")
+        if len(_seen_reports) >= MAX_REPORTS_PER_WINDOW:
+            _window["dropped"] += 1
             continue
         _seen_reports.add(key)
         logger.warning(f"CSP violation: {_clean(directive, 60)} blocked "

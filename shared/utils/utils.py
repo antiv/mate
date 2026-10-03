@@ -254,11 +254,16 @@ def adk_dev_ui_enabled() -> bool:
     It is a debugging tool that shows admins every event, tool argument and
     session state, and it runs on the dashboard's origin, so production leaves
     it off unless ADK_DEV_UI=true says otherwise. Elsewhere it is on unless
-    ADK_DEV_UI=false.
+    ADK_DEV_UI=false. A value that is neither is ignored, so a typo cannot turn
+    it on in production.
     """
     value = os.getenv("ADK_DEV_UI", "").strip().lower()
+    if value in ("true", "1", "yes", "on"):
+        return True
+    if value in ("false", "0", "no", "off"):
+        return False
     if value:
-        return value not in ("false", "0", "no", "off")
+        logger.warning(f"ADK_DEV_UI={value!r} is not true or false; using the default")
     return os.getenv("MATE_ENV", "development").strip().lower() != "production"
 
 

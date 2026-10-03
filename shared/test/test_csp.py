@@ -180,6 +180,10 @@ class TestWidgetFrameAncestors(unittest.TestCase):
         ])
         self.assertEqual(value, "'self'")
 
+    def test_entries_that_are_not_strings_are_skipped(self):
+        self.assertEqual(csp.widget_frame_ancestors(["https://a.example", 5, None, {"x": 1}]).split(),
+                         ["'self'", "https://a.example"])
+
     def test_an_empty_or_malformed_allowlist_allows_only_self(self):
         self.assertEqual(csp.widget_frame_ancestors([]), "'self'")
         self.assertEqual(csp.widget_frame_ancestors("https://a.example"), "'self'")
@@ -225,9 +229,14 @@ class TestWidgetChatPage(unittest.TestCase):
 class TestReports(unittest.TestCase):
 
     def setUp(self):
-        csp._seen_reports.clear()
-        self.addCleanup(csp._seen_reports.clear)
+        self._reset()
+        self.addCleanup(self._reset)
         self.client = _app()
+
+    @staticmethod
+    def _reset():
+        csp._seen_reports.clear()
+        csp._window.update(started=0.0, dropped=0)
 
     def _post(self, body, content_type="application/csp-report"):
         return self.client.post(csp.REPORT_PATH, content=body, headers={"Content-Type": content_type})
@@ -265,14 +274,61 @@ class TestReports(unittest.TestCase):
         self.assertEqual(self._post("not json").status_code, 400)
         self.assertEqual(self._post('"a string"').status_code, 204)
 
-    def test_distinct_reports_are_capped(self):
-        with patch.object(csp, "MAX_DISTINCT_REPORTS", 2), \
+    def _report(self, i):
+        return ('{"csp-report": {"document-uri": "https://m.example/a",'
+                f' "effective-directive": "img-src", "blocked-uri": "https://x{i}.example/"}}}}')
+
+    def test_logging_is_capped_per_window_not_for_good(self):
+        # Anyone can post reports, so a flood of fake ones must not silence real
+        # ones until restart: the next window logs again and says what it dropped
+        clock = [1000.0]
+        with patch.object(csp, "MAX_REPORTS_PER_WINDOW", 2), \
+                patch.object(csp.time, "monotonic", side_effect=lambda: clock[0]), \
                 self.assertLogs("server.csp", level="WARNING") as logs:
             for i in range(5):
-                self._post('{"csp-report": {"document-uri": "https://m.example/a",'
-                           f' "effective-directive": "img-src", "blocked-uri": "https://x{i}.example/"}}}}')
-        self.assertEqual(len(logs.output), 3)  # two reports and one notice that the rest are dropped
-        self.assertIn("ignoring further ones", logs.output[2])
+                self._post(self._report(i))
+            self.assertEqual(len(logs.output), 2)
+            clock[0] += csp.REPORT_WINDOW_SECONDS
+            self._post(self._report("real"))
+        self.assertIn("3 more violation report(s) were not logged", logs.output[2])
+        self.assertIn("https://xreal.example/", logs.output[3])
+
+    def test_a_large_body_is_refused_before_it_is_read(self):
+        import asyncio
+        read = []
+
+        class _Request:
+            headers = {}
+
+            async def stream(self):
+                for _ in range(100):
+                    read.append(1)
+                    yield b"x" * 1024
+
+        self.assertIsNone(asyncio.run(csp._read_capped(_Request())))
+        self.assertLessEqual(len(read), csp.MAX_REPORT_BYTES // 1024 + 1, "read past the cap")
+        # A declared length over the cap is refused without reading at all
+        r = self.client.post(csp.REPORT_PATH, content=b"{}",
+                             headers={"Content-Type": "application/csp-report",
+                                      "Content-Length": str(csp.MAX_REPORT_BYTES + 1)})
+        self.assertEqual(r.status_code, 413)
+
+    def test_fields_that_are_not_strings_are_ignored(self):
+        body = '{"csp-report": {"effective-directive": ["x"], "blocked-uri": {"a": 1}, "document-uri": 5}}'
+        self.assertEqual(self._post(body).status_code, 204)
+
+    def test_deeply_nested_json_is_a_bad_request(self):
+        body = "[" * 100000 + "]" * 100000
+        with patch.object(csp, "MAX_REPORT_BYTES", 300000):
+            self.assertEqual(self._post(body).status_code, 400)
+
+    def test_unicode_line_breaks_cannot_forge_log_lines(self):
+        body = ('{"csp-report": {"document-uri": "https://m.example/a", "effective-directive": "img-src",'
+                ' "blocked-uri": "https://x.example/\\u2028WARNING forged\\u0085line"}}')
+        with self.assertLogs("server.csp", level="WARNING") as logs:
+            self._post(body)
+        for ch in ("\u2028", "\u0085"):
+            self.assertNotIn(ch, logs.output[0])
 
 
 if __name__ == "__main__":
