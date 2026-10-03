@@ -73,7 +73,7 @@
                 id="docsIframe"
                 src=""
                 class="w-full h-[calc(100vh-200px)] border-0"
-                onload="hideDocsLoader()"
+                onload="if (this.getAttribute('src')) hideDocsLoader()"
                 onerror="showDocsError()"
                 sandbox="allow-same-origin allow-scripts allow-forms allow-popups">
             </iframe>

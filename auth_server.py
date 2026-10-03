@@ -262,6 +262,10 @@ app.add_middleware(
     same_site="lax",
 )
 
+# Content-Security-Policy on HTML responses (Report-Only unless CSP_MODE=enforce)
+from server.csp import add_csp_header, report_router as csp_report_router
+app.middleware("http")(add_csp_header)
+
 # Rate limit middleware (optional, enable with RATE_LIMIT_ENABLED=true)
 if os.getenv("RATE_LIMIT_ENABLED", "false").lower() in ("true", "1", "yes"):
     from server.rate_limit_middleware import RateLimitMiddleware
@@ -386,6 +390,7 @@ app.include_router(wizard_router)
 app.include_router(slack_router)
 app.include_router(slack_dashboard_router)
 app.include_router(public_artifacts_router)
+app.include_router(csp_report_router)
 app.include_router(proxy_router)
 app.include_router(browser_router)
 

@@ -9,6 +9,7 @@ same-origin and carry MATE's own origin, so they cannot be attributed to the
 parent site. Both are now checked.
 """
 
+import json
 import unittest
 from unittest.mock import patch
 import sys
@@ -147,6 +148,36 @@ class TestNoAllowlistIsOpen(unittest.TestCase):
             r = self.client.get("/widget/public-config?key=wk_public",
                                 headers={"Origin": "https://anywhere.example"})
         self.assertEqual(r.status_code, 200)
+
+
+
+class TestChatPageConfigEscaping(unittest.TestCase):
+    """
+    The widget config is written through the widget admin API, by whoever holds
+    the key's admin key. It went into an inline <script> with json.dumps, which
+    leaves "</script>" intact, so a title could close the script and run its
+    own on MATE's origin, the dashboard's.
+    """
+
+    def test_a_config_cannot_close_the_script(self):
+        payload = "</script><script>alert(document.domain)</script>"
+
+        class _HostileKey(_Key):
+            def get_widget_config(self):
+                return {"title": payload, "greeting": "<!--"}
+
+        app = FastAPI()
+        app.include_router(wr.router)
+        with patch.object(wr, "_lookup_widget_key", return_value=_HostileKey(None)), \
+                patch.object(wr, "_agent_disclosure", return_value="AI"):
+            r = TestClient(app, base_url="http://mate.local").get("/widget/chat?key=wk_public")
+        self.assertEqual(r.status_code, 200)
+        self.assertNotIn("<script>alert", r.text)
+        self.assertNotIn("</script><script>", r.text)
+        # Still the same value once the browser parses the JSON
+        start = r.text.index("window.WIDGET_CONFIG = ") + len("window.WIDGET_CONFIG = ")
+        config = json.loads(r.text[start:r.text.index(";\n", start)])
+        self.assertEqual(config["title"], payload)
 
 
 if __name__ == "__main__":

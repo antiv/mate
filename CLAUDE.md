@@ -96,11 +96,14 @@ Do not add attribution trailers to commit messages: no `Co-Authored-By: Claude .
 | `AUTH_USERNAME` / `AUTH_PASSWORD` | Dashboard login |
 | `MATE_ENV` | `development` (default) or `production`; production refuses insecure defaults |
 | `MATE_ALLOW_INSECURE_DEFAULTS` | Override the production startup checks |
+| `ADK_DEV_UI` | Serve ADK's dev UI at `/dev-ui` (admins only); defaults to off when `MATE_ENV=production`, on otherwise |
 | `ALLOWED_ORIGINS` | Comma-separated CORS allowlist |
 | `TRUSTED_PROXY_HOSTS` | Proxy hosts trusted for `X-Forwarded-*` headers; audit logs only trust `X-Forwarded-For` when set |
 | `OAUTH_ALLOWED_DOMAINS` / `OAUTH_ALLOWED_EMAILS` | Restrict who may sign in via SSO (unset = anyone with a provider account) |
 | `TOKEN_TTL_HOURS` | Bearer token lifetime, default 24 |
 | `WIDGET_ORIGIN_STRICT` | Enforce (vs. only log) a widget key's origin allowlist |
+| `CSP_MODE` | Content-Security-Policy: `report-only` (default), `enforce` or `off` |
+| `CSP_EXTRA_SOURCES` | Extra hosts the CSP allows for scripts, styles, fonts, connections and frames |
 | `BROWSER_ALLOW_PRIVATE_NETWORK` | Let the server-side browser load private/loopback addresses (blocked by default) |
 | `MATE_ALLOW_CODE_EXECUTOR_ON_WIDGET` | Allow `code_executor` on an agent that has a widget key (refused by default — it is not a sandbox) |
 | `WIDGET_LEGACY_ADMIN_KEY` | Transitional: let the public widget key work on `/widget/api` admin routes |
@@ -119,7 +122,7 @@ Do not add attribution trailers to commit messages: no `Co-Authored-By: Claude .
 ## Important Documentation
 
 - `AGENTS.md` — Architecture patterns and development guidelines (read before adding new agents or tools)
-- `documents/` — Feature-specific docs: `MCP_SERVERS.md`, `RATE_LIMITS.md`, `ALERTS.md`, `TRACING.md`, `WIDGET_INTEGRATION.md`, `TEMPLATE_LIBRARY.md`, `AGENT_WIZARD.md`, `LANGGRAPH_RUNTIME.md`, `EXTERNAL_AGENTS.md`, `FALLBACK_MODEL.md`, `AI_ACT.md`
+- `documents/` — Feature-specific docs: `MCP_SERVERS.md`, `RATE_LIMITS.md`, `ALERTS.md`, `TRACING.md`, `WIDGET_INTEGRATION.md`, `TEMPLATE_LIBRARY.md`, `AGENT_WIZARD.md`, `LANGGRAPH_RUNTIME.md`, `EXTERNAL_AGENTS.md`, `FALLBACK_MODEL.md`, `CSP.md`, `AI_ACT.md`
 - `shared/sql/README.md` — Database schema reference
 
 

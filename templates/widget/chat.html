@@ -57,9 +57,9 @@
   </div>
 
   <script>
-    window.WIDGET_API_KEY = "{{ api_key }}";
-    window.WIDGET_AGENT_NAME = "{{ agent_name }}";
-    window.WIDGET_CONFIG = {{ widget_config | safe }};
+    window.WIDGET_API_KEY = {{ api_key | tojson }};
+    window.WIDGET_AGENT_NAME = {{ agent_name | tojson }};
+    window.WIDGET_CONFIG = {{ widget_config | tojson }};
   </script>
   <script src="/static/js/widget/chat.js?v=14"></script>
 </body>

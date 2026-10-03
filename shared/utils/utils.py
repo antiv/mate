@@ -248,6 +248,25 @@ def resolve_agent_endpoint(config: Dict[str, Any]) -> Tuple[Optional[str], Optio
     return base_url, api_key
 
 
+def adk_dev_ui_enabled() -> bool:
+    """Whether ADK's dev UI (/dev-ui) is served.
+
+    It is a debugging tool that shows admins every event, tool argument and
+    session state, and it runs on the dashboard's origin, so production leaves
+    it off unless ADK_DEV_UI=true says otherwise. Elsewhere it is on unless
+    ADK_DEV_UI=false. A value that is neither is ignored, so a typo cannot turn
+    it on in production.
+    """
+    value = os.getenv("ADK_DEV_UI", "").strip().lower()
+    if value in ("true", "1", "yes", "on"):
+        return True
+    if value in ("false", "0", "no", "off"):
+        return False
+    if value:
+        logger.warning(f"ADK_DEV_UI={value!r} is not true or false; using the default")
+    return os.getenv("MATE_ENV", "development").strip().lower() != "production"
+
+
 def create_model_from_agent_config(config: Dict[str, Any]):
     """Build the model for a database-configured agent, honouring its own endpoint."""
     base_url, api_key = resolve_agent_endpoint(config)

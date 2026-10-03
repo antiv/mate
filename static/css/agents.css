@@ -238,15 +238,6 @@ th.sortable {
 }
 
 
-/* Agent chat side panel */
-body.chat-panel-open {
-    overflow: hidden;
-}
-
-#agentChatPanel.hidden {
-    display: none !important;
-}
-
 
 /* ─── React Flow Visual Builder: Node Overrides ─── */
 .react-flow__node {

@@ -26,6 +26,7 @@ from fastapi.templating import Jinja2Templates
 from shared.utils.database_client import get_database_client
 from shared.utils.models import WidgetApiKey, AgentConfig, Project
 from shared.utils.ai_disclosure import DEFAULT_DISCLOSURE, resolve_disclosure
+from server.csp import set_csp_header, widget_frame_ancestors
 
 logger = logging.getLogger(__name__)
 
@@ -224,7 +225,7 @@ def _check_origin(request: Request, widget_key: WidgetApiKey, require_origin: bo
             raise HTTPException(status_code=403, detail="Origin required for this request")
         return
 
-    if any(_origin_matches(origin, entry) for entry in allowed):
+    if any(isinstance(entry, str) and _origin_matches(origin, entry) for entry in allowed):
         return
 
     if not ORIGIN_STRICT:
@@ -297,27 +298,34 @@ async def widget_chat_page(request: Request, key: str = Query(...)):
     same-origin, so the allowlist can only be enforced here and on
     /widget/public-config, not on /widget/api/chat.
     """
+    # The error pages may be framed anywhere, so the embedding site shows the
+    # message rather than a frame the browser refused to load.
     wk = _lookup_widget_key(key)
     if wk is None:
-        return HTMLResponse("<h3>Invalid widget key</h3>", status_code=401)
+        return set_csp_header(HTMLResponse("<h3>Invalid widget key</h3>", status_code=401), "*")
     try:
         _check_origin(request, wk)
     except HTTPException:
-        return HTMLResponse(
+        return set_csp_header(HTMLResponse(
             "<h3>This chat widget is not enabled for this site.</h3>", status_code=403
-        )
+        ), "*")
     widget_cfg = dict(wk.get_widget_config())
     # Set here rather than stored in widget_config: that blob is editable through
     # the widget admin API by whoever embeds the widget, and the disclosure is not
     # theirs to remove. Overwriting on every render makes the agent row the only
     # source of truth.
     widget_cfg["ai_disclosure"] = _agent_disclosure(wk.agent_name)
-    return templates.TemplateResponse(request, "widget/chat.html", {
+    response = templates.TemplateResponse(request, "widget/chat.html", {
         "request": request,
         "api_key": key,
         "agent_name": wk.agent_name,
-        "widget_config": json.dumps(widget_cfg),
+        # A dict, rendered with tojson: the config is written through the widget
+        # admin API, and json.dumps leaves "</script>" in it intact.
+        "widget_config": widget_cfg,
     })
+    # Customer sites frame this page, so it cannot take the dashboard's
+    # frame-ancestors 'self'. It allows the sites _check_origin lets through.
+    return set_csp_header(response, widget_frame_ancestors(wk.get_allowed_origins(), ORIGIN_STRICT))
 
 
 @router.get("/public-config", include_in_schema=False)

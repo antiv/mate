@@ -89,6 +89,11 @@ pip install "langgraph-cli[inmem]"           # dev dependency, already in the ve
 STUDIO_AGENT=chess_mate_root langgraph dev --allow-blocking
 ```
 
+Never run `langgraph dev` on a production server or expose its port: it has no
+MATE login, RBAC or guardrails (see below), and it is not installed in the
+Docker image. The same goes for ADK's dev UI, which is off by default when
+`MATE_ENV=production`.
+
 - `STUDIO_AGENT` picks the agent (defaults to the first `AGENTS_LIST` entry).
 - `--allow-blocking` is required — MATE's DB layer is synchronous.
 - The command starts a dev server on **http://127.0.0.1:2024** and prints a
