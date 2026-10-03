@@ -30,8 +30,9 @@ psutil
 # MCP dependencies for MCP servers
 mcp
 starlette
-# SQLAlchemy ORM
-sqlalchemy
+# SQLAlchemy ORM. 2.1 makes postgresql:// use psycopg (v3), which is not installed:
+# with it the server starts without a database.
+sqlalchemy>=2.0,<2.1
 # Database drivers (install based on DB_TYPE)
 psycopg2-binary  # For PostgreSQL
 asyncpg  # For Async PostgreSQL
