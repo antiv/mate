@@ -9,6 +9,7 @@ using SQLAlchemy ORM:
 """
 
 import os
+import time
 import logging
 from typing import Optional
 from pathlib import Path
@@ -118,9 +119,7 @@ class DatabaseClient:
             if self._db_type == "sqlite":
                 self._configure_sqlite_concurrent_access()
             
-            # Test the connection
-            with self._engine.connect() as conn:
-                conn.execute(text("SELECT 1"))
+            self._wait_for_database()
             
             logger.info(f"Database client initialized successfully with {self._db_type}")
             
@@ -134,6 +133,20 @@ class DatabaseClient:
             self._engine = None
             self._session_factory = None
     
+    def _wait_for_database(self):
+        """Test the connection, retrying a server database that may still be starting."""
+        attempts = 1 if self._db_type == "sqlite" else max(1, int(os.getenv("DB_CONNECT_RETRIES", "5")))
+        for attempt in range(1, attempts + 1):
+            try:
+                with self._engine.connect() as conn:
+                    conn.execute(text("SELECT 1"))
+                return
+            except Exception as e:
+                if attempt == attempts:
+                    raise
+                logger.warning(f"Database not reachable (attempt {attempt}/{attempts}): {e}")
+                time.sleep(3)
+
     def get_session(self) -> Optional[Session]:
         """Get a new database session."""
         if not self._session_factory:

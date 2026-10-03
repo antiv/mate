@@ -4,9 +4,11 @@ Authenticated MATE (Multi-Agent Tree Engine) Server
 Wraps the ADK web interface with basic HTTP authentication
 """
 
+import asyncio
 import os
 import logging
 import secrets
+import sys
 import threading
 import time
 from pathlib import Path
@@ -65,6 +67,7 @@ logger = logging.getLogger(__name__)
 
 # Configuration
 from shared.utils.utils import get_adk_config, get_database_config
+from shared.utils.database_client import get_database_client
 
 adk_config = get_adk_config()
 db_config = get_database_config()
@@ -310,13 +313,18 @@ async def health_check():
     image_status = "available" if image_mcp_server and image_mcp_server.image_mcp_available else "unavailable"
     gdrive_status = "available" if gdrive_mcp_server and gdrive_mcp_server.gdrive_mcp_available else "unavailable"
     dashboard_status = "available" if dashboard_server else "unavailable"
-    return {
-        "status": "healthy",
+    database_ok = await asyncio.to_thread(get_database_client().is_connected)
+    body = {
+        "status": "healthy" if database_ok else "unhealthy",
         "service": "mate-auth",
+        "database": "available" if database_ok else "unavailable",
         "image_mcp": image_status,
         "gdrive_mcp": gdrive_status,
         "dashboard": dashboard_status,
     }
+    if not database_ok:
+        return JSONResponse(status_code=503, content=body)
+    return body
 
 
 # ---------- Admin documentation ----------
@@ -413,6 +421,12 @@ def shutdown_event():
 
 # ---------- Entry point ----------
 if __name__ == "__main__":
+    # In production, a deploy that cannot reach its database must fail rather
+    # than serve an empty dashboard. DatabaseClient retries before giving up.
+    if IS_PRODUCTION and not get_database_client().is_connected():
+        logger.error("Database is unavailable; refusing to start with MATE_ENV=production.")
+        sys.exit(1)
+
     server_control = ServerControlService(
         adk_host=ADK_HOST,
         adk_port=ADK_PORT,
