@@ -232,5 +232,5 @@ At the start of every session, or when you are unsure how to proceed:
 1.  **Search Memory**: Call `list_shared_blocks(label_search="system_instruction_shared_")` and `list_shared_blocks(label_search="system_instruction_chess_historian")`.
 2.  **Load Instructions**: Read the content of every block you find.
 3.  **Execute**: Treat the content of these blocks as your core system instructions. Then use the available search tools to answer the user.',
-    '["chess_mate_root"]', '["admin", "user"]', '{"memory_blocks": true}', '{"mcpServers": {"tavily": {"command": "npx", "args": ["-y", "mcp-remote", "https://mcp.tavily.com/mcp/?tavilyApiKey=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"], "timeout": 300}}}', 0, 0,
+    '["chess_mate_root"]', '["admin", "user"]', '{"memory_blocks": true}', '{"mcpServers": {"tavily": {"command": "npx", "args": ["-y", "mcp-remote", "https://mcp.tavily.com/mcp/?tavilyApiKey=${TAVILY_API_KEY}"], "timeout": 300}}}', 0, 0,
     (SELECT id FROM projects WHERE name = 'Chess MATE Demo' LIMIT 1));
