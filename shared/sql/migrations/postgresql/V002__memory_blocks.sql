@@ -13,6 +13,17 @@ CREATE TABLE IF NOT EXISTS memory_blocks (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     UNIQUE(project_id, label)
 );
+-- If the table already existed (created from the ORM models), it may lack the
+-- unique constraint the ON CONFLICT seed inserts below need.
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conrelid = 'memory_blocks'::regclass AND contype = 'u'
+    ) THEN
+        ALTER TABLE memory_blocks ADD CONSTRAINT memory_blocks_project_id_label_key UNIQUE (project_id, label);
+    END IF;
+END $$;
 CREATE INDEX IF NOT EXISTS idx_memory_blocks_project_id ON memory_blocks(project_id);
 CREATE INDEX IF NOT EXISTS idx_memory_blocks_label ON memory_blocks(label);
 

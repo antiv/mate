@@ -124,8 +124,13 @@ class DatabaseClient:
             logger.info(f"Database client initialized successfully with {self._db_type}")
             
             # Run migrations first, then auto-create/update tables
-            self._run_migrations()
-            self._auto_create_tables()
+            # create_all on top of a half-migrated schema makes tables without
+            # the migrations' constraints and defaults, and later migrations then
+            # fail against them, so only fill in ORM tables once migrations pass.
+            if self._run_migrations():
+                self._auto_create_tables()
+            else:
+                logger.error("Database migrations failed; skipping ORM table creation")
             self._run_audit_retention()
 
         except Exception as e:
@@ -154,7 +159,7 @@ class DatabaseClient:
             return None
         return self._session_factory()
     
-    def _run_migrations(self):
+    def _run_migrations(self) -> bool:
         """Run database migrations on initialization."""
         try:
             from .migration_system import MigrationSystem
@@ -164,8 +169,10 @@ class DatabaseClient:
                 logger.info("Database migrations completed successfully")
             else:
                 logger.warning("Some database migrations may have failed")
+            return success
         except Exception as e:
             logger.warning(f"Failed to run database migrations: {e}")
+            return False
 
     def _run_audit_retention(self):
         """Run audit log retention (delete entries older than AUDIT_RETENTION_DAYS)."""
