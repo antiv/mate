@@ -259,6 +259,7 @@ class AgentManager:
                 # falls back to the provider env vars and the endpoint is ignored
                 'model_base_url': config.model_base_url,
                 'model_api_key': config.model_api_key,
+                'fallback_model': config.fallback_model,
                 'description': config.description,
                 'instruction': config.instruction,
                 'mcp_servers_config': config.mcp_servers_config,
@@ -739,8 +740,17 @@ class AgentManager:
                     agent_params['after_model_callback'] = after_callback
                 # Guarded so a future ADK version dropping the hook cannot break
                 # agent construction — error recording is not worth that.
-                if error_callback is not None and 'on_model_error_callback' in Agent.model_fields:
-                    agent_params['on_model_error_callback'] = error_callback
+                error_callbacks = [error_callback] if error_callback is not None else []
+                # After the recorder, which returns None: ADK stops at the first
+                # callback that returns a response.
+                fallback_model = (config.get('fallback_model') or '').strip()
+                if fallback_model and fallback_model != (config.get('model_name') or '').strip():
+                    from ..callbacks.model_fallback_callback import make_model_fallback_callback
+                    error_callbacks.append(make_model_fallback_callback(
+                        agent_name, config.get('model_name'), fallback_model))
+                    logger.info(f"Applied fallback model {fallback_model} to agent {agent_name}")
+                if error_callbacks and 'on_model_error_callback' in Agent.model_fields:
+                    agent_params['on_model_error_callback'] = error_callbacks
 
                 # Framework-level retry for this agent node (ADK 2.x BaseNode.retry_config)
                 if isinstance(planner_config, dict):

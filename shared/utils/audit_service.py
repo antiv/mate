@@ -47,6 +47,7 @@ ACTION_SERVER_STOP = "server.stop"
 ACTION_SERVER_RESTART = "server.restart"
 ACTION_AGENT_ACCESS = "agent.access"
 ACTION_AGENT_ROLLBACK = "agent.rollback"
+ACTION_MODEL_FALLBACK = "agent.model_fallback"
 # Turning off the Art. 50 "you are talking to an AI" notice is a compliance
 # decision, not a preference, so it is recorded separately from agent.update.
 ACTION_DISCLOSURE_WAIVED = "agent.disclosure_waived"

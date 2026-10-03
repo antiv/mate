@@ -9,6 +9,8 @@ unauthenticated request could store script that ran in an admin's browser.
 
 import unittest
 from unittest.mock import patch
+import shutil
+import subprocess
 import sys
 import os
 
@@ -18,6 +20,7 @@ from shared.utils.audit_service import _client_ip
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 AUDIT_TEMPLATE = os.path.join(REPO_ROOT, "templates", "dashboard", "audit_logs.html")
+INDEX_TEMPLATE = os.path.join(REPO_ROOT, "templates", "dashboard", "index.html")
 
 
 class _Client:
@@ -71,6 +74,41 @@ class TestAuditTemplateEscaping(unittest.TestCase):
             self.assertIn(f"esc({field}", row, f"{field} rendered unescaped")
         self.assertNotIn("+ (row.actor", row)
         self.assertNotIn("+ (row.ip_address", row)
+
+
+
+@unittest.skipUnless(shutil.which("node"), "node is not installed")
+class TestRecentActivityEscaping(unittest.TestCase):
+    """
+    The dashboard home lists the latest audit entries. Their actor can come from a
+    chat: a widget visitor picks their own user_id, and a fallback model or an RBAC
+    denial records it. Run the list's real code on such an entry.
+    """
+
+    def _render(self, entry):
+        with open(INDEX_TEMPLATE, encoding="utf-8") as fh:
+            source = fh.read()
+        start = source.index("    function loadRecentActivity() {")
+        if "    function esc(s) {" in source[:start]:
+            start = source.index("    function esc(s) {")
+        end = source.index("\n    }\n", source.index("Could not load activity.")) + len("\n    }\n")
+        script = (
+            "const list = {innerHTML: ''};\n"
+            "const document = {getElementById: () => list};\n"
+            f"const apiCall = () => Promise.resolve({{logs: [{entry}]}});\n"
+            + source[start:end]
+            + "\nloadRecentActivity();\nsetTimeout(() => process.stdout.write(list.innerHTML), 0);\n"
+        )
+        return subprocess.run(["node", "-e", script], capture_output=True, text=True,
+                              check=True, timeout=30).stdout
+
+    def test_actor_action_and_resource_are_escaped(self):
+        html = self._render("""{actor: 'widget_1_<img src=x onerror=alert(1)>',
+            action: '<b>agent.model_fallback</b>', resource_type: 'agent',
+            resource_id: '<svg onload=alert(2)>', timestamp: new Date().toISOString()}""")
+        self.assertIn("widget_1_&lt;img src=x onerror=alert(1)&gt;", html)
+        for raw in ("<img", "<svg", "<b>"):
+            self.assertNotIn(raw, html)
 
 
 if __name__ == "__main__":

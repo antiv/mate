@@ -86,6 +86,11 @@ def ai_message_to_event(message: AIMessage, author: str, invocation_id: str) -> 
     usage = _usage_of(message)
     if usage:
         event["usageMetadata"] = usage
+    # The model that answered, as ADK events carry it. With a fallback model it
+    # is how the run tells which of the two did.
+    model_version = (message.response_metadata or {}).get("model_name")
+    if model_version:
+        event["modelVersion"] = model_version
     return event
 
 

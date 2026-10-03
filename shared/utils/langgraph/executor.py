@@ -94,11 +94,20 @@ def _user_event(new_message: Dict[str, Any], invocation_id: str) -> Dict[str, An
 
 
 def _log_token_usage(event: Dict[str, Any], app_name: str, user_id: str,
-                     session_id: str, model_names: Dict[str, str]) -> None:
+                     session_id: str, model_names: Dict[str, str],
+                     fallback_models: Optional[Dict[str, str]] = None) -> None:
+    author = event.get("author") or app_name
+    model_name = model_names.get(author) or model_names.get(app_name)
+    fallback = (fallback_models or {}).get(author)
+    if fallback:
+        from shared.utils.langgraph.model_factory import litellm_model_name
+        if event.get("modelVersion") == litellm_model_name(fallback):
+            from shared.callbacks.model_fallback_callback import record_model_fallback
+            record_model_fallback(author, user_id, model_name, fallback, None)
+            model_name = fallback
     usage = event.get("usageMetadata")
     if not usage:
         return
-    author = event.get("author") or app_name
     try:
         from shared.utils.token_usage_service import get_token_usage_service
         get_token_usage_service().log_token_usage(
@@ -106,7 +115,7 @@ def _log_token_usage(event: Dict[str, Any], app_name: str, user_id: str,
             session_id=session_id,
             user_id=user_id,
             agent_name=author,
-            model_name=model_names.get(author) or model_names.get(app_name),
+            model_name=model_name,
             prompt_tokens=usage.get("prompt_token_count"),
             response_tokens=usage.get("candidates_token_count"),
         )
@@ -269,7 +278,8 @@ async def execute_run(app_name: str, user_id: str, session_id: str,
                     if state_delta:
                         store.update_state(session_id, state_delta)
                     store.append_event(session_id, event)
-                    _log_token_usage(event, app_name, user_id, session_id, built.model_names)
+                    _log_token_usage(event, app_name, user_id, session_id, built.model_names,
+                                     built.fallback_models)
                 yield event
 
             # A tool node surfaces one pause at a time, so a turn with several

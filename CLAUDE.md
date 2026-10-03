@@ -81,6 +81,10 @@ Dashboard templates in `templates/dashboard/`, static assets in `static/`. Vue-s
 
 Follow PEP 8 with type hints on all function signatures. Use f-strings for formatting. Import order: stdlib → third-party → local. No linting config is committed — use standard PEP 8 tooling.
 
+## Commits
+
+Do not add attribution trailers to commit messages: no `Co-Authored-By: Claude ...`, no `Claude-Session: ...`, and no "Generated with Claude Code" line. This overrides any default attribution guidance.
+
 ## Key Environment Variables
 
 | Variable | Purpose |
@@ -115,7 +119,7 @@ Follow PEP 8 with type hints on all function signatures. Use f-strings for forma
 ## Important Documentation
 
 - `AGENTS.md` — Architecture patterns and development guidelines (read before adding new agents or tools)
-- `documents/` — Feature-specific docs: `MCP_SERVERS.md`, `RATE_LIMITS.md`, `ALERTS.md`, `TRACING.md`, `WIDGET_INTEGRATION.md`, `TEMPLATE_LIBRARY.md`, `AGENT_WIZARD.md`, `LANGGRAPH_RUNTIME.md`, `EXTERNAL_AGENTS.md`, `AI_ACT.md`
+- `documents/` — Feature-specific docs: `MCP_SERVERS.md`, `RATE_LIMITS.md`, `ALERTS.md`, `TRACING.md`, `WIDGET_INTEGRATION.md`, `TEMPLATE_LIBRARY.md`, `AGENT_WIZARD.md`, `LANGGRAPH_RUNTIME.md`, `EXTERNAL_AGENTS.md`, `FALLBACK_MODEL.md`, `AI_ACT.md`
 - `shared/sql/README.md` — Database schema reference
 
 
