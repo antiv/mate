@@ -26,6 +26,7 @@ from fastapi.templating import Jinja2Templates
 from shared.utils.database_client import get_database_client
 from shared.utils.models import WidgetApiKey, AgentConfig, Project
 from shared.utils.ai_disclosure import DEFAULT_DISCLOSURE, resolve_disclosure
+from server.csp import set_csp_header, widget_frame_ancestors
 
 logger = logging.getLogger(__name__)
 
@@ -312,12 +313,15 @@ async def widget_chat_page(request: Request, key: str = Query(...)):
     # theirs to remove. Overwriting on every render makes the agent row the only
     # source of truth.
     widget_cfg["ai_disclosure"] = _agent_disclosure(wk.agent_name)
-    return templates.TemplateResponse(request, "widget/chat.html", {
+    response = templates.TemplateResponse(request, "widget/chat.html", {
         "request": request,
         "api_key": key,
         "agent_name": wk.agent_name,
         "widget_config": json.dumps(widget_cfg),
     })
+    # Customer sites frame this page, so it cannot take the dashboard's
+    # frame-ancestors 'self'. The key's allowlist says which sites may.
+    return set_csp_header(response, widget_frame_ancestors(wk.get_allowed_origins()))
 
 
 @router.get("/public-config", include_in_schema=False)

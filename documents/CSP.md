@@ -1,0 +1,91 @@
+# Content-Security-Policy
+
+MATE sends a Content-Security-Policy (CSP) with every HTML page. A CSP limits
+the damage a cross-site scripting bug can do. Even if an attacker gets a script
+into a page, the browser refuses to load code from a host the policy does not
+list, to send data to one, or to let another site frame the dashboard.
+
+## What the policy allows
+
+| Directive | Allows |
+|---|---|
+| `script-src` | `'self'`, inline scripts, WebAssembly (`'wasm-unsafe-eval'`, for Pyodide), and the CDNs the templates use: `cdn.tailwindcss.com`, `cdn.jsdelivr.net`, `cdnjs.cloudflare.com`, `unpkg.com`, `d3js.org` |
+| `style-src` | `'self'`, inline styles, `cdn.jsdelivr.net`, `cdnjs.cloudflare.com`, `fonts.googleapis.com` |
+| `font-src` | `'self'`, `data:`, `cdn.jsdelivr.net`, `cdnjs.cloudflare.com`, `fonts.gstatic.com` |
+| `connect-src` | `'self'` (including the Work Room's WebSocket), `cdn.jsdelivr.net`, `cdnjs.cloudflare.com` |
+| `img-src` | `'self'`, `data:`, `blob:`, any `https:` host (answers show images from anywhere) |
+| `worker-src` | `'self'`, `blob:` (Monaco, Ace and Pyodide workers) |
+| `frame-src` | `'self'`, `dartpad.dev` (the Work Room's Dart runner) |
+| `object-src` | nothing |
+| `base-uri` | `'self'` |
+| `frame-ancestors` | `'self'` for the dashboard. For the widget chat page, see below |
+
+Two things are still allowed that a strict policy would forbid:
+
+- **Inline scripts and handlers (`'unsafe-inline'`).** The templates have many
+  inline `<script>` blocks and `onclick=` handlers. Removing them page by page
+  and adding nonces is the next step.
+- **`eval()` on ADK's dev UI.** The chat panel embeds ADK's dev UI from
+  `/dev-ui/`, and a library bundled into it calls `new Function()`. Only pages
+  under `/dev-ui/` get `'unsafe-eval'`. MATE's own pages do not.
+
+## Report-Only first
+
+By default the policy is sent as `Content-Security-Policy-Report-Only`. The
+browser blocks nothing. It reports what it would have blocked to
+`/csp-report`, and the server logs each distinct violation once, as a warning:
+
+```
+WARNING [server.csp] CSP violation: script-src-elem blocked 'https://cdn.example.com/lib.js' on /dashboard/agents
+```
+
+Query strings are removed from the logged URLs, since a page URL can carry a
+widget key. At most 500 distinct violations are logged until restart.
+
+Once the log stays quiet in normal use, switch to enforcing:
+
+| `CSP_MODE` | Effect |
+|---|---|
+| `report-only` (default) | Report violations, block nothing |
+| `enforce` | Block violations, and still report them |
+| `off` | Send no policy |
+
+## The widget
+
+Customer sites frame the widget chat page (`/widget/chat`), so it cannot use
+the dashboard's `frame-ancestors 'self'`. Its `frame-ancestors` comes from the
+widget key's **allowed origins**:
+
+- No allowlist: any site may frame it (`frame-ancestors *`).
+- An allowlist: those origins, plus MATE itself for the previews in the
+  dashboard and the widget admin panel. `https://shop.example.com` and
+  `*.example.com` both work, as in the allowlist itself.
+- An entry that is not a plain origin (it has a path, credentials, spaces or
+  `;`) is left out rather than copied into the header.
+
+With `CSP_MODE=enforce`, a site that is not on the allowlist cannot frame the
+widget at all, even when `WIDGET_ORIGIN_STRICT` is off. While the policy is
+Report-Only, those embeds only show up as `frame-ancestors` reports. Check
+those reports before you enforce.
+
+## Allowing another host
+
+If a deployment loads scripts, styles, fonts or frames from another host, for
+example a self-hosted copy of a library or an extra CDN, list it in
+`CSP_EXTRA_SOURCES`. Separate hosts with commas or spaces:
+
+```
+CSP_EXTRA_SOURCES=https://cdn.example.com,https://*.mycompany.com
+```
+
+The hosts are added to `script-src`, `style-src`, `font-src`, `connect-src` and
+`frame-src`. A value that is not a host source is ignored with a warning.
+
+## Known gaps
+
+- **Work Room canvas.** Code an agent writes is run in the Work Room in a
+  sandboxed `srcdoc` iframe, and such an iframe inherits the page's policy. A
+  canvas that loads a library from an unlisted CDN (for example
+  `cdn.plot.ly`) shows up as a violation. Under `enforce`, that script is
+  blocked. Add the host to `CSP_EXTRA_SOURCES` if your agents rely on it.
+- **Standalone builds** (`standalone_server.py`) do not send this policy yet.
