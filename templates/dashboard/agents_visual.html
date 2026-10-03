@@ -169,7 +169,7 @@ projects_list=projects
     window.visualBuilderInitialState = {
         configs: JSON.parse(document.getElementById('visual-configs-json').textContent || '[]'),
         projects: JSON.parse(document.getElementById('visual-projects-json').textContent || '[]'),
-        selectedProjectId: {{ selected_project_id |default ('null') }}
+        selectedProjectId: {{ selected_project_id | tojson }}
     };
     window.configs = window.visualBuilderInitialState.configs;
     window.projects = window.visualBuilderInitialState.projects;
