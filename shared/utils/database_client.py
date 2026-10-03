@@ -62,7 +62,7 @@ class DatabaseClient:
             if not all([database, user, password]):
                 raise ValueError("PostgreSQL requires DB_NAME, DB_USER, and DB_PASSWORD")
             
-            return f"postgresql://{user}:{password}@{host}:{port}/{database}"
+            return f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{database}"
         
         elif db_type == "sqlite":
             database_path = os.getenv("DB_PATH", "my_agent_data.db")

@@ -67,7 +67,7 @@ class MigrationSystem:
                 if not all([database, user, password]):
                     return None
                 
-                database_url = f"postgresql://{user}:{password}@{host}:{port}/{database}"
+                database_url = f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{database}"
             elif db_type == "sqlite":
                 database_path = os.getenv("DB_PATH", "mate_agent.db")
                 database_url = f"sqlite:///{database_path}"
