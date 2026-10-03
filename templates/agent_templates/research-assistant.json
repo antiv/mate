@@ -36,7 +36,7 @@
       "parent_agents": ["research_root"],
       "allowed_for_roles": "[\"admin\", \"user\"]",
       "tool_config": "{\"memory_blocks\": true}",
-      "mcp_servers_config": "{\"mcpServers\": {\"tavily\": {\"command\": \"npx\", \"args\": [\"-y\", \"mcp-remote\", \"https://mcp.tavily.com/mcp/?tavilyApiKey=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\"], \"timeout\": 300}}}",
+      "mcp_servers_config": "{\"mcpServers\": {\"tavily\": {\"command\": \"npx\", \"args\": [\"-y\", \"mcp-remote\", \"https://mcp.tavily.com/mcp/?tavilyApiKey=${TAVILY_API_KEY}\"], \"timeout\": 300}}}",
       "disabled": false,
       "hardcoded": false
     },

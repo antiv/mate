@@ -83,7 +83,7 @@ python -m playwright install-deps
 Playwright is fully integrated into MATE's `Dockerfile`. The build script automatically downloads browser binaries and system packages during image creation:
 ```dockerfile
 # Install Python dependencies
-RUN uv pip install --no-cache-dir --system -r ./requirements.txt
+RUN uv pip install --no-cache-dir --system --require-hashes -r ./requirements.lock
 
 # Install Playwright browser binaries and system dependencies (as root)
 RUN python -m playwright install --with-deps chromium

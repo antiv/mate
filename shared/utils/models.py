@@ -514,7 +514,11 @@ class MemoryBlock(Base):
     __tablename__ = 'memory_blocks'
     # Never reuse a deleted block's id: its history in memory_block_versions is
     # keyed on it. The migrations already say AUTOINCREMENT; this covers create_all.
-    __table_args__ = {'sqlite_autoincrement': True}
+    # The seed inserts in V002 rely on the (project_id, label) unique constraint.
+    __table_args__ = (
+        UniqueConstraint('project_id', 'label'),
+        {'sqlite_autoincrement': True},
+    )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     project_id = Column(Integer, ForeignKey('projects.id'), nullable=False)

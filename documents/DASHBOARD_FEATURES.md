@@ -173,7 +173,7 @@ Configure multiple Model Context Protocol servers per agent:
   "mcpServers": {
     "mate-chess-mcp": {
       "command": "npx",
-      "args": ["mcp-remote", "https://mcp.tavily.com/mcp/?tavilyApiKey=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"],
+      "args": ["mcp-remote", "https://mcp.tavily.com/mcp/?tavilyApiKey=${TAVILY_API_KEY}"],
       "env": {}
     }
   }

@@ -11,7 +11,7 @@ MATE (Multi-Agent Tree Engine) is a production-ready web platform built on top o
 ```bash
 # Setup
 python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements.lock
 cp .env.example .env  # Set GOOGLE_API_KEY or other LLM provider key
 
 # Run (auto-applies DB migrations, default SQLite)
