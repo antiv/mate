@@ -264,6 +264,12 @@
             });
     }
 
+    function esc(s) {
+        return (s == null ? '' : String(s))
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
     function loadRecentActivity() {
         const list = document.getElementById('recentActivityList');
         apiCall('/dashboard/api/audit-logs?limit=5&offset=0')
@@ -293,8 +299,8 @@
                     const resource = e.resource_type ? `${e.resource_type}${e.resource_id ? ' #' + e.resource_id : ''}` : '';
                     return `
                         <div style="display: flex; align-items: center; gap: 12px; padding: 11px 18px; border-top: 1px solid var(--border);">
-                            <span style="font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 7px; text-transform: uppercase; flex-shrink: 0; ${badgeStyle}">${action}</span>
-                            <span style="flex: 1; font-size: 12.5px; color: var(--text-secondary); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${user}${resource ? ' — ' + resource : ''}</span>
+                            <span style="font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 7px; text-transform: uppercase; flex-shrink: 0; ${badgeStyle}">${esc(action)}</span>
+                            <span style="flex: 1; font-size: 12.5px; color: var(--text-secondary); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${esc(user)}${resource ? ' — ' + esc(resource) : ''}</span>
                             <span style="font-size: 11.5px; color: var(--text-tertiary); flex-shrink: 0;">${relTime}</span>
                         </div>`;
                 }).join('');

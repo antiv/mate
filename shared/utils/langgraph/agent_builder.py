@@ -360,8 +360,11 @@ class AgentBuilder:
         if fallback:
             # Provider env vars only: the agent's endpoint and key belong to its own
             # model, and the fallback is usually on another provider's host.
-            model = model.with_fallbacks([create_chat_model(
-                fallback, generate_content_config=_json_field(config, "generate_content_config"))])
+            from shared.callbacks.model_fallback_callback import PROVIDER_OUTAGE_ERRORS
+            model = model.with_fallbacks(
+                [create_chat_model(fallback,
+                                   generate_content_config=_json_field(config, "generate_content_config"))],
+                exceptions_to_handle=PROVIDER_OUTAGE_ERRORS)
         tools = await self._build_tools(config)
         if extra_tools:
             tools.extend(extra_tools)

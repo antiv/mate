@@ -24,9 +24,19 @@ sending that key to another provider's host would leak it.
 
 ## When it fires
 
-The fallback runs when the model call raises an error, once per failed call.
-If the fallback fails too, the original error goes through as if no fallback
-were set.
+The fallback runs once per failed model call, and only when the provider is
+unavailable:
+
+- a timeout or a connection failure
+- a 5xx response (500, 502, 503)
+- a rate limit (429)
+
+Errors caused by the request itself do not fall back: a content-policy
+refusal, a context-length error, a bad request, or an invalid key. Falling
+back on those would let anyone chatting move a request past the primary
+provider's own filters by provoking a refusal. They fail as they would without
+a fallback. If the fallback fails too, the original error goes through as if no
+fallback were set.
 
 - **ADK runtime:** the fallback runs from the agent's `on_model_error_callback`,
   after the error is recorded as an `ERROR` row in usage logs. Retries inside
@@ -46,6 +56,10 @@ were set.
 - **Audit log:** each fallback writes an `agent.model_fallback` entry with the
   primary and fallback model, and on ADK the primary's error.
 - **Server log:** a warning names the agent, both models and the error.
+
+A fallback can send a request that was meant for the agent's own endpoint (for
+example a private, self-hosted model) to a third-party provider. Leave the
+field empty on agents whose data must not leave that endpoint.
 
 If the fallback fires often, fix or replace the primary. The fallback is meant
 to cover outages, not to be the normal path.

@@ -100,6 +100,69 @@ class TestFallbackCallback(unittest.TestCase):
         create.assert_called_once_with(model_name="anthropic/fallback")
 
 
+    def test_a_request_error_does_not_fall_back(self):
+        # Otherwise anyone chatting could move a request past the primary
+        # provider's own filters by making it refuse
+        fallback = MagicMock()
+        callback, _ = self._callback(fallback)
+        for error in (
+            litellm.ContentPolicyViolationError("refused", model="primary", llm_provider="openai"),
+            litellm.ContextWindowExceededError("too long", model="primary", llm_provider="openai"),
+            litellm.BadRequestError("bad", model="primary", llm_provider="openai"),
+            litellm.AuthenticationError("bad key", llm_provider="openai", model="primary"),
+            ValueError("not a provider error"),
+        ):
+            with self.subTest(error=type(error).__name__), patch("shared.utils.audit_service.log") as audit:
+                response = asyncio.run(callback(callback_context=_callback_context(),
+                                                llm_request=self._request(), error=error))
+                self.assertIsNone(response)
+                audit.assert_not_called()
+        fallback.generate_content_async.assert_not_called()
+
+    def test_tools_that_cannot_be_copied_do_not_stop_the_fallback(self):
+        import threading
+        callback, _ = self._callback(_lite_llm("anthropic/fallback", "ok"))
+        request = self._request()
+        request.tools_dict["holds_a_lock"] = SimpleNamespace(lock=threading.Lock())
+        with patch("shared.utils.audit_service.log"):
+            response = asyncio.run(callback(callback_context=_callback_context(),
+                                            llm_request=request, error=_provider_down()))
+        self.assertEqual(response.content.parts[0].text, "ok")
+
+
+class TestIsProviderOutage(unittest.TestCase):
+
+    def test_outages(self):
+        from google.genai.errors import ClientError, ServerError
+        from shared.callbacks.model_fallback_callback import is_provider_outage
+        for error in (
+            _provider_down(),
+            litellm.Timeout("slow", model="primary", llm_provider="openai"),
+            litellm.APIConnectionError("no route", llm_provider="openai", model="primary"),
+            litellm.RateLimitError("429", llm_provider="openai", model="primary"),
+            litellm.ServiceUnavailableError("503", llm_provider="openai", model="primary"),
+            litellm.BadGatewayError("502", llm_provider="openai", model="primary"),
+            TimeoutError(),
+            ConnectionResetError(),
+            ServerError(503, {"error": {"message": "unavailable"}}),
+            ClientError(429, {"error": {"message": "resource exhausted"}}),
+        ):
+            with self.subTest(error=type(error).__name__):
+                self.assertTrue(is_provider_outage(error))
+
+    def test_not_outages(self):
+        from google.genai.errors import ClientError
+        from shared.callbacks.model_fallback_callback import is_provider_outage
+        for error in (
+            litellm.ContentPolicyViolationError("refused", model="primary", llm_provider="openai"),
+            litellm.ContextWindowExceededError("too long", model="primary", llm_provider="openai"),
+            ClientError(400, {"error": {"message": "bad request"}}),
+            ValueError("x"),
+        ):
+            with self.subTest(error=type(error).__name__):
+                self.assertFalse(is_provider_outage(error))
+
+
 class TestRecordModelFallback(unittest.TestCase):
 
     def test_audit_failure_is_swallowed(self):
@@ -275,6 +338,30 @@ class TestLangGraph(unittest.TestCase):
         # The endpoint and key go to the agent's own model only
         self.assertEqual(created, [("openai/primary", "sk-literal", "http://127.0.0.1:9000/v1"),
                                    ("anthropic/fallback", None, None)])
+
+    def test_the_built_agent_does_not_fall_back_on_a_request_error(self):
+        from langchain_litellm import ChatLiteLLM
+        from shared.utils.langgraph.agent_builder import AgentBuilder
+        refused = litellm.ContentPolicyViolationError("refused", model="primary", llm_provider="openai")
+
+        def chat_model(name, generate_content_config=None, api_key=None, base_url=None):
+            reply = refused if name == "openai/primary" else "hello from the fallback"
+            return ChatLiteLLM(model=name, streaming=True, api_key="x",
+                               model_kwargs={"mock_response": reply})
+
+        config = {"name": "support", "type": "llm", "model_name": "openai/primary",
+                  "fallback_model": "anthropic/fallback", "instruction": "Be brief."}
+
+        async def go():
+            with patch("shared.utils.langgraph.agent_builder._load_child_configs", return_value=[]), \
+                    patch.object(AgentBuilder, "_build_tools", return_value=[]), \
+                    patch("shared.utils.langgraph.model_factory.create_chat_model",
+                          side_effect=chat_model):
+                built = await AgentBuilder().build_for_config(config)
+            return await built.graph.ainvoke({"messages": [("user", "hi")]})
+
+        with self.assertRaises(litellm.ContentPolicyViolationError):
+            asyncio.run(go())
 
     def _log(self, model_version, fallback_models):
         from shared.utils.langgraph.executor import _log_token_usage

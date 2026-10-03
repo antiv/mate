@@ -15,11 +15,19 @@ The fallback is built from the model name alone, through the provider env vars.
 It never inherits the agent's model_base_url / model_api_key: those belong to
 the primary model, and the fallback is usually on a different provider, so
 reusing them would send that key to the wrong host.
+
+Only a provider outage falls back: a timeout, a connection failure, a 5xx or a
+rate limit. Errors the request itself causes (a content-policy refusal, an
+oversized context, a bad request) do not, or anyone chatting could move their
+request to the fallback at will, past the primary provider's own filters.
 """
 
+import copy
 import logging
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Optional, Tuple, Type
 
+import httpx
+import litellm
 from google.adk.agents.callback_context import CallbackContext
 from google.adk.models.llm_request import LlmRequest
 from google.adk.models.llm_response import LlmResponse
@@ -27,6 +35,33 @@ from google.adk.models.llm_response import LlmResponse
 from .token_usage_callback import _get_adk_session_info
 
 logger = logging.getLogger(__name__)
+
+# What a provider outage raises. Both runtimes reach providers through LiteLLM,
+# except ADK's native Gemini backend, which raises google.genai errors.
+PROVIDER_OUTAGE_ERRORS: Tuple[Type[BaseException], ...] = (
+    TimeoutError,
+    ConnectionError,
+    httpx.TimeoutException,
+    httpx.NetworkError,
+    litellm.Timeout,
+    litellm.APIConnectionError,
+    litellm.RateLimitError,
+    litellm.InternalServerError,
+    litellm.ServiceUnavailableError,
+    litellm.BadGatewayError,
+)
+
+
+def is_provider_outage(error: BaseException) -> bool:
+    """True when `error` means the provider is unavailable, not that the request is at fault."""
+    if isinstance(error, PROVIDER_OUTAGE_ERRORS):
+        return True
+    try:
+        from google.genai.errors import ClientError, ServerError
+    except ImportError:
+        return False
+    # ADK's Gemini backend raises a ClientError subclass for 429 (resource exhausted)
+    return isinstance(error, ServerError) or (isinstance(error, ClientError) and error.code == 429)
 
 
 def record_model_fallback(agent_name: Optional[str], user_id: Optional[str],
@@ -64,10 +99,18 @@ def make_model_fallback_callback(agent_name: str, primary_model: Optional[str],
     async def model_fallback_callback(*, callback_context: CallbackContext,
                                       llm_request: LlmRequest,
                                       error: Exception) -> Optional[LlmResponse]:
-        request = llm_request.model_copy(deep=True)
-        request.model = llm.model
+        if not is_provider_outage(error):
+            return None  # ADK re-raises it, as without a fallback
         response = None
         try:
+            # Shallow, so the tools the request points at are not copied (they may
+            # hold locks or clients that cannot be); what a model call can change
+            # is copied, so the failed request is left as it was.
+            request = llm_request.model_copy(update={
+                "model": llm.model,
+                "contents": copy.deepcopy(llm_request.contents),
+                "config": llm_request.config.model_copy(deep=True) if llm_request.config else None,
+            })
             # Not streamed: a callback returns one response. The final one carries
             # the whole answer and its usage.
             async for response in llm.generate_content_async(request, stream=False):
