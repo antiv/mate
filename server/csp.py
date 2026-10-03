@@ -125,52 +125,63 @@ def build_policy(frame_ancestors: str = "'self'", allow_eval: bool = False) -> s
     return "; ".join(directives)
 
 
-def widget_frame_ancestors(allowed_origins: Optional[List[str]]) -> str:
-    """frame-ancestors for the widget chat page, from the key's origin allowlist.
+def widget_frame_ancestors(allowed_origins: Optional[List[str]], strict: bool) -> str:
+    """frame-ancestors for the widget chat page, matching what _check_origin lets through.
 
-    No allowlist means the key may be embedded anywhere. 'self' is always
-    allowed: the dashboard and the widget admin panel preview the widget.
+    No allowlist, or WIDGET_ORIGIN_STRICT off (the allowlist is then only
+    logged against), means any site may embed the key. Otherwise the allowlist's
+    origins may, and so may MATE itself: the dashboard and the widget admin
+    panel preview the widget.
     """
-    if allowed_origins is None:
+    if allowed_origins is None or not strict:
         return "*"
     if not isinstance(allowed_origins, list):
         return "'self'"  # a malformed allowlist allows no one, as _check_origin does
     sources = ["'self'"]
     for entry in allowed_origins:
-        source = _origin_to_source(entry) if isinstance(entry, str) else None
-        if source and source not in sources:
-            sources.append(source)
+        for source in (_origin_to_sources(entry) if isinstance(entry, str) else []):
+            if source not in sources:
+                sources.append(source)
     return " ".join(sources)
 
 
-def _origin_to_source(entry: str) -> Optional[str]:
-    """An allowlist entry as a CSP source, or None when it is not a plain origin.
+def _origin_to_sources(entry: str) -> List[str]:
+    """The CSP sources for an allowlist entry, covering what _origin_matches accepts for it.
 
-    Rebuilt from its parsed parts rather than passed through, since the
-    allowlist is written by whoever holds the widget's admin key.
+    Rebuilt from the entry's parsed parts rather than passed through, since the
+    allowlist is written by whoever holds the widget's admin key; an entry that
+    is not a plain origin gives none. So does an IPv6 address, which CSP source
+    expressions cannot name.
     """
-    entry = (entry or "").strip().rstrip("/")
+    entry = entry.strip().rstrip("/")
     if entry.startswith("*.") and "://" not in entry:
-        host, scheme, port = entry, None, None
-    else:
-        try:
-            parsed = urlparse(entry)
-            port = parsed.port
-        except ValueError:
-            return None
-        if parsed.scheme not in ("http", "https") or not parsed.hostname:
-            return None
-        if parsed.path or parsed.query or parsed.fragment or parsed.username:
-            return None
-        host, scheme = parsed.hostname, parsed.scheme
-    if not re.fullmatch(r"(?:\*\.)?[a-z0-9-]+(?:\.[a-z0-9-]+)*", host.lower()):
-        return None
-    source = host.lower()
-    if scheme:
-        source = f"{scheme}://{source}"
-    if port and port != {"http": 80, "https": 443}.get(scheme):
-        source = f"{source}:{port}"
-    return source
+        # A bare wildcard matches the domain and its subdomains on any scheme and port
+        domain = entry[2:].lower()
+        if not _is_hostname(domain):
+            return []
+        return [f"{scheme}://{host}:*" for host in (f"*.{domain}", domain) for scheme in ("https", "http")]
+    try:
+        parsed = urlparse(entry)
+        port = parsed.port
+    except ValueError:
+        return []
+    if parsed.scheme not in ("http", "https") or not parsed.hostname:
+        return []
+    if parsed.path or parsed.query or parsed.fragment or parsed.username:
+        return []
+    host = parsed.hostname.lower()
+    wildcard = host.startswith("*.")
+    domain = host[2:] if wildcard else host
+    if not _is_hostname(domain):
+        return []
+    suffix = f":{port}" if port and port != {"http": 80, "https": 443}[parsed.scheme] else ""
+    # https://*.example.com matches example.com itself too
+    hosts = [f"*.{domain}", domain] if wildcard else [domain]
+    return [f"{parsed.scheme}://{h}{suffix}" for h in hosts]
+
+
+def _is_hostname(value: str) -> bool:
+    return re.fullmatch(r"[a-z0-9-]+(?:\.[a-z0-9-]+)*", value) is not None
 
 
 async def add_csp_header(request: Request, call_next):

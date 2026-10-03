@@ -155,38 +155,58 @@ class TestMiddleware(unittest.TestCase):
 
 
 class TestWidgetFrameAncestors(unittest.TestCase):
+    """frame-ancestors lets through the sites _check_origin lets through."""
+
+    def _ancestors(self, origins, strict=True):
+        return csp.widget_frame_ancestors(origins, strict).split()
 
     def test_no_allowlist_may_be_embedded_anywhere(self):
-        self.assertEqual(csp.widget_frame_ancestors(None), "*")
+        self.assertEqual(self._ancestors(None), ["*"])
+
+    def test_without_strict_origins_any_site_may_embed_it(self):
+        # WIDGET_ORIGIN_STRICT off only logs a foreign embedder, so framing must
+        # not block it either once the CSP is enforced
+        self.assertEqual(self._ancestors(["https://shop.example.com"], strict=False), ["*"])
 
     def test_allowlist_entries_become_sources(self):
-        value = csp.widget_frame_ancestors([
-            "https://shop.example.com", "https://shop.example.com/", "*.partner.example",
-            "http://localhost:8000", "https://app.example.com:443", "HTTPS://Upper.Example.com"])
-        self.assertEqual(value.split(), ["'self'", "https://shop.example.com", "*.partner.example",
-                                         "http://localhost:8000", "https://app.example.com",
-                                         "https://upper.example.com"])
+        self.assertEqual(self._ancestors([
+            "https://shop.example.com", "https://shop.example.com/", "http://localhost:8000",
+            "https://app.example.com:443", "https://app.example.com:8443", "HTTPS://Upper.Example.com"]),
+            ["'self'", "https://shop.example.com", "http://localhost:8000", "https://app.example.com",
+             "https://app.example.com:8443", "https://upper.example.com"])
+
+    def test_a_scheme_wildcard_covers_the_domain_itself(self):
+        # _origin_matches("https://example.com", "https://*.example.com") is true
+        self.assertEqual(self._ancestors(["https://*.example.com"]),
+                         ["'self'", "https://*.example.com", "https://example.com"])
+
+    def test_a_bare_wildcard_covers_any_scheme_and_port(self):
+        # _origin_matches ignores scheme and port for a bare *.example.com
+        self.assertEqual(self._ancestors(["*.partner.example"]),
+                         ["'self'", "https://*.partner.example:*", "http://*.partner.example:*",
+                          "https://partner.example:*", "http://partner.example:*"])
 
     def test_entries_that_are_not_plain_origins_are_dropped(self):
-        value = csp.widget_frame_ancestors([
+        self.assertEqual(self._ancestors([
             "https://a.example; script-src *",
             "https://a.example 'unsafe-inline'",
             "javascript:alert(1)",
             "https://a.example/path",
             "https://user@a.example",
             "data:text/html,x",
+            "https://[::1]:8443",
             "*",
+            "*.",
             "",
-        ])
-        self.assertEqual(value, "'self'")
+        ]), ["'self'"])
 
     def test_entries_that_are_not_strings_are_skipped(self):
-        self.assertEqual(csp.widget_frame_ancestors(["https://a.example", 5, None, {"x": 1}]).split(),
+        self.assertEqual(self._ancestors(["https://a.example", 5, None, {"x": 1}]),
                          ["'self'", "https://a.example"])
 
     def test_an_empty_or_malformed_allowlist_allows_only_self(self):
-        self.assertEqual(csp.widget_frame_ancestors([]), "'self'")
-        self.assertEqual(csp.widget_frame_ancestors("https://a.example"), "'self'")
+        self.assertEqual(self._ancestors([]), ["'self'"])
+        self.assertEqual(self._ancestors("https://a.example"), ["'self'"])
 
 
 class _Key:
@@ -204,26 +224,39 @@ class _Key:
 
 class TestWidgetChatPage(unittest.TestCase):
 
-    def _get(self, origins):
+    def _get(self, origins, strict=True, referer="https://shop.example.com/", key=_Key):
         app = FastAPI()
         app.middleware("http")(csp.add_csp_header)
         app.include_router(wr.router)
-        with patch.object(wr, "_lookup_widget_key", return_value=_Key(origins)), \
-                patch.object(wr, "_agent_disclosure", return_value="AI"):
+        with patch.object(wr, "_lookup_widget_key", return_value=key(origins) if key else None), \
+                patch.object(wr, "_agent_disclosure", return_value="AI"), \
+                patch.object(wr, "ORIGIN_STRICT", strict):
             return TestClient(app, base_url="http://mate.local").get(
-                "/widget/chat?key=wk", headers={"Referer": "https://shop.example.com/"})
+                "/widget/chat?key=wk", headers={"Referer": referer})
 
-    def test_frame_ancestors_follow_the_allowlist(self):
+    def _ancestors(self, response):
+        return _directives(response.headers[csp.CSP_REPORT_ONLY_HEADER])["frame-ancestors"]
+
+    def test_frame_ancestors_follow_the_allowlist_when_strict(self):
         r = self._get(["https://shop.example.com"])
         self.assertEqual(r.status_code, 200)
-        d = _directives(r.headers[csp.CSP_REPORT_ONLY_HEADER])
-        self.assertEqual(d["frame-ancestors"], ["'self'", "https://shop.example.com"])
+        self.assertEqual(self._ancestors(r), ["'self'", "https://shop.example.com"])
         # The rest is the dashboard's policy
-        self.assertIn("https://cdn.jsdelivr.net", d["script-src"])
+        self.assertIn("https://cdn.jsdelivr.net", _directives(r.headers[csp.CSP_REPORT_ONLY_HEADER])["script-src"])
+
+    def test_without_strict_origins_any_site_may_frame_it(self):
+        self.assertEqual(self._ancestors(self._get(["https://shop.example.com"], strict=False)), ["*"])
 
     def test_without_an_allowlist_any_site_may_frame_it(self):
-        r = self._get(None)
-        self.assertEqual(_directives(r.headers[csp.CSP_REPORT_ONLY_HEADER])["frame-ancestors"], ["*"])
+        self.assertEqual(self._ancestors(self._get(None)), ["*"])
+
+    def test_error_pages_may_be_framed_so_their_message_shows(self):
+        refused = self._get(["https://shop.example.com"], referer="https://evil.example/")
+        self.assertEqual(refused.status_code, 403)
+        self.assertEqual(self._ancestors(refused), ["*"])
+        unknown = self._get(None, key=None)
+        self.assertEqual(unknown.status_code, 401)
+        self.assertEqual(self._ancestors(unknown), ["*"])
 
 
 class TestReports(unittest.TestCase):

@@ -62,20 +62,32 @@ Once the log stays quiet in normal use, switch to enforcing:
 ## The widget
 
 Customer sites frame the widget chat page (`/widget/chat`), so it cannot use
-the dashboard's `frame-ancestors 'self'`. Its `frame-ancestors` comes from the
-widget key's **allowed origins**:
+the dashboard's `frame-ancestors 'self'`. Its `frame-ancestors` lets through
+the same sites as the widget key's origin check (`WIDGET_ORIGIN_STRICT`):
 
-- No allowlist: any site may frame it (`frame-ancestors *`).
-- An allowlist: those origins, plus MATE itself for the previews in the
-  dashboard and the widget admin panel. `https://shop.example.com` and
-  `*.example.com` both work, as in the allowlist itself.
+- No allowlist, or `WIDGET_ORIGIN_STRICT` off: any site may frame it
+  (`frame-ancestors *`). With strict mode off, a site that is not on the
+  allowlist is only logged, so framing does not block it either.
+- An allowlist with `WIDGET_ORIGIN_STRICT=true`: the allowlist's origins, plus
+  MATE itself for the previews in the dashboard and the widget admin panel.
+  Entries mean what they mean to the origin check:
+  - `https://shop.example.com` covers that scheme, host and port.
+  - `https://*.example.com` covers its subdomains and `example.com` itself.
+  - `*.example.com` covers its subdomains and `example.com` itself, on any
+    scheme and port.
 - An entry that is not a plain origin (it has a path, credentials, spaces or
-  `;`) is left out rather than copied into the header.
+  `;`) is left out rather than copied into the header. So is an IPv6 address,
+  which a CSP cannot name; use a host name for such a site.
+- The widget's error pages ("Invalid widget key", "not enabled for this site")
+  may be framed by any site, so the embedding page shows the message rather
+  than a frame the browser refused.
 
-With `CSP_MODE=enforce`, a site that is not on the allowlist cannot frame the
-widget at all, even when `WIDGET_ORIGIN_STRICT` is off. While the policy is
-Report-Only, those embeds only show up as `frame-ancestors` reports. Check
-those reports before you enforce.
+`frame-ancestors` adds one thing the origin check cannot do. The origin check
+reads the embedding page from the `Referer` header, which a page can withhold
+(`referrerpolicy="no-referrer"`), and a request without one is let through.
+The browser enforces `frame-ancestors` whatever the page sends. So with
+`CSP_MODE=enforce` and `WIDGET_ORIGIN_STRICT=true`, a site that is not on the
+allowlist cannot frame the widget even when it hides its referrer.
 
 ## Allowing another host
 
