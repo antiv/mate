@@ -133,7 +133,12 @@ class TestMiddleware(unittest.TestCase):
             return HTMLResponse("<p>not adk</p>")
 
         client = TestClient(app)
-        policy = client.get("/dev-ui/").headers[csp.CSP_REPORT_ONLY_HEADER]
+        with patch.dict(os.environ, {"ADK_DEV_UI": "false"}):
+            policy = client.get("/dev-ui/").headers[csp.CSP_REPORT_ONLY_HEADER]
+        self.assertNotIn("'unsafe-eval'", _directives(policy)["script-src"],
+                         "no eval when the dev UI is not served")
+        with patch.dict(os.environ, {"ADK_DEV_UI": "true"}):
+            policy = client.get("/dev-ui/").headers[csp.CSP_REPORT_ONLY_HEADER]
         self.assertIn("'unsafe-eval'", _directives(policy)["script-src"])
         policy = client.get("/dev-uix").headers[csp.CSP_REPORT_ONLY_HEADER]
         self.assertNotIn("'unsafe-eval'", _directives(policy)["script-src"])

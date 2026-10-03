@@ -96,6 +96,7 @@ Do not add attribution trailers to commit messages: no `Co-Authored-By: Claude .
 | `AUTH_USERNAME` / `AUTH_PASSWORD` | Dashboard login |
 | `MATE_ENV` | `development` (default) or `production`; production refuses insecure defaults |
 | `MATE_ALLOW_INSECURE_DEFAULTS` | Override the production startup checks |
+| `ADK_DEV_UI` | Serve ADK's dev UI at `/dev-ui` (admins only); defaults to off when `MATE_ENV=production`, on otherwise |
 | `ALLOWED_ORIGINS` | Comma-separated CORS allowlist |
 | `TRUSTED_PROXY_HOSTS` | Proxy hosts trusted for `X-Forwarded-*` headers; audit logs only trust `X-Forwarded-For` when set |
 | `OAUTH_ALLOWED_DOMAINS` / `OAUTH_ALLOWED_EMAILS` | Restrict who may sign in via SSO (unset = anyone with a provider account) |

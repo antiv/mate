@@ -46,7 +46,8 @@ class TestNonAdminRefusal(unittest.TestCase):
 
     def test_the_rest_of_the_agent_server_is_admin_only(self):
         self.assertIsNone(_non_admin_refusal("list-apps", "bob@corp.com", None))
-        for path in ("debug/trace/e1", "apps/bot/eval_sets", "dev/build_graph/bot", "builder/save"):
+        for path in ("debug/trace/e1", "apps/bot/eval_sets", "dev/build_graph/bot", "builder/save",
+                     "dev-ui", "dev-ui/", "dev-ui/main.js"):
             with self.subTest(path=path):
                 self.assertIsNotNone(_non_admin_refusal(path, "bob@corp.com", None))
 
@@ -72,6 +73,10 @@ class TestProxyRoute(unittest.TestCase):
     def test_a_non_admin_cannot_run_as_someone_else(self):
         resp = self.client.post("/run_sse", json={"app_name": "bot", "user_id": "admin",
                                                   "session_id": "s", "new_message": {"parts": []}})
+        self.assertEqual(resp.status_code, 403)
+
+    def test_a_non_admin_cannot_open_the_dev_ui(self):
+        resp = self.client.get("/dev-ui/?app=bot")
         self.assertEqual(resp.status_code, 403)
 
     def test_an_admin_is_not_restricted(self):

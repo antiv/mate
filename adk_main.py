@@ -13,7 +13,7 @@ from google.adk.memory.in_memory_memory_service import InMemoryMemoryService
 from shared.utils.db_memory_service import DBMemoryService
 from google.adk.sessions.database_session_service import DatabaseSessionService
 from google.adk.sessions.in_memory_session_service import InMemorySessionService
-from shared.utils.utils import fix_session_events_compaction
+from shared.utils.utils import adk_dev_ui_enabled, fix_session_events_compaction
 import uvicorn
 import argparse
 from shared.utils.db_credential_service import DBCredentialService
@@ -174,8 +174,9 @@ def _resolve_within_agents(*parts: Union[str, Path]) -> Path:
     return resolve_within_base(Path.cwd() / AGENT_DIR.split('/')[-1], *parts)
 
 
-# ADK dev UI (Angular app at /dev-ui); set ADK_DEV_UI=false to serve the API only
-SERVE_WEB_INTERFACE = os.getenv("ADK_DEV_UI", "true").lower() != "false"
+# ADK dev UI (Angular app at /dev-ui): off in production unless ADK_DEV_UI=true,
+# on elsewhere unless ADK_DEV_UI=false
+SERVE_WEB_INTERFACE = adk_dev_ui_enabled()
 
 # initialize Agent Loader
 agent_loader = AgentLoader(AGENT_DIR)
@@ -302,7 +303,7 @@ try:
             print(f"⚠️  Error checking for browser assets: {e}")
             print(f"⚠️  API will work, but web UI will not be available")
     else:
-        print(f"ℹ️  ADK dev UI disabled (ADK_DEV_UI=false) — serving API only")
+        print(f"ℹ️  ADK dev UI disabled (ADK_DEV_UI, or MATE_ENV=production) — serving API only")
 
     print(f"🚀 Creating FastAPI app...")
     print(f"Extra FastAPI args: {list(extra_fast_api_args.keys())}")

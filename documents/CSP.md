@@ -25,9 +25,11 @@ Two things are still allowed that a strict policy would forbid:
 - **Inline scripts and handlers (`'unsafe-inline'`).** The templates have many
   inline `<script>` blocks and `onclick=` handlers. Removing them page by page
   and adding nonces is the next step.
-- **`eval()` on ADK's dev UI.** The chat panel embeds ADK's dev UI from
-  `/dev-ui/`, and a library bundled into it calls `new Function()`. Only pages
-  under `/dev-ui/` get `'unsafe-eval'`. MATE's own pages do not.
+- **`eval()` on ADK's dev UI.** A library bundled into ADK's dev UI
+  (`/dev-ui/`, admins only) calls `new Function()`. Only pages under `/dev-ui/`
+  get `'unsafe-eval'`, and only while the dev UI is served: it is off by
+  default when `MATE_ENV=production` (`ADK_DEV_UI` overrides that). MATE's own
+  pages never get it.
 
 ## Report-Only first
 

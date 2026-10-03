@@ -190,9 +190,12 @@ def _needs_eval(path: str) -> bool:
     """ADK's dev UI (proxied under /dev-ui/) calls new Function() in a bundled library.
 
     It is ADK's code, not ours, so it gets 'unsafe-eval' on its own pages rather
-    than the dashboard losing that protection everywhere.
+    than the dashboard losing that protection everywhere, and only while it is
+    served at all.
     """
-    return path == "/dev-ui" or path.startswith("/dev-ui/")
+    from shared.utils.utils import adk_dev_ui_enabled
+
+    return (path == "/dev-ui" or path.startswith("/dev-ui/")) and adk_dev_ui_enabled()
 
 
 def set_csp_header(response: Response, frame_ancestors: str) -> Response:
