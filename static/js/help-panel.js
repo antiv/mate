@@ -47,7 +47,8 @@
 
   function safeHref(url) {
     var u = String(url).trim();
-    return /^(\/(?!\/)|https?:\/\/|#)/i.test(u) ? u : "";
+    // A leading "/" must not be followed by "/" or "\": browsers read "/\host" as "//host".
+    return /^(\/(?![\/\\])|https?:\/\/|#)/i.test(u) ? u : "";
   }
 
   function inline(s) {
