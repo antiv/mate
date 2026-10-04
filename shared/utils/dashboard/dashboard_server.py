@@ -2614,8 +2614,8 @@ class DashboardServer:
             # Sync memory blocks
             memory_blocks_added = 0
             memory_blocks_updated = 0
-            from shared.utils.memory_blocks_service import (MemoryBlocksService, block_state,
-                                                            record_block_version)
+            memory_blocks_skipped = []
+            from shared.utils.memory_blocks_service import MemoryBlocksService
             from shared.utils.models import MemoryBlock
             mem_service = MemoryBlocksService(self.db_client)
             
@@ -2637,15 +2637,18 @@ class DashboardServer:
                     if result.get("status") == "success":
                         memory_blocks_added += 1
                 else:
-                    # Update existing block value
+                    # Through the service, so a read-only block or one whose limit the
+                    # template's value exceeds is left alone and reported, not overwritten.
                     existing = db_block_map[label]
                     if value != (existing.value or ""):
-                        previous = block_state(existing)
-                        existing.value = value
-                        if desc:
-                            existing.description = desc
-                        record_block_version(session, existing, "update", changed_by, previous=previous)
-                        memory_blocks_updated += 1
+                        result = mem_service.modify_block(project_id, str(existing.id), value=value,
+                                                          description=desc or None,
+                                                          changed_by=changed_by)
+                        if result.get("status") == "success":
+                            memory_blocks_updated += 1
+                        else:
+                            memory_blocks_skipped.append(
+                                {"label": label, "reason": result.get("error_message")})
             
             # Update project template version
             project.template_version = template_meta.get("version")
@@ -2671,6 +2674,7 @@ class DashboardServer:
                 "agents_updated": agents_updated,
                 "memory_blocks_added": memory_blocks_added,
                 "memory_blocks_updated": memory_blocks_updated,
+                "memory_blocks_skipped": memory_blocks_skipped,
             }
         except Exception as e:
             session.rollback()
@@ -4566,6 +4570,7 @@ class DashboardServer:
                         "agents_updated": result.get("agents_updated", 0),
                         "memory_blocks_added": result.get("memory_blocks_added", 0),
                         "memory_blocks_updated": result.get("memory_blocks_updated", 0),
+                        "memory_blocks_skipped": [b["label"] for b in result.get("memory_blocks_skipped", [])],
                     },
                     request=request,
                 )

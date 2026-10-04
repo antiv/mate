@@ -13,7 +13,7 @@ import os
 import sys
 import unittest
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -194,6 +194,48 @@ class TestDashboardEditForm(LockTestCase):
         result = self.save(read_only="false", character_limit="5")
         self.assertFalse(result["success"])
         self.assertIn("at most 5", result["error"])
+
+
+class TestTemplateSync(LockTestCase):
+    """Template sync used to write block values straight to the database."""
+
+    def setUp(self):
+        super().setUp()
+        from shared.utils.models import Project
+        session = self.db.get_session()
+        session.add(Project(id=1, name="Shop", template_id="shop"))
+        session.commit()
+        session.close()
+        self.svc.create_block(1, "hours", "Mon-Fri")
+
+        from shared.utils.dashboard.dashboard_server import DashboardServer
+        with patch("shared.utils.database_client.get_database_client", return_value=self.db):
+            self.server = DashboardServer(FastAPI(), project_root=PROJECT_ROOT)
+        self.server.db_client = self.db
+        self.server.template_service = MagicMock()
+        self.server.template_service.slugify_project_name.return_value = "shop"
+        self.server.template_service.get_template.return_value = {
+            "template_meta": {"version": "2"},
+            "agents": [],
+            "memory_blocks": [
+                {"label": "policy", "value": "Template policy"},
+                {"label": "hours", "value": "Mon-Sat"},
+            ],
+        }
+        patcher = patch("httpx.Client")  # the agent reload after a sync
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_a_read_only_block_is_skipped_and_reported(self):
+        result = self.server._sync_template(1, changed_by="admin")
+        self.assertNotIn("error", result, result)
+        self.assertEqual(self.value(), "Refunds within 30 days")
+        self.assertEqual([b["label"] for b in result["memory_blocks_skipped"]], ["policy"])
+        self.assertIn("read-only", result["memory_blocks_skipped"][0]["reason"])
+        # Other blocks still sync, and the write is a recorded version.
+        self.assertEqual(self.value("hours"), "Mon-Sat")
+        self.assertEqual(result["memory_blocks_updated"], 1)
+        self.assertEqual(self.svc.list_versions(1, "hours")["versions"][0]["changed_by"], "admin")
 
 
 if __name__ == "__main__":
