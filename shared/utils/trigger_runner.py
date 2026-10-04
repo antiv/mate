@@ -46,6 +46,55 @@ MAX_PAYLOAD_CHARS = 4000
 # rows keep loading and listing — removing them is the operator's call, not ours.
 UNIMPLEMENTED_TRIGGER_TYPES = ("file_watch", "event_bus")
 
+
+def parse_cron_expression(expr: Optional[str]) -> Any:
+    """Return an APScheduler CronTrigger (UTC) for a five-field cron expression.
+
+    Raises ValueError naming the problem, so the API can refuse an expression
+    that would otherwise be saved and then never scheduled.
+    """
+    from apscheduler.triggers.cron import CronTrigger as APSCronTrigger
+
+    expr = (expr or "").strip()
+    if not expr:
+        raise ValueError("cron_expression is empty")
+    parts = expr.split()
+    if len(parts) != 5:
+        raise ValueError(f"cron_expression '{expr}' must have 5 fields, not {len(parts)}")
+    minute, hour, day, month, day_of_week = parts
+    try:
+        return APSCronTrigger(
+            minute=minute, hour=hour, day=day, month=month,
+            day_of_week=day_of_week, timezone="UTC",
+        )
+    except ValueError as exc:
+        raise ValueError(f"cron_expression '{expr}' is invalid: {exc}") from exc
+
+
+def trigger_config_error(trigger_type: Optional[str], cron_expression: Optional[str],
+                         output_type: Optional[str], output_config: Optional[dict]) -> Optional[str]:
+    """Say why a trigger saved with this configuration would never run or deliver."""
+    if trigger_type == "cron":
+        try:
+            parse_cron_expression(cron_expression)
+        except ValueError as exc:
+            return str(exc)
+    return output_config_error(output_type, output_config)
+
+
+def output_config_error(output_type: Optional[str], cfg: Optional[dict]) -> Optional[str]:
+    """Say why this output could never be delivered, or None when it can be."""
+    cfg = cfg or {}
+    if output_type == "http_callback" and not cfg.get("url"):
+        return "http_callback output needs a 'url'"
+    if output_type == "email":
+        if not cfg.get("to"):
+            return "email output needs a 'to' address"
+        if not os.getenv("SMTP_HOST", ""):
+            return "email output needs SMTP_HOST to be set on the server"
+    return None
+
+
 _PAYLOAD_PLACEHOLDER = re.compile(r"\{\{\s*payload(?:\.([A-Za-z0-9_.\-]+))?\s*\}\}")
 
 
@@ -259,28 +308,17 @@ class TriggerRunner:
 
     def _upsert_cron_job(self, trigger: Any) -> None:
         """Add or reschedule a single APScheduler job for a cron trigger."""
+        job_id = str(trigger.id)
         try:
-            from apscheduler.triggers.cron import CronTrigger as APSCronTrigger
+            aps_trigger = parse_cron_expression(trigger.cron_expression)
         except ImportError:
             return
-
-        job_id = str(trigger.id)
-        expr = (trigger.cron_expression or "").strip()
-        if not expr:
-            logger.warning("Trigger %s has empty cron_expression — skipping", trigger.id)
+        except ValueError as exc:
+            # The API refuses these now; rows saved before that still land here.
+            logger.warning("Trigger %s: %s — skipping", trigger.id, exc)
             return
 
-        parts = expr.split()
-        if len(parts) != 5:
-            logger.warning("Trigger %s: invalid cron_expression '%s' (expected 5 fields)", trigger.id, expr)
-            return
-
-        minute, hour, day, month, day_of_week = parts
         try:
-            aps_trigger = APSCronTrigger(
-                minute=minute, hour=hour, day=day, month=month,
-                day_of_week=day_of_week, timezone="UTC",
-            )
             with self._scheduler_lock:
                 existing = self._scheduler.get_job(job_id)
                 if existing:
@@ -505,10 +543,10 @@ class TriggerRunner:
         Raises on delivery failure: _execute_trigger_sync records the trigger result
         from the exception, so swallowing it here would make failures invisible.
         """
-        url = cfg.get("url", "")
-        if not url:
-            logger.warning("http_callback output_config missing 'url'")
-            return
+        error = output_config_error("http_callback", cfg)
+        if error:
+            raise RuntimeError(error)
+        url = cfg["url"]
         ok, detail = post_json(
             url,
             payload={"response": text, "source": "mate_trigger"},
@@ -520,10 +558,10 @@ class TriggerRunner:
 
     def _output_email(self, cfg: dict, text: str) -> None:
         """Send agent response via SMTP. Raises on delivery failure (see above)."""
-        to_addr = cfg.get("to", "")
-        if not to_addr or not os.getenv("SMTP_HOST", ""):
-            logger.warning("Email output misconfigured: missing 'to' in config or SMTP_HOST env var")
-            return
+        error = output_config_error("email", cfg)
+        if error:
+            raise RuntimeError(error)
+        to_addr = cfg["to"]
         ok, detail = send_email(to_addr, cfg.get("subject", "MATE Trigger Result"), text)
         if not ok:
             raise RuntimeError(f"email delivery failed: {detail}")

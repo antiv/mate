@@ -36,9 +36,11 @@ class TestTriggerHttpOutput(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 self.runner._output_http_callback({"url": "https://x"}, "hello")
 
-    def test_missing_url_is_a_no_op_not_an_error(self):
+    def test_missing_url_raises(self):
+        # Nothing can be delivered, so the run must not be recorded as ok (#151).
         with patch("shared.utils.trigger_runner.post_json") as post:
-            self.runner._output_http_callback({}, "hello")
+            with self.assertRaisesRegex(RuntimeError, "url"):
+                self.runner._output_http_callback({}, "hello")
         post.assert_not_called()
 
 
@@ -59,10 +61,18 @@ class TestTriggerEmailOutput(unittest.TestCase):
                 with self.assertRaises(RuntimeError):
                     self.runner._output_email({"to": "a@b.c"}, "body")
 
-    def test_misconfiguration_is_a_no_op_not_an_error(self):
+    def test_missing_smtp_host_raises(self):
         with patch.dict(os.environ, {"SMTP_HOST": ""}):
             with patch("shared.utils.trigger_runner.send_email") as send:
-                self.runner._output_email({"to": "a@b.c"}, "body")
+                with self.assertRaisesRegex(RuntimeError, "SMTP_HOST"):
+                    self.runner._output_email({"to": "a@b.c"}, "body")
+        send.assert_not_called()
+
+    def test_missing_recipient_raises(self):
+        with patch.dict(os.environ, {"SMTP_HOST": "smtp.example.com"}):
+            with patch("shared.utils.trigger_runner.send_email") as send:
+                with self.assertRaisesRegex(RuntimeError, "'to'"):
+                    self.runner._output_email({}, "body")
         send.assert_not_called()
 
 
