@@ -367,6 +367,8 @@
                 z-index: 30;
                 width: 260px !important;
                 height: 100vh;
+                /* 100vh includes the area under the browser toolbar on phones, hiding the last menu items */
+                height: 100dvh;
                 transform: translateX(-100%);
                 transition: transform 0.25s ease, z-index 0s 0.25s;
                 box-shadow: none;
@@ -378,6 +380,7 @@
                 box-shadow: 8px 0 24px rgba(0, 0, 0, 0.25);
             }
             #sidebarToggle { display: none !important; }
+            .mate-sidebar-foot { display: none; }
         }
         @media (min-width: 768px) {
             #sidebarBackdrop { display: none !important; }
