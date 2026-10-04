@@ -630,6 +630,32 @@ def column_comment(lines: Sequence[str], node: ast.Assign) -> str:
     return " ".join(block)
 
 
+def migration_versions() -> Dict[int, Dict[str, str]]:
+    """{version: {dialect: name}} for every migration file in the dialect folders."""
+    versions: Dict[int, Dict[str, str]] = {}
+    for dialect in SQL_DIALECTS:
+        folder = ROOT / "shared" / "sql" / "migrations" / dialect
+        if not folder.is_dir():
+            continue
+        for entry in folder.iterdir():
+            match = MIGRATION_FILE.match(entry.name)
+            if match:
+                versions.setdefault(int(match.group(1)), {})[dialect] = match.group(2)
+    return versions
+
+
+def migration_gaps() -> List[str]:
+    """Each migration version missing from a dialect, e.g. ``V036 has no mysql file``.
+
+    An installation on that database type would silently never get the change.
+    """
+    return [
+        f"V{version:03d} has no {dialect} file"
+        for version, present in sorted(migration_versions().items())
+        for dialect in SQL_DIALECTS if dialect not in present
+    ]
+
+
 def render_database() -> str:
     tree = parse(MODELS)
     lines = (ROOT / MODELS).read_text(encoding="utf-8").splitlines() if tree else []
@@ -685,15 +711,7 @@ def render_database() -> str:
         body.append("\n".join(section))
 
     # Migrations, and whether every dialect has every version.
-    versions: Dict[int, Dict[str, str]] = {}
-    for dialect in SQL_DIALECTS:
-        folder = ROOT / "shared" / "sql" / "migrations" / dialect
-        if not folder.is_dir():
-            continue
-        for entry in folder.iterdir():
-            match = MIGRATION_FILE.match(entry.name)
-            if match:
-                versions.setdefault(int(match.group(1)), {})[dialect] = match.group(2)
+    versions = migration_versions()
     migration_rows = []
     gaps = 0
     for version in sorted(versions):
@@ -941,6 +959,12 @@ def cmd_generate(check: bool) -> int:
         print("Guide problems:")
         for problem in problems:
             print(f"  - {problem}")
+    gaps = migration_gaps()
+    if gaps:
+        failed = True
+        print("Migrations missing from a dialect (add the file to shared/sql/migrations/<dialect>/):")
+        for gap in gaps:
+            print(f"  - {gap}")
     if not failed:
         print(f"docs OK: {len(reference)} reference pages current, {len(guides())} guides well-formed")
         unverified = [rel(g) for g in guides() if read_frontmatter(g)[0].get("status") == "migrated"]

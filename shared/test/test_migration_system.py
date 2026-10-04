@@ -250,32 +250,41 @@ class TestCreateMigration(unittest.TestCase):
         import shutil
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
-    @patch.object(MigrationSystem, '_get_database_type', return_value='sqlite')
-    def test_create_first_migration(self, mock_db_type):
-        filepath = self.ms.create_migration("initial_setup")
-        self.assertIsNotNone(filepath)
-        self.assertTrue(os.path.exists(filepath))
-        self.assertIn("V001__initial_setup.sql", filepath)
+    # create used to write only the configured database's folder, so the other
+    # dialects were easy to forget and those installations never got the change (#156).
 
-    @patch.object(MigrationSystem, '_get_database_type', return_value='sqlite')
-    def test_create_sequential_migration(self, mock_db_type):
-        sqlite_dir = os.path.join(self.temp_dir, "sqlite")
-        os.makedirs(sqlite_dir)
-        with open(os.path.join(sqlite_dir, "V001__first.sql"), 'w') as f:
-            f.write("-- first")
+    def test_create_first_migration_writes_every_dialect(self):
+        filepaths = self.ms.create_migration("initial_setup")
+        self.assertEqual(len(filepaths), 3)
+        for dialect, filepath in zip(("sqlite", "postgresql", "mysql"), filepaths):
+            self.assertTrue(os.path.exists(filepath))
+            self.assertEqual(filepath, os.path.join(self.temp_dir, dialect, "V001__initial_setup.sql"))
 
-        filepath = self.ms.create_migration("second")
-        self.assertIsNotNone(filepath)
-        self.assertIn("V002__second.sql", filepath)
+    def test_create_does_not_depend_on_the_configured_database(self):
+        with patch.object(MigrationSystem, '_get_database_type', return_value='mysql'):
+            filepaths = self.ms.create_migration("x")
+        self.assertEqual(len(filepaths), 3)
 
-    @patch.object(MigrationSystem, '_get_database_type', return_value='sqlite')
-    def test_created_migration_has_header(self, mock_db_type):
-        filepath = self.ms.create_migration("test_migration")
-        with open(filepath, 'r') as f:
-            content = f.read()
-        self.assertIn("Migration: test_migration", content)
-        self.assertIn("Version: V001", content)
-        self.assertIn("SQLITE", content)
+    def test_create_sequential_migration_follows_the_highest_version_anywhere(self):
+        for dialect, filename in (("sqlite", "V001__first.sql"), ("mysql", "V002__mysql_only.sql")):
+            os.makedirs(os.path.join(self.temp_dir, dialect), exist_ok=True)
+            with open(os.path.join(self.temp_dir, dialect, filename), 'w') as f:
+                f.write("-- existing")
+
+        filepaths = self.ms.create_migration("second")
+        self.assertTrue(all(p.endswith("V003__second.sql") for p in filepaths))
+
+    def test_created_migration_has_header_naming_its_dialect(self):
+        for filepath, dialect in zip(self.ms.create_migration("test_migration"),
+                                     ("SQLITE", "POSTGRESQL", "MYSQL")):
+            with open(filepath, 'r') as f:
+                content = f.read()
+            self.assertIn("Migration: test_migration", content)
+            self.assertIn("Version: V001", content)
+            self.assertIn(f"Database: {dialect}", content)
+
+    def test_rollback_is_gone(self):
+        self.assertFalse(hasattr(self.ms, "rollback_migration"))
 
 
 class TestGetMigrationStatus(unittest.TestCase):

@@ -5,8 +5,10 @@ Database migration management CLI for MATE (Multi-Agent Tree Engine).
 Usage:
     python migrate.py run                    # Run all pending migrations
     python migrate.py status                 # Show migration status
-    python migrate.py create <name>          # Create new migration
-    python migrate.py rollback <version>     # Rollback specific migration
+    python migrate.py create <name>          # Create a new migration in every dialect
+
+There is no rollback: to undo a migration, write a new one that reverses it, or
+restore a backup.
 """
 
 import sys
@@ -25,7 +27,7 @@ from shared.utils.migration_system import MigrationSystem
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: python migrate.py [run|status|create <name>|rollback <version>]")
+        print("Usage: python migrate.py [run|status|create <name>]")
         sys.exit(1)
     
     command = sys.argv[1]
@@ -79,34 +81,25 @@ def main():
         name = sys.argv[2]
         print(f"Creating migration: {name}")
         
-        filepath = migration_system.create_migration(name)
-        if filepath:
-            print(f"✅ Created migration: {filepath}")
-            print("\nEdit the file to add your migration SQL, then run:")
+        filepaths = migration_system.create_migration(name)
+        if filepaths:
+            print("✅ Created migration:")
+            for filepath in filepaths:
+                print(f"  {filepath}")
+            print("\nWrite the SQL in each file, in that database's syntax, then run:")
             print("python migrate.py run")
         else:
             print("❌ Failed to create migration")
             sys.exit(1)
     
     elif command == "rollback":
-        if len(sys.argv) < 3:
-            print("Usage: python migrate.py rollback <version>")
-            print("Example: python migrate.py rollback 001")
-            sys.exit(1)
-        
-        version = sys.argv[2]
-        print(f"Rolling back migration V{version}...")
-        
-        success = migration_system.rollback_migration(version)
-        if success:
-            print(f"✅ Successfully rolled back migration V{version}")
-        else:
-            print(f"❌ Failed to rollback migration V{version}")
-            sys.exit(1)
+        print("There is no rollback. To undo a migration, write a new one that reverses it")
+        print("(python migrate.py create <name>), or restore a backup of the database.")
+        sys.exit(1)
     
     else:
         print(f"Unknown command: {command}")
-        print("Usage: python migrate.py [run|status|create <name>|rollback <version>]")
+        print("Usage: python migrate.py [run|status|create <name>]")
         sys.exit(1)
 
 

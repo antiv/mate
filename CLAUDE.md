@@ -45,8 +45,7 @@ Tests live in `shared/test/`, covering agent management, tool factory, model swi
 ```bash
 python shared/migrate.py run       # Apply pending migrations
 python shared/migrate.py status    # Check migration status
-python shared/migrate.py create    # Create new migration
-python shared/migrate.py rollback  # Roll back last migration
+python shared/migrate.py create    # Create new migration (all three dialects)
 ```
 
 Migrations auto-apply on server startup. Per-database migration files are in `shared/sql/migrations/{postgresql,mysql,sqlite}/`.

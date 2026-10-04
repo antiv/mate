@@ -46,8 +46,16 @@ class TestMigrateCLIIsRunnable(unittest.TestCase):
 
     def test_the_commands_the_docs_promise_are_all_recognised(self):
         usage = self._run(["shared/migrate.py"]).stdout
-        for command in ("run", "status", "create", "rollback"):
+        for command in ("run", "status", "create"):
             self.assertIn(command, usage)
+
+    def test_rollback_explains_there_is_none(self):
+        # It used to report a failure for every migration, since none had a rollback
+        # file (#156). It now says what to do instead.
+        result = self._run(["shared/migrate.py", "rollback", "001"])
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("There is no rollback", result.stdout)
+        self.assertIn("new one that reverses it", result.stdout)
 
 
 if __name__ == "__main__":

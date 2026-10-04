@@ -1,8 +1,9 @@
 """
 Database migration system for MATE (Multi-Agent Tree Engine).
 
-Handles database schema migrations with version tracking, automatic execution,
-and rollback capabilities.
+Handles database schema migrations with version tracking and automatic execution.
+There is no rollback: to undo a change, write a new migration that reverses it, or
+restore a backup.
 """
 
 import os
@@ -20,6 +21,10 @@ from dotenv import load_dotenv
 load_dotenv()
 
 logger = logging.getLogger(__name__)
+
+# Every migration exists once per dialect, in shared/sql/migrations/<dialect>/.
+DIALECTS = ("sqlite", "postgresql", "mysql")
+DIALECT_NAMES = {"sqlite": "SQLite", "postgresql": "PostgreSQL", "mysql": "MySQL"}
 
 
 class MigrationRecord:
@@ -391,42 +396,6 @@ class MigrationSystem:
             logger.error(f"Error applying migration V{version}__{name}: {e}")
             return False
     
-    def _rollback_migration(self, engine, version: str, name: str) -> bool:
-        """Rollback a single migration (if rollback SQL exists)."""
-        rollback_file = os.path.join(self.migrations_dir, f'R{version}__{name}.sql')
-        
-        if not os.path.exists(rollback_file):
-            logger.warning(f"No rollback file found for V{version}__{name}")
-            return False
-        
-        try:
-            with open(rollback_file, 'r', encoding='utf-8') as f:
-                sql_content = f.read()
-            
-            with engine.connect() as conn:
-                trans = conn.begin()
-                try:
-                    # Execute rollback SQL
-                    conn.execute(text(sql_content))
-                    
-                    # Remove migration record
-                    conn.execute(text("""
-                        DELETE FROM schema_migrations WHERE version = :version
-                    """), {'version': version})
-                    
-                    trans.commit()
-                    logger.info(f"Rolled back migration V{version}__{name}")
-                    return True
-                    
-                except Exception as e:
-                    trans.rollback()
-                    logger.error(f"Failed to rollback migration V{version}__{name}: {e}")
-                    return False
-                    
-        except Exception as e:
-            logger.error(f"Error rolling back migration V{version}__{name}: {e}")
-            return False
-    
     def run_migrations(self) -> bool:
         """Run all pending migrations."""
         engine = self._get_engine()
@@ -474,23 +443,6 @@ class MigrationSystem:
         
         return True
     
-    def rollback_migration(self, version: str) -> bool:
-        """Rollback a specific migration."""
-        engine = self._get_engine()
-        if not engine:
-            logger.error("No database engine available")
-            return False
-        
-        # Get migration info
-        applied_migrations = {m.version: m for m in self._get_applied_migrations(engine)}
-        
-        if version not in applied_migrations:
-            logger.error(f"Migration V{version} not found in applied migrations")
-            return False
-        
-        migration = applied_migrations[version]
-        return self._rollback_migration(engine, version, migration.name)
-    
     def get_migration_status(self) -> Dict[str, any]:
         """Get current migration status."""
         engine = self._get_engine()
@@ -516,37 +468,34 @@ class MigrationSystem:
             "orphaned": list(orphaned_versions)
         }
     
-    def create_migration(self, name: str) -> Optional[str]:
-        """Create a new migration file."""
-        # Get next version number
-        migration_files = self._get_migration_files()
-        if migration_files:
-            last_version = int(migration_files[-1][0])
-            next_version = str(last_version + 1).zfill(3)
-        else:
-            next_version = "001"
-        
-        db_type = self._get_database_type()
-        
-        # Create database-specific directory if it doesn't exist
-        db_specific_dir = os.path.join(self.migrations_dir, db_type)
-        if not os.path.exists(db_specific_dir):
-            os.makedirs(db_specific_dir)
-        
+    def create_migration(self, name: str) -> Optional[List[str]]:
+        """Create the next migration in every dialect folder; return the file paths.
+
+        Writing all three at once means a dialect cannot be forgotten: an
+        installation on that database type would otherwise never get the change.
+        The version follows the highest one found in any dialect.
+        """
+        versions = []
+        for dialect in DIALECTS:
+            folder = os.path.join(self.migrations_dir, dialect)
+            if os.path.isdir(folder):
+                versions += [int(version) for version, _, _ in self._get_migration_files_from_dir(folder)]
+        next_version = str(max(versions, default=0) + 1).zfill(3)
         filename = f"V{next_version}__{name}.sql"
-        filepath = os.path.join(db_specific_dir, filename)
-        
+        created = datetime.utcnow().isoformat()
+
+        paths = [os.path.join(self.migrations_dir, dialect, filename) for dialect in DIALECTS]
         try:
-            with open(filepath, 'w', encoding='utf-8') as f:
-                f.write(f"-- Migration: {name}\n")
-                f.write(f"-- Version: V{next_version}\n")
-                f.write(f"-- Created: {datetime.utcnow().isoformat()}\n")
-                f.write(f"-- Database: {db_type.upper()}\n\n")
-                f.write("-- Add your migration SQL here\n")
-            
-            logger.info(f"Created migration file: {filename} for {db_type}")
-            return filepath
-            
+            for dialect, filepath in zip(DIALECTS, paths):
+                os.makedirs(os.path.dirname(filepath), exist_ok=True)
+                with open(filepath, 'w', encoding='utf-8') as f:
+                    f.write(f"-- Migration: {name}\n")
+                    f.write(f"-- Version: V{next_version}\n")
+                    f.write(f"-- Created: {created}\n")
+                    f.write(f"-- Database: {dialect.upper()}\n\n")
+                    f.write(f"-- Add your migration SQL here, in {DIALECT_NAMES[dialect]} syntax\n")
+            logger.info(f"Created migration file {filename} for {', '.join(DIALECTS)}")
+            return paths
         except Exception as e:
             logger.error(f"Failed to create migration file: {e}")
             return None
@@ -567,7 +516,7 @@ if __name__ == "__main__":
     import sys
     
     if len(sys.argv) < 2:
-        print("Usage: python migration_system.py [run|status|create <name>|rollback <version>]")
+        print("Usage: python migration_system.py [run|status|create <name>]")
         sys.exit(1)
     
     command = sys.argv[1]
@@ -586,19 +535,12 @@ if __name__ == "__main__":
             print("Usage: python migration_system.py create <migration_name>")
             sys.exit(1)
         name = sys.argv[2]
-        filepath = migration_system.create_migration(name)
-        if filepath:
-            print(f"Created migration: {filepath}")
+        filepaths = migration_system.create_migration(name)
+        if filepaths:
+            for filepath in filepaths:
+                print(f"Created migration: {filepath}")
         else:
             sys.exit(1)
-    
-    elif command == "rollback":
-        if len(sys.argv) < 3:
-            print("Usage: python migration_system.py rollback <version>")
-            sys.exit(1)
-        version = sys.argv[2]
-        success = migration_system.rollback_migration(version)
-        sys.exit(0 if success else 1)
     
     else:
         print(f"Unknown command: {command}")

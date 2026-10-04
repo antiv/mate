@@ -244,6 +244,39 @@ class TestShippedDocs(unittest.TestCase):
             self.assertEqual(actual, expected, str(file))
 
 
+class TestMigrationDialectCheck(unittest.TestCase):
+    """`gen_docs.py --check` fails when a migration is missing from a dialect (#156)."""
+
+    def setUp(self):
+        spec = importlib.util.spec_from_file_location("gen_docs", REPO_ROOT / "scripts" / "gen_docs.py")
+        self.gen_docs = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.gen_docs)
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.gen_docs.ROOT = Path(self.tmp.name)
+
+    def _write(self, dialect, filename):
+        folder = Path(self.tmp.name) / "shared" / "sql" / "migrations" / dialect
+        folder.mkdir(parents=True, exist_ok=True)
+        (folder / filename).write_text("-- x", encoding="utf-8")
+
+    def test_a_version_missing_from_a_dialect_is_reported(self):
+        for dialect in ("sqlite", "postgresql", "mysql"):
+            self._write(dialect, "V001__one.sql")
+        self._write("sqlite", "V002__two.sql")
+        self._write("postgresql", "V002__two.sql")
+        self.assertEqual(self.gen_docs.migration_gaps(), ["V002 has no mysql file"])
+
+    def test_dialects_in_step_report_nothing(self):
+        for dialect in ("sqlite", "postgresql", "mysql"):
+            self._write(dialect, "V001__one.sql")
+        self.assertEqual(self.gen_docs.migration_gaps(), [])
+
+    def test_the_repository_has_no_gaps(self):
+        self.gen_docs.ROOT = REPO_ROOT
+        self.assertEqual(self.gen_docs.migration_gaps(), [])
+
+
 class TestDocsRoutes(unittest.TestCase):
 
     def setUp(self):
