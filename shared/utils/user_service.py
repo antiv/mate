@@ -8,6 +8,7 @@ This module handles:
 """
 
 import logging
+import os
 from typing import Optional, List
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
@@ -29,7 +30,8 @@ class UserService:
     
     def get_or_create_user(self, user_id: str) -> Optional[User]:
         """
-        Get existing user by user_id or create a new one with default 'user' role.
+        Get existing user by user_id or create a new one with the default role
+        ('user'; 'widget' for widget visitors; 'admin' and 'user' for AUTH_USERNAME).
         
         Args:
             user_id: User identifier from the request
@@ -46,24 +48,36 @@ class UserService:
             # Try to get existing user by user_id
             user = session.query(User).filter(User.user_id == user_id).first()
             
+            # The built-in account administers the dashboard, so it also holds the
+            # 'admin' role that admin-only agents and memory block writes check.
+            is_builtin_admin = user_id == os.getenv("AUTH_USERNAME", "admin")
+
             if user:
                 logger.debug(f"Found existing user {user_id}")
+                if is_builtin_admin and not user.has_role("admin"):
+                    user.add_role("admin")
+                    session.commit()
+                    session.refresh(user)
+                    logger.info(f"Gave built-in account {user_id} the 'admin' role")
                 return user
 
             # Public embeddable-widget visitors are scoped as "widget_{keyid}_{uid}" and get a
             # dedicated 'widget' role so they are isolated from dashboard 'user' accounts.
-            default_role = "widget" if user_id.startswith("widget_") else "user"
-            new_user = User(
-                user_id=user_id,
-                roles=f'["{default_role}"]'
-            )
+            if is_builtin_admin:
+                roles = ["admin", "user"]
+            elif user_id.startswith("widget_"):
+                roles = ["widget"]
+            else:
+                roles = ["user"]
+            new_user = User(user_id=user_id)
+            new_user.set_roles(roles)
 
             session.add(new_user)
             session.commit()
             # commit() expires the instance and close() below detaches it, so any
             # attribute read by the caller would raise. Load it while still attached.
             session.refresh(new_user)
-            logger.info(f"Created new user {user_id} with default '{default_role}' role")
+            logger.info(f"Created new user {user_id} with roles {roles}")
             return new_user
             
         except IntegrityError as e:

@@ -27,7 +27,7 @@ Every environment variable the code reads: **131** in total. Descriptions come f
 | `ARTIFACT_SERVICE` | `none` / `not set` ⚠ | — | `adk_main.py`, `shared/utils/langgraph/artifact_adapter.py`, `shared/utils/tools/image_tools.py` |
 | `AUDIT_RETENTION_DAYS` | `0` | Audit log retention (EU AI Act compliance). 0 = keep forever; N = delete entries older than N days | `shared/utils/audit_service.py` |
 | `AUTH_PASSWORD` | `mate` | — | `auth_server.py` |
-| `AUTH_USERNAME` | `admin` | Authentication (Basic Auth fallback — always available) | `auth_server.py`, `shared/utils/user_cleanup.py` |
+| `AUTH_USERNAME` | `admin` | Authentication (Basic Auth fallback — always available) | `auth_server.py`, `shared/utils/user_cleanup.py`, `shared/utils/user_service.py` |
 | `BROWSER_ALLOW_PRIVATE_NETWORK` | `false` | — | `shared/utils/tools/browser_tools.py` |
 | `BROWSER_CDP_URL` | `http://localhost:9222` | — | `shared/utils/tools/browser_tools.py` |
 | `BROWSER_HEADLESS` | `true` | — | `shared/utils/tools/browser_tools.py` |

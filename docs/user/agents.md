@@ -111,9 +111,8 @@ A person who is refused gets a message naming the roles required and the roles t
 have, and the refusal is recorded in the audit log. Roles are assigned on the
 **Users** page; see [Users and roles](users-and-roles.md).
 
-> **The built-in account does not start with the `admin` role.** Its user record is
-> created the first time it talks to an agent, with the role `user`. Until you add
-> `admin` to it on the Users page, an agent with an empty list refuses it too.
+The built-in account always has the `admin` role, so an agent with an empty list
+admits it.
 
 ## Switches at the bottom of the form
 

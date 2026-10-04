@@ -109,10 +109,13 @@ row with the agent's `allowed_for_roles`
 - an empty list requires the `admin` role
 - otherwise the user needs any one of the listed roles
 
-There is no bypass for dashboard administrators. A user id seen for the first time
-gets a row with the role `user`, or `widget` when the id starts with `widget_`. The
-built-in account's row is created the same way, with `user`, so on a new
-installation it is refused by agents with an empty list until it is given `admin`.
+There is no bypass for dashboard administrators other than the built-in account.
+A user id seen for the first time gets a row with the role `user`, or `widget` when
+the id starts with `widget_` (`shared/utils/user_service.py::get_or_create_user`).
+The id equal to `AUTH_USERNAME` gets `admin, user`, and an existing row for it that
+lacks `admin` has it added on the next lookup, so the built-in account passes the
+check for an empty list. An OAuth user whose id equals `AUTH_USERNAME` is treated the
+same way, as it already is by `server/auth.py` and `server/pat_auth.py`.
 
 The check runs again for each sub-agent the conversation is transferred to.
 

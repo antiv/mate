@@ -54,8 +54,8 @@ filters.
 
 So in a conversation with an ordinary user the agent can consult its memory but
 cannot rewrite it. The role is the one on the person's user record; see
-[Users and roles](users-and-roles.md) for giving it to the built-in account. This keeps a visitor from talking an agent into changing its own
-rules.
+[Users and roles](users-and-roles.md). The built-in account always has it. This keeps
+a visitor from talking an agent into changing its own rules.
 
 Search by meaning uses an embedding model. If none is available on the server, the
 agent falls back to matching words in labels and values.
