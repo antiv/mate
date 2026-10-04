@@ -132,15 +132,12 @@ Each row in the list has:
 
 - **Test fire** (▶) runs the trigger now and shows the result. It works whether the
   trigger is enabled or not.
-- The **Enabled** switch pauses and resumes a scheduled trigger immediately.
+- The **Enabled** switch pauses and resumes a trigger immediately. A webhook trigger
+  that is switched off refuses calls to its URL with `409 Trigger is disabled`.
 - The pencil opens the trigger for editing; the bin deletes it.
 
 **Last Run** shows when the trigger last fired and whether it succeeded. Token usage
 from triggers appears on the **Usage** page under the *trigger* origin.
-
-> **Switching a webhook trigger off does not block its URL.** The switch stops
-> schedules only. A webhook trigger that is switched off still runs when called with
-> a valid fire key. To stop one, regenerate its key or delete the trigger.
 
 ## System background tasks
 

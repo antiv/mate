@@ -7358,6 +7358,7 @@ class DashboardServer:
                 fire_key_hash = trigger_row.fire_key_hash if trigger_row else None
                 signing_secret = trigger_row.signing_secret if trigger_row else None
                 require_signature = bool(trigger_row.require_signature) if trigger_row else False
+                is_enabled = bool(trigger_row.is_enabled) if trigger_row else False
             finally:
                 session.close()
 
@@ -7406,6 +7407,13 @@ class DashboardServer:
                     )
                 if not TriggerRunner.verify_signature(signing_secret, raw_body, signature):
                     raise HTTPException(status_code=401, detail="Invalid signature")
+
+            # 4. Switching a trigger off must stop its webhook too, not only the
+            # cron path. Checked here rather than in execute_trigger so that
+            # test-fire from the dashboard still works on a disabled trigger.
+            # After authentication, so unauthenticated callers learn nothing.
+            if trigger_row and not is_enabled:
+                raise HTTPException(status_code=409, detail="Trigger is disabled")
 
             # The firing system's body reaches the prompt through {{ payload }}.
             # A body that is absent or not JSON is not an error: plenty of
