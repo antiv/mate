@@ -34,14 +34,20 @@ In the agent form, click **Manage Blocks**. The dialog lists the project's block
 | **Label** | The block's name. Agents ask for a block by its label, so choose one that says what is inside, such as `returns_policy`. |
 | **Value** | The text itself. |
 | **Description** | A note about what the block is for. |
-| **Character Limit**, **Read-only**, **Preserve on migration** | Recorded with the block. See the note below. |
+| **Character Limit** | The longest value the block accepts. A longer value is refused when it is saved, whoever saves it. Empty means no limit. |
+| **Read-only** | The block cannot be changed, deleted or restored to an older version, by you, an agent, a trigger, a template update or the widget admin panel. To change it, open it, untick **Read-only** and save; your edits in that same save are kept. One exception: importing agents with **Overwrite existing agents with the same name** ticked replaces existing blocks from the file, read-only ones included. |
+| **Preserve on migration** | Recorded with the block. |
 
 Use the search row at the top to filter the list; **Add Condition** combines several
 filters.
 
-> **Read-only and Character Limit are labels, not locks.** They are stored with the
-> block, but the server does not check them when a block is written. An agent that
-> is allowed to modify blocks can still overwrite a block marked read-only.
+When an agent tries to change a read-only block, or writes a value over the limit,
+it gets an error saying why. Over the limit it is told the limit, so it can shorten
+the text and try again. A trigger whose answer cannot be written to its block is
+recorded as failed, and **Last Run** shows the reason.
+
+The widget admin panel cannot clear **Read-only**, so it cannot change a read-only
+block. Unlock the block from the dashboard instead.
 
 ## What an agent can do with blocks
 

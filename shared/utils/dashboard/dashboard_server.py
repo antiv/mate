@@ -2614,8 +2614,8 @@ class DashboardServer:
             # Sync memory blocks
             memory_blocks_added = 0
             memory_blocks_updated = 0
-            from shared.utils.memory_blocks_service import (MemoryBlocksService, block_state,
-                                                            record_block_version)
+            memory_blocks_skipped = []
+            from shared.utils.memory_blocks_service import MemoryBlocksService
             from shared.utils.models import MemoryBlock
             mem_service = MemoryBlocksService(self.db_client)
             
@@ -2637,15 +2637,18 @@ class DashboardServer:
                     if result.get("status") == "success":
                         memory_blocks_added += 1
                 else:
-                    # Update existing block value
+                    # Through the service, so a read-only block or one whose limit the
+                    # template's value exceeds is left alone and reported, not overwritten.
                     existing = db_block_map[label]
                     if value != (existing.value or ""):
-                        previous = block_state(existing)
-                        existing.value = value
-                        if desc:
-                            existing.description = desc
-                        record_block_version(session, existing, "update", changed_by, previous=previous)
-                        memory_blocks_updated += 1
+                        result = mem_service.modify_block(project_id, str(existing.id), value=value,
+                                                          description=desc or None,
+                                                          changed_by=changed_by)
+                        if result.get("status") == "success":
+                            memory_blocks_updated += 1
+                        else:
+                            memory_blocks_skipped.append(
+                                {"label": label, "reason": result.get("error_message")})
             
             # Update project template version
             project.template_version = template_meta.get("version")
@@ -2671,6 +2674,7 @@ class DashboardServer:
                 "agents_updated": agents_updated,
                 "memory_blocks_added": memory_blocks_added,
                 "memory_blocks_updated": memory_blocks_updated,
+                "memory_blocks_skipped": memory_blocks_skipped,
             }
         except Exception as e:
             session.rollback()
@@ -4566,6 +4570,7 @@ class DashboardServer:
                         "agents_updated": result.get("agents_updated", 0),
                         "memory_blocks_added": result.get("memory_blocks_added", 0),
                         "memory_blocks_updated": result.get("memory_blocks_updated", 0),
+                        "memory_blocks_skipped": [b["label"] for b in result.get("memory_blocks_skipped", [])],
                     },
                     request=request,
                 )
@@ -5415,6 +5420,17 @@ class DashboardServer:
                 if value is None:
                     return {"success": False, "error": "value is required"}
                 
+                # The edit form always sends the checkboxes and leaves the limit out
+                # when it is empty, so a request carrying them sets all three.
+                # Unchecking Read-only here is how a read-only block is unlocked.
+                metadata_updates = None
+                if read_only is not None or preserve_on_migration is not None:
+                    metadata_updates = {
+                        "limit": character_limit or None,
+                        "read_only": True if read_only else None,
+                        "preserve_on_migration": True if preserve_on_migration else None,
+                    }
+
                 from shared.utils.memory_blocks_service import MemoryBlocksService
                 svc = MemoryBlocksService(self.db_client)
                 result = svc.modify_block(
@@ -5423,6 +5439,7 @@ class DashboardServer:
                     value=value,
                     description=description,
                     changed_by=username,
+                    metadata_updates=metadata_updates,
                 )
                 
                 if result.get("status") == "success":
@@ -6287,7 +6304,9 @@ class DashboardServer:
             for label, value in blocks.items():
                 result = svc.modify_block(project_id, label, value=value, changed_by=username)
                 if result.get("status") != "success":
-                    raise HTTPException(status_code=500, detail=f"Failed to update the block '{label}'")
+                    status = 400 if result.get("error_code") in ("read_only", "too_long") else 500
+                    raise HTTPException(status_code=status, detail=result.get("error_message")
+                                        or f"Failed to update the block '{label}'")
                 block_versions[label] = result.get("version_number")
 
             source = {k: body[k] for k in ("test_case_id", "feedback_id") if isinstance(body.get(k), int)}

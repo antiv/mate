@@ -52,6 +52,11 @@ dialog shows what would change:
 Click **Apply Updates** to take them. Your own model choices and role settings on
 existing agents are kept.
 
+A memory block marked **Read-only** in your project keeps its value; so does one whose
+**Character Limit** the template's new value exceeds. After the update a warning names
+the blocks that were not updated and why. To take the template's value, unlock the
+block (see [Memory blocks](memory-blocks.md)) and apply the updates again.
+
 ## Make your own template
 
 1. On the **Agents** page, select the project and the root agent of the tree you

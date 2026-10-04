@@ -155,13 +155,20 @@ function performTemplateSync() {
         })
         .then(data => {
             hideTemplateSyncModal();
+            const skipped = data.memory_blocks_skipped || [];
             if (typeof showNotification === 'function') {
-                showNotification('Project synchronized with template successfully!', 'success');
+                if (skipped.length) {
+                    // Read-only blocks, or values over a block's limit, are not overwritten.
+                    const labels = skipped.map(b => b.label).join(', ');
+                    showNotification(`Project synchronized, but these memory blocks were not updated: ${labels}. ${skipped[0].reason}`, 'warning');
+                } else {
+                    showNotification('Project synchronized with template successfully!', 'success');
+                }
             }
-            // Reload page to see changes
+            // Reload page to see changes; leave time to read a warning
             setTimeout(() => {
                 window.location.reload();
-            }, 1500);
+            }, skipped.length ? 6000 : 1500);
         })
         .catch(error => {
             console.error('Error syncing template:', error);
