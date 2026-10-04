@@ -19,7 +19,7 @@ CREATE INDEX idx_memory_blocks_label ON memory_blocks(label);
 
 -- Initial memory blocks for Chess MATE Demo project
 
-INSERT IGNORE INTO memory_blocks (project_id, label, value, description) VALUES (
+INSERT IGNORE INTO memory_blocks (project_id, label, value, description, created_at, updated_at) VALUES (
     (SELECT id FROM projects WHERE name = 'Chess MATE Demo' LIMIT 1),
     'system_instruction_chess_mate_root',
     'You are the Chess Team Captain. Analyze the user''s request.
@@ -28,9 +28,9 @@ INSERT IGNORE INTO memory_blocks (project_id, label, value, description) VALUES 
 - If they ask about historical games or players (e.g., Fischer vs Spassky), delegate to chess_historian.
 
 You are an agent. Your internal name is "chess_mate_root". The description about you is "Chess Team Captain. Routes to opening book, engine analyst, or historian.".',
-    'Main instruction for chess_mate_root agent');
+    'Main instruction for chess_mate_root agent', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 
-INSERT IGNORE INTO memory_blocks (project_id, label, value, description) VALUES (
+INSERT IGNORE INTO memory_blocks (project_id, label, value, description, created_at, updated_at) VALUES (
     (SELECT id FROM projects WHERE name = 'Chess MATE Demo' LIMIT 1),
     'system_instruction_escalation_protocol',
     'ESCALATION & FALLBACK PROTOCOL:
@@ -102,9 +102,9 @@ Then immediately escalate to your parent agent using the appropriate transfer.
 - Root Agent handles memory management directly
 
 **Key Principle**: No task should be abandoned. Always find a path to resolution or clearly communicate what''s needed from the user. System administration tasks are RESERVED for the Root Agent only.',
-    'Escalation protocol for when the chess team cannot handle a request');
+    'Escalation protocol for when the chess team cannot handle a request', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 
-INSERT IGNORE INTO memory_blocks (project_id, label, value, description) VALUES (
+INSERT IGNORE INTO memory_blocks (project_id, label, value, description, created_at, updated_at) VALUES (
     (SELECT id FROM projects WHERE name = 'Chess MATE Demo' LIMIT 1),
     'system_instruction_shared_user_profile',
     'USER PROFILE UPDATE PROTOCOL (REQUIRED):
@@ -123,27 +123,27 @@ When the user shares information about themselves, you MUST update their profile
 **Action**: Call the `update_user_profile` tool with the complete profile text. Merge the new information with any existing profile (include ALL known information about the user, not just the new fact). Use clear, structured text (e.g. sections or bullet points).
 
 **Do NOT ask for permission**—update automatically. The user expects you to remember what they share.',
-    'Shared rule: update user profile when user shares info about themselves');
+    'Shared rule: update user profile when user shares info about themselves', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 
-INSERT IGNORE INTO memory_blocks (project_id, label, value, description) VALUES (
+INSERT IGNORE INTO memory_blocks (project_id, label, value, description, created_at, updated_at) VALUES (
     (SELECT id FROM projects WHERE name = 'Chess MATE Demo' LIMIT 1),
     'system_instruction_chess_opening_book',
     'You are a Chess Opening expert. Explain the requested opening moves, variations, and strategic ideas clearly (load with RAG or instruction files).',
-    'Instruction for chess opening book specialist');
+    'Instruction for chess opening book specialist', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 
-INSERT IGNORE INTO memory_blocks (project_id, label, value, description) VALUES (
+INSERT IGNORE INTO memory_blocks (project_id, label, value, description, created_at, updated_at) VALUES (
     (SELECT id FROM projects WHERE name = 'Chess MATE Demo' LIMIT 1),
     'system_instruction_chess_engine_analyst',
     'You are a calculation engine. Use the available tools to calculate the best move or evaluate the position.',
-    'Instruction for chess engine analyst specialist');
+    'Instruction for chess engine analyst specialist', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 
-INSERT IGNORE INTO memory_blocks (project_id, label, value, description) VALUES (
+INSERT IGNORE INTO memory_blocks (project_id, label, value, description, created_at, updated_at) VALUES (
     (SELECT id FROM projects WHERE name = 'Chess MATE Demo' LIMIT 1),
     'system_instruction_chess_historian',
     'Search for historical match results, player biographies, and tournament trivia. Use the available search tools.',
-    'Instruction for chess historian specialist');
+    'Instruction for chess historian specialist', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 
-INSERT IGNORE INTO memory_blocks (project_id, label, value, description) VALUES (
+INSERT IGNORE INTO memory_blocks (project_id, label, value, description, created_at, updated_at) VALUES (
     (SELECT id FROM projects WHERE name = 'Chess MATE Demo' LIMIT 1),
     'system_instruction_chess_opening_book_database',
     'Chess Opening Database: Moves, Variations & Strategy
@@ -318,4 +318,4 @@ B. Réti Opening
 Moves: 1. Nf3
 
 Strategic Idea: Flexible development. White waits for Black to commit to a setup before deciding on a central pawn structure.',
-    '');
+    '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);

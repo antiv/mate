@@ -173,10 +173,14 @@ CREATE INDEX IF NOT EXISTS idx_file_search_documents_status ON file_search_docum
 -- Hierarchy: chess_mate_root (Captain) -> chess_opening_book | chess_engine_analyst | chess_historian
 -- All agents are DB-configured (hardcoded = false).
 -- =============================================================================
-INSERT OR IGNORE INTO projects (name, description)
-VALUES ('Chess MATE Demo', 'Demo project: Grandmaster MATE tree (Knowledge, Calculation, Search)');
+-- Seed rows are only inserted when absent, and the timestamps are given explicitly:
+-- on an installation whose tables SQLAlchemy's create_all made, this runs for the
+-- first time over agents an admin may already have edited, and those tables have no
+-- database-side defaults.
+INSERT OR IGNORE INTO projects (name, description, created_at, updated_at)
+VALUES ('Chess MATE Demo', 'Demo project: Grandmaster MATE tree (Knowledge, Calculation, Search)', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 
-INSERT OR REPLACE INTO agents_config (
+INSERT OR IGNORE INTO agents_config (
     name, type, model_name, description, instruction,
     parent_agents, allowed_for_roles, tool_config, mcp_servers_config, disabled, hardcoded, project_id
 ) VALUES

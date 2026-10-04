@@ -2,7 +2,12 @@
 -- Version: V003
 -- Database: MYSQL
 
-INSERT INTO agents_config (
+-- Inserted only when absent: on an installation whose tables SQLAlchemy's
+-- create_all made, this runs for the first time over an agent an admin may
+-- already have edited.
+-- INSERT IGNORE fills expose_as_model and debug_mode, which only exist there, with 0.
+
+INSERT IGNORE INTO agents_config (
     name, type, model_name, description, instruction,
     parent_agents, allowed_for_roles, tool_config, mcp_servers_config, disabled, hardcoded, project_id
 ) VALUES (
@@ -33,16 +38,4 @@ When generating images:
     FALSE,
     FALSE,
     (SELECT id FROM projects WHERE name = 'Chess MATE Demo' LIMIT 1)
-)
-ON DUPLICATE KEY UPDATE
-    type = VALUES(type),
-    model_name = VALUES(model_name),
-    description = VALUES(description),
-    instruction = VALUES(instruction),
-    parent_agents = VALUES(parent_agents),
-    allowed_for_roles = VALUES(allowed_for_roles),
-    tool_config = VALUES(tool_config),
-    mcp_servers_config = VALUES(mcp_servers_config),
-    disabled = VALUES(disabled),
-    hardcoded = VALUES(hardcoded),
-    project_id = VALUES(project_id);
+);

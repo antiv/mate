@@ -89,6 +89,18 @@ what makes a re-run of `CREATE TABLE` or `ADD COLUMN` statements harmless.
 Never edit a migration that has been released. Installations have already applied
 it, and nothing re-runs a file whose version is recorded. Add a new one.
 
+A migration that inserts rows (a demo project, a built-in agent) must work on tables
+that SQLAlchemy's `create_all` made, as some installations have. Those tables have no
+database-side defaults, since the defaults live in the models, and on such an
+installation the insert may run for the first time over rows an admin has edited:
+
+- Give every `NOT NULL` column a value, timestamps included (`CURRENT_TIMESTAMP`).
+- Insert only when absent (`ON CONFLICT DO NOTHING`, `INSERT IGNORE`,
+  `INSERT OR IGNORE`); never upsert over an existing row.
+- SQLite's `INSERT OR IGNORE` also skips a row that breaks a `NOT NULL` constraint,
+  without an error, so test a seed on a `create_all` schema
+  (`shared/test/test_mate_help_agent.py` does this for V036).
+
 ## Undoing a migration
 
 There is no rollback command. To undo a migration that has been applied, write a new

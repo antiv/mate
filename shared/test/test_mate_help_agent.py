@@ -176,9 +176,42 @@ class TestMigration(unittest.TestCase):
 
 
 class TestMigrationOnCreateAllSchema(TestMigration):
-    """V036 on tables made by SQLAlchemy's create_all, which have no database-side
-    defaults. On PostgreSQL the insert failed on projects.created_at; on SQLite,
-    INSERT OR IGNORE skipped the rows silently and no agent was created."""
+    """The migrations on tables made by SQLAlchemy's create_all, which have no
+    database-side defaults. The seeds in V001, V002, V003 and V036 left NOT NULL
+    timestamps to the database: on PostgreSQL they failed on every start, and on
+    SQLite V036 recorded itself without creating the agent."""
+
+    def test_every_migration_applies(self):
+        self.migrate()
+        self.assertEqual(self.query("SELECT COUNT(*) FROM schema_migrations")[0][0],
+                         len(os.listdir(os.path.join(os.path.dirname(__file__), "..", "sql",
+                                                     "migrations", "sqlite"))))
+
+    def test_seeds_leave_agents_an_admin_already_has_alone(self):
+        # On such an installation the seeds run for the first time over agents that
+        # exist already; they used to be upserts and would have overwritten them.
+        from sqlalchemy import create_engine
+        from sqlalchemy.orm import sessionmaker
+        from shared.utils.models import AgentConfig, Base, Project
+        engine = create_engine(f"sqlite:///{self.db_path}")
+        Base.metadata.create_all(engine)
+        session = sessionmaker(bind=engine)()
+        project = Project(name="Mine")
+        session.add(project)
+        session.flush()
+        for name in ("creative_agent", "chess_mate_root"):
+            session.add(AgentConfig(name=name, type="llm", model_name="my/model",
+                                    instruction="mine", project_id=project.id))
+        session.commit()
+        ids = dict(session.query(AgentConfig.name, AgentConfig.id).all())
+        session.close()
+        engine.dispose()
+
+        self.migrate()
+        rows = self.query("SELECT name, id, model_name, instruction FROM agents_config "
+                          "WHERE name IN ('creative_agent', 'chess_mate_root') ORDER BY name")
+        self.assertEqual(rows, [("chess_mate_root", ids["chess_mate_root"], "my/model", "mine"),
+                                ("creative_agent", ids["creative_agent"], "my/model", "mine")])
 
     def migrate(self):
         from sqlalchemy import create_engine
@@ -187,11 +220,7 @@ class TestMigrationOnCreateAllSchema(TestMigration):
         engine = create_engine(f"sqlite:///{self.db_path}")
         Base.metadata.create_all(engine)
         engine.dispose()
-        # V001 and V003 fail on such a schema for reasons of their own, so the run as
-        # a whole reports failure; what matters here is that V036 applied.
-        MigrationSystem().run_migrations()
-        self.assertEqual(self.query("SELECT version FROM schema_migrations WHERE version = '036'"),
-                         [("036",)])
+        self.assertTrue(MigrationSystem().run_migrations())
 
 
 if __name__ == "__main__":
