@@ -92,9 +92,9 @@ requests: a webhook trigger answers only when its agent has finished.
 
 ### First sign-in
 
-On a new installation, give the built-in account the `admin` role on the Users page
-after its first chat. Until then, agents with an empty Allowed Roles list refuse it;
-see [Authentication and access control](auth-and-access.md#layer-3-the-agent).
+The built-in account (`AUTH_USERNAME`) gets the `admin` role on its first chat, so
+agents with an empty Allowed Roles list admit it; see
+[Authentication and access control](auth-and-access.md#layer-3-the-agent).
 
 ## Standalone build
 

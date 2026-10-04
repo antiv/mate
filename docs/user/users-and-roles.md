@@ -56,11 +56,10 @@ one of their roles is on that list.
 - An agent with `["support", "admin"]` is open to people with either role.
 - **An agent with an empty list is open only to people with the `admin` role.**
 
-> **Give the built-in account the `admin` role.** Its user record does not exist
-> until it first talks to an agent, and is then created with the role `user`. On a
-> new installation, the built-in account is therefore refused by any agent whose
-> list is empty. Open the Users page, edit that user and set its roles to
-> `user, admin`.
+The built-in account (`AUTH_USERNAME`) always has the `admin` role. Its user record
+is created with `admin, user` the first time it talks to an agent, and `admin` is
+added back whenever it is missing, so it is not refused by an agent whose list is
+empty. Removing `admin` from it on the Users page lasts only until its next chat.
 
 Someone who is refused is told which roles the agent requires and which roles they
 have. Each refusal is written to the audit log.
