@@ -323,7 +323,7 @@ Model `ChannelIntegration`. Links an external chat platform (Slack, Discord, ...
 | `team_id` | `String(64)` | — | — | Slack team/workspace id |
 | `bot_token` | `String(255)` | — | — | xoxb-... token used to post replies |
 | `signing_secret` | `String(255)` | — | — | verifies inbound request signatures |
-| `config` | `Text` | — | — | JSON: mention_only, reply_in_thread, ... |
+| `config` | `Text` | — | — | JSON per-integration options; nothing reads it yet |
 | `is_active` | `Boolean` | not null | `True` | — |
 | `created_at` | `DateTime` | not null | `(computed)` | — |
 | `updated_at` | `DateTime` | not null | `(computed)` | — |

@@ -712,7 +712,7 @@ class ChannelIntegration(Base):
     team_id = Column(String(64), nullable=True, index=True)  # Slack team/workspace id
     bot_token = Column(String(255), nullable=True)  # xoxb-... token used to post replies
     signing_secret = Column(String(255), nullable=True)  # verifies inbound request signatures
-    config = Column(Text, nullable=True)  # JSON: mention_only, reply_in_thread, ...
+    config = Column(Text, nullable=True)  # JSON per-integration options; nothing reads it yet
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc),
