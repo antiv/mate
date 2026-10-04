@@ -1296,6 +1296,13 @@
         }
     </script>
 
+    {% if username %}
+    <!-- Help button: chat with the built-in mate_help agent (static/js/help-panel.js) -->
+    <link rel="stylesheet" href="/static/css/help-panel.css">
+    <div id="mateHelp" data-user="{{ username }}"></div>
+    <script src="/static/js/help-panel.js" defer></script>
+    {% endif %}
+
     {% block scripts %}{% endblock %}
 </body>
 </html>

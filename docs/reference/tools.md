@@ -10,7 +10,7 @@ generated: true
 
 # Tool reference
 
-The tool types an agent can enable through its `tool_config` JSON: **18** registered in `ToolFactory._tool_creators`.
+The tool types an agent can enable through its `tool_config` JSON: **19** registered in `ToolFactory._tool_creators`.
 
 A key enables its tools when present with a non-null value, for example `{"memory_blocks": true, "file_search": true}`.
 
@@ -20,6 +20,7 @@ A key enables its tools when present with a non-null value, for example `{"memor
 | `code_executor` | Create code executor tools (Python & shell execution) | `shared/utils/tools/code_executor_tools.py` |
 | `custom_functions` | Create custom function tools using the specialized custom tools module | `shared/utils/tools/custom_tools.py` |
 | `cv_tools` | Create CV tools using the specialized CV tools module | `shared/utils/tools/cv_tools.py` |
+| `docs` | Search and read MATE's own documentation; non-admins see only the user guides | `shared/utils/tools/docs_tools.py` |
 | `file_search` | Create File Search tools using the specialized file search tools module | `shared/utils/tools/file_search_tools.py` |
 | `google_calendar` | Create Google Calendar tools (check availability, list/create events) | `shared/utils/tools/google_calendar_tools.py` |
 | `google_drive` | Create Google Drive tools using the specialized Google tools module | `shared/utils/tools/google_tools.py` |
