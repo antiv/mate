@@ -22,7 +22,7 @@ python auth_server.py
 docker-compose up
 ```
 
-Two servers run: **Auth Server** (port 8000, FastAPI with HTTP Basic Auth) proxies authenticated requests to the **Agent Server** (port 8001). The agent server framework is selectable via `AGENT_FRAMEWORK`: `adk` (Google ADK runtime, `adk_main.py`, default) or `langgraph` (LangGraph runtime, `langgraph_main.py`, emulates ADK's HTTP/SSE wire contract — see `documents/LANGGRAPH_RUNTIME.md`).
+Two servers run: **Auth Server** (port 8000, FastAPI with HTTP Basic Auth) proxies authenticated requests to the **Agent Server** (port 8001). The agent server framework is selectable via `AGENT_FRAMEWORK`: `adk` (Google ADK runtime, `adk_main.py`, default) or `langgraph` (LangGraph runtime, `langgraph_main.py`, emulates ADK's HTTP/SSE wire contract — see `docs/dev/langgraph-runtime.md`).
 
 ## Testing
 
@@ -119,10 +119,19 @@ Do not add attribution trailers to commit messages: no `Co-Authored-By: Claude .
 | `AUDIT_RETENTION_DAYS` | Audit log retention (evidence toward EU AI Act Art. 12) |
 | `MATE_AI_DISCLOSURE` | Standalone builds only: wording of the Art. 50 AI disclosure |
 
+## Documentation
+
+`docs/` is served by the dashboard and is part of every change. See `docs/README.md`.
+
+- `docs/reference/` is generated. Never edit it by hand. After changing a route, an env var, a model or the tool registry, run `python scripts/gen_docs.py` and commit the result; CI fails on a stale reference (`--check`).
+- `docs/user/` and `docs/dev/` are guides. Before finishing a task, run `python scripts/gen_docs.py drift --base origin/main`. For each guide it lists, read the guide against your change and either update it in the same commit or say in the PR description why it still holds.
+- A new feature needs a user guide (what to click, what happens) and, if it has internals worth knowing, a dev guide. Give each a `covers:` list. Describe what the code does, not what it is meant to do.
+
 ## Important Documentation
 
 - `AGENTS.md` — Architecture patterns and development guidelines (read before adding new agents or tools)
-- `documents/` — Feature-specific docs: `MCP_SERVERS.md`, `RATE_LIMITS.md`, `ALERTS.md`, `TRACING.md`, `WIDGET_INTEGRATION.md`, `TEMPLATE_LIBRARY.md`, `AGENT_WIZARD.md`, `LANGGRAPH_RUNTIME.md`, `EXTERNAL_AGENTS.md`, `FALLBACK_MODEL.md`, `CSP.md`, `AI_ACT.md`
+- `docs/` — User guides (`docs/user/`), developer guides (`docs/dev/`) and the generated reference (`docs/reference/`), also served at `/dashboard/docs`. Feature documentation lives here.
+- `documents/` — Not documentation: screenshots for the README, the architecture PDF and its source, announcements.
 - `shared/sql/README.md` — Database schema reference
 
 

@@ -121,7 +121,7 @@ Key directories:
 - `shared/test/` - Test suite
 - `templates/` - Dashboard HTML templates
 - `static/` - Frontend assets (CSS, JS)
-- `documents/` - Feature documentation
+- `docs/` - Documentation: user guides, developer guides and the generated reference (see `docs/README.md`)
 
 ## Security
 

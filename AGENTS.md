@@ -78,7 +78,7 @@ docker-compose up
 ## Agent Development
 - **Database agents**: Stored in `agents_config` with types: `'root'`, `'llm'`, `'custom'`
 - **Hardcoded agents**: Python classes in `agents/<agent_name>/` (`__init__.py` and `agent.py`)
-- **External agents**: Agents can point to an existing OpenAI-compatible endpoint via `model_base_url` and `model_api_key` on the agent row. RBAC, guardrails, audit, token tracking, and widget integration apply identically. See `documents/EXTERNAL_AGENTS.md`
+- **External agents**: Agents can point to an existing OpenAI-compatible endpoint via `model_base_url` and `model_api_key` on the agent row. RBAC, guardrails, audit, token tracking, and widget integration apply identically. See `docs/user/external-agents.md`
 - **Agent Tree**: `shared/utils/agent_manager.py` merges database and hardcoded agents, building the hierarchy at startup
 - **Project Scoping**: Agents are scoped by project via `projects` table; `agents_config.project_id` must be populated for every agent
 - **Planners**: Root agents or agents without parents can be configured with planners (`PlanReActPlanner`, `BuiltInPlanner`) via `planner_config` JSON field
@@ -94,7 +94,7 @@ docker-compose up
   - **HTTP / SSE transport**: specify `url` for direct streaming connection without subprocess overhead
   - **`${VAR}` secret interpolation**: references to `${ENV_VAR}` in MCP configs or endpoint keys resolve dynamically from the server environment, keeping credentials out of the database
   - Renamed `MCPToolset` to `McpToolset` for ADK 2.3+ compatibility
-  - See `documents/MCP_SERVERS.md` for details
+  - See `docs/dev/mcp-servers.md` for details
 - **Specialized Tools**:
   - `create_agent_tool`: Allows agents to inspect, create, or modify other agents at runtime
   - Memory blocks with semantic search embeddings (`EMBEDDING_MODEL`)
@@ -105,7 +105,7 @@ docker-compose up
   - Human-in-the-loop (HITL) tool confirmation support
 
 ## EU AI Act & Compliance
-- **Article 50 (AI Disclosure)**: Public chat surfaces (embed widget, standalone chat) inform users they are interacting with an AI (`shared/utils/ai_disclosure.py`). Wording is configurable per agent. Waivers require an explicit justification string and write an entry to `audit_logs`. See `documents/AI_ACT.md`
+- **Article 50 (AI Disclosure)**: Public chat surfaces (embed widget, standalone chat) inform users they are interacting with an AI (`shared/utils/ai_disclosure.py`). Wording is configurable per agent. Waivers require an explicit justification string and write an entry to `audit_logs`. See `docs/user/eu-ai-act.md`
 - **Article 50(2) (Marking of Generated Synthetic Content)**: Generated images carry an XMP packet declaring IPTC digital source type `trainedAlgorithmicMedia` prior to saving (`shared/utils/content_marking.py`)
 - **Article 12 (Audit Logging)**: Append-only audit trail in `audit_logs` table managed by `shared/utils/audit_service.py` provides record-keeping evidence. Retention configurable via `AUDIT_RETENTION_DAYS`
 
@@ -208,22 +208,22 @@ Use environment variables for all API keys, database settings, and system toggle
 
 ## Important Documentation
 - `README.md` — Project overview, architecture, and quick start
-- `documents/` — In-depth feature guides:
-  - `documents/AI_ACT.md` — EU AI Act compliance guide (Art. 50, Art. 50(2), Art. 12)
-  - `documents/EXTERNAL_AGENTS.md` — External OpenAI-compatible agent endpoint setup
-  - `documents/MCP_SERVERS.md` — MCP server and client integration (stdio, HTTP/SSE, `${VAR}`)
-  - `documents/LANGGRAPH_RUNTIME.md` — LangGraph alternative runtime setup and wire contract
-  - `documents/OPENAI_COMPATIBILITY.md` — OpenAI-compatible API (`/v1/chat/completions`)
-  - `documents/SLACK_INTEGRATION.md` — Slack bot integration and Block Kit card translation
-  - `documents/WIDGET_INTEGRATION.md` — Embeddable widget integration and origin security
-  - `documents/RATE_LIMITS.md` — Rate limiting, token budgets, and cost controls
-  - `documents/ALERTS.md` — Notification rules on agent errors and budget thresholds
-  - `documents/TRACING.md` — OpenTelemetry and LangSmith tracing setup
-  - `documents/AGENT_WIZARD.md` — Public self-service agent builder wizard
-  - `documents/TEMPLATE_LIBRARY.md` — Agent templates and presets
+- `docs/` — Guides and reference, also served in the dashboard at `/dashboard/docs` (see `docs/README.md`). In-depth feature guides include:
+  - `docs/user/eu-ai-act.md` — EU AI Act compliance guide (Art. 50, Art. 50(2), Art. 12)
+  - `docs/user/external-agents.md` — External OpenAI-compatible agent endpoint setup
+  - `docs/dev/mcp-servers.md` — MCP server and client integration (stdio, HTTP/SSE, `${VAR}`)
+  - `docs/dev/langgraph-runtime.md` — LangGraph alternative runtime setup and wire contract
+  - `docs/dev/openai-compatibility.md` — OpenAI-compatible API (`/v1/chat/completions`)
+  - `docs/user/slack.md` — Slack bot integration and Block Kit card translation
+  - `docs/user/widget.md` — Embeddable widget integration and origin security
+  - `docs/user/rate-limits.md` — Rate limiting, token budgets, and cost controls
+  - `docs/dev/alerts.md` — Notification rules on agent errors and budget thresholds
+  - `docs/dev/tracing.md` — OpenTelemetry and LangSmith tracing setup
+  - `docs/dev/agent-wizard.md` — Public self-service agent builder wizard
+  - `docs/dev/template-format.md` — Agent templates and presets
 - `shared/sql/README.md` — Database schema reference
 - **Rules**:
-  - Do not create a separate README.md for each feature; place feature docs in `documents/`
+  - Do not create a separate README.md for each feature; add a guide under `docs/user/` or `docs/dev/` with a `covers:` list, and update the guides that cover the code you change
   - Update `AGENTS.md` when adding new patterns or architectural requirements
 
 ## Engineering & Coding Guidelines

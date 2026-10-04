@@ -60,3 +60,6 @@ test.sh
 tests/
 test_*.*
 *_test.py
+
+# The dashboard serves docs/ at runtime, so its pages must be in the image.
+!docs/**/*.md

@@ -7336,7 +7336,7 @@ class DashboardServer:
             ?key= query param, or standard dashboard bearer/basic auth.
 
             A trigger may additionally require the body to be signed; see
-            documents/TRIGGERS.md.
+            docs/user/triggers.md.
             """
             from shared.utils.trigger_runner import get_trigger_runner, TriggerRunner
 

@@ -76,6 +76,7 @@ COPY --chown=appuser:appuser langgraph_main.py ./langgraph_main.py
 COPY --chown=appuser:appuser langgraph.json ./langgraph.json
 COPY --chown=appuser:appuser templates/ ./templates/
 COPY --chown=appuser:appuser static/ ./static/
+COPY --chown=appuser:appuser docs/ ./docs/
 
 # Set environment variables
 ENV PYTHONPATH=/app
