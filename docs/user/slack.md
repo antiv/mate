@@ -61,8 +61,8 @@ Invite the bot to a channel with `/invite @YourBot`, then write
   said there.
 - Each Slack user is a separate MATE user, so usage and roles are tracked per
   person. They appear on the **Users** page with ids starting `slack_`.
-- The **Mention-only** box is saved with the integration but does not currently
-  change this behaviour.
+- There is no option to answer every message in a channel; the agent always waits
+  to be mentioned there.
 
 ## Direct messages
 
