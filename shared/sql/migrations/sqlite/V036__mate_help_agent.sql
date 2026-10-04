@@ -5,13 +5,16 @@
 -- through the docs tool. No model is set, so it uses the server's default model;
 -- an admin can choose another one in the agent form. An existing agent with the
 -- same name is left as it is, so a chosen model is never overwritten.
+-- Every NOT NULL column is set explicitly: tables that SQLAlchemy's create_all
+-- made have no database-side defaults (their defaults live in the models).
 
-INSERT OR IGNORE INTO projects (name, description)
-VALUES ('MATE Help', 'Built-in help agent for the MATE dashboard');
+INSERT OR IGNORE INTO projects (name, description, created_at, updated_at)
+VALUES ('MATE Help', 'Built-in help agent for the MATE dashboard', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 
 INSERT OR IGNORE INTO agents_config (
     name, type, model_name, description, instruction,
-    parent_agents, allowed_for_roles, tool_config, mcp_servers_config, disabled, hardcoded, project_id
+    parent_agents, allowed_for_roles, tool_config, mcp_servers_config,
+    disabled, hardcoded, expose_as_model, debug_mode, project_id
 ) VALUES (
     'mate_help',
     'llm',
@@ -31,6 +34,8 @@ How to answer:
     '["admin", "user"]',
     '{"docs": true}',
     NULL,
+    0,
+    0,
     0,
     0,
     (SELECT id FROM projects WHERE name = 'MATE Help' LIMIT 1)
