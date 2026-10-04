@@ -175,5 +175,24 @@ class TestMigration(unittest.TestCase):
         self.assertEqual(self.query("SELECT COUNT(*) FROM projects WHERE name = 'MATE Help'"), [(1,)])
 
 
+class TestMigrationOnCreateAllSchema(TestMigration):
+    """V036 on tables made by SQLAlchemy's create_all, which have no database-side
+    defaults. On PostgreSQL the insert failed on projects.created_at; on SQLite,
+    INSERT OR IGNORE skipped the rows silently and no agent was created."""
+
+    def migrate(self):
+        from sqlalchemy import create_engine
+        from shared.utils.migration_system import MigrationSystem
+        from shared.utils.models import Base
+        engine = create_engine(f"sqlite:///{self.db_path}")
+        Base.metadata.create_all(engine)
+        engine.dispose()
+        # V001 and V003 fail on such a schema for reasons of their own, so the run as
+        # a whole reports failure; what matters here is that V036 applied.
+        MigrationSystem().run_migrations()
+        self.assertEqual(self.query("SELECT version FROM schema_migrations WHERE version = '036'"),
+                         [("036",)])
+
+
 if __name__ == "__main__":
     unittest.main()
