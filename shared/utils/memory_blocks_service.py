@@ -120,8 +120,42 @@ def _memory_blocks_span(operation: str):
                 pass
 
 
+def _is_read_only(metadata: Optional[Dict[str, Any]]) -> bool:
+    return bool((metadata or {}).get("read_only"))
+
+
+def _char_limit(metadata: Optional[Dict[str, Any]]) -> Optional[int]:
+    """The block's character limit, or None when it has none (or an unusable one)."""
+    try:
+        limit = int((metadata or {}).get("limit"))
+    except (TypeError, ValueError):
+        return None
+    return limit if limit > 0 else None
+
+
+def _read_only_error(label: str, action: str) -> Dict[str, Any]:
+    return {"status": "error", "error_code": "read_only",
+            "error_message": f"Block '{label}' is read-only and cannot be {action}. "
+                             "Clear its Read-only setting first."}
+
+
+def _limit_error(label: str, value: str, metadata: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """An error the caller (often an agent) can act on when *value* is over the limit."""
+    limit = _char_limit(metadata)
+    if limit is None or len(value or "") <= limit:
+        return None
+    return {"status": "error", "error_code": "too_long", "limit": limit,
+            "error_message": f"The value for block '{label}' is {len(value)} characters, but the "
+                             f"block allows at most {limit}. Shorten it and try again."}
+
+
 class MemoryBlocksService:
-    """CRUD for memory blocks scoped by project_id."""
+    """CRUD for memory blocks scoped by project_id.
+
+    Writes honour the block's metadata: a ``read_only`` block refuses changes and
+    deletion until a write clears the flag, and a value longer than ``limit``
+    characters is refused. Errors carry ``error_code`` ``read_only`` or ``too_long``.
+    """
 
     def __init__(self, db_client):
         self.db_client = db_client
@@ -229,6 +263,10 @@ class MemoryBlocksService:
         """Create a memory block. Label must be unique per project."""
         from shared.utils.models import MemoryBlock
 
+        too_long = _limit_error(label.strip(), value or "", metadata)
+        if too_long:
+            return too_long
+
         with _memory_blocks_span("create"):
             session = self._get_session()
             if not session:
@@ -274,8 +312,14 @@ class MemoryBlocksService:
         description: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None,
         changed_by: Optional[str] = None,
+        metadata_updates: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        """Update block by id or label. *metadata* replaces the stored metadata when given."""
+        """Update block by id or label.
+
+        *metadata* replaces the stored metadata when given; *metadata_updates*
+        merges into it instead, a ``None`` value removing that key. A read-only
+        block is refused unless this call clears ``read_only``.
+        """
         from shared.utils.models import MemoryBlock
 
         with _memory_blocks_span("modify"):
@@ -295,14 +339,29 @@ class MemoryBlocksService:
                         MemoryBlock.label == block_id,
                     ).first()
                 if not row:
-                    return {"status": "error", "error_message": f"Block not found: {block_id}"}
+                    return {"status": "error", "error_code": "not_found",
+                            "error_message": f"Block not found: {block_id}"}
+                stored = row.get_metadata() or {}
+                new_metadata = stored
+                if metadata is not None:
+                    new_metadata = metadata
+                elif metadata_updates:
+                    new_metadata = {k: v for k, v in {**stored, **metadata_updates}.items()
+                                    if v is not None}
+                if _is_read_only(stored) and _is_read_only(new_metadata):
+                    return _read_only_error(row.label, "changed")
+                if value is not None or new_metadata is not stored:
+                    too_long = _limit_error(row.label, row.value if value is None else value,
+                                            new_metadata)
+                    if too_long:
+                        return too_long
                 previous = block_state(row)
                 if value is not None:
                     row.value = value
                 if description is not None:
                     row.description = description
-                if metadata is not None:
-                    row.set_metadata(metadata)
+                if new_metadata is not stored:
+                    row.set_metadata(new_metadata)
                 if block_state(row) == previous:
                     return {"status": "success", "block_id": str(row.id), "message": f"Block {block_id} unchanged"}
                 self._set_block_embedding(row)
@@ -408,6 +467,8 @@ class MemoryBlocksService:
                     ).first()
                 if not row:
                     return {"status": "error", "error_message": f"Block not found: {block_id}"}
+                if _is_read_only(row.get_metadata()):
+                    return _read_only_error(row.label, "deleted")
                 record_block_version(session, row, "delete", changed_by)
                 session.delete(row)
                 session.commit()
@@ -504,6 +565,8 @@ class MemoryBlocksService:
 
             row = session.query(MemoryBlock).filter(
                 MemoryBlock.project_id == project_id, MemoryBlock.id == version.block_id).first()
+            if row and _is_read_only(row.get_metadata()):
+                return _read_only_error(row.label, "restored to another version")
             previous = block_state(row) if row else None
             if not row:
                 row = MemoryBlock(id=version.block_id, project_id=project_id)

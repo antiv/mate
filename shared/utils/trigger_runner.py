@@ -533,9 +533,13 @@ class TriggerRunner:
         changed_by = f"trigger:{trigger.id}"
         result = svc.modify_block(trigger.project_id, label, value=text, description=description,
                                   changed_by=changed_by)
-        if result.get("status") == "error":
-            svc.create_block(trigger.project_id, label, value=text, description=description,
-                             changed_by=changed_by)
+        if result.get("error_code") == "not_found":
+            result = svc.create_block(trigger.project_id, label, value=text, description=description,
+                                      changed_by=changed_by)
+        # A read-only block or one whose limit the answer exceeds refuses the write;
+        # raising records the run as an error instead of a silent success.
+        if result.get("status") != "success":
+            raise RuntimeError(f"memory_block output failed: {result.get('error_message')}")
 
     def _output_http_callback(self, cfg: dict, text: str) -> None:
         """POST agent response as JSON to a configured URL.

@@ -5415,6 +5415,17 @@ class DashboardServer:
                 if value is None:
                     return {"success": False, "error": "value is required"}
                 
+                # The edit form always sends the checkboxes and leaves the limit out
+                # when it is empty, so a request carrying them sets all three.
+                # Unchecking Read-only here is how a read-only block is unlocked.
+                metadata_updates = None
+                if read_only is not None or preserve_on_migration is not None:
+                    metadata_updates = {
+                        "limit": character_limit or None,
+                        "read_only": True if read_only else None,
+                        "preserve_on_migration": True if preserve_on_migration else None,
+                    }
+
                 from shared.utils.memory_blocks_service import MemoryBlocksService
                 svc = MemoryBlocksService(self.db_client)
                 result = svc.modify_block(
@@ -5423,6 +5434,7 @@ class DashboardServer:
                     value=value,
                     description=description,
                     changed_by=username,
+                    metadata_updates=metadata_updates,
                 )
                 
                 if result.get("status") == "success":
@@ -6287,7 +6299,9 @@ class DashboardServer:
             for label, value in blocks.items():
                 result = svc.modify_block(project_id, label, value=value, changed_by=username)
                 if result.get("status") != "success":
-                    raise HTTPException(status_code=500, detail=f"Failed to update the block '{label}'")
+                    status = 400 if result.get("error_code") in ("read_only", "too_long") else 500
+                    raise HTTPException(status_code=status, detail=result.get("error_message")
+                                        or f"Failed to update the block '{label}'")
                 block_versions[label] = result.get("version_number")
 
             source = {k: body[k] for k in ("test_case_id", "feedback_id") if isinstance(body.get(k), int)}
