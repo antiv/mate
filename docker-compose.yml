@@ -10,14 +10,14 @@ services:
       - AGENT_FRAMEWORK=${AGENT_FRAMEWORK:-adk}
       - AUTH_USERNAME=${AUTH_USERNAME:-admin}
       - AUTH_PASSWORD=${AUTH_PASSWORD:?Set AUTH_PASSWORD in .env}
-      - DB_TYPE=sqlite
+      - DB_TYPE=${DB_TYPE:-sqlite}
       - DB_USER=${DB_USER:-postgres}
-      - DB_PASSWORD=${DB_PASSWORD:?Set DB_PASSWORD in .env}
+      - DB_PASSWORD=${DB_PASSWORD:-}
       - DB_HOST=${DB_HOST:-localhost}
       - DB_PORT=${DB_PORT:-5432}
       - DB_NAME=${DB_NAME:-mate_agent}
       - DB_PATH=data/my_agent_data.db
-      - ARTIFACT_SERVICE=supabase
+      - ARTIFACT_SERVICE=${ARTIFACT_SERVICE:-local_folder}
       - SUPABASE_URL=${SUPABASE_URL}
       - SUPABASE_KEY=${SUPABASE_KEY}
       - SUPABASE_BUCKET=${SUPABASE_BUCKET}
