@@ -2,6 +2,10 @@
 -- Version: V003
 -- Database: POSTGRESQL
 
+-- Inserted only when absent: on an installation whose tables SQLAlchemy's
+-- create_all made, this runs for the first time over an agent an admin may
+-- already have edited.
+
 INSERT INTO agents_config (
     name, type, model_name, description, instruction,
     parent_agents, allowed_for_roles, tool_config, mcp_servers_config, disabled, hardcoded, project_id
@@ -34,15 +38,4 @@ When generating images:
     false,
     (SELECT id FROM projects WHERE name = 'Chess MATE Demo' LIMIT 1)
 )
-ON CONFLICT (name) DO UPDATE SET
-    type = EXCLUDED.type,
-    model_name = EXCLUDED.model_name,
-    description = EXCLUDED.description,
-    instruction = EXCLUDED.instruction,
-    parent_agents = EXCLUDED.parent_agents,
-    allowed_for_roles = EXCLUDED.allowed_for_roles,
-    tool_config = EXCLUDED.tool_config,
-    mcp_servers_config = EXCLUDED.mcp_servers_config,
-    disabled = EXCLUDED.disabled,
-    hardcoded = EXCLUDED.hardcoded,
-    project_id = EXCLUDED.project_id;
+ON CONFLICT (name) DO NOTHING;

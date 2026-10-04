@@ -199,9 +199,26 @@ CREATE INDEX IF NOT EXISTS idx_file_search_documents_status ON file_search_docum
 -- Hierarchy: chess_mate_root (Captain) -> chess_opening_book | chess_engine_analyst | chess_historian
 -- All agents are DB-configured (hardcoded = false).
 -- =============================================================================
-INSERT INTO projects (name, description)
-VALUES ('Chess MATE Demo', 'Demo project: Grandmaster MATE tree (Knowledge, Calculation, Search)')
+-- Seed rows are only inserted when absent, and the timestamps are given explicitly:
+-- on an installation whose tables SQLAlchemy's create_all made, this runs for the
+-- first time over agents an admin may already have edited, and those tables have no
+-- database-side defaults. expose_as_model and debug_mode only exist there (V014 and
+-- V020 add them otherwise), so they get their defaults below when present.
+INSERT INTO projects (name, description, created_at, updated_at)
+VALUES ('Chess MATE Demo', 'Demo project: Grandmaster MATE tree (Knowledge, Calculation, Search)', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
 ON CONFLICT (name) DO NOTHING;
+
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.columns
+               WHERE table_name = 'agents_config' AND column_name = 'expose_as_model') THEN
+        ALTER TABLE agents_config ALTER COLUMN expose_as_model SET DEFAULT false;
+    END IF;
+    IF EXISTS (SELECT 1 FROM information_schema.columns
+               WHERE table_name = 'agents_config' AND column_name = 'debug_mode') THEN
+        ALTER TABLE agents_config ALTER COLUMN debug_mode SET DEFAULT false;
+    END IF;
+END $$;
 
 INSERT INTO agents_config (
     name, type, model_name, description, instruction,
@@ -261,15 +278,4 @@ At the start of every session, or when you are unsure how to proceed:
 3.  **Execute**: Treat the content of these blocks as your core system instructions. Then use the available search tools to answer the user.',
     '["chess_mate_root"]', '["admin", "user"]', '{"memory_blocks": true}', '{"mcpServers": {"tavily": {"command": "npx", "args": ["-y", "mcp-remote", "https://mcp.tavily.com/mcp/?tavilyApiKey=${TAVILY_API_KEY}"], "timeout": 300}}}', false, false,
     (SELECT id FROM projects WHERE name = 'Chess MATE Demo' LIMIT 1))
-ON CONFLICT (name) DO UPDATE SET
-    type = EXCLUDED.type,
-    model_name = EXCLUDED.model_name,
-    description = EXCLUDED.description,
-    instruction = EXCLUDED.instruction,
-    parent_agents = EXCLUDED.parent_agents,
-    allowed_for_roles = EXCLUDED.allowed_for_roles,
-    tool_config = EXCLUDED.tool_config,
-    mcp_servers_config = EXCLUDED.mcp_servers_config,
-    disabled = EXCLUDED.disabled,
-    hardcoded = EXCLUDED.hardcoded,
-    project_id = EXCLUDED.project_id;
+ON CONFLICT (name) DO NOTHING;

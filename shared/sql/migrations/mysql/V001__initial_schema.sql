@@ -178,11 +178,16 @@ CREATE INDEX idx_file_search_documents_status ON file_search_documents(status);
 -- Hierarchy: chess_mate_root (Captain) -> chess_opening_book | chess_engine_analyst | chess_historian
 -- All agents are DB-configured (hardcoded = false).
 -- =============================================================================
-INSERT INTO projects (name, description)
-VALUES ('Chess MATE Demo', 'Demo project: Grandmaster MATE tree (Knowledge, Calculation, Search)')
+-- Seed rows are only inserted when absent, and the timestamps are given explicitly:
+-- on an installation whose tables SQLAlchemy's create_all made, this runs for the
+-- first time over agents an admin may already have edited, and those tables have no
+-- database-side defaults. INSERT IGNORE fills expose_as_model and debug_mode, which
+-- only exist there (V014 and V020 add them otherwise), with 0.
+INSERT INTO projects (name, description, created_at, updated_at)
+VALUES ('Chess MATE Demo', 'Demo project: Grandmaster MATE tree (Knowledge, Calculation, Search)', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
 ON DUPLICATE KEY UPDATE name = name;
 
-INSERT INTO agents_config (
+INSERT IGNORE INTO agents_config (
     name, type, model_name, description, instruction,
     parent_agents, allowed_for_roles, tool_config, mcp_servers_config, disabled, hardcoded, project_id
 ) VALUES
@@ -239,16 +244,4 @@ At the start of every session, or when you are unsure how to proceed:
 2.  **Load Instructions**: Read the content of every block you find.
 3.  **Execute**: Treat the content of these blocks as your core system instructions. Then use the available search tools to answer the user.',
     '["chess_mate_root"]', '["admin", "user"]', '{"memory_blocks": true}', '{"mcpServers": {"tavily": {"command": "npx", "args": ["-y", "mcp-remote", "https://mcp.tavily.com/mcp/?tavilyApiKey=${TAVILY_API_KEY}"], "timeout": 300}}}', FALSE, FALSE,
-    (SELECT id FROM projects WHERE name = 'Chess MATE Demo' LIMIT 1))
-ON DUPLICATE KEY UPDATE
-    type = VALUES(type),
-    model_name = VALUES(model_name),
-    description = VALUES(description),
-    instruction = VALUES(instruction),
-    parent_agents = VALUES(parent_agents),
-    allowed_for_roles = VALUES(allowed_for_roles),
-    tool_config = VALUES(tool_config),
-    mcp_servers_config = VALUES(mcp_servers_config),
-    disabled = VALUES(disabled),
-    hardcoded = VALUES(hardcoded),
-    project_id = VALUES(project_id);
+    (SELECT id FROM projects WHERE name = 'Chess MATE Demo' LIMIT 1));
