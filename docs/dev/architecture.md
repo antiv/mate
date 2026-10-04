@@ -68,11 +68,10 @@ new router must be included before it.
 `--session-db-url` and `--a2a`, and the port in the `PORT` environment variable. The
 dashboard's start, stop and restart buttons call the same service.
 
-> The child is started with the command `python`, resolved from `PATH`, not with the
-> interpreter running the auth server. If you run `.venv/bin/python auth_server.py`
-> without activating the virtual environment, the agent server starts under a
-> different Python and fails to import its dependencies. Activate the environment
-> first.
+> The child is started with the interpreter that runs the auth server (`sys.executable`),
+> not with whatever `python` is first on `PATH`. Running `.venv/bin/python auth_server.py`
+> without activating the virtual environment therefore starts the agent server under the
+> same environment, and a process manager can call the interpreter by path.
 
 ### One app per root agent
 

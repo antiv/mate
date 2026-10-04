@@ -25,8 +25,9 @@ python auth_server.py
 The dashboard is at `http://localhost:8000`. The database is created and migrated on
 first start.
 
-Activate the virtual environment rather than calling its interpreter by path: the
-auth server starts the agent server with the `python` on your `PATH`.
+The auth server starts the agent server with the interpreter it is running under, so
+calling the virtual environment's interpreter by path (`.venv/bin/python auth_server.py`)
+works without activating it.
 
 ## Docker
 
