@@ -36,7 +36,8 @@ class ToolFactory:
             'shop': self._create_shop_tools,
             'mystery_gm': self._create_mystery_gm_tools,
             'mystery_character': self._create_mystery_character_tools,
-            'subagent_delegation': self._create_subagent_delegation_tools
+            'subagent_delegation': self._create_subagent_delegation_tools,
+            'docs': self._create_docs_tools,
         }
     
     def create_tools(self, config: Dict[str, Any]) -> List[Any]:
@@ -221,6 +222,11 @@ class ToolFactory:
         from .memory_blocks_tools import create_memory_blocks_tools_from_config
         return create_memory_blocks_tools_from_config(config)
     
+    def _create_docs_tools(self, config: Dict[str, Any]) -> List[Any]:
+        """Search and read MATE's own documentation; non-admins see only the user guides."""
+        from .docs_tools import create_docs_tools_from_config
+        return create_docs_tools_from_config(config)
+
     def _create_file_search_tools(self, config: Dict[str, Any]) -> List[Any]:
         """Create File Search tools using the specialized file search tools module."""
         from .file_search_tools import create_file_search_tools_from_config

@@ -1,0 +1,132 @@
+/* Help button and panel: chat with the built-in mate_help agent from any dashboard page. */
+
+.mate-help-button {
+    position: fixed;
+    right: 20px;
+    bottom: 20px;
+    z-index: 60;
+    width: 44px;
+    height: 44px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--accent);
+    color: #fff;
+    font-size: 18px;
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: 0 4px 14px rgb(0 0 0 / 0.18);
+}
+.mate-help-button:hover { filter: brightness(1.08); }
+.mate-help-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+.mate-help-panel {
+    position: fixed;
+    right: 20px;
+    bottom: 76px;
+    z-index: 60;
+    width: min(400px, calc(100vw - 32px));
+    height: min(560px, calc(100vh - 120px));
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-surface);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    box-shadow: 0 12px 40px rgb(0 0 0 / 0.22);
+    overflow: hidden;
+}
+.mate-help-panel[hidden] { display: none; }
+
+.mate-help-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+}
+.mate-help-title { font-weight: 700; font-size: 14px; flex: 1; }
+.mate-help-header button {
+    border: 0;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 12px;
+    padding: 4px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+}
+.mate-help-header button:hover { background: var(--bg-surface-2); color: var(--text-primary); }
+
+.mate-help-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    font-size: 13px;
+    line-height: 1.5;
+}
+.mate-help-msg {
+    max-width: 88%;
+    padding: 8px 11px;
+    border-radius: 12px;
+    overflow-wrap: anywhere;
+}
+.mate-help-msg.user {
+    align-self: flex-end;
+    background: var(--accent);
+    color: #fff;
+    white-space: pre-wrap;
+}
+.mate-help-msg.agent { align-self: flex-start; background: var(--bg-surface-2); }
+.mate-help-msg.agent p { margin: 0 0 6px; }
+.mate-help-msg.agent p:last-child { margin-bottom: 0; }
+.mate-help-msg.agent ul, .mate-help-msg.agent ol { margin: 4px 0 6px 18px; }
+.mate-help-msg.agent ul { list-style: disc; }
+.mate-help-msg.agent ol { list-style: decimal; }
+.mate-help-msg.agent a { color: var(--accent); text-decoration: underline; }
+.mate-help-msg.agent code {
+    font-size: 12px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0 3px;
+}
+.mate-help-msg.error { align-self: flex-start; background: transparent; color: var(--text-secondary); font-style: italic; }
+.mate-help-intro { color: var(--text-secondary); font-size: 13px; }
+
+.mate-help-form {
+    display: flex;
+    gap: 8px;
+    padding: 10px 12px;
+    border-top: 1px solid var(--border);
+}
+.mate-help-form textarea {
+    flex: 1;
+    resize: none;
+    height: 38px;
+    max-height: 120px;
+    padding: 8px 10px;
+    font-size: 13px;
+    color: var(--text-primary);
+    background: var(--bg-surface-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+}
+.mate-help-form textarea:focus { outline: none; border-color: var(--accent); }
+.mate-help-form button {
+    padding: 0 14px;
+    border: 0;
+    border-radius: 8px;
+    background: var(--accent);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+}
+.mate-help-form button:disabled { opacity: 0.5; cursor: default; }
+
+@media (max-width: 767px) {
+    .mate-help-button { right: 14px; bottom: 14px; }
+    .mate-help-panel { right: 8px; left: 8px; bottom: 68px; width: auto; height: calc(100vh - 150px); }
+}

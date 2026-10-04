@@ -149,6 +149,25 @@ build or keep in sync, and no external service.
 Opening a result highlights the terms in the page and scrolls to the first match in
 that section.
 
+## The help agent reads these pages
+
+The **?** button on every dashboard page (`static/js/help-panel.js`) chats with the
+`mate_help` agent, created by migration V036. It answers through the `docs` tool
+(`shared/utils/tools/docs_tools.py`), which calls the same `DocsService.search()` and
+`page()` as the Documentation page:
+
+- Admins get every section and a `/dashboard/docs?page=…#anchor` link per result.
+  Everyone else gets `docs/user/` only and no links, since the Documentation page is
+  admin-only. "Admin" is the `admin` role on the user record of the conversation's
+  user id; an unknown id counts as not admin.
+- Search requires every term, so the agent's instruction tells it to search with two
+  to four keywords and retry with fewer.
+- `read_doc_page` returns at most 20,000 characters of Markdown.
+- The panel prefixes each question with `[Dashboard page: <title> (<path>)]`.
+
+So a guide's headings and wording are what the agent finds and quotes: name buttons
+and fields exactly as the dashboard shows them.
+
 ## Writing a guide
 
 - One page per thing a reader wants to do or understand. Split by audience: the

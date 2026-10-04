@@ -10,7 +10,7 @@ generated: true
 
 # Database reference
 
-**32** tables defined in `shared/utils/models.py`; migrations are at **V035**. Migrations apply automatically on startup and are the source of truth for the schema: the models describe it, the migrations create it.
+**32** tables defined in `shared/utils/models.py`; migrations are at **V036**. Migrations apply automatically on startup and are the source of truth for the schema: the models describe it, the migrations create it.
 
 ## Migrations
 
@@ -53,6 +53,7 @@ A ✗ means that dialect has no file for that version. All dialects are in step.
 | V033 | memory block versions | ✓ | ✓ | ✓ |
 | V034 | agent fallback model | ✓ | ✓ | ✓ |
 | V035 | scrub tavily key | ✓ | ✓ | ✓ |
+| V036 | mate help agent | ✓ | ✓ | ✓ |
 
 ## `users`
 

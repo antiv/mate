@@ -40,6 +40,7 @@ only be adjusted there.
 | **Shop (E-commerce)** | Show a catalog, keep a cart, take orders. Edit the catalog, currency and shop name in the JSON. | `vendor_email` to email orders; `partner_key` to list them under **Shop Orders**. |
 | **Subagent Delegation** | Split a task and hand the parts to temporary helper agents that run in parallel. | Nothing. Limits and the helpers' model are set in the JSON. |
 | **CV Tools** | Work with CVs stored in Google Drive. | The Google service account. |
+| Documentation (`docs`) | Search and read MATE's own documentation. Admins get every section, anyone else the user guides. See [Help in the dashboard](help.md). | Nothing. There is no checkbox; add `"docs": true` in the JSON. |
 
 The [tool reference](../reference/tools.md) lists every key the JSON accepts.
 

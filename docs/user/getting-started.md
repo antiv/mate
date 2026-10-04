@@ -84,3 +84,5 @@ In the Work Room you can also:
 - [Agents](agents.md): give the agent tools, memory, guardrails and sub-agents.
 - [Triggers](triggers.md): run an agent on a schedule or from another system.
 - Use the search box above to find anything else; press `/` to jump to it.
+- Or click **?** in the bottom-right corner of any page and ask; see
+  [Help in the dashboard](help.md).
