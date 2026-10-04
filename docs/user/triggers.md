@@ -59,8 +59,9 @@ Things to know:
   up when the server comes back.
 - If the previous run of the same trigger is still going when the next one is due,
   the next one is skipped.
-- An expression that does not have exactly five fields is ignored. The trigger
-  saves but never fires, so check **Last Run** after the first scheduled time.
+- An expression that is empty, does not have exactly five fields or has a field
+  out of range (minute `61`, an unknown weekday) is refused when you save, with the
+  reason shown.
 
 ## Run from a webhook
 
@@ -122,6 +123,10 @@ and they sign each request themselves. For your own callers, see the
 | **Memory Block** | The answer replaces the contents of a memory block in the same project. The block is created if it does not exist. | A label. Left empty, the block is named `trigger_<id>_output`. |
 | **HTTP Callback** | The answer is sent as JSON to a URL. | The URL, and optional headers as JSON. |
 | **Email** | The answer is emailed as plain text. | The recipient and an optional subject. Your administrator must have configured outgoing mail on the server. |
+
+A destination that is missing what it needs, such as an HTTP callback without a URL
+or an email on a server without outgoing mail, is refused when you save. If a
+delivery fails anyway, **Last Run** shows the run as failed with the reason.
 
 A memory block destination is how one agent hands work to another: a trigger writes
 the block overnight, and an agent with memory blocks enabled reads it the next day.

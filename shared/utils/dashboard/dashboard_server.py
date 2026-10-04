@@ -6938,6 +6938,7 @@ class DashboardServer:
             import secrets as _secrets
             from shared.utils.trigger_runner import (
                 UNIMPLEMENTED_TRIGGER_TYPES, get_trigger_runner, generate_webhook_path,
+                trigger_config_error,
             )
 
             if not self.db_client:
@@ -6952,6 +6953,12 @@ class DashboardServer:
                     detail=f"trigger_type '{trigger_type}' is not implemented and would never fire. "
                            "Use 'cron' or 'webhook'.",
                 )
+            config_error = trigger_config_error(
+                trigger_type, body.get("cron_expression"),
+                body.get("output_type", "memory_block"), body.get("output_config"),
+            )
+            if config_error:
+                raise HTTPException(status_code=400, detail=config_error)
             session = self.db_client.get_session()
             if not session:
                 raise HTTPException(status_code=500, detail="Database unavailable")
@@ -7022,7 +7029,9 @@ class DashboardServer:
             Pass regenerate_fire_key=true to rotate the webhook key, or
             regenerate_signing_secret=true to rotate the body-signing secret.
             """
-            from shared.utils.trigger_runner import UNIMPLEMENTED_TRIGGER_TYPES, get_trigger_runner
+            from shared.utils.trigger_runner import (
+                UNIMPLEMENTED_TRIGGER_TYPES, get_trigger_runner, trigger_config_error,
+            )
 
             if not self.db_client:
                 raise HTTPException(status_code=500, detail="Database unavailable")
@@ -7048,6 +7057,21 @@ class DashboardServer:
                         detail=f"trigger_type '{new_type}' is not implemented and would never fire. "
                                "Use 'cron' or 'webhook'.",
                     )
+
+                # Validate the configuration the trigger would end up with, but only
+                # when this request changes it: rotating a key on an older trigger
+                # must not fail over a schedule or output nobody touched.
+                if any(k in body for k in ("trigger_type", "cron_expression",
+                                           "output_type", "output_config")):
+                    config_error = trigger_config_error(
+                        body.get("trigger_type", trigger.trigger_type),
+                        body.get("cron_expression", trigger.cron_expression),
+                        body.get("output_type", trigger.output_type),
+                        body["output_config"] if "output_config" in body
+                        else trigger.get_output_config(),
+                    )
+                    if config_error:
+                        raise HTTPException(status_code=400, detail=config_error)
 
                 for field in ("name", "description", "trigger_type", "agent_name", "prompt",
                               "cron_expression", "output_type"):

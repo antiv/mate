@@ -87,8 +87,10 @@ job store, then calls `sync_cron_jobs()`.
   is the trigger id as a string.
 - Nothing is persisted in the scheduler, so a run that fell due while the process
   was down is not replayed. A run delayed by more than 60 s is dropped.
-- A cron expression that is empty or not five fields is logged and skipped; the row
-  saves without error.
+- `parse_cron_expression()` turns the five fields into an APScheduler `CronTrigger`
+  and raises `ValueError` for an empty expression, the wrong number of fields or a
+  field APScheduler rejects. Create and update answer `400` with that reason, so a
+  bad expression is not saved. A row saved before this check is logged and skipped.
 
 > **One scheduler per process.** Running the auth server with several uvicorn
 > workers starts a scheduler in each, and every cron trigger fires once per worker.
@@ -173,12 +175,15 @@ These are what the code does today, stated here so nobody has to rediscover them
   `POST /triggers/{id}/fire` answers `409` for one, after authentication and the
   signature check, so an unauthenticated caller cannot tell whether it is enabled.
   Test-fire calls `execute_trigger` directly and runs a disabled trigger on purpose.
-- **Misconfigured outputs report `ok`.** `http_callback` without a `url`, and `email`
-  without `to` or without `SMTP_HOST`, log a warning and return, so the run is
-  recorded as successful although nothing was delivered.
+- **Outputs that cannot deliver are refused, then recorded as errors.**
+  `output_config_error()` names an `http_callback` without a `url`, and an `email`
+  without `to` or on a server without `SMTP_HOST`. Create and update answer `400`
+  for these. Update checks only when the request changes the type, the cron
+  expression or the output, so rotating a key on an older trigger still works. At
+  run time the same check raises, so the run is recorded as `error` with the agent's
+  answer kept.
 - **`/triggers/{id}/fire` does not check the trigger type.** With dashboard
   credentials it fires a cron trigger too.
-- **Create does not validate the cron expression**; see Scheduling above.
 
 ## Extending
 
