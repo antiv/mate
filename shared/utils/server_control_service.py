@@ -5,6 +5,7 @@ Manages ADK server lifecycle (start, stop, restart, status)
 
 import os
 import subprocess
+import sys
 import time
 import httpx
 from typing import Dict, Any, Optional
@@ -170,8 +171,10 @@ class ServerControlService:
             print(f"🚀 ADK host: {self.adk_host}, port: {self.adk_port}")
             print(f"🚀 Session DB URL: {self.session_service_uri}")
             
-            # Start from project root so load_dotenv() in adk_main.py finds .env
-            cmd = ["python", adk_script_path, "--host", self.adk_host, "--session-db-url", self.session_service_uri, "--a2a"]
+            # Start from project root so load_dotenv() in adk_main.py finds .env.
+            # sys.executable, not "python": the child must run under the interpreter (and virtualenv)
+            # that is running this server, whatever happens to be first on PATH.
+            cmd = [sys.executable, adk_script_path, "--host", self.adk_host, "--session-db-url", self.session_service_uri, "--a2a"]
             # Don't capture output so it appears in Docker logs
             # Set cwd to project_root so adk_main.py can find .env file
             adk_process = subprocess.Popen(cmd, env=env, cwd=str(self.project_root))
