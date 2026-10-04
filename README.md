@@ -353,7 +353,7 @@ Each key has a standalone admin panel at `/widget/admin?key=...`. Non-technical 
 | Memory blocks (company info, FAQs…) | ✓ |
 | RAG file upload | ✓ |
 
-> Full documentation: [documents/WIDGET_INTEGRATION.md](documents/WIDGET_INTEGRATION.md)
+> Full documentation: [docs/user/widget.md](docs/user/widget.md)
 
 ---
 
@@ -368,7 +368,7 @@ export MCP_EXPOSED_AGENTS=creative_agent,support_agent
 
 Each exposed agent gets endpoints at `/agents/{name}/mcp/*`. Built-in MCP servers: Image Generation (`/images/mcp`) and Google Drive (`/gdrive/mcp`).
 
-> Full documentation: [documents/MCP_SERVERS.md](documents/MCP_SERVERS.md)
+> Full documentation: [docs/dev/mcp-servers.md](docs/dev/mcp-servers.md)
 
 ---
 
@@ -384,21 +384,22 @@ Each exposed agent gets endpoints at `/agents/{name}/mcp/*`. Built-in MCP server
 | `/dashboard/evals` | Test suites, score history, regression tracking |
 | `/dashboard/audit-logs` | Audit trail viewer |
 | `/dashboard/migrations` | Database migration management |
-| `/dashboard/docs` | API documentation (Swagger + ReDoc) |
+| `/dashboard/docs` | Documentation: user and developer guides, generated reference, search, and the API explorer (Swagger + ReDoc) |
 
 ---
 
 ## Additional Documentation
 
-- **[documents/AI_ACT.md](documents/AI_ACT.md)** — EU AI Act: what applies when, and what MATE does and does not do about it
-- **[documents/EXTERNAL_AGENTS.md](documents/EXTERNAL_AGENTS.md)** — governing an agent that runs outside MATE
-- **[documents/OPENAI_COMPATIBILITY.md](documents/OPENAI_COMPATIBILITY.md)** — OpenAI-compatible API bridge, PAT generation, and external client setup (OpenCode, Continue, Cline)
-- **[documents/WIDGET_INTEGRATION.md](documents/WIDGET_INTEGRATION.md)** — embed code, widget admin panel, JS API, security, theming, page context
-- **[documents/SSO_OAUTH.md](documents/SSO_OAUTH.md)** — Google and GitHub SSO setup, enterprise domain restrictions, session security
-- **[documents/EVALS.md](documents/EVALS.md)** — eval methods, regression alerts, LLM-as-Judge configuration, API reference
-- **[documents/MCP_SERVERS.md](documents/MCP_SERVERS.md)** — MCP server configuration, client setup (Claude Desktop, Cursor), protocol details
-- **[documents/RATE_LIMITS.md](documents/RATE_LIMITS.md)** — per-user/agent/project rate limiting
-- **[documents/TRACING.md](documents/TRACING.md)** — OpenTelemetry tracing setup
+- **[docs/](docs/README.md)** — all user and developer guides plus the generated reference; the same pages are searchable in the dashboard under **Documentation**
+- **[docs/user/eu-ai-act.md](docs/user/eu-ai-act.md)** — EU AI Act: what applies when, and what MATE does and does not do about it
+- **[docs/user/external-agents.md](docs/user/external-agents.md)** — governing an agent that runs outside MATE
+- **[docs/dev/openai-compatibility.md](docs/dev/openai-compatibility.md)** — OpenAI-compatible API bridge, PAT generation, and external client setup (OpenCode, Continue, Cline)
+- **[docs/user/widget.md](docs/user/widget.md)** — embed code, widget admin panel, JS API, security, theming, page context
+- **[docs/dev/sso-setup.md](docs/dev/sso-setup.md)** — Google and GitHub SSO setup, enterprise domain restrictions, session security
+- **[docs/dev/evals.md](docs/dev/evals.md)** — eval methods, regression alerts, LLM-as-Judge configuration, API reference
+- **[docs/dev/mcp-servers.md](docs/dev/mcp-servers.md)** — MCP server configuration, client setup (Claude Desktop, Cursor), protocol details
+- **[docs/user/rate-limits.md](docs/user/rate-limits.md)** — per-user/agent/project rate limiting
+- **[docs/dev/tracing.md](docs/dev/tracing.md)** — OpenTelemetry tracing setup
 - **[AGENTS.md](AGENTS.md)** — architecture patterns and guidelines for adding new agents or tools
 
 ---

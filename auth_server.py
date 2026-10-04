@@ -143,6 +143,7 @@ tags_metadata = [
     {"name": "Widget - Admin API", "description": "Widget admin API for agent, memory blocks, and file management"},
     {"name": "Dashboard - Widget Keys", "description": "Widget API key management endpoints"},
     {"name": "Dashboard - Triggers", "description": "Trigger management API endpoints (cron, webhook, output routing)"},
+    {"name": "Dashboard - Docs", "description": "Documentation pages and search, served from the docs/ folder"},
     {"name": "Examples", "description": "Example endpoints demonstrating authentication patterns"},
 ]
 
@@ -385,6 +386,7 @@ from server.widget_routes import (
 )
 from server.wizard_routes import router as wizard_router
 from server.slack_routes import router as slack_router, dashboard_router as slack_dashboard_router
+from server.docs_routes import router as docs_router
 
 configure_widget_proxy(ADK_HOST, ADK_PORT)
 
@@ -397,6 +399,7 @@ app.include_router(dashboard_widget_router)
 app.include_router(wizard_router)
 app.include_router(slack_router)
 app.include_router(slack_dashboard_router)
+app.include_router(docs_router)
 app.include_router(public_artifacts_router)
 app.include_router(csp_report_router)
 app.include_router(proxy_router)

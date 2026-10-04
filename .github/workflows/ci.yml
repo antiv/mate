@@ -35,3 +35,25 @@ jobs:
       # unittest imports it but collects nothing from it.
       - name: Run pytest-native tests
         run: python -m pytest shared/test/test_sessions_api.py -v
+  docs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # the drift check compares against the merge base
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # No dependencies to install: gen_docs.py is static analysis on stdlib only.
+      - name: Reference is current and guides are well-formed
+        run: python scripts/gen_docs.py --check
+
+      # Warnings, not a failure: a code change does not always need a guide change.
+      - name: Guides whose covered code changed
+        if: github.event_name == 'pull_request'
+        run: python scripts/gen_docs.py drift --base "origin/${{ github.base_ref }}"
