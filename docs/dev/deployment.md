@@ -43,6 +43,10 @@ What the image and the compose file set up:
 - `./data` and `./artifacts` mounted as volumes, for the SQLite database and for
   files agents produce.
 - The `docs/` folder is copied into the image, so the Documentation page works.
+- `.env` is passed to the container with `env_file`, so LLM keys and other settings
+  in it reach the app. The image does not contain `.env`. Values in the compose file's
+  `environment:` list take precedence over `.env`. A missing `.env` is not an error;
+  this needs Docker Compose 2.24 or newer.
 
 Things to adjust in `docker-compose.yml` before relying on it:
 

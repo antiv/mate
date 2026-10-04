@@ -6,6 +6,9 @@ services:
       args:
         AGENTS_LIST: ${AGENTS_LIST:-chess_mate_root}
     container_name: mate
+    env_file:
+      - path: .env
+        required: false
     environment:
       - AGENT_FRAMEWORK=${AGENT_FRAMEWORK:-adk}
       - AUTH_USERNAME=${AUTH_USERNAME:-admin}
