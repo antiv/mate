@@ -168,10 +168,11 @@ An unknown `output_type` logs a warning and does nothing.
 
 These are what the code does today, stated here so nobody has to rediscover them:
 
-- **`is_enabled` gates cron only.** `_run_trigger_by_id` checks it; `execute_trigger`
-  does not. A disabled webhook trigger still executes on `POST /triggers/{id}/fire`
-  with a valid key. Test-fire ignoring it is intended; the webhook path probably is
-  not.
+- **`is_enabled` is checked by the callers, not by `execute_trigger`.**
+  `_run_trigger_by_id` skips a disabled trigger on the cron path, and
+  `POST /triggers/{id}/fire` answers `409` for one, after authentication and the
+  signature check, so an unauthenticated caller cannot tell whether it is enabled.
+  Test-fire calls `execute_trigger` directly and runs a disabled trigger on purpose.
 - **Misconfigured outputs report `ok`.** `http_callback` without a `url`, and `email`
   without `to` or without `SMTP_HOST`, log a warning and return, so the run is
   recorded as successful although nothing was delivered.
