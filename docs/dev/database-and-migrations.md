@@ -66,11 +66,11 @@ what makes a re-run of `CREATE TABLE` or `ADD COLUMN` statements harmless.
 
 ## Add a migration
 
-1. `python shared/migrate.py create <name>` writes the next numbered file, **only in
-   the folder of the database type you are currently running**.
-2. Write the SQL.
-3. Create the same version, with the same name, in the other two folders, in that
-   dialect's SQL. The usual differences:
+1. `python shared/migrate.py create <name>` writes the next numbered file into all
+   three folders (`sqlite/`, `postgresql/`, `mysql/`), each with a header naming its
+   database. The number follows the highest version in any of the folders, whatever
+   database you are running.
+2. Write the SQL in each file, in that dialect. The usual differences:
 
    | | SQLite | PostgreSQL | MySQL |
    |---|---|---|---|
@@ -79,22 +79,21 @@ what makes a re-run of `CREATE TABLE` or `ADD COLUMN` statements harmless.
    | Timestamp | `DATETIME` | `TIMESTAMP` | `DATETIME` |
    | Add a column if missing | not available; rely on the tolerant apply | `ADD COLUMN IF NOT EXISTS` | not available; rely on the tolerant apply |
 
-4. Update the model in `models.py`.
-5. Run `python scripts/gen_docs.py`. The database reference lists every version
-   against the three dialects and marks a missing file with ✗, so a forgotten
-   dialect shows up in the diff.
-6. Run the tests; `shared/test/` includes migration tests.
+3. Update the model in `models.py`.
+4. Run `python scripts/gen_docs.py`. The database reference lists every version
+   against the three dialects and marks a missing file with ✗.
+   `python scripts/gen_docs.py --check`, which CI runs, fails while any version is
+   missing from a dialect.
+5. Run the tests; `shared/test/` includes migration tests.
 
 Never edit a migration that has been released. Installations have already applied
 it, and nothing re-runs a file whose version is recorded. Add a new one.
 
-## Rollback
+## Undoing a migration
 
-`python shared/migrate.py rollback` looks for a file named `R<number>__<name>.sql`
-and, if it finds one, runs it and removes the version from `schema_migrations`.
-Without that file it does nothing. No migration in the repository currently ships a
-rollback file, so in practice a migration is undone by writing a new one, or by
-restoring a backup.
+There is no rollback command. To undo a migration that has been applied, write a new
+migration that reverses it, or restore a backup (see below).
+`python shared/migrate.py rollback` only prints this advice and exits with an error.
 
 ## Conversations are stored elsewhere
 

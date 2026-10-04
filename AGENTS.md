@@ -71,8 +71,7 @@ docker-compose up
     ```bash
     python shared/migrate.py run       # Apply pending migrations
     python shared/migrate.py status    # Check migration status
-    python shared/migrate.py create    # Create new migration files
-    python shared/migrate.py rollback  # Roll back last migration
+    python shared/migrate.py create    # Create new migration files (all three dialects)
     ```
 
 ## Agent Development

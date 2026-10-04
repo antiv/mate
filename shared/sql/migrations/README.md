@@ -8,14 +8,15 @@ The migration system provides:
 - **Version tracking**: Each migration has a unique version number
 - **Automatic execution**: Migrations run automatically on server startup
 - **Checksum validation**: Detects if migration files have been modified
-- **Rollback support**: Optional rollback scripts for each migration
 - **Status tracking**: Track which migrations have been applied
 
 ## Migration Files
 
 Migration files follow this naming convention:
 - `V001__add_users_table.sql` - Migration script
-- `R001__add_users_table.sql` - Optional rollback script
+
+There are no rollback scripts. To undo a migration, write a new one that reverses it,
+or restore a backup.
 
 ### Database-Specific Migrations
 
@@ -89,11 +90,8 @@ python migrate.py run
 # Check migration status
 python migrate.py status
 
-# Create a new migration
+# Create a new migration (one file in each dialect folder)
 python migrate.py create add_new_feature
-
-# Rollback a specific migration
-python migrate.py rollback 001
 ```
 
 ### Migration Status
@@ -105,12 +103,15 @@ The status command shows:
 
 ## Creating New Migrations
 
-1. **Create migration file**:
+1. **Create the migration files**:
    ```bash
    python migrate.py create add_new_table
    ```
+   This writes `V003__add_new_table.sql` into `sqlite/`, `postgresql/` and `mysql/`.
+   `python scripts/gen_docs.py --check` fails while any version is missing from a
+   dialect.
 
-2. **Edit the generated file** with your SQL:
+2. **Edit each generated file** with that database's SQL:
    ```sql
    -- Migration: Add new table
    -- Version: V003
@@ -125,12 +126,6 @@ The status command shows:
 3. **Test the migration**:
    ```bash
    python migrate.py run
-   ```
-
-4. **Optional: Create rollback script**:
-   ```bash
-   # Create R003__add_new_table.sql
-   DROP TABLE IF EXISTS public.new_table;
    ```
 
 ## Migration Best Practices
@@ -178,7 +173,6 @@ COMMIT;
 
 ### Testing
 - Test migrations on a copy of production data
-- Verify rollback scripts work correctly
 - Check that migrations are idempotent
 
 ## Current Migrations

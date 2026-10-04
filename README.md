@@ -280,8 +280,7 @@ AUDIT_RETENTION_DAYS=365
 ```bash
 python shared/migrate.py status     # check pending migrations
 python shared/migrate.py run        # apply manually (auto-runs on startup)
-python shared/migrate.py create     # scaffold a new migration
-python shared/migrate.py rollback   # roll back last migration
+python shared/migrate.py create     # scaffold a new migration in every dialect
 ```
 
 ### Docker
