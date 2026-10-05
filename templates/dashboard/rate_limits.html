@@ -87,9 +87,10 @@
                 <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Action on limit</label>
                 <select id="formActionOnLimit" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 rounded px-2 py-1.5 text-sm">
                     <option value="warn">Warn (log + continue)</option>
-                    <option value="throttle">Throttle (delay)</option>
+                    <option value="throttle">Throttle (delay requests/min; logs token limits)</option>
                     <option value="block">Block (429)</option>
                 </select>
+                <p class="text-[11px] text-gray-500 dark:text-gray-400 mt-1">Throttle delays requests over the per-minute limit; token limits are only logged.</p>
             </div>
             <div>
                 <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Alert webhook URL</label>
