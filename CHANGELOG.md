@@ -7,22 +7,85 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-10-05
+
+Every deployment should upgrade: the built-in admin account was refused by
+admin-only agents on a new installation, a disabled webhook trigger still ran,
+and two pages could run script stored by a widget visitor or a widget key's
+holder. The release also brings a **fallback model** for provider outages, a
+**Content-Security-Policy** (Report-Only), the **documentation inside the
+dashboard** with a **help agent** behind a ? button, and memory blocks that
+honour their Read-only and Character Limit settings.
+
+Migrations V034 to V036 apply on startup. V035 replaces a Tavily API key that
+older seeds wrote into agents' MCP URLs with `${TAVILY_API_KEY}`; set that
+variable if an agent uses Tavily.
+
+**Before upgrading:**
+
+- Install from `requirements.lock` (`pip install -r requirements.lock`); Docker
+  and CI already do. `requirements.txt` is now only the list of direct
+  dependencies, and SQLAlchemy is pinned below 2.1.
+- With `MATE_ENV=production`, the server exits at startup when it cannot reach
+  the database instead of serving an empty dashboard, and ADK's dev UI at
+  `/dev-ui` is off unless `ADK_DEV_UI=true`.
+- A memory block marked Read-only can no longer be changed or deleted, and a
+  value longer than its Character Limit is refused, whether the write comes
+  from an agent, the dashboard, the widget admin API, a trigger or a template
+  sync. An agent that relied on writing such a block now gets an error; untick
+  Read-only or raise the limit if that write is wanted.
+- Saving a trigger with an invalid cron expression, an `http_callback` without
+  a URL, or an email output without a recipient or `SMTP_HOST` is now a `400`.
+  Existing triggers like that keep their config, but their runs are recorded
+  as errors instead of `ok`.
+- `docker-compose.yml` now loads `.env` into the container, so every setting
+  in it reaches MATE, and `DB_TYPE` and `ARTIFACT_SERVICE` come from it
+  (defaults `sqlite` and `local_folder`; it used to force `supabase`).
+- The Slack integration's **Mention-only** box is gone. It was never read: in
+  channels the agent has always answered only when mentioned.
+- `python shared/migrate.py rollback` is removed; it failed for every
+  migration. Reverse a change with a new migration or restore a backup.
+
 ### Added
 
 - **Documentation in the dashboard** - the documentation was a folder of Markdown files nobody saw from inside the product, and it drifted from the code. It now lives in `docs/` and is served at `/dashboard/docs` with search: user guides, developer guides, and a reference (configuration, HTTP API, tools, database) that `scripts/gen_docs.py` generates from the code. CI fails when the reference is stale and warns when code covered by a guide changes without the guide. The feature guides from `documents/` moved into `docs/`; pages not yet re-checked against the code are marked as such. See `docs/dev/documentation.md`
-- **Content-Security-Policy** - MATE sent no CSP, so an injected script could load code from any host and send data to one. Every page now gets a policy that limits scripts, styles, fonts and connections to MATE itself and the CDNs its templates use, forbids plugins and `<base>` rewrites, and lets only MATE frame the dashboard. The widget chat page takes its `frame-ancestors` from the widget key's allowed origins when `WIDGET_ORIGIN_STRICT` is on, covering the same sites as the origin check, so once enforced it also stops a site that hides its referrer. It ships as `Content-Security-Policy-Report-Only` (`CSP_MODE`): nothing is blocked, and violations are logged once each through `/csp-report`. `CSP_EXTRA_SOURCES` adds hosts a deployment needs. Inline scripts are still allowed; removing them is the next step. See `documents/CSP.md` (#124)
-- **Fallback model** - when an agent's model failed, the person chatting saw an error, even with healthy providers one config field away. An agent can now name a **Fallback Model** (agent modal, visual builder, or `fallback_model` on the agents API). A request whose model call fails because the provider is unavailable (a timeout, a connection failure, a 5xx or a 429) is re-run once on it, and the answer goes back without an error. Errors the request itself causes, such as a content-policy refusal or an oversized context, do not fall back, so a refusal cannot be used to get past the primary provider's filters. Guardrails and token logging apply to it as to any answer, usage logs book its tokens under the fallback model, and each fallback leaves a warning and an `agent.model_fallback` audit entry. The fallback is reached through the provider env vars, never the agent's own base URL and key. Works on both runtimes. Migration V034. See `documents/FALLBACK_MODEL.md` (#41)
-- **Suggest a fix can change the memory blocks the agent read** - when a wrong answer came from a block, such as outdated opening hours, the fix could only patch the instruction around it. The suggestion now also lists the blocks the agent read in that answer (from the rated turn, or by running the test case once in memory), and the model may revise the values of the ones you tick; read-only blocks are never offered. The check runs the suite with the new values standing in for the stored ones inside the in-memory run, without writing them, and warns which other agents of the project share the blocks. Apply is refused if a block changed meanwhile, and writes each block as a block version under your name, listed in the audit entry. See `documents/EVALS.md` (#136)
-- **Evals against a stored version on the LangGraph runtime** - with `AGENT_FRAMEWORK=langgraph`, running an eval against a version, a suite run and "Check against suite" returned `501`. They now build the graph from the version's snapshot, with sub-agents from their current config, and run it against an in-memory checkpointer, as the ADK runtime does. The deployed graph, the LangGraph session tables and the configured artifact storage are untouched, and RBAC is skipped for the eval run on both runtimes. See `documents/EVALS.md` (#123)
+- **Content-Security-Policy** - MATE sent no CSP, so an injected script could load code from any host and send data to one. Every page now gets a policy that limits scripts, styles, fonts and connections to MATE itself and the CDNs its templates use, forbids plugins and `<base>` rewrites, and lets only MATE frame the dashboard. The widget chat page takes its `frame-ancestors` from the widget key's allowed origins when `WIDGET_ORIGIN_STRICT` is on, covering the same sites as the origin check, so once enforced it also stops a site that hides its referrer. It ships as `Content-Security-Policy-Report-Only` (`CSP_MODE`): nothing is blocked, and violations are logged once each through `/csp-report`. `CSP_EXTRA_SOURCES` adds hosts a deployment needs. Inline scripts are still allowed; removing them is the next step. See `docs/dev/content-security-policy.md` (#124)
+- **Fallback model** - when an agent's model failed, the person chatting saw an error, even with healthy providers one config field away. An agent can now name a **Fallback Model** (agent modal, visual builder, or `fallback_model` on the agents API). A request whose model call fails because the provider is unavailable (a timeout, a connection failure, a 5xx or a 429) is re-run once on it, and the answer goes back without an error. Errors the request itself causes, such as a content-policy refusal or an oversized context, do not fall back, so a refusal cannot be used to get past the primary provider's filters. Guardrails and token logging apply to it as to any answer, usage logs book its tokens under the fallback model, and each fallback leaves a warning and an `agent.model_fallback` audit entry. The fallback is reached through the provider env vars, never the agent's own base URL and key. Works on both runtimes. Migration V034. See `docs/user/fallback-model.md` (#41)
+- **Suggest a fix can change the memory blocks the agent read** - when a wrong answer came from a block, such as outdated opening hours, the fix could only patch the instruction around it. The suggestion now also lists the blocks the agent read in that answer (from the rated turn, or by running the test case once in memory), and the model may revise the values of the ones you tick; read-only blocks are never offered. The check runs the suite with the new values standing in for the stored ones inside the in-memory run, without writing them, and warns which other agents of the project share the blocks. Apply is refused if a block changed meanwhile, and writes each block as a block version under your name, listed in the audit entry. See `docs/user/evals.md` (#136)
+- **Evals against a stored version on the LangGraph runtime** - with `AGENT_FRAMEWORK=langgraph`, running an eval against a version, a suite run and "Check against suite" returned `501`. They now build the graph from the version's snapshot, with sub-agents from their current config, and run it against an in-memory checkpointer, as the ADK runtime does. The deployed graph, the LangGraph session tables and the configured artifact storage are untouched, and RBAC is skipped for the eval run on both runtimes. See `docs/user/evals.md` (#123)
+- **Help agent** - a **?** button on every dashboard page opens a chat with `mate_help`, a built-in agent that searches and reads MATE's documentation through the new `docs` tool and knows which page you are on. Admins get every section with links to the Documentation page; other users get the user guides only. Migration V036 creates it in its own MATE Help project, open to the admin and user roles, with no model set, so it uses the server's default until an admin picks one; it is only created when no agent of that name exists. See `docs/user/help.md`
+- **The database in `/health`** - `/health` now answers `503` with `"database": "unavailable"` when the database cannot be reached, so the Docker `HEALTHCHECK` and orchestrators notice. PostgreSQL and MySQL are retried at startup (`DB_CONNECT_RETRIES`, default 5, 3 s apart) for a database that starts after MATE, and with `MATE_ENV=production` the server exits if it still cannot connect (#144)
+- **Hashed lock file** - `requirements.lock`, compiled with uv for Python 3.11 on every platform, pins every package with hashes. Docker, CI and the Quick Start install from it, so rebuilding the same commit can no longer pick up a breaking release. The README says how to regenerate and upgrade it (#143)
 
 ### Changed
 
 - **ADK's dev UI is off in production by default** - `/dev-ui` is a debugging tool that shows admins every event, tool argument and session state, runs on the dashboard's origin, and needs `'unsafe-eval'`. With `MATE_ENV=production` it is no longer served unless `ADK_DEV_UI=true`; elsewhere nothing changes. The CSP only allows `eval()` there while it is served. The dashboard's Chat button already opens the Work Room, so nothing in the dashboard depends on it
+- **The Slack integration's Mention-only option is removed** - the form saved it but nothing read it: in channels the agent always answered only when mentioned, plus direct messages. The Slack guide says so (#154)
+- **`migrate.py rollback` is removed** - it looked for `R<version>` files no migration ships, in the wrong folder, so it failed for every migration. The CLI now says to write a reversing migration or restore a backup (#156)
+- The dashboard's old dev UI chat side panel is removed; nothing could open it, as the Chat button opens the Work Room
+
+### Fixed
+
+- **Memory blocks ignored Read-only and Character Limit.** Both were stored in a block's metadata and never checked. Changes, deletes and restores of a read-only block are now refused unless the write clears the flag, as is a value over the limit, with `error_code` `read_only` or `too_long` and a message an agent can act on. The dashboard's edit form now saves the Read-only, Character Limit and Preserve on migration fields it always sent, a trigger whose answer cannot be written to its block fails the run instead of dropping the answer, and template sync skips such blocks and lists them in the sync dialog. Importing agents with overwrite still replaces blocks directly (#153)
+- **Triggers reported success when nothing was delivered or scheduled.** An invalid cron expression, an `http_callback` without a URL and an email output without a recipient or `SMTP_HOST` were saved without complaint, and their runs recorded as `ok`. Create and update now answer `400` with the reason (update only checks when it changes the type, schedule or output, so rotating an older trigger's key still works), and such a run is recorded as an error with the agent's answer kept (#151)
+- **`docker-compose` did not pass `.env` to the container**, so LLM API keys and every setting not listed under `environment:` never reached MATE. It is loaded with `env_file` now (optional), and the explicit entries still win. `DB_TYPE` and `ARTIFACT_SERVICE` are taken from `.env` instead of being forced to `sqlite` and `supabase`, and `DB_PASSWORD` is no longer required (#159, #163). Thanks to @cestercian
+- **The agent server was started with `python` from `PATH`** instead of the interpreter running the auth server, so in a virtualenv it could start without MATE's dependencies. It uses `sys.executable` now (#155). Thanks to @cestercian
+- **Migrations failed on a fresh PostgreSQL database and on schemas made by `create_all`.** V002's seed relied on a unique constraint the `MemoryBlock` model lacked, so when the ORM created the table first every insert failed; the model declares it, V002 adds it when missing, and `create_all` only runs after migrations succeed (#145). On tables made by `create_all`, which have no database-side defaults, V001 to V003 and V036 left NOT NULL timestamps and flags to the database and failed (V036 was even recorded as applied on SQLite without creating the agent); they set every such column themselves now, and the V001 and V003 agent seeds only insert missing agents instead of overwriting ones an admin may have edited
+- **`migrate.py create` wrote a single dialect.** It now writes the new file into `sqlite/`, `postgresql/` and `mysql/`, numbered after the highest version in any of them, and `gen_docs.py --check` in CI fails while a version is missing from a dialect (#156)
+- **The server ran without a database after a rebuild** - SQLAlchemy 2.1 made `postgresql://` select psycopg 3, which is not installed, so the first image built after its release could not open the database and the dashboard silently showed nothing. SQLAlchemy is pinned to 2.0, and the sync engines name `postgresql+psycopg2://` explicitly
+- **The Gemini image generation setup check always failed** with `google-genai`; it called the old `google-generativeai` API and now creates a `genai.Client`
+- **Script errors on the visual builder and the API docs page** - with no project selected the builder rendered `None` into its script and stopped, and the API docs page called a function before defining it
+- **The last items of the sidebar were hidden on phones**, Documentation among them; the mobile drawer now fits the visible screen
 
 ### Security
 
 - **Script in a widget's config** - the widget chat page put the key's config into an inline `<script>` with `json.dumps`, which leaves `</script>` intact. Whoever holds a widget's admin key could set a title that closed the script and ran their own on MATE's origin, the dashboard's, when an admin opened the widget preview. The config, agent name and key are rendered with `tojson` now
 - **Script in the dashboard home's Recent Activity** - the list put an audit entry's actor, action and resource into the page unescaped. The actor can come from a chat: a widget visitor picks their own `user_id`, which an RBAC denial (and now a model fallback) records. A visitor could thus store script that ran when an admin opened the dashboard. The fields are escaped now, as on the Audit Logs page
+- **The built-in admin account was not an admin to agents.** The `AUTH_USERNAME` account administers the dashboard, but its `users` row was created with only the `user` role, so on a new installation every admin-only agent refused it and no agent could write memory blocks for it. The row is now created with `admin` and `user`, and `admin` is added to an existing row that lacks it (#152)
+- **Disabled webhook triggers still fired.** `is_enabled` was only checked for cron triggers, so a switched-off webhook trigger still ran when its URL was called with a valid key. `POST /triggers/{id}/fire` now answers `409` for a disabled trigger, after authentication and the signature check. Test-fire from the dashboard still runs it (#150)
+- **A Tavily API key was shipped in seed data** - the V001 seed, three agent templates and the docs carried a real key in the Tavily MCP URL. They now use the `${TAVILY_API_KEY}` placeholder the MCP loader fills from the environment, and V035 swaps the key out of agents seeded with it
+- **`/csp-report` and the widget allowlist were hardened** - the anonymous report endpoint refuses bodies over 16 KB before reading them, ignores malformed fields instead of failing with a `500`, and logs at most 100 violations per 10 minutes. A non-string entry in a widget key's allowed origins no longer makes the chat page a `500`, and an unrecognised `ADK_DEV_UI` value no longer turns the dev UI on in production
+- **Help answers could link off-site** - a link starting with `/\`, which browsers read as `//host`, passed as a local link in the help panel; it is refused now
 
 ## [1.3.3] - 2026-09-27
 
