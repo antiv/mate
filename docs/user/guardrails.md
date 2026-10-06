@@ -50,9 +50,9 @@ affects anyone.
 - **PII detection matches formats**, such as something shaped like an email address
   or a card number. It does not recognise names or addresses.
 - **The hallucination check is a second opinion from another model**, with that
-  model's own error rate. It is set up in the JSON, with the judge `model` and a
-  `threshold` (0.7 if not set). If the judge model cannot be reached, the answer
-  is let through.
+  model's own error rate. It is configured in the guardrails dialog or directly
+  in the JSON, with the judge `model` and a `threshold` (0.7 if not set). If the
+  judge model cannot be reached, the answer is let through.
 - **A guardrail that fails does not block.** If a check raises an error, the message
   passes and the error is logged.
 - Every check adds a little time to each message; the hallucination check adds a
