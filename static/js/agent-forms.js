@@ -308,13 +308,15 @@ function syncJsonToGuardrailConfig(prefix) {
     const parsed = safeJsonParse(textarea.value);
     const guardrails = (parsed && parsed.guardrails && Array.isArray(parsed.guardrails)) ? parsed.guardrails : [];
     const _set = (id, val) => { const el = document.getElementById(id); if (el) el.checked = !!val; };
-    const _setVal = (id, val) => { const el = document.getElementById(id); if (el) el.value = val || ''; };
+    const _setVal = (id, val) => { const el = document.getElementById(id); if (el) el.value = (val !== undefined && val !== null) ? val : ''; };
     if (guardrails.length === 0) {
         _set(prefix + 'GrPii', false);
         _set(prefix + 'GrInjection', false);
         _set(prefix + 'GrContentPolicy', false);
         _set(prefix + 'GrOutputLength', false);
         _set(prefix + 'GrHallucination', false);
+        _setVal(prefix + 'GrHallucinationModel', '');
+        _setVal(prefix + 'GrHallucinationThreshold', 0.7);
     }
     for (const g of guardrails) {
         switch (g.type) {
@@ -340,6 +342,8 @@ function syncJsonToGuardrailConfig(prefix) {
             case 'hallucination_check':
                 _set(prefix + 'GrHallucination', g.enabled);
                 _setVal(prefix + 'GrHallucinationAction', g.action);
+                _setVal(prefix + 'GrHallucinationModel', (g.config || {}).model || '');
+                _setVal(prefix + 'GrHallucinationThreshold', (g.config && g.config.threshold !== undefined) ? g.config.threshold : 0.7);
                 break;
         }
     }
@@ -372,10 +376,18 @@ function buildGuardrailConfigFromPresets(prefix) {
         action: _val(prefix + 'GrOutputLengthAction') || 'warn',
         config: { max_characters: maxChars, max_words: maxWords }
     });
+    const hallucinationModel = _val(prefix + 'GrHallucinationModel').trim();
+    const parsedThreshold = parseFloat(_val(prefix + 'GrHallucinationThreshold'));
+    const hallucinationThreshold = isNaN(parsedThreshold) ? 0.7 : parsedThreshold;
+    const hallucinationConfig = {};
+    if (hallucinationModel) {
+        hallucinationConfig.model = hallucinationModel;
+    }
+    hallucinationConfig.threshold = hallucinationThreshold;
     guardrails.push({
         type: 'hallucination_check', enabled: _checked(prefix + 'GrHallucination'),
         action: _val(prefix + 'GrHallucinationAction') || 'warn',
-        config: {}
+        config: hallucinationConfig
     });
     return { guardrails: guardrails };
 }
