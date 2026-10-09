@@ -649,6 +649,9 @@ class WidgetApiKey(Base):
     # Separate secret for the /widget/api admin routes: api_key is embedded in
     # customer pages and therefore public, admin_key never leaves the dashboard.
     admin_key = Column(String(255), unique=True, nullable=True, index=True)
+    # For a standalone build forwarding its ratings: only this key may send the rated
+    # question and answer, which the server cannot check. Kept out of web pages.
+    feedback_key = Column(String(255), unique=True, nullable=True, index=True)
     project_id = Column(Integer, ForeignKey('projects.id'), nullable=False)
     agent_name = Column(String(255), nullable=False)
     label = Column(String(255), nullable=True)
@@ -688,6 +691,7 @@ class WidgetApiKey(Base):
             'id': self.id,
             'api_key': self.api_key,
             'admin_key': self.admin_key,
+            'feedback_key': self.feedback_key,
             'project_id': self.project_id,
             'agent_name': self.agent_name,
             'label': self.label,

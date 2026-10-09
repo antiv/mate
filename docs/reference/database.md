@@ -10,7 +10,7 @@ generated: true
 
 # Database reference
 
-**32** tables defined in `shared/utils/models.py`; migrations are at **V038**. Migrations apply automatically on startup and are the source of truth for the schema: the models describe it, the migrations create it.
+**32** tables defined in `shared/utils/models.py`; migrations are at **V039**. Migrations apply automatically on startup and are the source of truth for the schema: the models describe it, the migrations create it.
 
 ## Migrations
 
@@ -56,6 +56,7 @@ A ✗ means that dialect has no file for that version. All dialects are in step.
 | V036 | mate help agent | ✓ | ✓ | ✓ |
 | V037 | alert rules open types | ✓ | ✓ | ✓ |
 | V038 | feedback reported exchange | ✓ | ✓ | ✓ |
+| V039 | widget feedback key | ✓ | ✓ | ✓ |
 
 ## `users`
 
@@ -303,6 +304,7 @@ Model `WidgetApiKey`. Model for embeddable chat widget API keys, scoped to a pro
 | `id` | `Integer` | PK | — | — |
 | `api_key` | `String(255)` | unique, not null | — | — |
 | `admin_key` | `String(255)` | unique | — | Separate secret for the /widget/api admin routes: api_key is embedded in customer pages and therefore public, admin_key never leaves the dashboard. |
+| `feedback_key` | `String(255)` | unique | — | For a standalone build forwarding its ratings: only this key may send the rated question and answer, which the server cannot check. Kept out of web pages. |
 | `project_id` | `Integer` | FK → `projects.id`, not null | — | — |
 | `agent_name` | `String(255)` | not null | — | — |
 | `label` | `String(255)` | — | — | — |

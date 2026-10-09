@@ -141,15 +141,18 @@ STANDALONE_HOST=127.0.0.1
 
 # Optional — send 👍/👎 ratings to a central MATE (both needed)
 MATE_FEEDBACK_URL=https://mate.example.com
-MATE_FEEDBACK_KEY=wk_...
+MATE_FEEDBACK_KEY=wfk_...
 ```
 
 ## Response ratings
 
 A standalone build has no dashboard, so it shows no 👍/👎 unless it can send them
 to a MATE that has one. Set both `MATE_FEEDBACK_URL` (that MATE's address) and
-`MATE_FEEDBACK_KEY`, a widget key for the same agent on that server: in its
-dashboard, **Widget Keys → New Key** for the agent the build serves. The chat then
+`MATE_FEEDBACK_KEY`, the **standalone feedback key** of a widget key for the same
+agent on that server. In its dashboard, open **Widget Keys** for the agent the build
+serves, create a key if there is none, and copy the feedback key (`wfk_…`) from
+**Embed Code**. It is not the public `wk_` key: that one is in every page that embeds
+the widget, while the feedback key belongs only in the build's `.env`. The chat then
 shows the buttons and the optional note after a thumbs-down, and the ratings land in
 that MATE's **Evals → Rated Down**, with **Add to evals** and **Suggest a fix**, next
 to the ratings from its own chats.
@@ -163,8 +166,8 @@ How a rating travels:
    never taken from the browser: a session that does not exist for that user id is a
    `404` and nothing is sent.
 3. It posts rating, note, question and answer to `{MATE_FEEDBACK_URL}/widget/api/feedback`
-   with the key in `X-Widget-Key`. The agent and project come from the key, as for any
-   widget rating.
+   with the key in `X-Widget-Feedback-Key`. The agent and project come from the key,
+   as for any widget rating.
 
 `/feedback` has no login, like the rest of the standalone chat, so it accepts at most
 30 ratings a minute per client address (`429` beyond that). A rating the central MATE
@@ -172,10 +175,17 @@ does not accept, or cannot be reached for, is a `502` to the chat, which ignores
 it is not queued or retried. Without the two variables the route answers `404`.
 
 On the central server the question and answer are stored on the rating
-(`response_feedback.question` / `answer`, migration V038) and shown in Rated Down as
-*sent by a standalone build*. They are only used when the server has no session for
-the rating. Anyone holding a widget's public key can send them, so for MATE's own
-chats the session always wins.
+(`response_feedback.question` / `answer`, migration V038) and shown in Rated Down and
+in Suggest a fix as *sent by a standalone build*. They are only used when the server
+has no session for the rating, so for MATE's own chats the session always wins.
+
+The route accepts `question` and `answer` only with the feedback key
+(`widget_api_keys.feedback_key`, migration V039, generated for every key). With the
+public key it records the rating and ignores them: the public key is in every page
+that embeds the widget, and this text reaches the model that proposes instruction
+changes. Whoever receives a build can read the feedback key from its `.env`, so give
+each distributed build its own widget key if you need to revoke one. A rating also
+cannot be changed through another agent's key.
 
 ## MCP Server Dependencies
 

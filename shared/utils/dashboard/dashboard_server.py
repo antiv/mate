@@ -6061,14 +6061,15 @@ class DashboardServer:
                 from shared.utils.agent_improver import blocks_read
                 events = self._get_session_events(fb.session_id) or []
                 question, answer = extract_exchange(events, fb.message_id)
-                if not question and fb.question:
+                reported = not question and bool(fb.question)
+                if reported:
                     # Sent by a standalone build, whose session this server cannot read
                     question, answer = fb.question, fb.answer
                 if not question:
                     raise HTTPException(status_code=400, detail="The rated conversation is no longer available")
                 return {"agent_name": fb.agent_name, "question": question, "answer": answer,
                         "expected": None, "comment": fb.comment, "source": {"feedback_id": fb.id},
-                        "blocks_read": blocks_read(events, fb.message_id)}
+                        "blocks_read": blocks_read(events, fb.message_id), "reported": reported}
             raise HTTPException(status_code=400, detail="test_case_id or feedback_id is required")
 
         def _agent_row(session, agent_name: str):
@@ -6178,6 +6179,7 @@ class DashboardServer:
                 raise HTTPException(status_code=400, detail=str(e))
             return {"agent_name": ctx["agent_name"], "source": ctx["source"],
                     "question": ctx["question"], "answer": ctx["answer"],
+                    "reported": ctx.get("reported", False),
                     "current_instruction": current, **proposal,
                     "candidate_blocks": [{"label": k, "value": v, "selected": k in selected}
                                          for k, v in candidates.items()],
