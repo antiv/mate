@@ -69,8 +69,8 @@ function syncToolConfigToJson(prefix = '') {
         config.cv_tools = true;
     }
     if (imageTools && imageTools.checked) {
-        if (imageModel && imageModel.value) {
-            config.image_tools = { model: imageModel.value };
+        if (imageModel && imageModel.value.trim()) {
+            config.image_tools = { model: imageModel.value.trim() };
         } else {
             config.image_tools = true;
         }
@@ -418,9 +418,9 @@ function setupToolListeners(prefix) {
         });
     }
     
-    const imageModelSelect = document.getElementById(prefix + 'ImageModel');
-    if (imageModelSelect) {
-        imageModelSelect.addEventListener('change', function() {
+    const imageModelInput = document.getElementById(prefix + 'ImageModel');
+    if (imageModelInput) {
+        imageModelInput.addEventListener('input', function() {
             syncToolConfigToJson(prefix);
         });
     }

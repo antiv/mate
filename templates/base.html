@@ -624,6 +624,10 @@
                 </div>
                 <p class="sidebar-section-header">System</p>
                 <div class="space-y-0.5">
+                    <a href="/dashboard/settings" class="mate-nav-item {% if request.url.path == '/dashboard/settings' %}sidebar-active{% endif %}" title="Settings">
+                        <i class="fas fa-sliders-h sidebar-icon"></i>
+                        <span class="sidebar-text">Settings</span>
+                    </a>
                     <a href="/dashboard/migrations" class="mate-nav-item {% if request.url.path == '/dashboard/migrations' %}sidebar-active{% endif %}" title="Migrations">
                         <i class="fas fa-database sidebar-icon"></i>
                         <span class="sidebar-text">Migrations</span>

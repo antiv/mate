@@ -37,8 +37,8 @@ MATE exposes:
   - Quality: standard, hd
   - Single image only
 - `generate_image_nano_banana` - Generate images using Nano Banana (Gemini 2.5 Flash Image via OpenRouter) model
-  - Supports asset naming for version tracking
-  - Custom model configuration
+  - Optional `model_config.model` for another image model; `asset_name` is accepted and ignored
+  - All three go through the agents' image tool path; see [Image generation](image-generation.md)
 
 **Requirements:** Image generation API keys configured (OpenAI, Google, etc.)
 

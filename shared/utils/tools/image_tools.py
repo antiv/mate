@@ -1,12 +1,16 @@
 """
 Image generation tools for agents.
 
-This module provides image generation capabilities using various APIs.
+Generation goes through LiteLLM, so any image model it supports can be used:
+OpenAI, Azure, OpenRouter, Gemini/Imagen, Vertex AI, Bedrock, Black Forest Labs,
+fal.ai, Recraft, Stability, xAI and others. Image data extraction (vision) is at
+the end of the file.
 """
 
 import asyncio
 import os
 import base64
+import re
 import time
 import logging
 
@@ -16,13 +20,6 @@ try:
     from openai import OpenAI  # type: ignore
 except Exception:
     OpenAI = None  # type: ignore
-
-try:
-    from google import genai  # type: ignore
-    from google.genai import types  # type: ignore
-except Exception:
-    genai = None  # type: ignore
-    types = None  # type: ignore
 
 from google.adk.tools.tool_context import ToolContext
 
@@ -122,233 +119,217 @@ def _construct_public_url(app_name: str, user_id: str, session_id: str, filename
         return ""
 
 
+# Image models are named as for agents, in LiteLLM's provider/model form
+# (gemini/gemini-2.5-flash-image, black_forest_labs/flux-pro-1.1, ...). A bare
+# name (dall-e-3, gpt-image-1) is an OpenAI model, as agent configs from before
+# LiteLLM wrote them. "nano-banana" is the name the agent form used to save.
+DEFAULT_IMAGE_MODEL = "dall-e-3"
+_MODEL_ALIASES = {"nano-banana": "openrouter/google/gemini-2.5-flash-image"}
+# The tool name agents saw for these before, kept so instructions naming it still work
+_LEGACY_TOOL_NAMES = {"openrouter/google/gemini-2.5-flash-image": "generate_image_nano_banana"}
+
+# Request parameters come from tool_config, which an agent with create_agent can
+# write. Where the request goes and with which credentials is the server's call:
+# these come from the environment only.
+_BLOCKED_PARAMS = frozenset({
+    "api_base", "base_url", "api_key", "api_version", "organization", "custom_llm_provider",
+    "extra_headers", "headers", "aws_access_key_id", "aws_secret_access_key",
+    "aws_session_token", "aws_region_name", "vertex_project", "vertex_location",
+    "vertex_credentials", "timeout", "client",
+})
+
+# LiteLLM's validate_environment reports these image-only providers as configured
+# whatever the environment holds; their key names are from LiteLLM's own code.
+_IMAGE_PROVIDER_KEYS = {
+    "black_forest_labs": ("BFL_API_KEY", "BLACK_FOREST_LABS_API_KEY"),
+    "stability": ("STABILITY_API_KEY",),
+    "recraft": ("RECRAFT_API_KEY",),
+    "fal_ai": ("FAL_AI_API_KEY",),
+    "runwayml": ("RUNWAYML_API_KEY",),
+    "aiml": ("AIML_API_KEY",),
+}
+
+_MIME_SIGNATURES = (
+    (b"\x89PNG\r\n\x1a\n", "image/png", "png"),
+    (b"\xff\xd8\xff", "image/jpeg", "jpg"),
+    (b"GIF8", "image/gif", "gif"),
+)
+
+
+def default_image_model() -> Tuple[str, str]:
+    """The model for agents that name none, and where it comes from.
+
+    The dashboard's Settings page wins, then IMAGE_MODEL, then dall-e-3. Read on
+    every call: the agent runtime is another process than the dashboard.
+    Returns (model, source) with source "dashboard", "IMAGE_MODEL" or "default".
+    """
+    from ..system_settings import IMAGE_MODEL, get_setting
+    stored = (get_setting(IMAGE_MODEL) or "").strip()
+    if stored:
+        return stored, "dashboard"
+    env = (os.getenv("IMAGE_MODEL") or "").strip()
+    if env:
+        return env, "IMAGE_MODEL"
+    return DEFAULT_IMAGE_MODEL, "default"
+
+
+def resolve_image_model(model: Optional[str] = None) -> Tuple[str, Dict[str, Any]]:
+    """The LiteLLM model name and the credentials to call it with.
+
+    Without a model, the default from default_image_model(). Credentials come from the provider's
+    usual env var, as for agents, with two exceptions kept from before: a bare
+    OpenAI name falls back to OPENAI_API_KEY_BACKUP, then to OpenRouter's endpoint
+    with OPENROUTER_API_KEY; and Gemini takes GOOGLE_API_KEY, which LiteLLM's
+    image call does not read on its own.
+    """
+    name = (model or default_image_model()[0]).strip()
+    name = _MODEL_ALIASES.get(name, name)
+    kwargs: Dict[str, Any] = {}
+    if "/" not in name and not os.getenv("OPENAI_API_KEY"):
+        if os.getenv("OPENAI_API_KEY_BACKUP"):
+            kwargs["api_key"] = os.getenv("OPENAI_API_KEY_BACKUP")
+        elif os.getenv("OPENROUTER_API_KEY"):
+            kwargs["api_key"] = os.getenv("OPENROUTER_API_KEY")
+            kwargs["api_base"] = "https://openrouter.ai/api/v1"
+    elif name.startswith("gemini/"):
+        key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+        if key:
+            kwargs["api_key"] = key
+    return name, kwargs
+
+
+def image_tool_name(model: str) -> str:
+    """The tool name an agent sees for an image model."""
+    name, _ = resolve_image_model(model)
+    if name in _LEGACY_TOOL_NAMES:
+        return _LEGACY_TOOL_NAMES[name]
+    return "generate_image_" + (re.sub(r"[^A-Za-z0-9]+", "_", model).strip("_") or "default")
+
+
+def _sniff_image(data: bytes) -> Tuple[str, str]:
+    """(mime type, file extension) from the image's first bytes; WebP or PNG otherwise."""
+    for signature, mime, ext in _MIME_SIGNATURES:
+        if data.startswith(signature):
+            return mime, ext
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "image/webp", "webp"
+    return "image/png", "png"
+
+
 def validate_image_generation_setup() -> Tuple[bool, str, Dict[str, Any]]:
     """
-    Validate that image generation is properly configured and available.
-    
+    Check that the default image model (see default_image_model) can be called.
+
+    Only looks for its provider's key; it makes no request, so a wrong key or an
+    unknown model shows up on the first generation, not here.
+
     Returns:
         Tuple of (is_available, error_message, details)
-        - is_available: True if image generation can work
-        - error_message: Empty string if available, error description if not
-        - details: Dictionary with validation details
     """
-    details = {
-        "openai_package": False,
-        "google_generativeai_package": False,
-        "api_key_configured": False,
-        "api_key_source": None,
-        "base_url": None,
-        "models_available": [],
-        "gemini_models_available": []
-    }
-    
-    # Check if OpenAI package is installed
-    if OpenAI is None:
-        details["openai_package"] = False
-    else:
-        details["openai_package"] = True
-    
-    # Check if Google Generative AI package is installed
-    if genai is None or types is None:
-        details["google_generativeai_package"] = False
-    else:
-        details["google_generativeai_package"] = True
-    
-    # Check for API keys
-    openai_api_key = os.getenv("OPENAI_API_KEY")
-    openrouter_api_key = os.getenv("OPENROUTER_API_KEY")
-    backup_api_key = os.getenv("OPENAI_API_KEY_BACKUP")
-    google_api_key = os.getenv("GOOGLE_API_KEY")
-    
-    # Check if we have at least one API key
-    has_openai_key = openai_api_key or openrouter_api_key or backup_api_key
-    has_google_key = google_api_key
-    
-    if not has_openai_key and not has_google_key:
-        return False, "No API key configured. Please set one of: OPENAI_API_KEY, OPENROUTER_API_KEY, GOOGLE_API_KEY environment variables.", details
-    
-    details["api_key_configured"] = True
-    
-    # Test OpenAI/OpenRouter connectivity if available
-    if has_openai_key and details["openai_package"]:
-        try:
-            # Determine API key source and base URL
-            if openai_api_key:
-                details["api_key_source"] = "OPENAI_API_KEY"
-                details["base_url"] = None
-            elif openrouter_api_key:
-                details["api_key_source"] = "OPENROUTER_API_KEY"
-                details["base_url"] = "https://openrouter.ai/api/v1"
-            elif backup_api_key:
-                details["api_key_source"] = "OPENAI_API_KEY_BACKUP"
-                details["base_url"] = None
-            
-            base_url = details["base_url"]
-            api_key = openai_api_key or openrouter_api_key or backup_api_key
-            client = OpenAI(api_key=api_key, base_url=base_url)
-            
-            # Try to list models to test connectivity (this is a lightweight request)
-            models = client.models.list()
-            details["models_available"] = [model.id for model in models.data if "dall" in model.id.lower() or "gpt-image" in model.id.lower()]
-            
-        except Exception as e:
-            error_msg = str(e).lower()
-            if "incorrect api key" in error_msg or "invalid api key" in error_msg:
-                return False, f"Invalid API key: {details['api_key_source']}", details
-            elif "rate limit" in error_msg:
-                return False, f"API rate limit exceeded for {details['api_key_source']}", details
-            elif "authentication" in error_msg or "unauthorized" in error_msg:
-                return False, f"Authentication failed for {details['api_key_source']}", details
-            else:
-                return False, f"OpenAI API connectivity test failed: {str(e)}", details
-    
-    # Test Google Generative AI connectivity if available
-    if has_google_key and details["google_generativeai_package"]:
-        try:
-            # google-genai has no module-level configure(); creating a client validates the setup
-            genai.Client(api_key=google_api_key)
-            details["gemini_models_available"] = ["gemini-2.0-flash-exp"]
-            details["api_key_source"] = "GOOGLE_API_KEY"
-            
-        except Exception as e:
-            error_msg = str(e).lower()
-            if "incorrect api key" in error_msg or "invalid api key" in error_msg:
-                return False, f"Invalid Google API key: GOOGLE_API_KEY", details
-            elif "rate limit" in error_msg:
-                return False, f"Google API rate limit exceeded", details
-            elif "authentication" in error_msg or "unauthorized" in error_msg:
-                return False, f"Google API authentication failed", details
-            else:
-                return False, f"Google API connectivity test failed: {str(e)}", details
-    
-    # Check if we have any image generation models available
-    total_models = len(details["models_available"]) + len(details["gemini_models_available"])
-    if total_models == 0:
-        return False, f"No image generation models found. OpenAI models: {len(details['models_available'])}, Gemini models: {len(details['gemini_models_available'])}", details
-    
-    return True, "", details
+    model, kwargs = resolve_image_model(None)
+    details: Dict[str, Any] = {"default_model": model, "source": default_image_model()[1],
+                               "provider": None, "missing_keys": []}
+    try:
+        import litellm
+        details["provider"] = litellm.get_llm_provider(model)[1]
+        env = litellm.validate_environment(model=model)
+    except Exception as e:
+        return False, f"Unknown image model '{model}': {e}", details
+    if "api_key" in kwargs:
+        return True, "", details
+    provider_keys = _IMAGE_PROVIDER_KEYS.get(details["provider"])
+    if provider_keys:
+        if any(os.getenv(k) for k in provider_keys):
+            return True, "", details
+        env = {"missing_keys": list(provider_keys)}
+    elif env.get("keys_in_environment"):
+        return True, "", details
+    details["missing_keys"] = env.get("missing_keys") or []
+    return False, (f"No API key for image model '{model}'. Set one of: "
+                   f"{', '.join(details['missing_keys']) or 'the provider key'}"), details
 
 
 def get_model_config(model: str, custom_config: dict = None) -> dict:
     """
-    Get model-specific configuration parameters from database configuration.
-    
+    Request parameters for an image model: OpenAI's defaults for a bare OpenAI
+    name, as before, then the agent's own (size, quality, n, style, ...).
+    Parameters a provider does not take are dropped by LiteLLM.
+
     Args:
         model: The model name
         custom_config: Custom configuration parameters from database
-        
+
     Returns:
         Dictionary of model-specific parameters
     """
-    # Start with basic defaults that work for all models
-    config = {
-        "size": "1024x1024",
-        "n": 1
-    }
-    
-    # Add model-specific defaults if needed
-    if model == "dall-e-3":
-        config["quality"] = "standard"
-    
-    # Override with database configuration if provided
+    config: Dict[str, Any] = {}
+    if "/" not in model:
+        config = {"size": "1024x1024", "n": 1}
+        if model == "dall-e-3":
+            config["quality"] = "standard"
     if custom_config:
-        config.update(custom_config)
-    
+        blocked = sorted(k for k in custom_config if k in _BLOCKED_PARAMS)
+        if blocked:
+            logger.warning("Ignoring image tool settings that only the environment may set: %s",
+                           ", ".join(blocked))
+        config.update({k: v for k, v in custom_config.items()
+                       if k != "model" and k not in _BLOCKED_PARAMS})
     return config
 
 
 async def generate_image(prompt: str, tool_context: ToolContext = None) -> dict:
     """
-    Generate image using default configuration.
-    This is the main function used by agents.
-    
+    Generate an image with the default model (Settings page, IMAGE_MODEL, else dall-e-3).
+
     Args:
         prompt: The text prompt to generate the image from.
         tool_context: Optional tool context for artifact management.
 
     Returns:
-        A dictionary containing the prompt and the base64 encoded image string,
-        or an error message if the generation fails.
+        A dictionary describing the saved image, or an error.
     """
-    return await _generate_image_internal(prompt, tool_context, "dall-e-3", {})
+    return await _generate_image_internal(prompt, tool_context, None, {})
 
 
-async def _generate_image_internal(prompt: str, tool_context: ToolContext = None, model: str = "dall-e-3", model_config: dict = None) -> dict:
+async def _generate_image_internal(prompt: str, tool_context: ToolContext = None,
+                                   model: Optional[str] = None, model_config: dict = None) -> dict:
     """
-    Internal implementation for image generation.
-    
+    Generate one image through LiteLLM and save it as an artifact.
+
     Args:
         prompt: The text prompt to generate the image from.
         tool_context: Optional tool context for artifact management.
-        model: The model to use for image generation.
-        model_config: Custom configuration parameters to override defaults.
+        model: Any LiteLLM image model; None for the default.
+        model_config: Request parameters from the agent's tool_config.
 
     Returns:
-        A dictionary containing the prompt and the base64 encoded image string,
-        or an error message if the generation fails.
+        A dictionary describing the saved image, or an error. Never the image
+        bytes: they would flood the agent's context.
     """
+    model, credentials = resolve_image_model(model)
     try:
-        # Check if OpenAI package is available
-        if OpenAI is None:
-            error_msg = "OpenAI package not installed. Please install it with: pip install openai"
-            logger.error(error_msg)
-            return {
-                "error": error_msg,
-                "prompt": prompt,
-                "error_type": "missing_dependency",
-                "success": False
-            }
-        
-        # Get OpenAI client - try multiple API key sources
-        openai_api_key = (
-            os.getenv("OPENAI_API_KEY") or 
-            os.getenv("OPENROUTER_API_KEY") or 
-            os.getenv("OPENAI_API_KEY_BACKUP")
-        )
-        
-        if not openai_api_key:
-            error_msg = "OpenAI API key not configured. Please set one of: OPENAI_API_KEY, OPENROUTER_API_KEY environment variables."
-            logger.error(error_msg)
-            return {
-                "error": error_msg,
-                "prompt": prompt,
-                "error_type": "missing_api_key",
-                "success": False,
-                "help": "Set OPENAI_API_KEY for OpenAI API or OPENROUTER_API_KEY for OpenRouter"
-            }
-        
-        # Determine base URL based on which API key is used
-        base_url = None
-        if os.getenv("OPENROUTER_API_KEY") and not os.getenv("OPENAI_API_KEY"):
-            base_url = "https://openrouter.ai/api/v1"
-            logger.info("Using OpenRouter API for image generation")
-        
-        client = OpenAI(api_key=openai_api_key, base_url=base_url)
+        import litellm
 
-        # Configure model-specific parameters
-        config = get_model_config(model, model_config)
-        
-        # Generate the image (sync SDK call — run in a worker thread to keep the event loop free)
-        response = await asyncio.to_thread(
-            client.images.generate,
-            model=model,
-            prompt=prompt,
-            **config
-        )
-        
-        # Handle different response formats based on model
+        params = get_model_config(model, model_config)
+        response = await litellm.aimage_generation(
+            model=model, prompt=prompt, drop_params=True, **params, **credentials)
+
+        if not response.data:
+            raise ValueError("the provider returned no image")
         image_data = response.data[0]
         image_url = getattr(image_data, 'url', None)
         image_b64 = getattr(image_data, 'b64_json', None)
-        
+        if not image_url and not image_b64:
+            raise ValueError("the provider returned no image")
+
         artifact_info = None
         try:
             if tool_context is not None:
                 image_bytes = None
-                
+
                 if image_b64:
-                    # Model returns base64 data directly
-                    image_bytes = base64.b64decode(image_b64)
+                    # Model returns base64 data directly (a data: URL from some providers)
+                    image_bytes = base64.b64decode(image_b64.split(",", 1)[1] if image_b64.startswith("data:") else image_b64)
                 elif image_url:
                     # Model returns URL, download the image
                     import httpx
@@ -356,11 +337,12 @@ async def _generate_image_internal(prompt: str, tool_context: ToolContext = None
                         image_response = await ac.get(image_url, timeout=30)
                     image_response.raise_for_status()
                     image_bytes = image_response.content
-                    
+
                 if image_bytes:
                     # EU AI Act Art. 50(2), from 2 December 2026: generated content
                     # must be machine-readably marked as such. Marked before the
-                    # artifact is saved so every copy carries it.
+                    # artifact is saved so every copy carries it. Only PNG can be
+                    # marked; other formats are saved unmarked, with a warning.
                     marked_bytes = mark_png_as_ai_generated(
                         image_bytes, description=f"AI-generated image for prompt: {prompt}"[:300])
                     if not is_marked_as_ai_generated(marked_bytes):
@@ -368,18 +350,19 @@ async def _generate_image_internal(prompt: str, tool_context: ToolContext = None
                             "Generated image could not be marked as AI-generated; "
                             "it is stored unmarked.")
                     image_bytes = marked_bytes
+                    mime_type, extension = _sniff_image(image_bytes)
 
                     # Use ADK types.Part for artifact content
                     import google.genai.types as types
-                    part = types.Part.from_bytes(data=image_bytes, mime_type="image/png")
+                    part = types.Part.from_bytes(data=image_bytes, mime_type=mime_type)
 
                     # Create a unique filename within the session namespace
                     timestamp = int(time.time())
-                    filename = f"generated_image_{timestamp}.png"
+                    filename = f"generated_image_{timestamp}.{extension}"
 
                     # Save artifact via ToolContext (async)
                     saved_version = await tool_context.save_artifact(filename, part)
-                    
+
                     # Construct ADK artifact path and public URL
                     artifact_path = None
                     public_url = None
@@ -398,7 +381,7 @@ async def _generate_image_internal(prompt: str, tool_context: ToolContext = None
                     artifact_info = {
                         "filename": filename,
                         "version": saved_version,
-                        "mime_type": "image/png",
+                        "mime_type": mime_type,
                         "artifact_path": artifact_path,
                         "public_url": public_url
                     }
@@ -414,7 +397,7 @@ async def _generate_image_internal(prompt: str, tool_context: ToolContext = None
             "status": "COMPLETE",
             "note": "Image generation is DONE. Do NOT call this tool again for the same request. Present the result to the user."
         }
-        
+
         # Add appropriate image data based on what's available
         # NEVER include base64 data - it breaks context length
         if artifact_info and artifact_info.get("public_url"):
@@ -427,28 +410,28 @@ async def _generate_image_internal(prompt: str, tool_context: ToolContext = None
             result["image_access"] = f"View the generated image at: {image_url}"
         else:
             result["image_access"] = "Image generated successfully but could not be saved as artifact"
-            
+
         return result
 
     except Exception as e:
         error_msg = f"Image generation failed: {str(e)}"
         logger.error(f"Image generation error for model {model}: {error_msg}")
-        
+
         # Determine error type for better handling
         error_type = "unknown_error"
         error_str = str(e).lower()
-        
-        if "authentication" in error_str or "auth" in error_str or "unauthorized" in error_str:
+
+        if "api key" in error_str or "api_key" in error_str or "authentication" in error_str \
+                or "unauthorized" in error_str:
             error_type = "authentication_error"
         elif "rate" in error_str or "limit" in error_str or "quota" in error_str:
             error_type = "rate_limit_error"
+        elif "provider not provided" in error_str or "not found" in error_str \
+                or ("model" in error_str and "not" in error_str):
+            error_type = "model_not_found_error"
         elif "invalid" in error_str or "bad" in error_str or "badrequest" in error_str:
             error_type = "invalid_request_error"
-        elif "not found" in error_str or "model" in error_str and "not" in error_str:
-            error_type = "model_not_found_error"
-        elif "openrouter" in error_str:
-            error_type = "openrouter_error"
-        
+
         return {
             "error": error_msg,
             "prompt": prompt,
@@ -461,59 +444,57 @@ async def _generate_image_internal(prompt: str, tool_context: ToolContext = None
 def create_image_tools_from_config(config: Dict[str, Any]) -> list:
     """
     Create image generation tools based on agent configuration.
-    
+
+    ``tool_config.image_tools`` is ``true`` for the default model, or
+    ``{"model": "...", ...}`` with any LiteLLM image model and its request
+    parameters.
+
     Args:
         config: Agent configuration dictionary
-        
+
     Returns:
         List of image generation tools
     """
     tools = []
-    
-    # Check if image generation is enabled in tool_config
+
     tool_config = config.get('tool_config')
-    if tool_config:
-        try:
-            import json
-            tool_config_dict = json.loads(tool_config)
-            
-            # Check for image_tools configuration
-            image_tools_config = tool_config_dict.get('image_tools')
-            if image_tools_config:
-                # Handle both boolean and object configurations
-                if isinstance(image_tools_config, bool) and image_tools_config:
-                    # Simple boolean configuration - use default model
-                    tools.append(generate_image)
-                    logger.info(f"Created image generation tool with default model for agent {config.get('name', 'unknown')}")
-                elif isinstance(image_tools_config, dict):
-                    # Object configuration - extract model and other settings
-                    model = image_tools_config.get('model', 'dall-e-3')
-                    model_config = {k: v for k, v in image_tools_config.items() if k != 'model'}
-                    
-                    # Handle special case for nano banana (Gemini 2.5 Flash Image via OpenRouter)
-                    if (model == 'nano-banana' or model == 'openrouter/google/gemini-2.5-flash-image'):
-                        tools.append(generate_image_nano_banana)
-                        logger.info(f"Created nano banana image generation tool for agent {config.get('name', 'unknown')} with model {model}")
-                    else:
-                        # Create a wrapper function with the configured model and parameters
-                        def create_model_specific_tool(model_name: str, config_params: dict):
-                            async def model_specific_generate_image(prompt: str, tool_context: ToolContext = None) -> dict:
-                                # Use the internal implementation with pre-configured parameters
-                                return await _generate_image_internal(prompt, tool_context, model_name, config_params)
-                            return model_specific_generate_image
-                        
-                        model_tool = create_model_specific_tool(model, model_config)
-                        model_tool.__name__ = f"generate_image_{model.replace('-', '_')}"
-                        tools.append(model_tool)
-                        
-                        config_str = f"model='{model}'"
-                        if model_config:
-                            config_str += f", config={model_config}"
-                        logger.info(f"Created image generation tool with {config_str} for agent {config.get('name', 'unknown')}")
-                
-        except json.JSONDecodeError:
-            logger.warning(f"Invalid JSON in tool_config for agent {config.get('name', 'unknown')}")
-    
+    if not tool_config:
+        return tools
+    try:
+        import json
+        tool_config_dict = json.loads(tool_config)
+    except json.JSONDecodeError:
+        logger.warning(f"Invalid JSON in tool_config for agent {config.get('name', 'unknown')}")
+        return tools
+
+    image_tools_config = tool_config_dict.get('image_tools')
+    if isinstance(image_tools_config, bool) and image_tools_config:
+        tools.append(generate_image)
+        logger.info(f"Created image generation tool with default model for agent {config.get('name', 'unknown')}")
+    elif isinstance(image_tools_config, dict):
+        model = (image_tools_config.get('model') or '').strip() or None
+        model_config = {k: v for k, v in image_tools_config.items() if k != 'model'}
+
+        def create_model_specific_tool(model_name: Optional[str], config_params: dict):
+            async def model_specific_generate_image(prompt: str, tool_context: ToolContext = None) -> dict:
+                """
+                Generate an image from a text prompt and save it as an artifact.
+
+                Args:
+                    prompt: What the image should show.
+
+                Returns:
+                    Where the image was saved, or an error.
+                """
+                return await _generate_image_internal(prompt, tool_context, model_name, config_params)
+            return model_specific_generate_image
+
+        model_tool = create_model_specific_tool(model, model_config)
+        model_tool.__name__ = image_tool_name(model) if model else "generate_image"
+        tools.append(model_tool)
+        logger.info(f"Created image generation tool {model_tool.__name__} "
+                    f"(model={resolve_image_model(model)[0]!r}) for agent {config.get('name', 'unknown')}")
+
     return tools
 
 
@@ -521,452 +502,56 @@ def create_image_tools_from_config(config: Dict[str, Any]) -> list:
 async def generate_image_gpt_image_1(prompt: str, tool_context: ToolContext = None, size: str = "1024x1024", n: int = 1) -> dict:
     """
     Generate image using GPT Image 1 model.
-    
+
     Args:
         prompt: The text prompt to generate the image from.
         tool_context: Optional tool context for artifact management.
-        size: Image size (256x256, 512x512, 1024x1024).
-        n: Number of images to generate (1-10).
+        size: Image size (1024x1024, 1024x1536, 1536x1024, auto)
+        n: Number of images to generate
 
     Returns:
-        A dictionary containing the prompt and the base64 encoded image string,
-        or an error message if the generation fails.
+        A dictionary containing the prompt and image data or error message.
     """
-    model_config = {
-        "size": size,
-        "n": n
-    }
-    return await _generate_image_internal(prompt, tool_context, "gpt-image-1", model_config)
+    return await _generate_image_internal(prompt, tool_context, "gpt-image-1", {"size": size, "n": n})
 
 
 async def generate_image_dall_e_3(prompt: str, tool_context: ToolContext = None, size: str = "1024x1024", quality: str = "standard", n: int = 1) -> dict:
     """
     Generate image using DALL-E 3 model.
-    
+
     Args:
         prompt: The text prompt to generate the image from.
         tool_context: Optional tool context for artifact management.
-        size: Image size (1024x1024, 1024x1792, 1792x1024).
-        quality: Image quality (standard, hd).
-        n: Number of images to generate (1 for DALL-E 3).
+        size: Image size (1024x1024, 1792x1024, 1024x1792)
+        quality: Image quality (standard, hd)
+        n: Number of images to generate
 
     Returns:
-        A dictionary containing the prompt and the base64 encoded image string,
-        or an error message if the generation fails.
+        A dictionary containing the prompt and image data or error message.
     """
-    model_config = {
-        "size": size,
-        "quality": quality,
-        "n": n
-    }
-    return await _generate_image_internal(prompt, tool_context, "dall-e-3", model_config)
+    return await _generate_image_internal(
+        prompt, tool_context, "dall-e-3", {"size": size, "quality": quality, "n": n})
 
 
 async def generate_image_nano_banana(prompt: str, tool_context: ToolContext = None, asset_name: str = "generated_image", model_config: Optional[Dict[str, Any]] = None) -> dict:
     """
-    Generate image using Nano Banana (Gemini 2.5 Flash Image) model.
-    
+    Generate image using Nano Banana (Gemini 2.5 Flash Image), through OpenRouter
+    unless model_config names another model.
+
     Args:
         prompt: The text prompt to generate the image from.
         tool_context: Optional tool context for artifact management.
-        asset_name: Name for the asset to track versions.
-        model_config: Optional configuration parameters from database.
+        asset_name: Kept for callers of the old signature; unused.
+        model_config: Optional {"model": ..., other request parameters}.
 
     Returns:
-        A dictionary containing the prompt and artifact information,
-        or an error message if the generation fails.
+        A dictionary containing the prompt and image data or error message.
     """
-    try:
-        # Determine model and API configuration
-        # Default to OpenRouter to avoid Google API quota issues, with fallback to Google API
-        model_name = "openrouter/google/gemini-2.5-flash-image"
-        use_openrouter = True
-        
-        if model_config:
-            # Check if using OpenRouter model
-            config_model = model_config.get("model")
-            if config_model:
-                model_name = config_model
-                # Check if this is an OpenRouter model
-                if "openrouter" in config_model.lower() or "google/" in config_model.lower():
-                    use_openrouter = True
-                    model_name = config_model  # Keep full name for configuration
-                    logger.info(f"Using OpenRouter API for model: {config_model}")
-                else:
-                    use_openrouter = False
-                    model_name = config_model
-                    logger.info(f"Using Google API for model: {model_name}")
-        
-        logger.info(f"Model configuration: {model_config}, use_openrouter: {use_openrouter}, model_name: {model_name}")
-        
-        # Check if Google Generative AI package is available
-        if genai is None or types is None:
-            error_msg = "Google Generative AI package not installed. Please install it with: pip install google-genai"
-            logger.error(error_msg)
-            return {
-                "error": error_msg,
-                "prompt": prompt,
-                "error_type": "missing_dependency",
-                "success": False,
-                "help": "Run 'pip install google-genai' to install the required package for Gemini image generation"
-            }
-        
-        # Get API key based on configuration
-        if use_openrouter:
-            # Use OpenRouter API
-            openrouter_api_key = os.getenv("OPENROUTER_API_KEY")
-            if not openrouter_api_key:
-                error_msg = "OpenRouter API key not configured. Please set OPENROUTER_API_KEY environment variable."
-                logger.error(error_msg)
-                return {
-                    "error": error_msg,
-                    "prompt": prompt,
-                    "error_type": "missing_api_key",
-                    "success": False
-                }
-            
-            # Configure OpenRouter client
-            import openai
-            client = openai.OpenAI(
-                api_key=openrouter_api_key,
-                base_url="https://openrouter.ai/api/v1"
-            )
-            
-            # Try to use OpenRouter with a supported image generation model
-            # OpenRouter provides OpenAI-compatible completion API for image generation
-            try:
-                # Remove openrouter/ prefix for the actual API call
-                api_model_name = model_name
-                if model_name.startswith("openrouter/"):
-                    api_model_name = model_name.replace("openrouter/", "")
-                
-                # Use chat completions API for image generation via OpenRouter
-                # (sync SDK call — run in a worker thread to keep the event loop free)
-                response = await asyncio.to_thread(
-                    client.chat.completions.create,
-                    model=api_model_name,
-                    messages=[
-                        {
-                            "role": "user",
-                            "content": [
-                                {
-                                    "type": "text",
-                                    "text": prompt
-                                }
-                            ]
-                        }
-                    ],
-                    max_tokens=1000
-                )
-                
-                # Handle OpenRouter response from chat completions
-                # The image data is in message.images[0].image_url.url
-                message = response.choices[0].message
-                
-                logger.info(f"Message has images: {hasattr(message, 'images')}")
-                
-                # Check if the response contains image data in the images field
-                inline_data = None
-                timestamp = int(time.time())
-                base64_part = None
-                if hasattr(message, 'images') and message.images:
-                    logger.info(f"Found {len(message.images)} images in response")
-                    
-                    # Get the first image
-                    first_image = message.images[0]
-                    
-                    # Handle both object and dictionary formats
-                    image_url_data = None
-                    if hasattr(first_image, 'image_url'):
-                        image_url_data = first_image.image_url
-                    elif isinstance(first_image, dict) and 'image_url' in first_image:
-                        image_url_data = first_image['image_url']
-                    
-                    if image_url_data:
-                        # Get the URL from either object or dictionary
-                        url = None
-                        if hasattr(image_url_data, 'url'):
-                            url = image_url_data.url
-                        elif isinstance(image_url_data, dict) and 'url' in image_url_data:
-                            url = image_url_data['url']
-                        
-                        if url:
-                            # Check if it's a base64 data URL
-                            if url.startswith('data:image/'):
-                                logger.info("Found base64 data URL (content not logged)")
-                                try:
-                                    import base64
-                                    # Extract base64 part after comma
-                                    base64_part = url.split(',')[1] if ',' in url else url
-                                    image_bytes = base64.b64decode(base64_part)
-                                    
-                                    # Create inline data object
-                                    class InlineData:
-                                        def __init__(self, data, mime_type):
-                                            self.data = data
-                                            self.mime_type = mime_type
-                                    
-                                    # Extract mime type from data URL
-                                    mime_type = url.split(';')[0].split(':')[1] if ':' in url else "image/png"
-                                    # Art. 50(2) marking, same as the other generation path.
-                                    image_bytes = mark_png_as_ai_generated(
-                                        image_bytes, description="AI-generated image")
-                                    inline_data = InlineData(image_bytes, mime_type)
-                                    logger.info(f"Successfully extracted base64 image data, size: {len(image_bytes)} bytes")
-                                except Exception as e:
-                                    logger.error(f"Failed to extract base64 data: {e}")
-                                    inline_data = None
-                            else:
-                                logger.info("URL is not a base64 data URL")
-                                inline_data = None
-                        else:
-                            logger.info("No URL found in image_url data")
-                            inline_data = None
-                    else:
-                        logger.info("No image_url found in image")
-                        inline_data = None
-                else:
-                    logger.info("No images found in message")
-                    inline_data = None
-                
-                logger.info(f"Found inline_data: {inline_data is not None}")
-                
-                artifact_info = None
-                try:
-                    if tool_context is not None and inline_data:
-                        # Create a Part object from the inline data to save as artifact
-                        image_part = types.Part(inline_data=inline_data)
-
-                        # Create a unique filename within the session namespace
-                        filename = f"nano_banana_image_{timestamp}.png"
-
-                        # Save artifact via ToolContext (async)
-                        saved_version = await tool_context.save_artifact(filename, image_part)
-
-                        # Construct ADK artifact path and public URL
-                        artifact_path = None
-                        public_url = None
-                        try:
-                            app_name, user_id, session_id = _get_context_values(tool_context)
-                            # ADK artifact path pattern
-                            artifact_path = f"/apps/{app_name}/users/{user_id}/sessions/{session_id}/artifacts/{filename}/versions/{saved_version}"
-                            # Public URL based on artifact service
-                            public_url = _construct_public_url(app_name, user_id, session_id, filename, saved_version)
-                            logger.debug(f"Generated ADK artifact path: {artifact_path}")
-                            logger.debug(f"Generated public URL: {public_url}")
-                        except Exception as url_err:
-                            logger.warning(f"Could not generate artifact URLs: {url_err}")
-
-                        # NOTE: Do NOT modify tool_context.state here.
-                        # Setting state inside a tool causes a session save race condition
-                        # with ADK's own session update, triggering 'stale session' errors
-                        # and infinite retry loops.
-
-                        artifact_info = {
-                            "filename": filename,
-                            "version": saved_version,
-                            "mime_type": "image/png",
-                            "artifact_path": artifact_path,
-                            "public_url": public_url
-                        }
-                        
-                        logger.info(f"Saved generated image as artifact '{filename}' (version {saved_version})")
-                        
-                        return {
-                            "prompt": prompt,
-                            "artifact": artifact_info,
-                            "model": model_name,
-                            "success": True,
-                            "status": "COMPLETE",
-                            "note": "Image generation is DONE. Do NOT call this tool again for the same request. Present the result to the user.",
-                            "image_access": f"Image generated successfully! Saved as artifact: {filename} (version {saved_version} of {asset_name})"
-                        }
-                except Exception as artifact_err:
-                    logger.warning(f"Artifact save failed: {artifact_err}")
-                
-                # Fallback response
-                result = {
-                    "prompt": prompt,
-                    "artifact": artifact_info,
-                    "model": model_name,
-                    "success": True,
-                    "status": "COMPLETE",
-                    "note": "Image generation is DONE. Do NOT call this tool again for the same request. Present the result to the user."
-                }
-                
-                # NEVER include inline_data - it breaks context length
-                if inline_data:
-                    if artifact_info and artifact_info.get("public_url"):
-                        result["url"] = artifact_info["public_url"]
-                        result["image_access"] = f"Image saved as artifact. View at: {artifact_info['public_url']}"
-                    elif artifact_info:
-                        result["image_access"] = f"Image generated and saved as artifact: {artifact_info['filename']} (version {artifact_info.get('version', 0)})"
-                    else:
-                        result["image_access"] = "Image generated successfully but could not be saved as artifact"
-                else:
-                    result["error"] = "No image data received from OpenRouter"
-                    result["success"] = False
-                
-                return result
-                
-            except Exception as e:
-                # If OpenRouter fails, fall back to Google API
-                logger.error(f"OpenRouter image generation failed: {e}")
-                logger.error(f"OpenRouter error type: {type(e)}")
-                logger.error(f"OpenRouter error details: {str(e)}")
-                logger.warning("Falling back to Google API")
-                use_openrouter = False
-                model_name = "gemini-2.5-flash-image"
-        
-        else:
-            # Use Google API directly
-            google_api_key = os.getenv("GOOGLE_API_KEY")
-            if not google_api_key:
-                error_msg = "Google API key not configured. Please set GOOGLE_API_KEY environment variable."
-                logger.error(error_msg)
-                return {
-                    "error": error_msg,
-                    "prompt": prompt,
-                    "error_type": "missing_api_key",
-                    "success": False
-                }
-            
-            # Configure the client
-            client = genai.Client(api_key=google_api_key)
-        
-            # Create unique filename for the artifact
-            timestamp = int(time.time())
-            artifact_filename = f"nano_banana_image_{timestamp}.png"
-
-            # Consume the sync content stream in a worker thread so it doesn't
-            # block the event loop; return the first inline image data found.
-            def _consume_stream():
-                for chunk in client.models.generate_content_stream(
-                    model=model_name,
-                    contents=[prompt],
-                ):
-                    if (
-                        chunk.candidates is None
-                        or chunk.candidates[0].content is None
-                        or chunk.candidates[0].content.parts is None
-                    ):
-                        continue
-
-                    if chunk.candidates[0].content.parts[0].inline_data and chunk.candidates[0].content.parts[0].inline_data.data:
-                        return chunk.candidates[0].content.parts[0].inline_data
-                    else:
-                        # Log any text content (though this shouldn't happen for image generation)
-                        if hasattr(chunk.candidates[0].content.parts[0], 'text') and chunk.candidates[0].content.parts[0].text:
-                            logger.info(f"Text content from stream: {chunk.candidates[0].content.parts[0].text}")
-                return None
-
-            inline_data = await asyncio.to_thread(_consume_stream)
-
-            if inline_data is not None:
-                # Art. 50(2) marking. inline_data comes back from the SDK, so the
-                # marked bytes are written onto it before the Part is built.
-                try:
-                    inline_data.data = mark_png_as_ai_generated(
-                        inline_data.data, description="AI-generated image")
-                except Exception as exc:
-                    logger.warning("Could not mark the generated image: %s", exc)
-                # Create a Part object from the inline data to save as artifact
-                image_part = types.Part(inline_data=inline_data)
-
-                try:
-                    if tool_context is not None:
-                        # Save the image as an artifact
-                        version = await tool_context.save_artifact(
-                            filename=artifact_filename,
-                            artifact=image_part
-                        )
-
-                        # Construct ADK artifact path and public URL
-                        artifact_path = None
-                        public_url = None
-                        try:
-                            app_name, user_id, session_id = _get_context_values(tool_context)
-                            # ADK artifact path pattern
-                            artifact_path = f"/apps/{app_name}/users/{user_id}/sessions/{session_id}/artifacts/{artifact_filename}/versions/{version}"
-                            # Public URL based on artifact service
-                            public_url = _construct_public_url(app_name, user_id, session_id, artifact_filename, version)
-                            logger.debug(f"Generated ADK artifact path: {artifact_path}")
-                            logger.debug(f"Generated public URL: {public_url}")
-                        except Exception as url_err:
-                            logger.warning(f"Could not generate artifact URLs: {url_err}")
-
-                        # NOTE: Do NOT modify tool_context.state here.
-                        # Setting state inside a tool causes a session save race condition
-                        # with ADK's own session update, triggering 'stale session' errors
-                        # and infinite retry loops.
-
-                        logger.info(f"Saved generated image as artifact '{artifact_filename}' (version {version})")
-
-                        return {
-                            "prompt": prompt,
-                            "artifact": {
-                                "filename": artifact_filename,
-                                "version": version,
-                                "mime_type": "image/png",
-                                "artifact_path": artifact_path,
-                                "public_url": public_url
-                            },
-                            "model": model_name,
-                            "success": True,
-                            "status": "COMPLETE",
-                            "note": "Image generation is DONE. Do NOT call this tool again for the same request. Present the result to the user.",
-                            "image_access": f"Image generated successfully! Saved as artifact: {artifact_filename} (version {version} of {asset_name})"
-                        }
-                    else:
-                        # If no tool context, we can't save the image
-                        # NEVER return inline_data - it breaks context length
-                        return {
-                            "prompt": prompt,
-                            "model": model_name,
-                            "success": True,
-                            "image_access": "Image generated successfully but could not be saved (no tool context available)"
-                        }
-
-                except Exception as e:
-                    logger.error(f"Error saving artifact: {e}")
-                    return {
-                        "error": f"Error saving generated image as artifact: {e}",
-                        "prompt": prompt,
-                        "error_type": "artifact_save_error",
-                        "success": False
-                    }
-
-            return {
-                "error": "No image was generated",
-                "prompt": prompt,
-                "error_type": "no_image_generated",
-                "success": False
-            }
-
-    except Exception as e:
-        error_msg = f"Nano Banana image generation failed: {str(e)}"
-        logger.error(f"Nano Banana image generation error: {error_msg}")
-        
-        # Determine error type for better handling
-        error_type = "unknown_error"
-        error_str = str(e).lower()
-        
-        if "authentication" in error_str or "auth" in error_str or "unauthorized" in error_str:
-            error_type = "authentication_error"
-        elif "rate" in error_str or "limit" in error_str or "quota" in error_str:
-            error_type = "rate_limit_error"
-        elif "invalid" in error_str or "bad" in error_str or "badrequest" in error_str:
-            error_type = "invalid_request_error"
-        elif "not found" in error_str or "model" in error_str and "not" in error_str:
-            error_type = "model_not_found_error"
-        
-        return {
-            "error": error_msg,
-            "prompt": prompt,
-            "error_type": error_type,
-            "model": model_name,
-            "success": False
-        }
+    model_config = dict(model_config or {})
+    model = model_config.pop("model", None) or "nano-banana"
+    if model.startswith("google/"):
+        model = f"openrouter/{model}"  # this path always sent google/... names to OpenRouter
+    return await _generate_image_internal(prompt, tool_context, model, model_config)
 
 
 # ---------------------------------------------------------------------------
