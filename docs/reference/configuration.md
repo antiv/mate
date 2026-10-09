@@ -72,7 +72,7 @@ Every environment variable the code reads: **133** in total. Descriptions come f
 | `GOOGLE_DRIVE_FOLDER_ID` | — | for gdrive mcp + Google Calendar tool (shared service account) | `shared/utils/tools/cv_analyzer_tools.py`, `shared/utils/tools/google_drive_tools.py` |
 | `GOOGLE_SERVICE_ACCOUNT_FILE` | `service-account-key.json` | — | `shared/utils/tools/google_calendar_tools.py`, `shared/utils/tools/google_drive_tools.py` |
 | `GOOGLE_SERVICE_ACCOUNT_INFO` | — | — | `shared/utils/mcp/google_drive_mcp_server.py`, `shared/utils/tools/google_calendar_tools.py`, `shared/utils/tools/google_drive_mcp_protocol_handler.py` +1 more |
-| `IMAGE_MODEL` | — | Default model for the image tool when an agent names none: any LiteLLM image model, e.g. gpt-image-1, gemini/gemini-2.5-flash-image or black_forest_labs/flux-pro-1.1 (needs BFL_API_KEY). Unset: dall-e-3. | `shared/utils/tools/image_tools.py` |
+| `IMAGE_MODEL` | — | Default model for the image tool when an agent names none: any LiteLLM image model, e.g. gpt-image-1, gemini/gemini-2.5-flash-image or black_forest_labs/flux-pro-1.1 (needs BFL_API_KEY). The dashboard's Settings page overrides it. Unset: dall-e-3. | `shared/utils/dashboard/dashboard_server.py`, `shared/utils/tools/image_tools.py` |
 | `LLAMACPP_BASE_URL` | `http://localhost:8080/v1` | — | `shared/utils/langgraph/model_factory.py`, `shared/utils/utils.py` |
 | `LLAMAFILE_BASE_URL` | `http://localhost:8080/v1` | — | `shared/utils/langgraph/model_factory.py`, `shared/utils/utils.py` |
 | `LM_STUDIO_BASE_URL` | `http://localhost:1234/v1` | Alternative Local API Servers (defaults are used if not set) | `shared/utils/langgraph/model_factory.py`, `shared/utils/utils.py` |

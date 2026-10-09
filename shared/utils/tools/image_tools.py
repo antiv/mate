@@ -138,6 +138,17 @@ _BLOCKED_PARAMS = frozenset({
     "vertex_credentials", "timeout", "client",
 })
 
+# LiteLLM's validate_environment reports these image-only providers as configured
+# whatever the environment holds; their key names are from LiteLLM's own code.
+_IMAGE_PROVIDER_KEYS = {
+    "black_forest_labs": ("BFL_API_KEY", "BLACK_FOREST_LABS_API_KEY"),
+    "stability": ("STABILITY_API_KEY",),
+    "recraft": ("RECRAFT_API_KEY",),
+    "fal_ai": ("FAL_AI_API_KEY",),
+    "runwayml": ("RUNWAYML_API_KEY",),
+    "aiml": ("AIML_API_KEY",),
+}
+
 _MIME_SIGNATURES = (
     (b"\x89PNG\r\n\x1a\n", "image/png", "png"),
     (b"\xff\xd8\xff", "image/jpeg", "jpg"),
@@ -145,16 +156,33 @@ _MIME_SIGNATURES = (
 )
 
 
+def default_image_model() -> Tuple[str, str]:
+    """The model for agents that name none, and where it comes from.
+
+    The dashboard's Settings page wins, then IMAGE_MODEL, then dall-e-3. Read on
+    every call: the agent runtime is another process than the dashboard.
+    Returns (model, source) with source "dashboard", "IMAGE_MODEL" or "default".
+    """
+    from ..system_settings import IMAGE_MODEL, get_setting
+    stored = (get_setting(IMAGE_MODEL) or "").strip()
+    if stored:
+        return stored, "dashboard"
+    env = (os.getenv("IMAGE_MODEL") or "").strip()
+    if env:
+        return env, "IMAGE_MODEL"
+    return DEFAULT_IMAGE_MODEL, "default"
+
+
 def resolve_image_model(model: Optional[str] = None) -> Tuple[str, Dict[str, Any]]:
     """The LiteLLM model name and the credentials to call it with.
 
-    Without a model, IMAGE_MODEL or dall-e-3. Credentials come from the provider's
+    Without a model, the default from default_image_model(). Credentials come from the provider's
     usual env var, as for agents, with two exceptions kept from before: a bare
     OpenAI name falls back to OPENAI_API_KEY_BACKUP, then to OpenRouter's endpoint
     with OPENROUTER_API_KEY; and Gemini takes GOOGLE_API_KEY, which LiteLLM's
     image call does not read on its own.
     """
-    name = (model or os.getenv("IMAGE_MODEL") or DEFAULT_IMAGE_MODEL).strip()
+    name = (model or default_image_model()[0]).strip()
     name = _MODEL_ALIASES.get(name, name)
     kwargs: Dict[str, Any] = {}
     if "/" not in name and not os.getenv("OPENAI_API_KEY"):
@@ -190,7 +218,7 @@ def _sniff_image(data: bytes) -> Tuple[str, str]:
 
 def validate_image_generation_setup() -> Tuple[bool, str, Dict[str, Any]]:
     """
-    Check that the default image model (IMAGE_MODEL, else dall-e-3) can be called.
+    Check that the default image model (see default_image_model) can be called.
 
     Only looks for its provider's key; it makes no request, so a wrong key or an
     unknown model shows up on the first generation, not here.
@@ -199,14 +227,22 @@ def validate_image_generation_setup() -> Tuple[bool, str, Dict[str, Any]]:
         Tuple of (is_available, error_message, details)
     """
     model, kwargs = resolve_image_model(None)
-    details: Dict[str, Any] = {"default_model": model, "provider": None, "missing_keys": []}
+    details: Dict[str, Any] = {"default_model": model, "source": default_image_model()[1],
+                               "provider": None, "missing_keys": []}
     try:
         import litellm
         details["provider"] = litellm.get_llm_provider(model)[1]
         env = litellm.validate_environment(model=model)
     except Exception as e:
         return False, f"Unknown image model '{model}': {e}", details
-    if "api_key" in kwargs or env.get("keys_in_environment"):
+    if "api_key" in kwargs:
+        return True, "", details
+    provider_keys = _IMAGE_PROVIDER_KEYS.get(details["provider"])
+    if provider_keys:
+        if any(os.getenv(k) for k in provider_keys):
+            return True, "", details
+        env = {"missing_keys": list(provider_keys)}
+    elif env.get("keys_in_environment"):
         return True, "", details
     details["missing_keys"] = env.get("missing_keys") or []
     return False, (f"No API key for image model '{model}'. Set one of: "
@@ -243,7 +279,7 @@ def get_model_config(model: str, custom_config: dict = None) -> dict:
 
 async def generate_image(prompt: str, tool_context: ToolContext = None) -> dict:
     """
-    Generate an image with the default model (IMAGE_MODEL, else dall-e-3).
+    Generate an image with the default model (Settings page, IMAGE_MODEL, else dall-e-3).
 
     Args:
         prompt: The text prompt to generate the image from.

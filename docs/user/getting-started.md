@@ -33,7 +33,7 @@ The switch at the top of every page moves between three spaces:
 |---|---|
 | **Work Room** | Talking to agents. Everyone who can sign in has this. |
 | **Studio** | Building: agents, the visual builder, triggers, integrations, templates, evals, traces. |
-| **Control Room** | Running the installation: usage, audit and guardrail logs, sessions, users, rate limits, alerts, migrations, and this documentation. |
+| **Control Room** | Running the installation: usage, audit and guardrail logs, sessions, users, rate limits, alerts, server-wide [settings](settings.md), migrations, and this documentation. |
 
 Studio and Control Room are for administrators. Someone signed in without the admin
 role sees only the Work Room and their own usage.

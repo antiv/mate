@@ -10,7 +10,7 @@ generated: true
 
 # HTTP API reference
 
-Every HTTP route declared in the code: **253** routes. 35 have no docstring and so no summary here.
+Every HTTP route declared in the code: **256** routes. 36 have no docstring and so no summary here.
 
 This page lists what exists and where it is implemented. For request and response schemas, and to try a call, use the live Swagger UI under **Documentation → API** in the dashboard.
 
@@ -18,7 +18,7 @@ Requests to `/dashboard/api/*` require an admin, apart from the short allowlist 
 
 ## Auth server and dashboard
 
-Port 8000. Everything a browser or an external client talks to. 233 routes.
+Port 8000. Everything a browser or an external client talks to. 236 routes.
 
 ### Authentication
 
@@ -198,6 +198,7 @@ Web interface pages for system management.
 | `GET` | `/dashboard/overview` | Platform Overview — Control Room landing page | shared/utils/dashboard/dashboard_server.py · dashboard_overview |
 | `GET` | `/dashboard/rate-limits` | Dashboard rate limits and budgets page | shared/utils/dashboard/dashboard_server.py · dashboard_rate_limits |
 | `GET` | `/dashboard/sessions` | Dashboard session tracking page (ADK & LangGraph) | shared/utils/dashboard/dashboard_server.py · dashboard_sessions |
+| `GET` | `/dashboard/settings` | — | shared/utils/dashboard/dashboard_server.py · dashboard_settings |
 | `GET` | `/dashboard/shop-orders` | Dashboard page listing orders placed through the e-commerce MCP, grouped by partner | shared/utils/dashboard/dashboard_server.py · dashboard_shop_orders |
 | `GET` | `/dashboard/templates` | Dashboard templates gallery page | shared/utils/dashboard/dashboard_server.py · dashboard_templates |
 | `GET` | `/dashboard/traces` | Dashboard traces page - OpenTelemetry distributed tracing viewer | shared/utils/dashboard/dashboard_server.py · dashboard_traces |
@@ -247,6 +248,13 @@ ADK server control API endpoints (start, stop, restart).
 | `DELETE` | `/dashboard/api/sessions` | Delete a specific session and its associated events | shared/utils/dashboard/dashboard_server.py · delete_session_api |
 | `GET` | `/dashboard/api/sessions` | Get paginated session list across ADK and LangGraph runtimes | shared/utils/dashboard/dashboard_server.py · get_sessions_api |
 | `GET` | `/dashboard/api/sessions/detail` | Get complete history of prompts, responses, thoughts, tool calls, and state for a session | shared/utils/dashboard/dashboard_server.py · get_session_detail_api |
+
+### Dashboard - Settings
+
+| Method | Path | Summary | Implemented in |
+|---|---|---|---|
+| `GET` | `/dashboard/api/settings/image-model` | The default image model for agents that name none, where it comes from, and whether its key is set | shared/utils/dashboard/dashboard_server.py · get_image_model_setting |
+| `PUT` | `/dashboard/api/settings/image-model` | Set the default image model; an empty model falls back to IMAGE_MODEL, then dall-e-3 | shared/utils/dashboard/dashboard_server.py · put_image_model_setting |
 
 ### Dashboard - Templates
 

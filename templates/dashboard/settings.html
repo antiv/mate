@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+
+{% block title %}Settings - MATE{% endblock %}
+
+{% block content %}
+<div class="space-y-4 max-w-3xl">
+
+    <div>
+        <h2 class="text-xl font-bold text-gray-900 dark:text-white">Settings</h2>
+        <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">
+            Server-wide defaults. A value set here wins over the matching environment variable.
+        </p>
+    </div>
+
+    <!-- Image generation -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 space-y-3">
+        <div>
+            <h3 class="text-sm font-semibold text-gray-900 dark:text-white"><i class="fas fa-image mr-1.5 text-gray-400"></i>Default image model</h3>
+            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                Used by agents with <span class="font-medium">Image Tools</span> on and no model of their own.
+                Any LiteLLM image model, as <code class="bg-gray-100 dark:bg-gray-700 px-1 rounded">provider/model</code>; the provider's API key must be set on the server.
+            </p>
+        </div>
+
+        <div class="flex flex-col sm:flex-row gap-2">
+            <input type="text" id="imageModelInput" list="imageModelOptions" autocomplete="off"
+                   class="flex-1 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500">
+            <datalist id="imageModelOptions">
+                {% include 'dashboard/partials/image_model_options.html' %}
+            </datalist>
+            <div class="flex gap-2">
+                <button type="button" id="imageModelSave" class="px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg">Save</button>
+                <button type="button" id="imageModelClear" class="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 dark:text-gray-200 rounded-lg" title="Fall back to IMAGE_MODEL or the built-in default">Clear</button>
+            </div>
+        </div>
+
+        <dl class="text-xs grid grid-cols-[auto,1fr] gap-x-3 gap-y-1 text-gray-600 dark:text-gray-300">
+            <dt class="text-gray-500 dark:text-gray-400">In use</dt>
+            <dd><code id="imageModelEffective" class="font-medium text-gray-900 dark:text-white"></code> <span id="imageModelSource" class="text-gray-500 dark:text-gray-400"></span></dd>
+            <dt class="text-gray-500 dark:text-gray-400">API key</dt>
+            <dd id="imageModelCheck"></dd>
+        </dl>
+    </div>
+</div>
+
+<script src="/static/js/settings-page.js?v=1"></script>
+{% endblock %}

@@ -92,17 +92,10 @@
                                 class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Image
                                 Model</label>
                             <input type="text" id="{{ id_prefix }}ImageModel" list="{{ id_prefix }}ImageModelOptions"
-                                placeholder="server default (IMAGE_MODEL)"
+                                placeholder="server default (Settings page)"
                                 class="w-full px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded focus:outline-none focus:ring-1 focus:ring-blue-500">
                             <datalist id="{{ id_prefix }}ImageModelOptions">
-                                <option value="openrouter/google/gemini-2.5-flash-image">Nano Banana via OpenRouter</option>
-                                <option value="gemini/gemini-2.5-flash-image">Nano Banana via Google</option>
-                                <option value="gpt-image-1">GPT Image 1 (OpenAI)</option>
-                                <option value="dall-e-3">DALL-E 3 (OpenAI)</option>
-                                <option value="black_forest_labs/flux-pro-1.1">FLUX 1.1 pro</option>
-                                <option value="stability/sd3.5-large">Stable Diffusion 3.5</option>
-                                <option value="recraft/recraftv3">Recraft V3</option>
-                                <option value="xai/grok-imagine-image">Grok Imagine (xAI)</option>
+                                {% include 'dashboard/partials/image_model_options.html' %}
                             </datalist>
                             <p class="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">Any LiteLLM image model, as provider/model. Needs that provider's API key on the server.</p>
                         </div>

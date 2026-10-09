@@ -639,6 +639,22 @@ class AuditLog(Base):
         }
 
 
+class SystemSetting(Base):
+    """A server-wide setting an admin changes in the dashboard.
+
+    A stored value wins over the matching environment variable; no row means
+    the environment (or the code's default) applies. See shared/utils/system_settings.py.
+    """
+
+    __tablename__ = 'system_settings'
+
+    setting_key = Column(String(100), primary_key=True)
+    value = Column(Text, nullable=True)
+    updated_by = Column(String(255), nullable=True)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc),
+                        onupdate=lambda: datetime.now(timezone.utc), nullable=False)
+
+
 class WidgetApiKey(Base):
     """Model for embeddable chat widget API keys, scoped to a project and root agent."""
 

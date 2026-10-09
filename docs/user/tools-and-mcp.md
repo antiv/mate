@@ -32,7 +32,7 @@ only be adjusted there.
 | **Google Drive** | List and read files in a Drive folder. | A Google service account on the server. |
 | **Google Calendar** | Check availability, list and create events. | The same service account, and the calendar shared with its email address. Set the calendar, timezone, working hours and appointment length in the dialog. |
 | **Browser** | Open pages, click and type in a browser running on the server. Watch it in the Work Room's Browser panel. | Private and local addresses are blocked unless the administrator allows them. |
-| **Image Tools** | Generate images. Type any LiteLLM image model in the dialog (suggestions list common ones), or leave it empty for the server's default (`IMAGE_MODEL`, else `dall-e-3`). | An API key for the chosen model's provider. |
+| **Image Tools** | Generate images. Type any LiteLLM image model in the dialog (suggestions list common ones), or leave it empty for the server's default, set under [Settings](settings.md). | An API key for the chosen model's provider. |
 | **Image Data Extraction** | Read structured data out of an image. | A vision model, set in the dialog. |
 | **Memory Blocks** | Read and update the project's shared notes. See [Memory blocks](memory-blocks.md). | Nothing. |
 | **Create Agent** | Create, read, change and delete other agents. | Nothing. Give this only to agents you trust to redesign your setup. |

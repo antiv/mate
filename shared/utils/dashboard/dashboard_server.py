@@ -7233,6 +7233,70 @@ class DashboardServer:
                 "is_admin": True,
             })
 
+        @self.app.get("/dashboard/settings", response_class=HTMLResponse, tags=["Dashboard - Pages"])
+        async def dashboard_settings(request: Request, username: str = Depends(self._get_auth_user_dependency)):
+            if not self._get_is_admin(request):
+                return RedirectResponse(url="/dashboard/workroom", status_code=302)
+            return self.templates.TemplateResponse(request, "dashboard/settings.html", {
+                "request": request,
+                "page_title": "Settings",
+                "username": username,
+                "is_admin": True,
+            })
+
+        def _image_model_state() -> Dict[str, Any]:
+            from shared.utils.system_settings import IMAGE_MODEL, get_setting
+            from shared.utils.tools.image_tools import (
+                DEFAULT_IMAGE_MODEL, default_image_model, validate_image_generation_setup)
+            effective, source = default_image_model()
+            ok, error, details = validate_image_generation_setup()
+            return {"stored": get_setting(IMAGE_MODEL) or "",
+                    "env": (os.getenv("IMAGE_MODEL") or "").strip(),
+                    "builtin": DEFAULT_IMAGE_MODEL,
+                    "effective": effective, "source": source,
+                    "check": {"ok": ok, "error": error or None,
+                              "provider": details.get("provider"),
+                              "missing_keys": details.get("missing_keys") or []}}
+
+        @self.app.get("/dashboard/api/settings/image-model", tags=["Dashboard - Settings"])
+        async def get_image_model_setting(request: Request, username: str = Depends(self._get_auth_user_dependency)):
+            """The default image model for agents that name none, where it comes from, and whether its key is set."""
+            if not self._get_is_admin(request):
+                raise HTTPException(status_code=403, detail="Forbidden")
+            return _image_model_state()
+
+        @self.app.put("/dashboard/api/settings/image-model", tags=["Dashboard - Settings"])
+        async def put_image_model_setting(request: Request, username: str = Depends(self._get_auth_user_dependency),
+                                          body: Dict[str, Any] = Body(...)):
+            """Set the default image model; an empty model falls back to IMAGE_MODEL, then dall-e-3."""
+            if not self._get_is_admin(request):
+                raise HTTPException(status_code=403, detail="Forbidden")
+            from shared.utils.system_settings import IMAGE_MODEL, get_setting, set_setting
+            model = body.get("model")
+            if model is not None and not isinstance(model, str):
+                raise HTTPException(status_code=400, detail="model must be a string")
+            model = (model or "").strip()
+            if len(model) > 255 or any(c.isspace() for c in model):
+                raise HTTPException(status_code=400, detail="model must be a single name of at most 255 characters")
+            if model:
+                try:
+                    import litellm
+                    from shared.utils.tools.image_tools import resolve_image_model
+                    litellm.get_llm_provider(resolve_image_model(model)[0])
+                except Exception:
+                    raise HTTPException(status_code=400,
+                                        detail=f"Unknown model '{model}': write it as provider/model, e.g. gemini/gemini-2.5-flash-image")
+            before = get_setting(IMAGE_MODEL) or ""
+            if not set_setting(IMAGE_MODEL, model, username):
+                raise HTTPException(status_code=500, detail="Could not store the setting")
+            try:
+                from shared.utils.audit_service import ACTION_CONFIG_CHANGE, log
+                log(username, ACTION_CONFIG_CHANGE, "setting", resource_id=IMAGE_MODEL,
+                    details={"before": before or None, "after": model or None}, request=request)
+            except Exception as e:
+                logger.debug("Audit log for image model setting: %s", e)
+            return _image_model_state()
+
         def _validate_alert_rule(body: dict, partial: bool = False) -> dict:
             """Shared validation for create and update. Raises HTTPException on bad input."""
             from shared.utils.alert_service import CONDITION_TYPES, DESTINATION_TYPES, SCOPES

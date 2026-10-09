@@ -27,7 +27,10 @@ suggests common ones. This is stored in `tool_config`:
 {"image_tools": {"model": "gpt-image-1", "size": "1536x1024", "quality": "high"}}
 ```
 
-- `true`, or an empty model, uses the server default: `IMAGE_MODEL`, else `dall-e-3`.
+- `true`, or an empty model, uses the server default: the model set on the dashboard's
+  [Settings](../user/settings.md) page (`system_settings` row `image_model`), else
+  `IMAGE_MODEL`, else `dall-e-3`. It is read on every generation, so a change applies
+  without a restart; `default_image_model()` returns it with its source.
 - Every other key is passed to the provider as a request parameter. LiteLLM drops
   the ones a provider does not take (`drop_params`).
 - Endpoint and credential keys (`api_base`, `api_key`, `api_version`, headers, the

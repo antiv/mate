@@ -20,6 +20,17 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 
 from shared.utils.tools import image_tools as it
 
+
+def setUpModule():
+    # No dashboard setting unless a test sets one; keeps these tests off the database
+    global _setting_patch
+    _setting_patch = patch("shared.utils.system_settings.get_setting", return_value=None)
+    _setting_patch.start()
+
+
+def tearDownModule():
+    _setting_patch.stop()
+
 PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 32
 JPEG = b"\xff\xd8\xff\xe0" + b"\x00" * 32
 
@@ -37,6 +48,13 @@ class TestResolveImageModel(unittest.TestCase):
     @patch.dict(os.environ, {"IMAGE_MODEL": "black_forest_labs/flux-pro-1.1"}, clear=True)
     def test_image_model_sets_the_default(self):
         self.assertEqual(it.resolve_image_model(None)[0], "black_forest_labs/flux-pro-1.1")
+
+    @patch.dict(os.environ, {"IMAGE_MODEL": "stability/sd3-large"}, clear=True)
+    def test_the_dashboard_setting_wins_over_image_model(self):
+        with patch("shared.utils.system_settings.get_setting", return_value="recraft/recraftv3"):
+            self.assertEqual(it.default_image_model(), ("recraft/recraftv3", "dashboard"))
+            self.assertEqual(it.resolve_image_model(None)[0], "recraft/recraftv3")
+        self.assertEqual(it.default_image_model(), ("stability/sd3-large", "IMAGE_MODEL"))
 
     @patch.dict(os.environ, {}, clear=True)
     def test_nano_banana_means_gemini_flash_image_on_openrouter(self):
@@ -174,6 +192,15 @@ class TestValidateSetup(unittest.TestCase):
         ok, error, details = it.validate_image_generation_setup()
         self.assertTrue(ok, error)
         self.assertEqual(details["provider"], "gemini")
+
+    @patch.dict(os.environ, {"IMAGE_MODEL": "black_forest_labs/flux-pro-1.1"}, clear=True)
+    def test_providers_litellm_cannot_check_are_checked_here(self):
+        # validate_environment calls these configured whatever the environment holds
+        ok, error, details = it.validate_image_generation_setup()
+        self.assertFalse(ok)
+        self.assertEqual(details["missing_keys"], ["BFL_API_KEY", "BLACK_FOREST_LABS_API_KEY"])
+        with patch.dict(os.environ, {"BFL_API_KEY": "k"}):
+            self.assertTrue(it.validate_image_generation_setup()[0])
 
     @patch.dict(os.environ, {}, clear=True)
     def test_a_missing_key_is_named(self):

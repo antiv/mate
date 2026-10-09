@@ -10,7 +10,7 @@ generated: true
 
 # Database reference
 
-**32** tables defined in `shared/utils/models.py`; migrations are at **V039**. Migrations apply automatically on startup and are the source of truth for the schema: the models describe it, the migrations create it.
+**33** tables defined in `shared/utils/models.py`; migrations are at **V040**. Migrations apply automatically on startup and are the source of truth for the schema: the models describe it, the migrations create it.
 
 ## Migrations
 
@@ -57,6 +57,7 @@ A ✗ means that dialect has no file for that version. All dialects are in step.
 | V037 | alert rules open types | ✓ | ✓ | ✓ |
 | V038 | feedback reported exchange | ✓ | ✓ | ✓ |
 | V039 | widget feedback key | ✓ | ✓ | ✓ |
+| V040 | system settings | ✓ | ✓ | ✓ |
 
 ## `users`
 
@@ -294,6 +295,17 @@ Model `AuditLog`. Append-only audit log.
 | `resource_id` | `String(500)` | — | — | — |
 | `details` | `Text` | — | — | JSON string for portability (SQLite/MySQL/PostgreSQL) |
 | `ip_address` | `String(45)` | — | — | — |
+
+## `system_settings`
+
+Model `SystemSetting`. A server-wide setting an admin changes in the dashboard.
+
+| Column | Type | Constraints | Default | Notes |
+|---|---|---|---|---|
+| `setting_key` | `String(100)` | PK | — | — |
+| `value` | `Text` | — | — | — |
+| `updated_by` | `String(255)` | — | — | — |
+| `updated_at` | `DateTime` | not null | `(computed)` | — |
 
 ## `widget_api_keys`
 
