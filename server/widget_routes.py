@@ -384,6 +384,10 @@ async def widget_feedback(request: Request, wk: WidgetApiKey = Depends(verify_wi
     Rating is a visitor action, so it is scoped by the widget's public key. The agent
     and project come from the key rather than the body — a visitor must not be able to
     attribute a rating to someone else's agent.
+
+    A standalone build forwarding its ratings also sends `question` and `answer`,
+    since this server cannot read its sessions. Whoever holds the public key can send
+    them, so the dashboard marks them as reported and prefers the session when it has it.
     """
     from shared.utils.feedback_service import get_feedback_service
 
@@ -392,6 +396,8 @@ async def widget_feedback(request: Request, wk: WidgetApiKey = Depends(verify_wi
     message_id = (body.get("message_id") or "").strip()
     rating = (body.get("rating") or "").strip()
     comment = body.get("comment")
+    question = body.get("question")
+    answer = body.get("answer")
 
     if not session_id or not message_id:
         raise HTTPException(status_code=400, detail="session_id and message_id are required")
@@ -402,6 +408,8 @@ async def widget_feedback(request: Request, wk: WidgetApiKey = Depends(verify_wi
         session_id=session_id, message_id=message_id, rating=rating,
         agent_name=wk.agent_name, project_id=wk.project_id,
         comment=comment if isinstance(comment, str) else None,
+        question=question if isinstance(question, str) else None,
+        answer=answer if isinstance(answer, str) else None,
     )
     if not result:
         raise HTTPException(status_code=500, detail="Failed to record feedback")

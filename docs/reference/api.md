@@ -10,7 +10,7 @@ generated: true
 
 # HTTP API reference
 
-Every HTTP route declared in the code: **252** routes. 35 have no docstring and so no summary here.
+Every HTTP route declared in the code: **253** routes. 35 have no docstring and so no summary here.
 
 This page lists what exists and where it is implemented. For request and response schemas, and to try a call, use the live Swagger UI under **Documentation → API** in the dashboard.
 
@@ -530,11 +530,12 @@ Used instead of the ADK runtime when `AGENT_FRAMEWORK=langgraph`; emulates the s
 
 ## Standalone server
 
-The single-agent binary built by `build_standalone_agent.py`. 2 routes.
+The single-agent binary built by `build_standalone_agent.py`. 3 routes.
 
 ### Other
 
 | Method | Path | Summary | Implemented in |
 |---|---|---|---|
 | `GET` | `/` | Serve the standalone chat UI | standalone_server.py · chat_page |
+| `POST` | `/feedback` | Send a 👍/👎 to the central MATE named by MATE_FEEDBACK_URL | standalone_server.py · feedback |
 | `GET` | `/health` | — | standalone_server.py · health |

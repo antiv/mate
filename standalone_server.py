@@ -14,6 +14,8 @@ Environment:
     DB_PATH          — path to SQLite database (default: standalone_agent.db)
     GOOGLE_API_KEY   — Gemini API key (if using Gemini models)
     OPENROUTER_API_KEY — OpenRouter API key (if using OpenRouter models)
+    MATE_FEEDBACK_URL / MATE_FEEDBACK_KEY — central MATE and widget key to send
+                       👍/👎 ratings to; without both the chat shows no ratings
 """
 
 import os
@@ -114,7 +116,7 @@ import logging
 import json
 import uvicorn
 from fastapi import FastAPI, Request, HTTPException
-from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -294,7 +296,43 @@ def create_app():
             "request": request,
             "agent_name": ROOT_AGENT_NAME,
             "ai_disclosure": disclosure,
+            "ratings_enabled": feedback_target() is not None,
         })
+
+    # --- Ratings, forwarded to a central MATE ---
+    from shared.utils.standalone_feedback import (
+        RateLimiter, feedback_target, forward, parse_rating, read_exchange,
+    )
+    feedback_limiter = RateLimiter()
+
+    @adk_app.post("/feedback")
+    async def feedback(request: Request):
+        """Send a 👍/👎 to the central MATE named by MATE_FEEDBACK_URL."""
+        target = feedback_target()
+        if target is None:
+            raise HTTPException(status_code=404, detail="Ratings are not configured")
+        if not feedback_limiter.allow(request.client.host if request.client else "unknown"):
+            raise HTTPException(status_code=429, detail="Too many ratings")
+        try:
+            rating = parse_rating(await request.json())
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        except Exception:
+            raise HTTPException(status_code=400, detail="expected a JSON object")
+        # Read from this build's session, so the browser cannot put words in either side
+        exchange = await read_exchange(adk_web_server.session_service, ROOT_AGENT_NAME,
+                                       rating["user_id"], rating["session_id"], rating["message_id"])
+        if exchange is None:
+            raise HTTPException(status_code=404, detail="Session not found")
+        question, answer = exchange
+        payload = {"session_id": rating["session_id"], "message_id": rating["message_id"],
+                   "rating": rating["rating"], "question": question, "answer": answer}
+        if rating["comment"] is not None:
+            payload["comment"] = rating["comment"]
+        ok, detail = await forward(*target, payload)
+        if not ok:
+            return JSONResponse(status_code=502, content={"detail": f"Rating not delivered ({detail})"})
+        return {"ok": True}
 
     # --- Health check ---
     @adk_app.get("/health")

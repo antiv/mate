@@ -8,6 +8,8 @@ covers:
   - build_standalone_agent.py
   - standalone_server.py
   - static/js/standalone/**
+  - shared/utils/standalone_feedback.py
+  - templates/standalone/chat.html
 ---
 
 # Standalone Agent Build
@@ -136,7 +138,44 @@ OPENAI_API_KEY=your-openai-key          # For OpenAI models
 # Optional
 STANDALONE_PORT=8080
 STANDALONE_HOST=127.0.0.1
+
+# Optional — send 👍/👎 ratings to a central MATE (both needed)
+MATE_FEEDBACK_URL=https://mate.example.com
+MATE_FEEDBACK_KEY=wk_...
 ```
+
+## Response ratings
+
+A standalone build has no dashboard, so it shows no 👍/👎 unless it can send them
+to a MATE that has one. Set both `MATE_FEEDBACK_URL` (that MATE's address) and
+`MATE_FEEDBACK_KEY`, a widget key for the same agent on that server: in its
+dashboard, **Widget Keys → New Key** for the agent the build serves. The chat then
+shows the buttons and the optional note after a thumbs-down, and the ratings land in
+that MATE's **Evals → Rated Down**, with **Add to evals** and **Suggest a fix**, next
+to the ratings from its own chats.
+
+How a rating travels:
+
+1. The chat posts the rating to the build's own `POST /feedback` with the session,
+   invocation and user id, and the note if any.
+2. The build reads the rated question and answer from its own session store. The
+   central MATE cannot read the build's sessions, so they have to go along. They are
+   never taken from the browser: a session that does not exist for that user id is a
+   `404` and nothing is sent.
+3. It posts rating, note, question and answer to `{MATE_FEEDBACK_URL}/widget/api/feedback`
+   with the key in `X-Widget-Key`. The agent and project come from the key, as for any
+   widget rating.
+
+`/feedback` has no login, like the rest of the standalone chat, so it accepts at most
+30 ratings a minute per client address (`429` beyond that). A rating the central MATE
+does not accept, or cannot be reached for, is a `502` to the chat, which ignores it;
+it is not queued or retried. Without the two variables the route answers `404`.
+
+On the central server the question and answer are stored on the rating
+(`response_feedback.question` / `answer`, migration V038) and shown in Rated Down as
+*sent by a standalone build*. They are only used when the server has no session for
+the rating. Anyone holding a widget's public key can send them, so for MATE's own
+chats the session always wins.
 
 ## MCP Server Dependencies
 
@@ -213,7 +252,7 @@ The standalone build uses a simplified architecture compared to the full MATE sy
 - In-memory services (session, artifact, memory, credential)
 - Single embedded SQLite database
 - Auto-opens browser on startup
-- No response ratings: the chat shows no 👍/👎, because there is no dashboard to read them in
+- Response ratings only when forwarded to a central MATE (see [Response ratings](#response-ratings))
 
 ## Troubleshooting
 

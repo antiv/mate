@@ -740,7 +740,9 @@ function renderRatedDown() {
     }
     const unavailable = '<span class="text-gray-400 italic">session no longer available</span>';
     tbody.innerHTML = _ratedDown.map((r, i) => {
-        const question = r.question ? escHtml(truncate(r.question, 80)) : (r.session_available ? '—' : unavailable);
+        // From a standalone build: its session is not on this server, so the text is what the build sent
+        const reported = r.reported ? '<div class="text-gray-400 italic" title="This server cannot read the build\'s session">sent by a standalone build</div>' : '';
+        const question = (r.question ? escHtml(truncate(r.question, 80)) : (r.session_available ? '—' : unavailable)) + reported;
         const answer = r.answer ? escHtml(truncate(r.answer, 80)) : (r.session_available ? '—' : unavailable);
         let action;
         if (r.test_case_id) {

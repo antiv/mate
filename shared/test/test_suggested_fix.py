@@ -156,6 +156,20 @@ class TestImproveEndpoints(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(propose.call_args.args[5], "closed on Sundays")
 
+    def test_propose_from_a_standalone_builds_thumbs_down(self):
+        # This server cannot read the build's session; the build sent the exchange
+        session = self.Session()
+        fb = session.get(ResponseFeedback, self.fb_id)
+        fb.question, fb.answer = "Open Sunday?", "Yes"
+        session.commit()
+        session.close()
+        self.server._get_session_events = lambda sid: None
+        with patch("shared.utils.agent_improver.propose_instruction",
+                   return_value={"instruction": "NEW", "reason": ""}) as propose:
+            resp = self.client.post("/dashboard/api/evals/improve/propose", json={"feedback_id": self.fb_id})
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(propose.call_args.args[2:4], ("Open Sunday?", "Yes"))
+
     def test_propose_needs_a_source(self):
         self.assertEqual(self.client.post("/dashboard/api/evals/improve/propose", json={}).status_code, 400)
 

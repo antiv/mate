@@ -370,6 +370,12 @@ DB_PATH=standalone_agent.db
 # --- Server (optional) ---
 # STANDALONE_PORT=8080
 # STANDALONE_HOST=127.0.0.1
+
+# --- Ratings (optional) ---
+# Show 👍/👎 in the chat and send each rating, with the rated question and answer,
+# to a central MATE. The key is a widget key for this agent on that server.
+# MATE_FEEDBACK_URL=https://mate.example.com
+# MATE_FEEDBACK_KEY=wk_...
 """
     env_path = output_dir / ".env"
     with open(env_path, "w", encoding="utf-8") as f:

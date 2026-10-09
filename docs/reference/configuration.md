@@ -10,7 +10,7 @@ generated: true
 
 # Configuration reference
 
-Every environment variable the code reads: **131** in total. Descriptions come from the comments in `.env.example`; defaults come from the code. A ⚠ marks a variable read with different defaults in different places.
+Every environment variable the code reads: **133** in total. Descriptions come from the comments in `.env.example`; defaults come from the code. A ⚠ marks a variable read with different defaults in different places.
 
 | Variable | Default | Description | Read in |
 |---|---|---|---|
@@ -81,6 +81,8 @@ Every environment variable the code reads: **131** in total. Descriptions come f
 | `MATE_ALLOW_CODE_EXECUTOR_ON_WIDGET` | — | — | `shared/utils/tools/tool_factory.py` |
 | `MATE_ALLOW_INSECURE_DEFAULTS` | `false` | Escape hatch: allow those defaults in production anyway. | `auth_server.py` |
 | `MATE_ENV` | `development` | Set to 'production' to refuse startup on insecure defaults (default AUTH_PASSWORD, missing SECRET_KEY) and to force SESSION_SECURE_COOKIE on. | `auth_server.py`, `shared/utils/utils.py` |
+| `MATE_FEEDBACK_KEY` | — | — | `shared/utils/standalone_feedback.py` |
+| `MATE_FEEDBACK_URL` | — | — | `shared/utils/standalone_feedback.py` |
 | `MATE_PLUGINS_ENABLED` | `false` | App-wide MATE plugin: RBAC/guardrails/token tracking as ADK Plugin instead of per-agent callbacks; covers all agents incl. runtime-created ones (requires ADK >= 2.0) | `shared/utils/agent_manager.py`, `shared/utils/utils.py` |
 | `MCP_EXPOSED_AGENTS` | `chess_mate_root` | — | `shared/utils/mcp/agent_mcp_manager.py` |
 | `MEMORY_SERVICE` | `database` / `not set` ⚠ | — | `adk_main.py` |
@@ -148,9 +150,9 @@ Every environment variable the code reads: **131** in total. Descriptions come f
 
 ## Read by the code but missing from `.env.example`
 
-55 variables have no entry (and so no description) in `.env.example`:
+57 variables have no entry (and so no description) in `.env.example`:
 
-`ALERTS_ENABLED`, `ALERTS_INTERVAL_SECONDS`, `ALLOWED_API_ROLES`, `BROWSER_ALLOW_PRIVATE_NETWORK`, `BROWSER_CDP_URL`, `BROWSER_HEADLESS`, `BROWSER_MODE`, `CONTEXT_CACHE_INTERVALS`, `CONTEXT_CACHE_MIN_TOKENS`, `CONTEXT_CACHE_TTL_SECONDS`, `CREDENTIAL_SERVICE`, `DB_AUTO_CREATE_TABLES`, `DB_SKIP_SEED`, `EVAL_IMPROVE_MODEL`, `EVAL_JUDGE_MODEL`, `EVAL_REGRESSION_WEBHOOK_URL`, `GEMINI_API_KEY`, `GEMINI_MODEL`, `GOOGLE_SERVICE_ACCOUNT_FILE`, `MATE_AI_DISCLOSURE`, `MATE_ALLOW_CODE_EXECUTOR_ON_WIDGET`, `MEMORY_SERVICE`, `MODEL_NAME`, `MYSTERY_GEN_MODEL`, `OLLAMA_HOST`, `OPENAI_API_KEY_BACKUP`, `OPENROUTER_BASE_URL`, `PORT`, `PRINT_CONTEXT_FEATURES_STATUS`, `ROOT_AGENT_NAME`, `SESSION_DB_URL`, `SMTP_FROM`, `SMTP_HOST`, `SMTP_PASS`, `SMTP_PORT`, `SMTP_USER`, `STANDALONE_HOST`, `STANDALONE_PORT`, `STUDIO_AGENT`, `TEMPLATES_REMOTE_URL`, `TIKTOKEN_CACHE_DIR`, `TITLE_GEN_MODEL`, `WIZARD_CAPTCHA_PROVIDER`, `WIZARD_CLEANUP_ENABLED`, `WIZARD_CONTACT_EMAIL`, `WIZARD_CRAWL_MAX_DEPTH`, `WIZARD_CRAWL_MAX_PAGES`, `WIZARD_CRAWL_PAGE_TIMEOUT_MS`, `WIZARD_CRAWL_TIME_BUDGET_S`, `WIZARD_CURRENCY`, `WIZARD_SESSION_IDLE_HOURS`, `WIZARD_SHOP_CURRENCY`, `WIZARD_TIER3_TRIAL_TTL_DAYS`, `WIZARD_TRIAL_MAX_PAGES`, `WIZARD_TRIAL_TTL_DAYS`
+`ALERTS_ENABLED`, `ALERTS_INTERVAL_SECONDS`, `ALLOWED_API_ROLES`, `BROWSER_ALLOW_PRIVATE_NETWORK`, `BROWSER_CDP_URL`, `BROWSER_HEADLESS`, `BROWSER_MODE`, `CONTEXT_CACHE_INTERVALS`, `CONTEXT_CACHE_MIN_TOKENS`, `CONTEXT_CACHE_TTL_SECONDS`, `CREDENTIAL_SERVICE`, `DB_AUTO_CREATE_TABLES`, `DB_SKIP_SEED`, `EVAL_IMPROVE_MODEL`, `EVAL_JUDGE_MODEL`, `EVAL_REGRESSION_WEBHOOK_URL`, `GEMINI_API_KEY`, `GEMINI_MODEL`, `GOOGLE_SERVICE_ACCOUNT_FILE`, `MATE_AI_DISCLOSURE`, `MATE_ALLOW_CODE_EXECUTOR_ON_WIDGET`, `MATE_FEEDBACK_KEY`, `MATE_FEEDBACK_URL`, `MEMORY_SERVICE`, `MODEL_NAME`, `MYSTERY_GEN_MODEL`, `OLLAMA_HOST`, `OPENAI_API_KEY_BACKUP`, `OPENROUTER_BASE_URL`, `PORT`, `PRINT_CONTEXT_FEATURES_STATUS`, `ROOT_AGENT_NAME`, `SESSION_DB_URL`, `SMTP_FROM`, `SMTP_HOST`, `SMTP_PASS`, `SMTP_PORT`, `SMTP_USER`, `STANDALONE_HOST`, `STANDALONE_PORT`, `STUDIO_AGENT`, `TEMPLATES_REMOTE_URL`, `TIKTOKEN_CACHE_DIR`, `TITLE_GEN_MODEL`, `WIZARD_CAPTCHA_PROVIDER`, `WIZARD_CLEANUP_ENABLED`, `WIZARD_CONTACT_EMAIL`, `WIZARD_CRAWL_MAX_DEPTH`, `WIZARD_CRAWL_MAX_PAGES`, `WIZARD_CRAWL_PAGE_TIMEOUT_MS`, `WIZARD_CRAWL_TIME_BUDGET_S`, `WIZARD_CURRENCY`, `WIZARD_SESSION_IDLE_HOURS`, `WIZARD_SHOP_CURRENCY`, `WIZARD_TIER3_TRIAL_TTL_DAYS`, `WIZARD_TRIAL_MAX_PAGES`, `WIZARD_TRIAL_TTL_DAYS`
 
 ## In `.env.example` but not read by MATE's own code
 

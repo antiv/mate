@@ -10,7 +10,7 @@ generated: true
 
 # Database reference
 
-**32** tables defined in `shared/utils/models.py`; migrations are at **V037**. Migrations apply automatically on startup and are the source of truth for the schema: the models describe it, the migrations create it.
+**32** tables defined in `shared/utils/models.py`; migrations are at **V038**. Migrations apply automatically on startup and are the source of truth for the schema: the models describe it, the migrations create it.
 
 ## Migrations
 
@@ -55,6 +55,7 @@ A ✗ means that dialect has no file for that version. All dialects are in step.
 | V035 | scrub tavily key | ✓ | ✓ | ✓ |
 | V036 | mate help agent | ✓ | ✓ | ✓ |
 | V037 | alert rules open types | ✓ | ✓ | ✓ |
+| V038 | feedback reported exchange | ✓ | ✓ | ✓ |
 
 ## `users`
 
@@ -550,6 +551,8 @@ Model `ResponseFeedback`. A visitor's thumbs up/down on one agent response.
 | `project_id` | `Integer` | FK → `projects.id` | — | — |
 | `rating` | `String(10)` | not null | — | up \| down |
 | `comment` | `Text` | — | — | — |
+| `question` | `Text` | — | — | Sent by a standalone build, whose sessions this server cannot read. NULL for MATE's own chats, where the exchange is read from the session. |
+| `answer` | `Text` | — | — | — |
 | `created_at` | `DateTime` | not null | `(computed)` | — |
 | `updated_at` | `DateTime` | not null | `(computed)` | — |
 

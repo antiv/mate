@@ -92,6 +92,32 @@ class TestFeedbackService(unittest.TestCase):
         result = self.service.submit(session_id="s1", message_id="e-1", rating="up")
         self.assertEqual(result["comment"], "was wrong about the price")
 
+    def test_stores_the_exchange_a_standalone_build_sends(self):
+        self.service.submit(session_id="s1", message_id="e-1", rating="down",
+                            question="2+2?", answer="5")
+        session = self.Session()
+        row = session.query(ResponseFeedback).one()
+        self.assertEqual((row.question, row.answer), ("2+2?", "5"))
+        session.close()
+
+    def test_a_later_rating_without_the_exchange_keeps_it(self):
+        # The note after a thumbs-down is a second submit; it must not blank the exchange
+        self.service.submit(session_id="s1", message_id="e-1", rating="down",
+                            question="2+2?", answer="5")
+        self.service.submit(session_id="s1", message_id="e-1", rating="down", comment="wrong")
+        session = self.Session()
+        row = session.query(ResponseFeedback).one()
+        self.assertEqual((row.question, row.answer, row.comment), ("2+2?", "5", "wrong"))
+        session.close()
+
+    def test_the_exchange_is_truncated(self):
+        from shared.utils.feedback_service import MAX_EXCHANGE
+        self.service.submit(session_id="s1", message_id="e-1", rating="down",
+                            question="q" * (MAX_EXCHANGE + 10), answer="a")
+        session = self.Session()
+        self.assertEqual(len(session.query(ResponseFeedback).one().question), MAX_EXCHANGE)
+        session.close()
+
     def test_ratings_for_a_session_are_readable(self):
         self.service.submit(session_id="s1", message_id="e-1", rating="up")
         self.service.submit(session_id="s1", message_id="e-2", rating="down")
@@ -143,6 +169,21 @@ class TestWidgetFeedbackEndpoint(unittest.TestCase):
         kwargs = self.service.submit.call_args.kwargs
         self.assertEqual(kwargs["agent_name"], "support_root")
         self.assertEqual(kwargs["project_id"], 42)
+
+    def test_passes_on_the_exchange_a_standalone_build_sends(self):
+        self.client.post("/widget/api/feedback", json={
+            "session_id": "s1", "message_id": "e-1", "rating": "down",
+            "question": "2+2?", "answer": "5"})
+        kwargs = self.service.submit.call_args.kwargs
+        self.assertEqual((kwargs["question"], kwargs["answer"]), ("2+2?", "5"))
+
+    def test_ignores_an_exchange_that_is_not_text(self):
+        self.client.post("/widget/api/feedback", json={
+            "session_id": "s1", "message_id": "e-1", "rating": "down",
+            "question": {"x": 1}, "answer": ["5"]})
+        kwargs = self.service.submit.call_args.kwargs
+        self.assertIsNone(kwargs["question"])
+        self.assertIsNone(kwargs["answer"])
 
     def test_rejects_a_bad_rating(self):
         resp = self.client.post("/widget/api/feedback", json={
