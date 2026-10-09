@@ -23,16 +23,6 @@ def is_tracing_enabled() -> bool:
     return _TRACING_ENABLED
 
 
-def get_otlp_endpoint() -> str:
-    """Get OTLP exporter endpoint."""
-    return os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318")
-
-
-def get_otlp_protocol() -> str:
-    """Get OTLP protocol (http/protobuf or grpc)."""
-    return os.getenv("OTEL_EXPORTER_OTLP_PROTOCOL", "http/protobuf")
-
-
 def get_service_name() -> str:
     """Get service name for traces."""
     return os.getenv("OTEL_SERVICE_NAME", "mate")

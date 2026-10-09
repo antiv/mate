@@ -11,6 +11,8 @@ from typing import Optional, List, Dict, Any
 from pathlib import Path
 from google.adk.artifacts.base_artifact_service import BaseArtifactService, ArtifactVersion
 from google.genai import types
+
+from .. import settings
 from typing_extensions import override
 
 logger = logging.getLogger(__name__)
@@ -38,11 +40,11 @@ class SupabaseArtifactService(BaseArtifactService):
         Args:
             url: Supabase URL (defaults to SUPABASE_URL env var)
             key: Supabase key (defaults to SUPABASE_KEY env var)
-            bucket_name: Storage bucket name (defaults to SUPABASE_BUCKET env var or 'artifacts')
+            bucket_name: Storage bucket name (defaults to settings.supabase_bucket())
         """
         self.url = url or os.getenv("SUPABASE_URL")
         self.key = key or os.getenv("SUPABASE_KEY")
-        self.bucket_name = bucket_name or os.getenv("SUPABASE_BUCKET", "artifacts")
+        self.bucket_name = bucket_name or settings.supabase_bucket()
         
         if not self.url or not self.key:
             raise ValueError("SUPABASE_URL and SUPABASE_KEY must be provided or set in environment")

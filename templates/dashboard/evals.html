@@ -203,7 +203,7 @@
         <div class="p-4 space-y-3 overflow-y-auto">
             <div id="imLoading" class="text-sm text-gray-500 dark:text-gray-400"><i class="fas fa-spinner fa-spin mr-1"></i>Asking the model for a suggestion…</div>
             <div id="imBody" class="hidden space-y-3">
-                <div class="text-xs text-gray-600 dark:text-gray-300"><span class="font-medium">Question:</span> <span id="imQuestion"></span></div>
+                <div class="text-xs text-gray-600 dark:text-gray-300"><span class="font-medium">Question:</span> <span id="imQuestion"></span> <span id="imReported" class="hidden text-gray-400 italic" title="This server cannot read the build's session">(sent by a standalone build)</span></div>
                 <div class="text-xs p-2 rounded bg-purple-50 dark:bg-purple-900/20 text-gray-700 dark:text-gray-200"><span class="font-medium">Why:</span> <span id="imReason"></span></div>
                 <p class="text-xs text-gray-500 dark:text-gray-400">Only the instruction and the memory blocks you tick below can change. Edit the suggestion if you like, check it against the suite, then apply. Each change becomes a new version you can roll back.</p>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -814,6 +814,7 @@ async function openImprove(source, blockLabels) {
         _renderImproveBlocks(data.blocks || {}, data.shared_with || []);
         document.getElementById('imAgent').textContent = '— ' + data.agent_name;
         document.getElementById('imQuestion').textContent = data.question || '';
+        document.getElementById('imReported').classList.toggle('hidden', !data.reported);
         document.getElementById('imReason').textContent = data.reason || '—';
         document.getElementById('imCurrent').value = data.current_instruction || '';
         document.getElementById('imProposed').value = data.instruction || '';

@@ -162,6 +162,17 @@ def _lookup_widget_admin_key(admin_key: str) -> Optional[WidgetApiKey]:
         session.close()
 
 
+def _lookup_widget_feedback_key(feedback_key: str) -> Optional[WidgetApiKey]:
+    db = get_database_client()
+    session = db.get_session()
+    if not session:
+        return None
+    try:
+        return session.query(WidgetApiKey).filter_by(feedback_key=feedback_key, is_active=True).first()
+    finally:
+        session.close()
+
+
 def _extract_api_key(request: Request) -> str:
     key = request.headers.get("X-Widget-Key") or request.query_params.get("key")
     if not key:
@@ -245,6 +256,22 @@ def verify_widget_key(request: Request) -> WidgetApiKey:
         raise HTTPException(status_code=401, detail="Invalid or inactive widget API key")
     _check_origin(request, wk)
     return wk
+
+
+def verify_feedback_sender(request: Request) -> tuple:
+    """FastAPI dependency for /api/feedback: (widget key, sent by a standalone build).
+
+    A standalone build authenticates with the key's feedback_key in
+    X-Widget-Feedback-Key; it is the only sender trusted with the rated question
+    and answer. Everyone else uses the public key, as for any widget call.
+    """
+    feedback_key = request.headers.get("X-Widget-Feedback-Key")
+    if feedback_key:
+        wk = _lookup_widget_feedback_key(feedback_key)
+        if wk is None:
+            raise HTTPException(status_code=401, detail="Invalid or inactive widget feedback key")
+        return wk, True
+    return verify_widget_key(request), False
 
 
 def verify_widget_admin_key(request: Request) -> WidgetApiKey:
@@ -378,7 +405,7 @@ async def widget_admin_page(request: Request, key: str = Query(...)):
 # ---------------------------------------------------------------------------
 
 @router.post("/api/feedback")
-async def widget_feedback(request: Request, wk: WidgetApiKey = Depends(verify_widget_key)):
+async def widget_feedback(request: Request, sender: tuple = Depends(verify_feedback_sender)):
     """Record a visitor's thumbs up/down on one agent response.
 
     Rating is a visitor action, so it is scoped by the widget's public key. The agent
@@ -386,18 +413,21 @@ async def widget_feedback(request: Request, wk: WidgetApiKey = Depends(verify_wi
     attribute a rating to someone else's agent.
 
     A standalone build forwarding its ratings also sends `question` and `answer`,
-    since this server cannot read its sessions. Whoever holds the public key can send
-    them, so the dashboard marks them as reported and prefers the session when it has it.
+    since this server cannot read its sessions. They are taken only from a sender
+    holding the key's feedback_key: the public key is in every page that embeds the
+    widget, and the text reaches Suggest a fix.
     """
     from shared.utils.feedback_service import get_feedback_service
+
+    wk, from_build = sender
 
     body = await request.json()
     session_id = (body.get("session_id") or "").strip()
     message_id = (body.get("message_id") or "").strip()
     rating = (body.get("rating") or "").strip()
     comment = body.get("comment")
-    question = body.get("question")
-    answer = body.get("answer")
+    question = body.get("question") if from_build else None
+    answer = body.get("answer") if from_build else None
 
     if not session_id or not message_id:
         raise HTTPException(status_code=400, detail="session_id and message_id are required")
@@ -991,6 +1021,7 @@ async def create_widget_key(
 
     api_key = f"wk_{secrets.token_urlsafe(32)}"
     admin_key = f"wak_{secrets.token_urlsafe(32)}"
+    feedback_key = f"wfk_{secrets.token_urlsafe(32)}"
 
     db = get_database_client()
     session = db.get_session()
@@ -1000,6 +1031,7 @@ async def create_widget_key(
         wk = WidgetApiKey(
             api_key=api_key,
             admin_key=admin_key,
+            feedback_key=feedback_key,
             project_id=project_id,
             agent_name=agent_name,
             label=label,
@@ -1125,6 +1157,7 @@ async def get_embed_code(
             "embed_code": embed_code,
             "api_key": wk.api_key,
             "admin_key": wk.admin_key,
+            "feedback_key": wk.feedback_key,
         }
     finally:
         session.close()

@@ -283,14 +283,17 @@ def get_database_config() -> Dict[str, Any]:
     Returns:
         Dictionary containing database configuration values
     """
+    from . import settings
+
+    kind = settings.db_type()
     return {
-        "db_type": os.getenv("DB_TYPE", "sqlite"),
-        "db_path": os.getenv("DB_PATH", "my_agent_data.db"),
-        "db_user": os.getenv("DB_USER", "postgres"),
-        "db_password": os.getenv("DB_PASSWORD", ""),
-        "db_host": os.getenv("DB_HOST", "localhost"),
-        "db_port": os.getenv("DB_PORT", "5432"),
-        "db_name": os.getenv("DB_NAME", "mate_agent"),
+        "db_type": kind,
+        "db_path": settings.db_path(),
+        "db_user": settings.db_user() or "",
+        "db_password": settings.db_password() or "",
+        "db_host": settings.db_host(),
+        "db_port": settings.db_port(kind),
+        "db_name": settings.db_name(),
     }
 
 
@@ -304,7 +307,6 @@ def build_session_service_uri() -> str:
     config = get_database_config()
     
     db_type = config["db_type"]
-    db_path = config["db_path"]
     db_user = config["db_user"]
     db_password = config["db_password"]
     db_host = config["db_host"]
@@ -312,12 +314,8 @@ def build_session_service_uri() -> str:
     db_name = config["db_name"]
     
     if db_type == "sqlite":
-        # Use absolute path to ensure consistency regardless of working directory
-        from pathlib import Path
-        # Get project root (2 levels up from this file: shared/utils/utils.py -> project_root)
-        project_root = Path(__file__).parent.parent.parent
-        absolute_db_path = project_root / db_path
-        return f"sqlite:///{absolute_db_path}"
+        # settings.db_path() is already absolute, from the project root
+        return f"sqlite:///{config['db_path']}"
     elif db_type == "postgresql":
         return f"postgresql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}"
     elif db_type == "mysql":

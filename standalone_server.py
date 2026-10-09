@@ -136,7 +136,8 @@ HOST = os.getenv("STANDALONE_HOST", "127.0.0.1")
 
 print(f"🚀 MATE Standalone Server")
 print(f"   Agent: {ROOT_AGENT_NAME}")
-print(f"   Database: {os.getenv('DB_TYPE', 'sqlite')} / {os.getenv('DB_PATH', 'standalone_agent.db')}")
+from shared.utils import settings as _settings
+print(f"   Database: {_settings.db_type()} / {_settings.db_path()}")
 
 
 def _print_mcp_command_status():

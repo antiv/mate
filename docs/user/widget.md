@@ -80,6 +80,10 @@ The admin page is opened with its own admin key, separate from the key in the em
 code. Treat that link as a password: whoever has it can rewrite the agent's
 instruction.
 
+**Embed Code** also shows a **standalone feedback key**. It is only for a
+[standalone build](../dev/standalone-build.md#response-ratings) of the same agent that
+sends its ratings to this server, and goes in that build's `.env`, never in a web page.
+
 ## Limit where the widget works
 
 **Allowed Origins is advisory unless your administrator switches enforcement on.**

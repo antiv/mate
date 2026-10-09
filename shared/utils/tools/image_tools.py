@@ -26,6 +26,7 @@ except Exception:
 
 from google.adk.tools.tool_context import ToolContext
 
+from .. import settings
 from ..content_marking import is_marked_as_ai_generated, mark_png_as_ai_generated
 
 logger = logging.getLogger(__name__)
@@ -88,7 +89,7 @@ def _construct_public_url(app_name: str, user_id: str, session_id: str, filename
     Returns:
         str: The public URL for the artifact, or empty string if not supported
     """
-    artifact_service = os.getenv("ARTIFACT_SERVICE", "none").lower()
+    artifact_service = settings.artifact_service()
     
     if artifact_service == "s3":
         # For S3: DISTRIBUTION_DOMAIN/{app_name}/{user_id}/{session_id}/{filename}/{saved_version}
@@ -105,9 +106,9 @@ def _construct_public_url(app_name: str, user_id: str, session_id: str, filename
     elif artifact_service == "supabase":
         # For Supabase: SUPABASE_URL/storage/v1/object/public/SUPABASE_BUCKET/public/{app_name}/{user_id}/{session_id}/{filename}/{saved_version}
         supabase_url = os.getenv("SUPABASE_URL", "")
-        supabase_bucket = os.getenv("SUPABASE_BUCKET", "")
-        if not supabase_url or not supabase_bucket:
-            logger.warning("SUPABASE_URL or SUPABASE_BUCKET not set for Supabase artifact service")
+        supabase_bucket = settings.supabase_bucket()
+        if not supabase_url:
+            logger.warning("SUPABASE_URL not set for Supabase artifact service")
             return ""
         # Remove trailing slash if present
         supabase_url = supabase_url.rstrip('/')

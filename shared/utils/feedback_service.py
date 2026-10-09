@@ -88,6 +88,11 @@ class FeedbackService:
                 ResponseFeedback.message_id == message_id,
             ).first()
 
+            if existing and agent_name and existing.agent_name and existing.agent_name != agent_name:
+                # Another agent's key must not rewrite this agent's rating or exchange
+                logger.warning("Refused a rating for %s/%s: it belongs to agent %s, not %s",
+                               session_id, message_id, existing.agent_name, agent_name)
+                return None
             if existing:
                 existing.rating = rating
                 # A visitor changing their mind should not silently drop the comment

@@ -373,9 +373,10 @@ DB_PATH=standalone_agent.db
 
 # --- Ratings (optional) ---
 # Show 👍/👎 in the chat and send each rating, with the rated question and answer,
-# to a central MATE. The key is a widget key for this agent on that server.
+# to a central MATE. The key is the standalone feedback key of a widget key for this
+# agent on that server (Widget Keys → Embed Code), not the public wk_ key.
 # MATE_FEEDBACK_URL=https://mate.example.com
-# MATE_FEEDBACK_KEY=wk_...
+# MATE_FEEDBACK_KEY=wfk_...
 """
     env_path = output_dir / ".env"
     with open(env_path, "w", encoding="utf-8") as f:

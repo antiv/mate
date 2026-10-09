@@ -169,6 +169,7 @@ class TestImproveEndpoints(unittest.TestCase):
             resp = self.client.post("/dashboard/api/evals/improve/propose", json={"feedback_id": self.fb_id})
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(propose.call_args.args[2:4], ("Open Sunday?", "Yes"))
+        self.assertTrue(resp.json()["reported"])  # the modal marks it as sent by a build
 
     def test_propose_needs_a_source(self):
         self.assertEqual(self.client.post("/dashboard/api/evals/improve/propose", json={}).status_code, 400)

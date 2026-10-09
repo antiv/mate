@@ -118,6 +118,16 @@ class TestFeedbackService(unittest.TestCase):
         self.assertEqual(len(session.query(ResponseFeedback).one().question), MAX_EXCHANGE)
         session.close()
 
+    def test_another_agents_key_cannot_take_over_a_rating(self):
+        self.service.submit(session_id="s1", message_id="e-1", rating="down",
+                            agent_name="a1", question="2+2?", answer="5")
+        self.assertIsNone(self.service.submit(session_id="s1", message_id="e-1", rating="up",
+                                              agent_name="other", question="made up"))
+        session = self.Session()
+        row = session.query(ResponseFeedback).one()
+        self.assertEqual((row.rating, row.question, row.agent_name), ("down", "2+2?", "a1"))
+        session.close()
+
     def test_ratings_for_a_session_are_readable(self):
         self.service.submit(session_id="s1", message_id="e-1", rating="up")
         self.service.submit(session_id="s1", message_id="e-2", rating="down")
@@ -143,7 +153,8 @@ class TestWidgetFeedbackEndpoint(unittest.TestCase):
 
         app = FastAPI()
         app.include_router(wr.router)
-        app.dependency_overrides[wr.verify_widget_key] = lambda: self.widget_key
+        self.from_build = False
+        app.dependency_overrides[wr.verify_feedback_sender] = lambda: (self.widget_key, self.from_build)
         self.client = TestClient(app)
 
         self.service = MagicMock()
@@ -171,6 +182,7 @@ class TestWidgetFeedbackEndpoint(unittest.TestCase):
         self.assertEqual(kwargs["project_id"], 42)
 
     def test_passes_on_the_exchange_a_standalone_build_sends(self):
+        self.from_build = True
         self.client.post("/widget/api/feedback", json={
             "session_id": "s1", "message_id": "e-1", "rating": "down",
             "question": "2+2?", "answer": "5"})
@@ -178,9 +190,19 @@ class TestWidgetFeedbackEndpoint(unittest.TestCase):
         self.assertEqual((kwargs["question"], kwargs["answer"]), ("2+2?", "5"))
 
     def test_ignores_an_exchange_that_is_not_text(self):
+        self.from_build = True
         self.client.post("/widget/api/feedback", json={
             "session_id": "s1", "message_id": "e-1", "rating": "down",
             "question": {"x": 1}, "answer": ["5"]})
+        kwargs = self.service.submit.call_args.kwargs
+        self.assertIsNone(kwargs["question"])
+        self.assertIsNone(kwargs["answer"])
+
+    def test_the_public_key_cannot_send_an_exchange(self):
+        # It is in every page that embeds the widget; the text reaches Suggest a fix
+        self.client.post("/widget/api/feedback", json={
+            "session_id": "s1", "message_id": "e-1", "rating": "down",
+            "question": "made up", "answer": "made up"})
         kwargs = self.service.submit.call_args.kwargs
         self.assertIsNone(kwargs["question"])
         self.assertIsNone(kwargs["answer"])
@@ -199,6 +221,39 @@ class TestWidgetFeedbackEndpoint(unittest.TestCase):
         resp = self.client.post("/widget/api/feedback", json={
             "session_id": "s1", "message_id": "e-1", "rating": "up"})
         self.assertEqual(resp.status_code, 500)
+
+
+class TestFeedbackSender(unittest.TestCase):
+    """Which credential the feedback route was called with."""
+
+    def _request(self, headers):
+        from starlette.requests import Request
+        return Request({"type": "http", "method": "POST", "path": "/widget/api/feedback",
+                        "headers": [(k.lower().encode(), v.encode()) for k, v in headers.items()],
+                        "query_string": b""})
+
+    def test_the_feedback_key_marks_a_standalone_build(self):
+        import server.widget_routes as wr
+        wk = MagicMock(agent_name="a1")
+        with patch.object(wr, "_lookup_widget_feedback_key", return_value=wk) as lookup:
+            self.assertEqual(wr.verify_feedback_sender(self._request({"X-Widget-Feedback-Key": "wfk_1"})),
+                             (wk, True))
+        lookup.assert_called_once_with("wfk_1")
+
+    def test_an_unknown_feedback_key_is_refused(self):
+        import server.widget_routes as wr
+        from fastapi import HTTPException
+        with patch.object(wr, "_lookup_widget_feedback_key", return_value=None):
+            with self.assertRaises(HTTPException) as ctx:
+                wr.verify_feedback_sender(self._request({"X-Widget-Feedback-Key": "wfk_bad"}))
+        self.assertEqual(ctx.exception.status_code, 401)
+
+    def test_the_public_key_is_not_a_standalone_build(self):
+        import server.widget_routes as wr
+        wk = MagicMock(agent_name="a1")
+        with patch.object(wr, "verify_widget_key", return_value=wk):
+            self.assertEqual(wr.verify_feedback_sender(self._request({"X-Widget-Key": "wk_1"})),
+                             (wk, False))
 
 
 class TestFeedbackIsRateLimited(unittest.TestCase):

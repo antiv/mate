@@ -148,6 +148,7 @@ function showWidgetEmbedCode(keyId) {
                 const adminLink = document.getElementById('widgetAdminLink');
                 adminLink.href = adminUrl;
                 adminLink.textContent = adminUrl;
+                document.getElementById('widgetFeedbackKey').textContent = res.feedback_key || '—';
                 document.getElementById('widgetEmbedModal').classList.remove('hidden');
             }
         });

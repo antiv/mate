@@ -52,6 +52,19 @@ class TestRateLimiter(unittest.TestCase):
             self.assertTrue(limiter.allow("a"))
 
 
+class TestRateLimiterForgetsIdleClients(unittest.TestCase):
+
+    def test_idle_clients_are_dropped(self):
+        # Rotating addresses must not grow the table without bound
+        limiter = sf.RateLimiter(limit=5, window=60)
+        times = iter([100, 101, 102, 300])
+        with patch("shared.utils.standalone_feedback.time.monotonic", side_effect=lambda: next(times)):
+            for ip in ("a", "b", "c"):
+                limiter.allow(ip)
+            limiter.allow("d")
+        self.assertEqual(list(limiter._hits), ["d"])
+
+
 class TestParseRating(unittest.TestCase):
 
     def _body(self, **overrides):
@@ -121,7 +134,7 @@ class TestForward(unittest.TestCase):
 
         def handler(request):
             seen["url"] = str(request.url)
-            seen["key"] = request.headers.get("X-Widget-Key")
+            seen["key"] = request.headers.get("X-Widget-Feedback-Key")
             return httpx.Response(200, json={})
 
         self.assertEqual(self._forward_with(handler), (True, "HTTP 200"))

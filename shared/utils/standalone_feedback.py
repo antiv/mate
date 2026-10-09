@@ -6,7 +6,9 @@ reaches one. With MATE_FEEDBACK_URL and MATE_FEEDBACK_KEY set, the build's
 /feedback route sends each rating to that MATE's /widget/api/feedback under a
 widget key for the same agent. The central server cannot read the build's
 sessions, so the rated question and answer go with it, read here from the
-build's own session store, never taken from the browser.
+build's own session store, never taken from the browser. MATE_FEEDBACK_KEY is the
+widget key's feedback key, not its public key: the central server accepts the
+question and answer only with that one.
 """
 
 import logging
@@ -43,11 +45,18 @@ class RateLimiter:
         self.limit = limit
         self.window = window
         self._hits: Dict[str, Deque[float]] = {}
+        self._swept = 0.0
         self._lock = threading.Lock()
 
     def allow(self, key: str) -> bool:
         now = time.monotonic()
         with self._lock:
+            # Forget clients idle for a whole window, so rotating addresses cannot
+            # grow this dict without bound. Once per window, not on every call.
+            if now - self._swept > self.window:
+                for idle in [k for k, h in self._hits.items() if not h or now - h[-1] > self.window]:
+                    del self._hits[idle]
+                self._swept = now
             hits = self._hits.setdefault(key, deque())
             while hits and now - hits[0] > self.window:
                 hits.popleft()
@@ -89,7 +98,7 @@ async def forward(url: str, key: str, payload: Dict[str, Any]) -> Tuple[bool, st
     try:
         async with httpx.AsyncClient(timeout=FORWARD_TIMEOUT) as client:
             resp = await client.post(f"{url}/widget/api/feedback", json=payload,
-                                     headers={"X-Widget-Key": key})
+                                     headers={"X-Widget-Feedback-Key": key})
         if resp.status_code >= 400:
             logger.warning("Feedback forward to %s refused: HTTP %s", url, resp.status_code)
             return False, f"HTTP {resp.status_code}"

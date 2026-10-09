@@ -20,10 +20,9 @@ MATE uses OpenTelemetry for distributed tracing of agent executions, LLM calls, 
 # Enable tracing (default: false)
 OTEL_TRACING_ENABLED=true
 
-# Optional: OTLP endpoint for Jaeger, Grafana Tempo, Datadog, Honeycomb
+# Optional: OTLP endpoint for Jaeger, Grafana Tempo, Datadog, Honeycomb (OTLP over HTTP)
 # When unset, only DB export runs (for dashboard)
 OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
-OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
 
 # Service name for traces
 OTEL_SERVICE_NAME=mate
@@ -55,8 +54,9 @@ The `/dashboard/traces` page shows traces from the database when `OTEL_TRACES_DB
 To export to Jaeger, Grafana Tempo, Datadog, or Honeycomb:
 
 1. Run an OTLP-compatible collector (e.g. Jaeger all-in-one, Grafana OTLP collector)
-2. Set `OTEL_EXPORTER_OTLP_ENDPOINT` to the collector URL
-3. Default: `http://localhost:4318` (OTLP HTTP)
+2. Set `OTEL_EXPORTER_OTLP_ENDPOINT` to the collector's OTLP HTTP URL, for example
+   `http://localhost:4318`. There is no default: without it, spans only go to the
+   database. The exporter is OTLP over HTTP; gRPC is not supported.
 
 ## W3C Trace Context
 
