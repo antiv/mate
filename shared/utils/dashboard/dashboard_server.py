@@ -6044,6 +6044,12 @@ class DashboardServer:
                     events_by_session[sid] = self._get_session_events(sid)
                 events = events_by_session[sid]
                 question, answer = extract_exchange(events or [], row["message_id"])
+                reported_question = row.pop("reported_question", None)
+                reported_answer = row.pop("reported_answer", None)
+                # A standalone build's session is not here; it sent the exchange instead
+                row["reported"] = not (question or answer) and bool(reported_question or reported_answer)
+                if row["reported"]:
+                    question, answer = reported_question, reported_answer
                 row["question"] = question
                 row["answer"] = answer
                 row["session_available"] = events is not None
@@ -6075,6 +6081,9 @@ class DashboardServer:
                 from shared.utils.agent_improver import blocks_read
                 events = self._get_session_events(fb.session_id) or []
                 question, answer = extract_exchange(events, fb.message_id)
+                if not question and fb.question:
+                    # Sent by a standalone build, whose session this server cannot read
+                    question, answer = fb.question, fb.answer
                 if not question:
                     raise HTTPException(status_code=400, detail="The rated conversation is no longer available")
                 return {"agent_name": fb.agent_name, "question": question, "answer": answer,

@@ -77,7 +77,10 @@ are looking at.
 ## Turn a bad answer into a test
 
 **Rated Down** lists the answers people gave a thumbs-down in the Work Room or the
-widget, with their comment. **Add to evals** opens a new test case with the agent
+widget, with their comment. A [standalone build](../dev/standalone-build.md#response-ratings)
+can send its ratings here too; those rows are marked *sent by a standalone build*,
+because the question and answer come from the build rather than from a conversation
+stored on this server. **Add to evals** opens a new test case with the agent
 and question filled in. Write the answer the agent should have given, and that
 mistake is checked on every future run.
 

@@ -18,6 +18,8 @@ logger = logging.getLogger(__name__)
 
 RATINGS = ('up', 'down')
 MAX_COMMENT = 2000
+# A rated question and answer sent by a standalone build
+MAX_EXCHANGE = 8000
 
 
 def _event_texts(event: Dict[str, Any]) -> List[str]:
@@ -65,8 +67,13 @@ class FeedbackService:
 
     def submit(self, session_id: str, message_id: str, rating: str,
                agent_name: Optional[str] = None, project_id: Optional[int] = None,
-               comment: Optional[str] = None) -> Optional[Dict[str, Any]]:
-        """Record or change a rating. Returns the stored row, or None on failure."""
+               comment: Optional[str] = None, question: Optional[str] = None,
+               answer: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """Record or change a rating. Returns the stored row, or None on failure.
+
+        question and answer are only sent by a standalone build; a later submit
+        without them keeps the stored ones.
+        """
         if rating not in RATINGS:
             return None
         if not session_id or not message_id:
@@ -87,6 +94,10 @@ class FeedbackService:
                 # they wrote, but an explicit new comment replaces it.
                 if comment is not None:
                     existing.comment = comment[:MAX_COMMENT] or None
+                if question:
+                    existing.question = question[:MAX_EXCHANGE]
+                if answer:
+                    existing.answer = answer[:MAX_EXCHANGE]
                 existing.updated_at = datetime.now(timezone.utc)
                 row = existing
             else:
@@ -97,6 +108,8 @@ class FeedbackService:
                     project_id=project_id,
                     rating=rating,
                     comment=(comment or '')[:MAX_COMMENT] or None,
+                    question=(question or '')[:MAX_EXCHANGE] or None,
+                    answer=(answer or '')[:MAX_EXCHANGE] or None,
                 )
                 session.add(row)
 
@@ -155,6 +168,9 @@ class FeedbackService:
             for r in rows:
                 item = r.to_dict()
                 item['test_case_id'] = linked.get(r.id)
+                # What a standalone build sent; the caller prefers the session
+                item['reported_question'] = r.question
+                item['reported_answer'] = r.answer
                 result.append(item)
             return result
         except Exception as e:

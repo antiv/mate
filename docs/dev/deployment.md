@@ -129,3 +129,6 @@ What carries over and what does not:
   that command installed on every machine that runs the build.
 - There is no authentication. Anyone who can reach the port can use the agent, so it
   listens on `127.0.0.1` by default (`STANDALONE_HOST`, `STANDALONE_PORT`).
+- 👍/👎 ratings are shown only when the build can send them to a central MATE
+  (`MATE_FEEDBACK_URL`, `MATE_FEEDBACK_KEY`); see
+  [Standalone build](standalone-build.md#response-ratings).

@@ -1236,6 +1236,10 @@ class ResponseFeedback(Base):
     project_id = Column(Integer, ForeignKey('projects.id', ondelete='CASCADE'), nullable=True)
     rating = Column(String(10), nullable=False)  # up | down
     comment = Column(Text, nullable=True)
+    # Sent by a standalone build, whose sessions this server cannot read. NULL for
+    # MATE's own chats, where the exchange is read from the session.
+    question = Column(Text, nullable=True)
+    answer = Column(Text, nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc),
                         onupdate=lambda: datetime.now(timezone.utc), nullable=False)

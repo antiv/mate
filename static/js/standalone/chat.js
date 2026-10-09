@@ -15,8 +15,9 @@
   var BASE = window.location.origin;
   var STORAGE_PREFIX = "mate_standalone_" + AGENT_NAME;
   var IMAGE_EXTENSIONS = [".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".bmp"];
-  // Off in standalone builds, which have no feedback route and no dashboard to read ratings in
+  // Off in a standalone build unless it forwards ratings to a central MATE
   var RATINGS_ENABLED = window.STANDALONE_RATINGS !== false;
+  var FEEDBACK_ENDPOINT = window.MATE_FEEDBACK_ENDPOINT || "/dashboard/api/feedback";
 
   // --- State -----------------------------------------------------------
   var sessionId = localStorage.getItem(STORAGE_PREFIX + "_sid") || "";
@@ -1319,10 +1320,12 @@
       message_id: invocationId,
       rating: rating,
       agent_name: AGENT_NAME,
+      // The standalone server reads the rated exchange from this user's session
+      user_id: userId,
     };
     // Sent as a second request on the same rating, which the server updates in place
     if (comment) payload.comment = comment;
-    fetch("/dashboard/api/feedback", {
+    fetch(FEEDBACK_ENDPOINT, {
       method: "POST",
       credentials: "same-origin",
       headers: { "Content-Type": "application/json" },
