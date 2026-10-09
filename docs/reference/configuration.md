@@ -10,7 +10,7 @@ generated: true
 
 # Configuration reference
 
-Every environment variable the code reads: **133** in total. Descriptions come from the comments in `.env.example`; defaults come from the code. A ⚠ marks a variable read with different defaults in different places.
+Every environment variable the code reads: **132** in total. Descriptions come from the comments in `.env.example`; defaults come from the code. A ⚠ marks a variable read with different defaults in different places.
 
 | Variable | Default | Description | Read in |
 |---|---|---|---|
@@ -24,7 +24,7 @@ Every environment variable the code reads: **133** in total. Descriptions come f
 | `ALERTS_INTERVAL_SECONDS` | `60` | — | `shared/utils/trigger_runner.py` |
 | `ALLOWED_API_ROLES` | — | — | `server/pat_auth.py` |
 | `ALLOWED_ORIGINS` | `http://localhost:8000,http://127.0.0.1:8000` | Comma-separated CORS allowlist. Dashboard and widget chat are same-origin; /widget/public-config stays open on its own. | `auth_server.py` |
-| `ARTIFACT_SERVICE` | `none` / `not set` ⚠ | — | `adk_main.py`, `shared/utils/langgraph/artifact_adapter.py`, `shared/utils/tools/image_tools.py` |
+| `ARTIFACT_SERVICE` | `none` | local_folder, supabase or s3; unset or none keeps artifacts in memory, lost on restart | `shared/utils/settings.py` |
 | `AUDIT_RETENTION_DAYS` | `0` | Audit log retention (EU AI Act compliance). 0 = keep forever; N = delete entries older than N days | `shared/utils/audit_service.py` |
 | `AUTH_PASSWORD` | `mate` | — | `auth_server.py` |
 | `AUTH_USERNAME` | `admin` | Authentication (Basic Auth fallback — always available) | `auth_server.py`, `shared/utils/user_cleanup.py`, `shared/utils/user_service.py` |
@@ -41,19 +41,19 @@ Every environment variable the code reads: **133** in total. Descriptions come f
 | `CONTEXT_COMPACTION_INTERVAL` | `3` | — | `shared/utils/utils.py` |
 | `CONTEXT_COMPACTION_OVERLAP_SIZE` | `1` | — | `shared/utils/utils.py` |
 | `CONTEXT_COMPACTION_SUMMARIZER_MODEL` | — | — | `shared/utils/utils.py` |
-| `CREDENTIAL_SERVICE` | `database` / `not set` ⚠ | — | `adk_main.py` |
+| `CREDENTIAL_SERVICE` | `database` | — | `adk_main.py` |
 | `CSP_EXTRA_SOURCES` | — | Extra hosts for scripts, styles, fonts, connections and frames, e.g. https://cdn.example.com (comma separated). | `server/csp.py` |
 | `CSP_MODE` | `report-only` | Content-Security-Policy: report-only (log violations, block nothing), enforce, or off. See docs/dev/content-security-policy.md. | `server/csp.py` |
 | `DB_AUTO_CREATE_TABLES` | `true` | — | `shared/utils/database_client.py` |
 | `DB_CONNECT_RETRIES` | `5` | connection attempts at startup, 3s apart, for a database that starts after the app | `shared/utils/database_client.py` |
-| `DB_HOST` | `localhost` | PostgreSQL/MySQL settings | `shared/utils/dashboard/dashboard_server.py`, `shared/utils/database_client.py`, `shared/utils/migration_system.py` +1 more |
-| `DB_NAME` | — / `mate_agent` ⚠ | — | `shared/utils/dashboard/dashboard_server.py`, `shared/utils/database_client.py`, `shared/utils/migration_system.py` +1 more |
-| `DB_PASSWORD` | — | — | `shared/utils/database_client.py`, `shared/utils/migration_system.py`, `shared/utils/utils.py` |
-| `DB_PATH` | `mate_agent.db` / `my_agent_data.db` / `standalone_agent.db` ⚠ | SQLite (optional path) | `shared/utils/dashboard/dashboard_server.py`, `shared/utils/database_client.py`, `shared/utils/migration_system.py` +2 more |
-| `DB_PORT` | `3306` / `5432` ⚠ | or 3306 for MySQL | `shared/utils/dashboard/dashboard_server.py`, `shared/utils/database_client.py`, `shared/utils/migration_system.py` +1 more |
+| `DB_HOST` | `localhost` | default localhost | `shared/utils/settings.py` |
+| `DB_NAME` | `mate_agent` | default mate_agent | `shared/utils/settings.py` |
+| `DB_PASSWORD` | — | required for PostgreSQL and MySQL | `shared/utils/settings.py` |
+| `DB_PATH` | `my_agent_data.db` | SQLite file; a relative path is taken from the project root (default my_agent_data.db) | `shared/utils/settings.py` |
+| `DB_PORT` | `(computed)` | default 5432, or 3306 for MySQL | `shared/utils/settings.py` |
 | `DB_SKIP_SEED` | — | — | `shared/utils/database_client.py` |
-| `DB_TYPE` | `postgresql` / `sqlite` ⚠ | postgresql, sqlite or mysql | `shared/utils/dashboard/dashboard_server.py`, `shared/utils/database_client.py`, `shared/utils/migration_system.py` +2 more |
-| `DB_USER` | `postgres` | — | `shared/utils/database_client.py`, `shared/utils/migration_system.py`, `shared/utils/utils.py` |
+| `DB_TYPE` | `sqlite` | sqlite (default), postgresql or mysql | `shared/utils/settings.py` |
+| `DB_USER` | — | required for PostgreSQL and MySQL | `shared/utils/settings.py` |
 | `DISTRIBUTION_DOMAIN` | — | — | `shared/utils/tools/image_tools.py` |
 | `DISTRIBUTION_S3_BUCKET_NAME` | `test-bucket` | — | `adk_main.py`, `shared/utils/langgraph/artifact_adapter.py` |
 | `DISTRIBUTION_S3_ENDPOINT` | — | — | `adk_main.py`, `shared/utils/langgraph/artifact_adapter.py` |
@@ -85,7 +85,7 @@ Every environment variable the code reads: **133** in total. Descriptions come f
 | `MATE_FEEDBACK_URL` | — | — | `shared/utils/standalone_feedback.py` |
 | `MATE_PLUGINS_ENABLED` | `false` | App-wide MATE plugin: RBAC/guardrails/token tracking as ADK Plugin instead of per-agent callbacks; covers all agents incl. runtime-created ones (requires ADK >= 2.0) | `shared/utils/agent_manager.py`, `shared/utils/utils.py` |
 | `MCP_EXPOSED_AGENTS` | `chess_mate_root` | — | `shared/utils/mcp/agent_mcp_manager.py` |
-| `MEMORY_SERVICE` | `database` / `not set` ⚠ | — | `adk_main.py` |
+| `MEMORY_SERVICE` | `database` | — | `adk_main.py` |
 | `MODEL_NAME` | — | — | `server/proxy_routes.py`, `server/widget_routes.py` |
 | `MYSTERY_GEN_MODEL` | — | — | `shared/utils/tools/mystery_game.py` |
 | `OAUTH_ALLOWED_DOMAINS` | — | Comma-separated email domains allowed to sign in via SSO. Empty = anyone with a provider account can create a session. | `server/oauth_routes.py` |
@@ -96,8 +96,7 @@ Every environment variable the code reads: **133** in total. Descriptions come f
 | `OPENAI_API_KEY_BACKUP` | — | — | `shared/utils/tools/image_tools.py` |
 | `OPENROUTER_API_KEY` | — | — | `shared/utils/langgraph/model_factory.py`, `shared/utils/tools/image_tools.py`, `shared/utils/utils.py` |
 | `OPENROUTER_BASE_URL` | `https://openrouter.ai/api/v1` | — | `shared/utils/langgraph/model_factory.py`, `shared/utils/tools/image_tools.py`, `shared/utils/utils.py` |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | — / `http://localhost:4318` ⚠ | — | `shared/utils/tracing/tracer.py`, `shared/utils/tracing/tracing_config.py` |
-| `OTEL_EXPORTER_OTLP_PROTOCOL` | `http/protobuf` | — | `shared/utils/tracing/tracing_config.py` |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | — | — | `shared/utils/tracing/tracer.py` |
 | `OTEL_SERVICE_NAME` | `mate` | — | `shared/utils/tracing/tracing_config.py` |
 | `OTEL_TRACES_DB_EXPORT` | `true` | — | `shared/utils/tracing/tracing_config.py` |
 | `OTEL_TRACING_ENABLED` | `false` | OpenTelemetry Distributed Tracing (optional) | `auth_server.py`, `shared/utils/tracing/tracing_config.py` |
@@ -118,7 +117,7 @@ Every environment variable the code reads: **133** in total. Descriptions come f
 | `STANDALONE_HOST` | `127.0.0.1` | — | `standalone_server.py` |
 | `STANDALONE_PORT` | `8080` | — | `standalone_server.py` |
 | `STUDIO_AGENT` | — | — | `shared/utils/langgraph/studio_graph.py` |
-| `SUPABASE_BUCKET` | — / `artifacts` / `public-bucket` ⚠ | — | `adk_main.py`, `shared/utils/artifacts/supabase_artifact_service.py`, `shared/utils/langgraph/artifact_adapter.py` +2 more |
+| `SUPABASE_BUCKET` | `artifacts` | bucket for both Supabase artifacts and the Supabase storage tools (default artifacts); image links assume it is public | `shared/utils/settings.py` |
 | `SUPABASE_KEY` | — | — | `adk_main.py`, `shared/utils/artifacts/supabase_artifact_service.py`, `shared/utils/langgraph/artifact_adapter.py` +1 more |
 | `SUPABASE_URL` | — | — | `adk_main.py`, `shared/utils/artifacts/supabase_artifact_service.py`, `shared/utils/langgraph/artifact_adapter.py` +2 more |
 | `TAVILY_API_KEY` | — | Web search for the google_search tool. With a key, results come from the Tavily API; without one, the tool falls back to DuckDuckGo. | `shared/utils/tools/google_tools.py` |
@@ -158,4 +157,4 @@ Every environment variable the code reads: **133** in total. Descriptions come f
 
 Usually consumed by a library (LiteLLM provider keys, OpenTelemetry, LangSmith) rather than by MATE directly; otherwise a leftover:
 
-`ANTHROPIC_API_KEY`, `AWS_ACCESS_KEY_ID`, `AWS_BUCKET_NAME`, `AWS_ENDPOINT_URL`, `AWS_REGION`, `AWS_SECRET_ACCESS_KEY`, `DEEPSEEK_API_KEY`, `LANGSMITH_API_KEY`, `LANGSMITH_ENDPOINT`, `LANGSMITH_PROJECT`, `LANGSMITH_TRACING`, `OLLAMA_API_BASE`
+`ANTHROPIC_API_KEY`, `AWS_ACCESS_KEY_ID`, `AWS_BUCKET_NAME`, `AWS_ENDPOINT_URL`, `AWS_REGION`, `AWS_SECRET_ACCESS_KEY`, `DEEPSEEK_API_KEY`, `LANGSMITH_API_KEY`, `LANGSMITH_ENDPOINT`, `LANGSMITH_PROJECT`, `LANGSMITH_TRACING`, `OLLAMA_API_BASE`, `OTEL_EXPORTER_OTLP_PROTOCOL`

@@ -24,7 +24,9 @@ def _create_service() -> Any:
         SupabaseArtifactService,
     )
 
-    service_type = os.getenv("ARTIFACT_SERVICE", "none").lower()
+    from shared.utils import settings
+
+    service_type = settings.artifact_service()
     if service_type == "local_folder":
         artifact_dir = PROJECT_ROOT / "artifacts"
         artifact_dir.mkdir(exist_ok=True, parents=True)
@@ -41,7 +43,7 @@ def _create_service() -> Any:
         return SupabaseArtifactService(
             url=os.getenv("SUPABASE_URL"),
             key=os.getenv("SUPABASE_KEY"),
-            bucket_name=os.getenv("SUPABASE_BUCKET", "artifacts"),
+            bucket_name=settings.supabase_bucket(),
         )
     from google.adk.artifacts.in_memory_artifact_service import InMemoryArtifactService
     logger.info("Artifact service: in-memory (ARTIFACT_SERVICE not set)")

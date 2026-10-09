@@ -16,6 +16,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **Migration V037** drops the CHECK constraints V026 put on `alert_rules.condition_type` and `destination_type` (SQLite rebuilds the table, keeping every rule), which refused any type added after them. The dashboard API validates both lists, and tables created by SQLAlchemy never had the constraints
+- **One default per environment variable** (#157) - `SUPABASE_BUCKET` defaults to `artifacts` everywhere. The Supabase storage tools used `public-bucket`, so with the variable unset they and the artifact service wrote to different buckets; if you relied on that, set `SUPABASE_BUCKET`. Image links for Supabase artifacts are now built with that default too, where they used to be left out. `DB_NAME` defaults to `mate_agent` for the application database as it already did for sessions, so PostgreSQL and MySQL need only `DB_USER` and `DB_PASSWORD`. Defaults now live in `shared/utils/settings.py`
+- `get_otlp_endpoint()` and `get_otlp_protocol()` are removed from the tracing config; nothing called them, and the `http://localhost:4318` default they advertised never applied: without `OTEL_EXPORTER_OTLP_ENDPOINT` no OTLP exporter is added
+
+### Fixed
+
+- **`shared/migrate.py` without a `.env` looked for PostgreSQL** (#157) - run on its own, the migration runner fell back to `DB_TYPE=postgresql` and, for SQLite, to `mate_agent.db` relative to the working directory, while the application uses SQLite and `my_agent_data.db` in the project root. `migrate.py status` and `run` therefore failed with "No database engine available", or migrated a different file. The runner, the database client, the session store and the dashboard now read the database settings from one place
+- **MySQL sessions used port 5432** (#157) - with `DB_TYPE=mysql` and `DB_PORT` unset, the application database used 3306 but the ADK session store 5432
 
 ## [1.4.0] - 2026-10-05
 

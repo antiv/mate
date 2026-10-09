@@ -18,6 +18,13 @@ Connection settings are listed in the
 [configuration reference](../reference/configuration.md); the tables are listed in
 the [database reference](../reference/database.md).
 
+Every part of MATE reads those settings through `shared/utils/settings.py`: the
+database client, the migration runner (also `shared/migrate.py` run on its own), the
+ADK session store and the dashboard's database panel. A relative `DB_PATH` is taken
+from the project root, and `DB_PORT` defaults to 5432, or 3306 when `DB_TYPE=mysql`.
+Read a database variable through that module rather than `os.getenv`, so a new
+caller cannot quietly pick a different database.
+
 ## Models and migrations are separate
 
 `shared/utils/models.py` holds the SQLAlchemy models the code queries through.

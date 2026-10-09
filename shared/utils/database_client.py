@@ -18,6 +18,7 @@ from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.exc import SQLAlchemyError
 import sqlalchemy.pool
 from dotenv import load_dotenv
+from . import settings
 from .models import Base
 
 logger = logging.getLogger(__name__)
@@ -46,49 +47,12 @@ class DatabaseClient:
     def __init__(self):
         self._engine = None
         self._session_factory = None
-        self._db_type = os.getenv("DB_TYPE", "sqlite").lower()
+        self._db_type = settings.db_type()
         self._initialize_connection()
     
     def _get_database_url(self) -> str:
         """Generate database URL based on DB_TYPE."""
-        db_type = self._db_type
-        
-        if db_type == "postgresql":
-            host = os.getenv("DB_HOST", "localhost")
-            port = os.getenv("DB_PORT", "5432")
-            database = os.getenv("DB_NAME")
-            user = os.getenv("DB_USER")
-            password = os.getenv("DB_PASSWORD")
-            
-            if not all([database, user, password]):
-                raise ValueError("PostgreSQL requires DB_NAME, DB_USER, and DB_PASSWORD")
-            
-            return f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{database}"
-        
-        elif db_type == "sqlite":
-            database_path = os.getenv("DB_PATH", "my_agent_data.db")
-            # Make path absolute to avoid issues when running from different directories
-            if not os.path.isabs(database_path):
-                # Find the project root (where .env file should be)
-                current_dir = Path(__file__).parent
-                project_root = current_dir.parent.parent  # Go up from shared/utils/ to project root
-                database_path = str(project_root / database_path)
-            return f"sqlite:///{database_path}"
-        
-        elif db_type == "mysql":
-            host = os.getenv("DB_HOST", "localhost")
-            port = os.getenv("DB_PORT", "3306")
-            database = os.getenv("DB_NAME")
-            user = os.getenv("DB_USER")
-            password = os.getenv("DB_PASSWORD")
-            
-            if not all([database, user, password]):
-                raise ValueError("MySQL requires DB_NAME, DB_USER, and DB_PASSWORD")
-            
-            return f"mysql+pymysql://{user}:{password}@{host}:{port}/{database}"
-        
-        else:
-            raise ValueError(f"Unsupported database type: {db_type}")
+        return settings.database_url()
     
     def _initialize_connection(self):
         """Initialize the SQLAlchemy engine and session factory."""
@@ -403,31 +367,7 @@ For simple single-topic queries, delegate to the right agent and let them respon
     
     def get_connection_info(self) -> dict:
         """Get database connection information for display."""
-        info = {
-            "type": self._db_type.upper(),
-            "hostname": None,
-            "filename": None,
-            "database": None,
-            "port": None
-        }
-        
-        if self._db_type == "sqlite":
-            database_path = os.getenv("DB_PATH", "my_agent_data.db")
-            if not os.path.isabs(database_path):
-                current_dir = Path(__file__).parent
-                project_root = current_dir.parent.parent
-                database_path = str(project_root / database_path)
-            info["filename"] = os.path.basename(database_path)
-        elif self._db_type == "postgresql":
-            info["hostname"] = os.getenv("DB_HOST", "localhost")
-            info["database"] = os.getenv("DB_NAME", "")
-            info["port"] = os.getenv("DB_PORT", "5432")
-        elif self._db_type == "mysql":
-            info["hostname"] = os.getenv("DB_HOST", "localhost")
-            info["database"] = os.getenv("DB_NAME", "")
-            info["port"] = os.getenv("DB_PORT", "3306")
-        
-        return info
+        return settings.database_info()
 
     def close(self):
         """Close the database connection."""

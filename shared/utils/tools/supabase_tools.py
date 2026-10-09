@@ -18,6 +18,8 @@ from typing import Any, Dict, List, Optional
 
 from google.adk.tools.tool_context import ToolContext
 
+from .. import settings
+
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +66,7 @@ def supabase_upload_file(
     """
     try:
         client = _get_supabase_client()
-        bucket = os.getenv("SUPABASE_BUCKET", "public-bucket")
+        bucket = settings.supabase_bucket()
         storage = client.storage.from_(bucket)
 
         file_bytes = base64.b64decode(file_bytes_b64)
@@ -126,7 +128,7 @@ def supabase_get_file(
     """
     try:
         client = _get_supabase_client()
-        bucket = os.getenv("SUPABASE_BUCKET", "public-bucket")
+        bucket = settings.supabase_bucket()
         storage = client.storage.from_(bucket)
         file_bytes: bytes = storage.download(path)
 
@@ -168,7 +170,7 @@ def supabase_delete_file(
     """
     try:
         client = _get_supabase_client()
-        bucket = os.getenv("SUPABASE_BUCKET", "public-bucket")
+        bucket = settings.supabase_bucket()
         storage = client.storage.from_(bucket)
         storage.remove([path])
         return {"status": "success", "bucket": bucket, "path": path}

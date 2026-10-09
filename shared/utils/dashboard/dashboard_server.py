@@ -574,28 +574,8 @@ class DashboardServer:
 
     def _get_database_info(self) -> dict:
         """Get database connection information."""
-        db_type = os.getenv("DB_TYPE", "sqlite").upper()
-        info = {
-            "type": db_type,
-            "hostname": None,
-            "filename": None,
-            "database": None,
-            "port": None
-        }
-        
-        if db_type == "SQLITE":
-            db_path = os.getenv("DB_PATH", "my_agent_data.db")
-            info["filename"] = os.path.basename(db_path)
-        elif db_type == "POSTGRESQL":
-            info["hostname"] = os.getenv("DB_HOST", "localhost")
-            info["database"] = os.getenv("DB_NAME", "")
-            info["port"] = os.getenv("DB_PORT", "5432")
-        elif db_type == "MYSQL":
-            info["hostname"] = os.getenv("DB_HOST", "localhost")
-            info["database"] = os.getenv("DB_NAME", "")
-            info["port"] = os.getenv("DB_PORT", "3306")
-        
-        return info
+        from shared.utils import settings
+        return settings.database_info()
     
     def _get_all_users(self) -> List[Dict[str, Any]]:
         """Get all users from database."""
