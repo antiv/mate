@@ -10,7 +10,7 @@
         <div>
             <h2 class="text-xl font-bold text-gray-900 dark:text-white">Alerts</h2>
             <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                Get notified when agents start failing, guardrails fire repeatedly, or a token budget runs out.
+                Get notified when agents start failing, guardrails fire repeatedly, a token budget runs out, or agents keep answering with their fallback model.
                 Enable with <code class="bg-gray-100 dark:bg-gray-700 px-1 rounded">ALERTS_ENABLED=true</code>.
             </p>
         </div>
@@ -26,6 +26,7 @@
             <option value="agent_error_count">Agent errors</option>
             <option value="budget_threshold">Budget threshold</option>
             <option value="guardrail_count">Guardrail hits</option>
+            <option value="model_fallback_count">Fallback model used</option>
         </select>
         <select id="filterScope" onchange="AlertPage.loadRules()" class="text-xs border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500">
             <option value="">All Scopes</option>
@@ -77,6 +78,7 @@
                         <option value="agent_error_count">Agent errors</option>
                         <option value="budget_threshold">Budget threshold</option>
                         <option value="guardrail_count">Guardrail hits</option>
+                        <option value="model_fallback_count">Fallback model used</option>
                     </select>
                 </div>
                 <div>
@@ -139,6 +141,8 @@
                             class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-sm">
                         <option value="http">HTTP POST</option>
                         <option value="email">Email</option>
+                        <option value="slack">Slack (incoming webhook)</option>
+                        <option value="discord">Discord (webhook)</option>
                     </select>
                 </div>
                 <div>
@@ -152,6 +156,7 @@
                 <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Webhook URL</label>
                 <input type="text" id="formUrl" placeholder="https://hooks.example.com/mate"
                        class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-sm">
+                <p id="chatHint" class="hidden text-xs text-gray-500 dark:text-gray-400 mt-1">Posts the alert message as text. Anyone with this URL can post to the channel, so treat it as a secret.</p>
             </div>
 
             <div id="emailFields" class="hidden">
@@ -169,7 +174,7 @@
     </div>
 </div>
 
-<script src="/static/js/alerts-page.js?v=1"></script>
+<script src="/static/js/alerts-page.js?v=2"></script>
 <script>
     document.addEventListener('DOMContentLoaded', function () { AlertPage.init(); });
 </script>

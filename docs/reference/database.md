@@ -10,7 +10,7 @@ generated: true
 
 # Database reference
 
-**32** tables defined in `shared/utils/models.py`; migrations are at **V036**. Migrations apply automatically on startup and are the source of truth for the schema: the models describe it, the migrations create it.
+**32** tables defined in `shared/utils/models.py`; migrations are at **V037**. Migrations apply automatically on startup and are the source of truth for the schema: the models describe it, the migrations create it.
 
 ## Migrations
 
@@ -54,6 +54,7 @@ A ✗ means that dialect has no file for that version. All dialects are in step.
 | V034 | agent fallback model | ✓ | ✓ | ✓ |
 | V035 | scrub tavily key | ✓ | ✓ | ✓ |
 | V036 | mate help agent | ✓ | ✓ | ✓ |
+| V037 | alert rules open types | ✓ | ✓ | ✓ |
 
 ## `users`
 
@@ -579,9 +580,9 @@ Model `AlertRule`. Notification rule: a condition over recorded events, a destin
 | `description` | `Text` | — | — | — |
 | `scope` | `String(20)` | not null | — | user \| agent \| project \| global |
 | `scope_id` | `String(255)` | — | — | NULL only when scope='global' |
-| `condition_type` | `String(50)` | not null | — | agent_error_count \| budget_threshold \| guardrail_count |
+| `condition_type` | `String(50)` | not null | — | agent_error_count \| budget_threshold \| guardrail_count \| model_fallback_count |
 | `condition_config` | `Text` | — | — | — |
-| `destination_type` | `String(50)` | not null | — | http \| email |
+| `destination_type` | `String(50)` | not null | — | http \| email \| slack \| discord |
 | `destination_config` | `Text` | — | — | — |
 | `cooldown_seconds` | `Integer` | not null | `3600` | — |
 | `is_enabled` | `Boolean` | not null | `True` | — |

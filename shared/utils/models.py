@@ -1306,9 +1306,9 @@ class AlertRule(Base):
     description = Column(Text, nullable=True)
     scope = Column(String(20), nullable=False)  # user | agent | project | global
     scope_id = Column(String(255), nullable=True)  # NULL only when scope='global'
-    condition_type = Column(String(50), nullable=False)  # agent_error_count | budget_threshold | guardrail_count
+    condition_type = Column(String(50), nullable=False)  # agent_error_count | budget_threshold | guardrail_count | model_fallback_count
     condition_config = Column(Text, nullable=True)
-    destination_type = Column(String(50), nullable=False)  # http | email
+    destination_type = Column(String(50), nullable=False)  # http | email | slack | discord
     destination_config = Column(Text, nullable=True)
     cooldown_seconds = Column(Integer, nullable=False, default=3600)
     is_enabled = Column(Boolean, nullable=False, default=True)

@@ -7279,8 +7279,9 @@ class DashboardServer:
 
             destination_config = body.get("destination_config")
             if destination_config is not None:
-                if destination_type == 'http' and not (destination_config.get("url") or "").strip():
-                    raise HTTPException(status_code=400, detail="destination_config.url is required for http")
+                if destination_type in ('http', 'slack', 'discord') and not (destination_config.get("url") or "").strip():
+                    raise HTTPException(status_code=400,
+                                        detail=f"destination_config.url is required for {destination_type}")
                 if destination_type == 'email' and not (destination_config.get("to") or "").strip():
                     raise HTTPException(status_code=400, detail="destination_config.to is required for email")
                 fields["destination_config"] = destination_config
