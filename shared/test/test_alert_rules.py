@@ -19,7 +19,7 @@ from sqlalchemy.orm import sessionmaker
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from shared.utils.models import (
-    AgentConfig, AlertRule, Base, GuardrailLog, RateLimitConfig,
+    AgentConfig, AlertRule, AuditLog, Base, GuardrailLog, RateLimitConfig,
 )
 from shared.utils.alert_service import AlertService
 
@@ -251,6 +251,56 @@ class TestConditions(_AlertTestCase):
             self.service.evaluate_all()
         self.assertEqual(post.call_count, 2)
 
+    def _fallback(self, agent_name="a1", actor="u1", minutes_ago=1, action="agent.model_fallback"):
+        session = self.Session()
+        session.add(AuditLog(actor=actor, action=action, resource_type="agent",
+                             resource_id=agent_name,
+                             timestamp=self.now - timedelta(minutes=minutes_ago)))
+        session.commit()
+        session.close()
+
+    def test_fallback_condition_counts_fallback_audit_entries_in_the_window(self):
+        for _ in range(3):
+            self._fallback()
+        self._fallback(minutes_ago=120)                     # outside the window
+        self._fallback(agent_name="other")                  # another agent
+        self._fallback(action="agent.update")               # not a fallback
+        self._rule(condition_type="model_fallback_count",
+                   condition_config={"threshold": 3, "window_minutes": 15})
+        with patch("shared.utils.alert_service.post_json", return_value=(True, "ok")) as post:
+            fired = self.service.evaluate_all()
+        self.assertEqual(len(fired), 1)
+        payload = post.call_args.args[1]
+        self.assertEqual(payload["event"], "model_fallback_alert")
+        self.assertEqual(payload["value"], 3)
+
+    def test_fallback_condition_below_threshold_does_not_fire(self):
+        self._fallback()
+        self._rule(condition_type="model_fallback_count",
+                   condition_config={"threshold": 2, "window_minutes": 15})
+        with patch("shared.utils.alert_service.post_json", return_value=(True, "ok")) as post:
+            self.assertEqual(self.service.evaluate_all(), [])
+        post.assert_not_called()
+
+    def test_fallback_condition_scopes(self):
+        session = self.Session()
+        session.add(AgentConfig(name="a1", type="llm", project_id=5))
+        session.add(AgentConfig(name="a2", type="llm", project_id=5))
+        session.commit()
+        session.close()
+        self._fallback(agent_name="a1", actor="u1")
+        self._fallback(agent_name="a2", actor="u2")
+        self._fallback(agent_name="elsewhere", actor="u1")
+        cases = {("project", "5"): 2, ("user", "u1"): 2, ("global", None): 3, ("project", "9"): 0}
+        for (scope, scope_id), expected in cases.items():
+            session = self.Session()
+            rule = AlertRule(name="r", scope=scope, scope_id=scope_id,
+                             condition_type="model_fallback_count", destination_type="http")
+            rule.set_condition_config({"threshold": 1, "window_minutes": 15})
+            measured = self.service._measure(session, rule)
+            session.close()
+            self.assertEqual(measured["value"], expected, (scope, scope_id))
+
 
 class TestDelivery(_AlertTestCase):
 
@@ -260,6 +310,36 @@ class TestDelivery(_AlertTestCase):
         with patch("shared.utils.alert_service.send_email", return_value=(True, "sent")) as send:
             self.service.evaluate_all()
         self.assertEqual(send.call_args.args[0], "ops@example.com")
+
+    def test_slack_destination_posts_the_message_as_escaped_text(self):
+        self.token_service.get_error_count_since.return_value = 5
+        self._rule(name="<!channel> bot", destination_type="slack",
+                   destination_config={"url": "https://hooks.slack.com/services/T/B/x"})
+        with patch("shared.utils.alert_service.post_json", return_value=(True, "ok")) as post:
+            self.service.evaluate_all()
+        url, body = post.call_args.args[0], post.call_args.args[1]
+        self.assertEqual(url, "https://hooks.slack.com/services/T/B/x")
+        self.assertEqual(list(body), ["text"])
+        self.assertTrue(body["text"].startswith("[MATE alert] &lt;!channel&gt; bot: "))
+        self.assertIn("recorded 5 errors", body["text"])
+
+    def test_discord_destination_posts_content_without_mentions(self):
+        self.token_service.get_error_count_since.return_value = 5
+        self._rule(name="@everyone bot", destination_type="discord",
+                   destination_config={"url": "https://discord.com/api/webhooks/1/x"})
+        with patch("shared.utils.alert_service.post_json", return_value=(True, "ok")) as post:
+            self.service.evaluate_all()
+        body = post.call_args.args[1]
+        self.assertIn("@everyone bot", body["content"])
+        self.assertEqual(body["allowed_mentions"], {"parse": []})
+
+    def test_chat_test_notification_is_marked_as_a_test(self):
+        self.token_service.get_error_count_since.return_value = 0
+        rule_id = self._rule(destination_type="slack",
+                             destination_config={"url": "https://hooks.slack.com/services/T/B/x"})
+        with patch("shared.utils.alert_service.post_json", return_value=(True, "ok")) as post:
+            self.service.evaluate_rule(rule_id, force=True)
+        self.assertTrue(post.call_args.args[1]["text"].startswith("[MATE alert test] "))
 
     def test_delivery_failure_is_recorded_on_the_rule(self):
         self.token_service.get_error_count_since.return_value = 5

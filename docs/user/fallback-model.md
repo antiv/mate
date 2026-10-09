@@ -71,5 +71,6 @@ A fallback can send a request that was meant for the agent's own endpoint (for
 example a private, self-hosted model) to a third-party provider. Leave the
 field empty on agents whose data must not leave that endpoint.
 
-If the fallback fires often, fix or replace the primary. The fallback is meant
+To be told when it fires, add an [alert rule](alerts.md) on **Fallback model
+used**. If the fallback fires often, fix or replace the primary. The fallback is meant
 to cover outages, not to be the normal path.

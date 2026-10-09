@@ -18,15 +18,22 @@ import os
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
+from sqlalchemy import func
+
 from .database_client import get_database_client
-from .models import AgentConfig, AlertRule, RateLimitConfig
+from .models import AgentConfig, AlertRule, AuditLog, RateLimitConfig
 from .notify import post_json, send_email
 
 logger = logging.getLogger(__name__)
 
-CONDITION_TYPES = ('agent_error_count', 'budget_threshold', 'guardrail_count')
-DESTINATION_TYPES = ('http', 'email')
+CONDITION_TYPES = ('agent_error_count', 'budget_threshold', 'guardrail_count',
+                   'model_fallback_count')
+DESTINATION_TYPES = ('http', 'email', 'slack', 'discord')
 SCOPES = ('user', 'agent', 'project', 'global')
+
+# Chat incoming webhooks take a fixed body, not MATE's payload: Slack rejects a
+# post without `text` and Discord one without `content`.
+_CHAT_MESSAGE_KEYS = {'slack': 'text', 'discord': 'content'}
 
 # Budget periods and the granularity at which "already alerted" resets.
 _PERIOD_WINDOWS = {
@@ -193,6 +200,8 @@ class AlertService:
             return self._measure_guardrail_count(session, rule, config)
         if rule.condition_type == 'budget_threshold':
             return self._measure_budget(session, rule, config)
+        if rule.condition_type == 'model_fallback_count':
+            return self._measure_fallback_count(session, rule, config)
         logger.warning("Unknown condition_type '%s' on rule %s", rule.condition_type, rule.id)
         return None
 
@@ -230,6 +239,34 @@ class AlertService:
             action_taken=config.get('action_taken') or None,
         )
         return {'value': value, 'threshold': threshold,
+                'detail': {'window_minutes': window_minutes}}
+
+    def _measure_fallback_count(self, session, rule: AlertRule,
+                                config: dict) -> Optional[Dict[str, Any]]:
+        """Count requests answered by an agent's fallback model.
+
+        agent_error_count cannot tell these apart: on ADK the primary's failure is
+        an ERROR row like any failed request, and on LangGraph the fallback leaves
+        none. Each fallback writes one agent.model_fallback audit entry, with the
+        agent in resource_id and the chatting user as actor.
+        """
+        from .audit_service import ACTION_MODEL_FALLBACK
+
+        window_minutes = int(config.get('window_minutes', 15))
+        threshold = int(config.get('threshold', 5))
+        since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+        query = session.query(func.count(AuditLog.id)).filter(
+            AuditLog.action == ACTION_MODEL_FALLBACK, AuditLog.timestamp >= since)
+        if rule.scope == 'user':
+            query = query.filter(AuditLog.actor == rule.scope_id)
+        else:
+            agent_names = self._agent_names_for_scope(session, rule)
+            if agent_names is not None:
+                if not agent_names:
+                    return {'value': 0, 'threshold': threshold,
+                            'detail': {'window_minutes': window_minutes}}
+                query = query.filter(AuditLog.resource_id.in_(agent_names))
+        return {'value': int(query.scalar() or 0), 'threshold': threshold,
                 'detail': {'window_minutes': window_minutes}}
 
     def _measure_budget(self, session, rule: AlertRule, config: dict) -> Optional[Dict[str, Any]]:
@@ -333,6 +370,11 @@ class AlertService:
             event = 'agent_error_alert'
             message = (f"{rule.scope} {rule.scope_id} recorded {measurement['value']} errors in "
                        f"the last {detail.get('window_minutes')} minutes")
+        elif rule.condition_type == 'model_fallback_count':
+            event = 'model_fallback_alert'
+            message = (f"{rule.scope} {rule.scope_id} was answered by its fallback model "
+                       f"{measurement['value']} times in the last "
+                       f"{detail.get('window_minutes')} minutes; check the primary model's provider")
         else:
             event = 'guardrail_alert'
             message = (f"{rule.scope} {rule.scope_id} triggered guardrails "
@@ -363,6 +405,16 @@ class AlertService:
             body = payload['message'] + "\n\n" + "\n".join(
                 f"{k}: {v}" for k, v in payload.items() if k != 'message')
             return send_email(config.get('to', ''), subject, body)
+        if rule.destination_type in _CHAT_MESSAGE_KEYS:
+            label = "MATE alert test" if payload.get('test') else "MATE alert"
+            text = f"[{label}] {rule.name}: {payload['message']}"
+            if rule.destination_type == 'slack':
+                # Slack reads <...> as links and mentions (<!channel>); these three are its escapes
+                text = text.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+            body: Dict[str, Any] = {_CHAT_MESSAGE_KEYS[rule.destination_type]: text}
+            if rule.destination_type == 'discord':
+                body['allowed_mentions'] = {'parse': []}  # no @everyone from a rule or agent name
+            return post_json(config.get('url', ''), body, timeout=float(config.get('timeout', 30)))
         return False, f"unknown destination_type '{rule.destination_type}'"
 
     def evaluate_rule(self, rule_id: int, force: bool = False) -> Dict[str, Any]:

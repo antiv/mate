@@ -10,8 +10,9 @@ covers:
 
 # Alerts
 
-Rule-based notifications for the three things that mean something is wrong: agents
-failing, guardrails firing repeatedly, and token budgets running out.
+Rule-based notifications for the things that mean something is wrong: agents
+failing, agents answering on their fallback model, guardrails firing repeatedly, and
+token budgets running out.
 
 ## Enable
 
@@ -32,11 +33,19 @@ database queries and outbound HTTP.
 | `agent_error_count` | `{"threshold": 5, "window_minutes": 15}` | `token_usage_logs` rows with `status='ERROR'` |
 | `guardrail_count` | `{"threshold": 10, "window_minutes": 60, "guardrail_type": null, "action_taken": null}` | `guardrail_logs` |
 | `budget_threshold` | `{"threshold_pct": 90, "period": "day", "token_limit": null}` | token sums vs. the budget |
+| `model_fallback_count` | `{"threshold": 5, "window_minutes": 15}` | `audit_logs` rows with `action='agent.model_fallback'` |
 
 `period` is `hour`, `day` or `month`. A null `token_limit` resolves the limit from the
 matching `rate_limit_config` row for the same scope, so budgets stay configured in one place.
 
 RBAC denials are recorded as `ACCESS_DENIED`, not `ERROR`, so they never trip an error rule.
+
+`agent_error_count` cannot separate failures the fallback model covered: on ADK the
+primary's failure is an `ERROR` row before the fallback runs, and on LangGraph the
+fallback swallows it and leaves none. `model_fallback_count` reads the audit log
+instead, which both runtimes write: one `agent.model_fallback` entry per fallback, with
+the agent in `resource_id` and the chatting user as `actor`. Agent and project scopes
+filter on `resource_id`, user scope on `actor`.
 
 ## Scope
 
@@ -50,9 +59,15 @@ so a project-scoped rule is expanded into that project's agent names at evaluati
 
 - `http` — `{"url": "...", "headers": {...}, "timeout": 30}`, POSTs the alert payload as JSON.
 - `email` — `{"to": "ops@example.com", "subject": "..."}`, requires `SMTP_HOST` and friends.
+- `slack` — `{"url": "https://hooks.slack.com/services/..."}`, a Slack incoming webhook.
+  POSTs `{"text": "[MATE alert] <rule name>: <message>"}`, with `&`, `<` and `>` escaped
+  so a name cannot carry a `<!channel>` mention or a link.
+- `discord` — `{"url": "https://discord.com/api/webhooks/..."}`. POSTs the same text as
+  `content`, with `allowed_mentions` empty so it cannot ping `@everyone`.
 
-Slack is not yet a destination: `channel_integrations` has no channel column and the
-existing Slack helper is async and keyed by workspace, not project.
+Chat webhooks take a fixed body, so they get the message line, not the payload below; a
+test notification starts with `[MATE alert test]`. They do not go through the Slack
+integration (`channel_integrations`), which is a bot keyed by workspace.
 
 Payload:
 
@@ -72,7 +87,8 @@ Payload:
 }
 ```
 
-Budget alerts keep the historical `"event": "rate_limit_alert"` name so webhooks written
+`event` is `agent_error_alert`, `guardrail_alert`, `model_fallback_alert` or, for budgets,
+`rate_limit_alert`. Budget alerts keep that historical name so webhooks written
 against the old rate-limit alert keep working.
 
 ## Cooldown
@@ -102,4 +118,4 @@ clearly-marked test notification without touching the cooldown or the fire count
 - `DELETE /dashboard/api/alert-rules/{id}`
 - `POST /dashboard/api/alert-rules/{id}/test`
 
-Everything except the listing is admin-only.
+All of them are admin-only (`server/dashboard_authz.py`).

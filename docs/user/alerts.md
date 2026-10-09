@@ -1,6 +1,6 @@
 ---
 title: Alerts
-summary: Be told by webhook or email when an agent starts failing, guardrails fire repeatedly, or a token budget is nearly used up.
+summary: Be told by webhook, Slack, Discord or email when an agent starts failing, keeps falling back to its fallback model, guardrails fire repeatedly, or a token budget is nearly used up.
 audience: user
 order: 140
 covers:
@@ -26,6 +26,7 @@ in **Control Room → Alerts**.
 |---|---|---|
 | **Agent errors** | Failed requests reach a count within a time window. | **Threshold (count)** and **Window (minutes)** |
 | **Guardrail hits** | Guardrail hits reach a count within a time window. | the same |
+| **Fallback model used** | Requests answered by an agent's [fallback model](fallback-model.md) reach a count within a time window. | the same |
 | **Budget threshold** | Token use reaches a percentage of a budget. | **Threshold (% of budget)**, the **Period** (hour, day or month) and optionally a **Token limit** |
 
 For a budget rule, leave **Token limit** empty to use the budget already configured
@@ -33,6 +34,13 @@ for the same scope on the [Rate Limits](rate-limits.md) page, so the number live
 one place.
 
 A person being refused by an agent's role check is not counted as an agent error.
+
+*Agent errors* cannot tell you whether the [fallback model](fallback-model.md)
+covered a failure. On the ADK runtime the primary model's failure counts as an error
+even when the fallback then answered; on the LangGraph runtime it does not count at
+all. A *Fallback model used* rule counts only the requests the fallback answered, on
+both runtimes, so you learn that a provider is down while people are still getting
+answers.
 
 ## Create a rule
 
@@ -54,6 +62,14 @@ A person being refused by an agent's role check is not counted as an agent error
    - **HTTP POST** sends a JSON message to a **Webhook URL**.
    - **Email** sends to a **Recipient**. This needs outgoing mail configured on the
      server.
+   - **Slack (incoming webhook)** posts the alert as a message to a channel. In Slack,
+     create an [incoming webhook](https://api.slack.com/messaging/webhooks) for the
+     channel and paste its URL into **Webhook URL**.
+   - **Discord (webhook)** does the same for a Discord channel: in the channel's
+     settings, **Integrations → Webhooks → New Webhook**, then **Copy Webhook URL**.
+
+   A Slack or Discord webhook URL lets anyone who has it post in the channel, so the
+   rule list shows "Slack webhook" or "Discord webhook" instead of the URL.
 5. Set the **Cooldown**, then **Save**.
 
 ## How often you are notified
@@ -76,3 +92,5 @@ and send a test notification to check the destination.
 - **Budget threshold**, 80% of the monthly project budget: time to look before the
   limit blocks people.
 - **Guardrail hits**, on the agent behind a public widget: someone may be probing it.
+- **Fallback model used**, scope Global, 10 in 15 minutes: a provider is failing and
+  the fallback is carrying the load.

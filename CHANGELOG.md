@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Alert when agents answer on their fallback model** - the fallback model hides a provider outage from the person chatting, and the *Agent errors* condition could not show it either: on ADK it counts the primary's failure like any other error, on LangGraph not at all. A new **Fallback model used** condition counts the requests a fallback answered in a time window, per agent, project, user or globally, from the `agent.model_fallback` audit entries both runtimes write. Its webhook event is `model_fallback_alert`. See `docs/user/alerts.md`
+- **Slack and Discord as alert destinations** - an alert posted to a Slack or Discord webhook URL as an HTTP destination was refused, since those take a fixed body (`text`, `content`) rather than MATE's payload. Alert rules can now name a **Slack (incoming webhook)** or **Discord (webhook)** destination, which posts the alert message as text. Slack's `<` `>` `&` are escaped and Discord's mentions turned off, so a rule or agent name cannot ping the channel, and the rule list shows the destination type instead of the webhook URL. See `docs/user/alerts.md`
+
+### Changed
+
+- **Migration V037** drops the CHECK constraints V026 put on `alert_rules.condition_type` and `destination_type` (SQLite rebuilds the table, keeping every rule), which refused any type added after them. The dashboard API validates both lists, and tables created by SQLAlchemy never had the constraints
+
 ## [1.4.0] - 2026-10-05
 
 Every deployment should upgrade: the built-in admin account was refused by

@@ -12,6 +12,7 @@ const AlertPage = (function () {
         agent_error_count: 'Agent errors',
         budget_threshold: 'Budget threshold',
         guardrail_count: 'Guardrail hits',
+        model_fallback_count: 'Fallback model used',
     };
 
     const esc = s => String(s === null || s === undefined ? '' : s)
@@ -51,7 +52,11 @@ const AlertPage = (function () {
 
     function _describeDestination(rule) {
         const d = rule.destination_config || {};
-        return rule.destination_type === 'email' ? esc(d.to || '—') : esc(d.url || '—');
+        if (rule.destination_type === 'email') return esc(d.to || '—');
+        // A chat webhook URL is the credential to post in the channel; keep it off the table
+        if (rule.destination_type === 'slack') return 'Slack webhook';
+        if (rule.destination_type === 'discord') return 'Discord webhook';
+        return esc(d.url || '—');
     }
 
     function _render() {
@@ -96,9 +101,12 @@ const AlertPage = (function () {
     }
 
     function onDestinationChange() {
-        const isEmail = document.getElementById('formDestination').value === 'email';
+        const destination = document.getElementById('formDestination').value;
+        const isEmail = destination === 'email';
         document.getElementById('emailFields').classList.toggle('hidden', !isEmail);
         document.getElementById('httpFields').classList.toggle('hidden', isEmail);
+        document.getElementById('chatHint').classList.toggle(
+            'hidden', destination !== 'slack' && destination !== 'discord');
     }
 
     function openCreateModal() {
