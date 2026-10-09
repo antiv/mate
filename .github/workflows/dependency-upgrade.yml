@@ -1,0 +1,89 @@
+name: Dependency upgrade
+
+# Once a month, recompile requirements.lock with the newest releases that
+# requirements.txt allows, run the test suite on it, and open a pull request
+# when anything moved. Exact pins in requirements.txt (google-adk, SQLAlchemy
+# below 2.1) stay where they are: moving those is a decision made by hand,
+# after reading their changelogs. If the tests fail, no pull request is opened
+# and the run is marked failed, which GitHub reports to the workflow's owner.
+on:
+  schedule:
+    - cron: "17 6 1 * *"  # 06:17 UTC on the 1st
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  upgrade:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Recompile the lock with the newest allowed releases
+        run: |
+          python -m pip install --upgrade pip uv
+          uv pip compile requirements.txt -o requirements.lock --universal \
+            --python-version 3.11 --generate-hashes --upgrade
+
+      - name: Anything changed?
+        id: diff
+        run: |
+          if git diff --quiet -- requirements.lock; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install the new lock and run the tests
+        if: steps.diff.outputs.changed == 'true'
+        run: |
+          pip install --require-hashes -r requirements.lock
+          python -m unittest discover -s shared/test -p "test_*.py"
+          python -m pytest shared/test/test_sessions_api.py
+
+      - name: List what moved
+        if: steps.diff.outputs.changed == 'true'
+        run: |
+          git show HEAD:requirements.lock > /tmp/old.lock
+          python - <<'PY' > /tmp/body.md
+          import re
+          def pins(text):
+              return dict(re.findall(r"^([A-Za-z0-9_.\-\[\]]+)==([^\s;\\]+)", text, re.M))
+          old = pins(open("/tmp/old.lock").read())
+          new = pins(open("requirements.lock").read())
+          rows = [(k, old.get(k, "new"), new.get(k, "removed"))
+                  for k in sorted(set(old) | set(new)) if old.get(k) != new.get(k)]
+          print("Monthly `uv pip compile --upgrade` of `requirements.lock`. The unit tests "
+                "passed on it before this pull request was opened.\n")
+          print("Before merging, read the changelogs of the large libraries that moved "
+                "(google-genai, litellm, langgraph, langchain-*, fastapi, starlette, mcp, a2a-sdk) "
+                "and run both runtimes (`AGENT_FRAMEWORK=adk` and `langgraph`), on PostgreSQL if you can.\n")
+          print("| Package | From | To |\n|---|---|---|")
+          for name, a, b in rows:
+              print(f"| {name} | {a} | {b} |")
+          PY
+
+      # A pull request opened with the default token does not start CI on itself.
+      # Set a DEPENDENCY_PR_TOKEN secret (a fine-grained token or GitHub App token
+      # with contents and pull-requests write) to get the usual checks on it.
+      - name: Open the pull request
+        if: steps.diff.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.DEPENDENCY_PR_TOKEN || github.token }}
+          branch: deps/monthly-upgrade
+          delete-branch: true
+          commit-message: "Monthly dependency upgrade"
+          title: "Monthly dependency upgrade"
+          body-path: /tmp/body.md
+          add-paths: requirements.lock
+          labels: dependencies
