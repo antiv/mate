@@ -1,30 +1,195 @@
 #!/usr/bin/env python3
 """
-Unit tests for validate_image_generation_setup with the google-genai SDK.
+Unit tests for the image tool on LiteLLM.
+
+Every image model goes through litellm.aimage_generation. Agent configs saved
+before that (bare OpenAI names, "nano-banana", `true`) must keep working, and the
+keys MATE already uses must reach the provider.
 """
 
+import asyncio
+import base64
+import json
 import os
 import sys
 import unittest
-from unittest.mock import patch
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock, patch
 
-# Add parent directory to path for imports
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+
+from shared.utils.tools import image_tools as it
+
+PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 32
+JPEG = b"\xff\xd8\xff\xe0" + b"\x00" * 32
 
 
-class TestValidateImageGenerationSetupGemini(unittest.TestCase):
-    """The Gemini check must use google-genai's Client, not the old configure() API."""
+def _response(b64=None, url=None):
+    return SimpleNamespace(data=[SimpleNamespace(b64_json=b64, url=url)])
 
-    @patch.dict(os.environ, {"GOOGLE_API_KEY": "test-key"}, clear=True)
-    def test_google_key_reports_gemini_model(self):
-        from shared.utils.tools import image_tools
-        with patch.object(image_tools.genai, "Client") as client_cls:
-            ok, error, details = image_tools.validate_image_generation_setup()
+
+class TestResolveImageModel(unittest.TestCase):
+
+    @patch.dict(os.environ, {}, clear=True)
+    def test_default_is_dall_e_3(self):
+        self.assertEqual(it.resolve_image_model(None), ("dall-e-3", {}))
+
+    @patch.dict(os.environ, {"IMAGE_MODEL": "black_forest_labs/flux-pro-1.1"}, clear=True)
+    def test_image_model_sets_the_default(self):
+        self.assertEqual(it.resolve_image_model(None)[0], "black_forest_labs/flux-pro-1.1")
+
+    @patch.dict(os.environ, {}, clear=True)
+    def test_nano_banana_means_gemini_flash_image_on_openrouter(self):
+        self.assertEqual(it.resolve_image_model("nano-banana")[0],
+                         "openrouter/google/gemini-2.5-flash-image")
+
+    @patch.dict(os.environ, {"GOOGLE_API_KEY": "g"}, clear=True)
+    def test_gemini_takes_the_google_key(self):
+        # LiteLLM's image call reads only GEMINI_API_KEY
+        self.assertEqual(it.resolve_image_model("gemini/gemini-2.5-flash-image")[1], {"api_key": "g"})
+
+    @patch.dict(os.environ, {"OPENROUTER_API_KEY": "or"}, clear=True)
+    def test_a_bare_openai_name_falls_back_to_openrouter_as_before(self):
+        self.assertEqual(it.resolve_image_model("gpt-image-1")[1],
+                         {"api_key": "or", "api_base": "https://openrouter.ai/api/v1"})
+
+    @patch.dict(os.environ, {"OPENAI_API_KEY": "sk", "OPENROUTER_API_KEY": "or"}, clear=True)
+    def test_the_openai_key_wins_for_a_bare_name(self):
+        self.assertEqual(it.resolve_image_model("dall-e-3")[1], {})
+
+    @patch.dict(os.environ, {"OPENAI_API_KEY_BACKUP": "bk"}, clear=True)
+    def test_the_backup_key_is_used_without_the_main_one(self):
+        self.assertEqual(it.resolve_image_model("dall-e-3")[1], {"api_key": "bk"})
+
+
+class TestToolNames(unittest.TestCase):
+
+    def test_names_kept_from_before(self):
+        self.assertEqual(it.image_tool_name("gpt-image-1"), "generate_image_gpt_image_1")
+        self.assertEqual(it.image_tool_name("dall-e-3"), "generate_image_dall_e_3")
+        self.assertEqual(it.image_tool_name("nano-banana"), "generate_image_nano_banana")
+        self.assertEqual(it.image_tool_name("openrouter/google/gemini-2.5-flash-image"),
+                         "generate_image_nano_banana")
+
+    def test_any_model_gets_a_valid_name(self):
+        self.assertEqual(it.image_tool_name("black_forest_labs/flux-pro-1.1"),
+                         "generate_image_black_forest_labs_flux_pro_1_1")
+
+    def _tools(self, image_tools):
+        return it.create_image_tools_from_config(
+            {"name": "a", "tool_config": json.dumps({"image_tools": image_tools})})
+
+    def test_config_shapes(self):
+        self.assertEqual([t.__name__ for t in self._tools(True)], ["generate_image"])
+        self.assertEqual([t.__name__ for t in self._tools({"model": ""})], ["generate_image"])
+        self.assertEqual([t.__name__ for t in self._tools({"model": "stability/sd3-large"})],
+                         ["generate_image_stability_sd3_large"])
+        self.assertEqual(self._tools(False), [])
+
+
+class TestGenerate(unittest.TestCase):
+
+    def _run(self, response, model="black_forest_labs/flux-pro-1.1", config=None, env=None):
+        ctx = MagicMock()
+        ctx.save_artifact = AsyncMock(return_value=3)
+        call = AsyncMock(return_value=response)
+        with patch.dict(os.environ, env or {}, clear=True), \
+                patch("litellm.aimage_generation", call), \
+                patch.object(it, "_get_context_values", return_value=("app", "u", "s")):
+            result = asyncio.run(it._generate_image_internal("a cat", ctx, model, config or {}))
+        return result, call, ctx
+
+    def test_any_model_is_passed_to_litellm_with_its_parameters(self):
+        result, call, _ = self._run(_response(b64=base64.b64encode(PNG).decode()),
+                                    config={"aspect_ratio": "16:9"})
+        kwargs = call.call_args.kwargs
+        self.assertEqual(kwargs["model"], "black_forest_labs/flux-pro-1.1")
+        self.assertEqual(kwargs["aspect_ratio"], "16:9")
+        self.assertTrue(kwargs["drop_params"])
+        self.assertNotIn("size", kwargs)  # OpenAI defaults only for bare OpenAI names
+        self.assertTrue(result["success"])
+        self.assertEqual(result["artifact"]["version"], 3)
+
+    def test_endpoint_and_key_settings_are_not_taken_from_tool_config(self):
+        # An agent can write tool_config through create_agent; it must not redirect the call
+        _, call, _ = self._run(_response(b64=base64.b64encode(PNG).decode()),
+                               config={"api_base": "http://169.254.169.254", "api_key": "x",
+                                       "extra_headers": {"a": "b"}, "quality": "hd"})
+        kwargs = call.call_args.kwargs
+        self.assertNotIn("api_base", kwargs)
+        self.assertNotIn("extra_headers", kwargs)
+        self.assertNotEqual(kwargs.get("api_key"), "x")
+        self.assertEqual(kwargs["quality"], "hd")
+
+    def test_a_bare_openai_name_keeps_its_defaults(self):
+        _, call, _ = self._run(_response(b64=base64.b64encode(PNG).decode()), model="dall-e-3",
+                               env={"OPENAI_API_KEY": "sk"})
+        kwargs = call.call_args.kwargs
+        self.assertEqual((kwargs["size"], kwargs["n"], kwargs["quality"]), ("1024x1024", 1, "standard"))
+
+    def test_a_jpeg_is_saved_as_a_jpeg(self):
+        result, _, ctx = self._run(_response(b64=base64.b64encode(JPEG).decode()))
+        filename, part = ctx.save_artifact.call_args.args
+        self.assertTrue(filename.endswith(".jpg"))
+        self.assertEqual(part.inline_data.mime_type, "image/jpeg")
+        self.assertEqual(result["artifact"]["mime_type"], "image/jpeg")
+
+    def test_a_png_is_marked_as_ai_generated(self):
+        with patch.object(it, "mark_png_as_ai_generated", wraps=it.mark_png_as_ai_generated) as mark:
+            self._run(_response(b64=base64.b64encode(PNG).decode()))
+        mark.assert_called_once()
+
+    def test_a_data_url_is_decoded(self):
+        data_url = "data:image/png;base64," + base64.b64encode(PNG).decode()
+        result, _, ctx = self._run(_response(b64=data_url))
+        self.assertTrue(result["success"])
+        self.assertTrue(ctx.save_artifact.call_args.args[0].endswith(".png"))
+
+    def test_no_image_is_an_error_not_a_success(self):
+        result, _, ctx = self._run(SimpleNamespace(data=[]))
+        self.assertFalse(result["success"])
+        ctx.save_artifact.assert_not_called()
+
+    def test_a_provider_error_is_reported(self):
+        call = AsyncMock(side_effect=Exception("AuthenticationError: invalid api key"))
+        with patch("litellm.aimage_generation", call):
+            result = asyncio.run(it._generate_image_internal("a cat", None, "xai/grok-imagine-image", {}))
+        self.assertFalse(result["success"])
+        self.assertEqual(result["error_type"], "authentication_error")
+        self.assertNotIn("b64", json.dumps(result))
+
+    def test_nano_banana_wrapper_sends_google_names_to_openrouter(self):
+        call = AsyncMock(return_value=_response(url="https://img.example/x.png"))
+        with patch("litellm.aimage_generation", call):
+            asyncio.run(it.generate_image_nano_banana(
+                "a cat", None, model_config={"model": "google/gemini-2.5-flash-image"}))
+        self.assertEqual(call.call_args.kwargs["model"], "openrouter/google/gemini-2.5-flash-image")
+
+
+class TestValidateSetup(unittest.TestCase):
+
+    @patch.dict(os.environ, {"IMAGE_MODEL": "gemini/gemini-2.5-flash-image", "GOOGLE_API_KEY": "g"},
+                clear=True)
+    def test_the_google_key_is_enough_for_gemini(self):
+        ok, error, details = it.validate_image_generation_setup()
         self.assertTrue(ok, error)
-        self.assertEqual(error, "")
-        client_cls.assert_called_once_with(api_key="test-key")
-        self.assertEqual(details["api_key_source"], "GOOGLE_API_KEY")
-        self.assertTrue(details["gemini_models_available"])
+        self.assertEqual(details["provider"], "gemini")
+
+    @patch.dict(os.environ, {}, clear=True)
+    def test_a_missing_key_is_named(self):
+        ok, error, details = it.validate_image_generation_setup()
+        self.assertFalse(ok)
+        self.assertIn("OPENAI_API_KEY", error)
+        self.assertEqual(details["default_model"], "dall-e-3")
+
+
+class TestSniffImage(unittest.TestCase):
+
+    def test_formats(self):
+        self.assertEqual(it._sniff_image(PNG), ("image/png", "png"))
+        self.assertEqual(it._sniff_image(JPEG), ("image/jpeg", "jpg"))
+        self.assertEqual(it._sniff_image(b"RIFF\x00\x00\x00\x00WEBPVP8 "), ("image/webp", "webp"))
+        self.assertEqual(it._sniff_image(b"GIF89a"), ("image/gif", "gif"))
 
 
 if __name__ == "__main__":
