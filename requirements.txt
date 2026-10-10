@@ -33,11 +33,11 @@ starlette
 # SQLAlchemy ORM. 2.1 makes postgresql:// use psycopg (v3), which is not installed:
 # with it the server starts without a database.
 sqlalchemy>=2.0,<2.1
-# Database drivers (install based on DB_TYPE)
+# Database drivers for DB_TYPE=postgresql and DB_TYPE=mysql
 psycopg2-binary  # For PostgreSQL
 asyncpg  # For Async PostgreSQL
-# pymysql  # For MySQL (alternative to mysql-connector-python)
-# aiomysql # For Async MySQL
+pymysql  # For MySQL (DB_TYPE=mysql)
+aiomysql  # For Async MySQL (ADK sessions on MySQL)
 # SQLite is included with Python standard library
 aiosqlite
 greenlet

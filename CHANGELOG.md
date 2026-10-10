@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`DB_TYPE=mysql` failed at startup on a default install** - MATE connects to MySQL with `pymysql`, and ADK keeps sessions on MySQL with `aiomysql`, but both were commented out in `requirements.txt` and missing from `requirements.lock`, so the server stopped with `No module named 'pymysql'`. Both are now installed, like the PostgreSQL drivers (#178)
 - **The Visual Builder's History button did nothing** - the agent form on the Visual Builder has a History button, but the page loaded neither the version history panel nor its script, so clicking it raised an error. It now opens the agent's version history, as on the Agents page
 - **`shared/migrate.py` without a `.env` looked for PostgreSQL** (#157) - run on its own, the migration runner fell back to `DB_TYPE=postgresql` and, for SQLite, to `mate_agent.db` relative to the working directory, while the application uses SQLite and `my_agent_data.db` in the project root. `migrate.py status` and `run` therefore failed with "No database engine available", or migrated a different file. The runner, the database client, the session store and the dashboard now read the database settings from one place
 - **MySQL sessions used port 5432** (#157) - with `DB_TYPE=mysql` and `DB_PORT` unset, the application database used 3306 but the ADK session store 5432
