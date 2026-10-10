@@ -197,6 +197,11 @@ print(f"Using credential service type: {CREDENTIAL_SERVICE_TYPE}")
 # Get service registry
 registry = get_service_registry()
 
+# The application's MySQL URL names the sync driver (mysql+pymysql://); the
+# "mysql" factory switches it to the async one
+if SESSION_DB_URL.startswith("mysql+pymysql://"):
+    SESSION_DB_URL = "mysql://" + SESSION_DB_URL[len("mysql+pymysql://"):]
+
 # Initialize session service using registry
 if SESSION_DB_URL.startswith("sqlite://"):
     session_service = registry.create_session_service(SESSION_DB_URL)
@@ -205,8 +210,9 @@ elif SESSION_DB_URL.startswith("postgresql://"):
 elif SESSION_DB_URL.startswith("mysql://"):
     session_service = registry.create_session_service(SESSION_DB_URL)
 else:
-    # Default to in-memory for unsupported URLs
-    session_service = registry.create_session_service("in_memory://")
+    # Default to in-memory for unsupported URLs. Not through the registry:
+    # "in_memory" is not a valid URL scheme, so it would return None.
+    session_service = InMemorySessionService()
 
 # Initialize artifact service using registry
 if ARTIFACT_SERVICE_TYPE == "local_folder":

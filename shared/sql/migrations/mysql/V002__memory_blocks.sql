@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS memory_blocks (
     id INT AUTO_INCREMENT PRIMARY KEY,
     project_id INT NOT NULL,
     label VARCHAR(500) NOT NULL,
-    value TEXT NOT NULL DEFAULT '',
+    value TEXT NOT NULL DEFAULT (''),
     description TEXT,
     metadata JSON,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,

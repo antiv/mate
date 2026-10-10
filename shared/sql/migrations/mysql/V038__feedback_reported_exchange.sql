@@ -7,5 +7,5 @@
 -- and they are kept here. Rows from MATE's own chats leave both NULL and are read
 -- from the session as before.
 
-ALTER TABLE response_feedback ADD COLUMN IF NOT EXISTS question TEXT NULL;
-ALTER TABLE response_feedback ADD COLUMN IF NOT EXISTS answer TEXT NULL;
+ALTER TABLE response_feedback ADD COLUMN question TEXT NULL;
+ALTER TABLE response_feedback ADD COLUMN answer TEXT NULL;

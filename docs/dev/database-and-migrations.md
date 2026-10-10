@@ -56,7 +56,8 @@ version is not yet in the `schema_migrations` table, in order. Each file runs in
 transaction and is recorded with a checksum.
 
 Statements are executed one at a time, and a statement that fails with "already
-exists" or "duplicate column name" is skipped rather than aborting the migration.
+exists", "duplicate column name" or "duplicate key name" (MySQL's error for an index
+that exists) is skipped rather than aborting the migration.
 This makes re-running tolerant, and it also means a typo that happens to produce
 one of those errors passes silently. Check the result with `status`.
 
@@ -85,6 +86,14 @@ what makes a re-run of `CREATE TABLE` or `ADD COLUMN` statements harmless.
    | Boolean | `BOOLEAN` (stored as 0/1) | `BOOLEAN` | `TINYINT(1)` or `BOOLEAN` |
    | Timestamp | `DATETIME` | `TIMESTAMP` | `DATETIME` |
    | Add a column if missing | not available; rely on the tolerant apply | `ADD COLUMN IF NOT EXISTS` | not available; rely on the tolerant apply |
+   | Create an index if missing | `CREATE INDEX IF NOT EXISTS` | `CREATE INDEX IF NOT EXISTS` | not available; rely on the tolerant apply |
+   | Default on a `TEXT` column | `DEFAULT 'x'` | `DEFAULT 'x'` | only as an expression: `DEFAULT ('x')` |
+   | Index on long strings | no limit | no limit | at most 3072 bytes a key, 4 bytes a character: index a prefix, `col(255)` |
+
+   `shared/test/test_migration_system.py` checks the MySQL files for
+   `ADD COLUMN IF NOT EXISTS` and for a `TEXT` default that is not an expression.
+   Nothing runs them on MySQL in CI, so try a new MySQL migration on a fresh MySQL 8
+   database.
 
 3. Update the model in `models.py`.
 4. Run `python scripts/gen_docs.py`. The database reference lists every version

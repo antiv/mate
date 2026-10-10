@@ -3,6 +3,6 @@
 -- Database: MySQL
 
 ALTER TABLE users
-    ADD COLUMN IF NOT EXISTS email VARCHAR(255),
-    ADD COLUMN IF NOT EXISTS display_name VARCHAR(255),
-    ADD COLUMN IF NOT EXISTS oauth_provider VARCHAR(50);
+    ADD COLUMN email VARCHAR(255),
+    ADD COLUMN display_name VARCHAR(255),
+    ADD COLUMN oauth_provider VARCHAR(50);
