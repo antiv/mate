@@ -10,7 +10,7 @@ generated: true
 
 # HTTP API reference
 
-Every HTTP route declared in the code: **261** routes. 36 have no docstring and so no summary here.
+Every HTTP route declared in the code: **264** routes. 36 have no docstring and so no summary here.
 
 This page lists what exists and where it is implemented. For request and response schemas, and to try a call, use the live Swagger UI under **Documentation → API** in the dashboard.
 
@@ -18,7 +18,7 @@ Requests to `/dashboard/api/*` require an admin, apart from the short allowlist 
 
 ## Auth server and dashboard
 
-Port 8000. Everything a browser or an external client talks to. 241 routes.
+Port 8000. Everything a browser or an external client talks to. 244 routes.
 
 ### Authentication
 
@@ -120,6 +120,9 @@ Documentation pages and search, served from the docs/ folder.
 | `POST` | `/dashboard/api/evals/improve/apply` | Replace the agent's instruction and block values with the reviewed ones: a new config version and a version per block, an audit entry naming what prompted it and every block ver | shared/utils/dashboard/dashboard_server.py · apply_improvement |
 | `POST` | `/dashboard/api/evals/improve/check` | Run the agent's active eval suite with its current config and with the proposed instruction and block values, both in memory, and return the results side by side | shared/utils/dashboard/dashboard_server.py · check_improvement |
 | `POST` | `/dashboard/api/evals/improve/propose` | Suggest a revised instruction for the agent behind a failing test case or a thumbs-down, and revised values for the memory blocks it read while answering that the admin picked ( | shared/utils/dashboard/dashboard_server.py · propose_improvement |
+| `GET` | `/dashboard/api/evals/playground/agent/{agent_name}` | An agent's current model and instructions, and its stored versions, to start variants from | shared/utils/dashboard/dashboard_server.py · playground_agent |
+| `GET` | `/dashboard/api/evals/playground/agents` | Agents the Playground can run, with their model and how many active test cases they have | shared/utils/dashboard/dashboard_server.py · playground_agents |
+| `POST` | `/dashboard/api/evals/playground/run` | Run one prompt, or the agent's active eval suite, on 2-3 variants of the agent and return replies, scores, latency and cost side by side | shared/utils/dashboard/dashboard_server.py · playground_run |
 | `POST` | `/dashboard/api/evals/version/{version_id}/run` | Run the eval suite for all active test cases linked to the agent of this version | shared/utils/dashboard/dashboard_server.py · run_version_eval_suite |
 | `DELETE` | `/dashboard/api/evals/{test_case_id}` | Soft-delete a test case (sets is_active=False) | shared/utils/dashboard/dashboard_server.py · delete_test_case |
 | `PUT` | `/dashboard/api/evals/{test_case_id}` | Update a test case's fields | shared/utils/dashboard/dashboard_server.py · update_test_case |

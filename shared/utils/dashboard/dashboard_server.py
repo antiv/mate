@@ -6336,6 +6336,158 @@ class DashboardServer:
                 "after": _summary(after_results),
             }
 
+        # ── Playground: the same prompts on 2-3 variants of an agent ──────────────
+
+        @self.app.get("/dashboard/api/evals/playground/agents", tags=["Dashboard - Evals"])
+        async def playground_agents(request: Request, username: str = Depends(self._get_auth_user_dependency)):
+            """Agents the Playground can run, with their model and how many active test cases they have."""
+            session = self.db_client.get_session() if self.db_client else None
+            if not session:
+                raise HTTPException(status_code=503, detail="Database not available")
+            try:
+                from sqlalchemy import func
+                counts = dict(session.query(self.TestCase.agent_name, func.count(self.TestCase.id))
+                              .filter(self.TestCase.is_active.is_(True))
+                              .group_by(self.TestCase.agent_name).all())
+                agents = session.query(self.AgentConfig.name, self.AgentConfig.model_name) \
+                    .filter(self.AgentConfig.type == "llm").order_by(self.AgentConfig.name).all()
+                return {"agents": [{"name": name, "model_name": model, "active_cases": counts.get(name, 0)}
+                                   for name, model in agents]}
+            finally:
+                session.close()
+
+        @self.app.get("/dashboard/api/evals/playground/agent/{agent_name}", tags=["Dashboard - Evals"])
+        async def playground_agent(agent_name: str, request: Request,
+                                   username: str = Depends(self._get_auth_user_dependency)):
+            """An agent's current model and instructions, and its stored versions, to start variants from."""
+            session = self.db_client.get_session() if self.db_client else None
+            if not session:
+                raise HTTPException(status_code=503, detail="Database not available")
+            try:
+                config = _agent_row(session, agent_name)
+                versions = (session.query(self.AgentConfigVersion)
+                            .filter(self.AgentConfigVersion.agent_config_id == config.id)
+                            .order_by(self.AgentConfigVersion.version_number.desc()).limit(50).all())
+                active = session.query(self.TestCase).filter(
+                    self.TestCase.agent_name == config.name, self.TestCase.is_active.is_(True)).count()
+                return {"name": config.name, "model_name": config.model_name,
+                        "instruction": config.instruction or "", "active_cases": active,
+                        "versions": [{"id": v.id, "version_number": v.version_number, "tag": v.tag,
+                                      "created_at": v.created_at.isoformat() if v.created_at else None}
+                                     for v in versions]}
+            finally:
+                session.close()
+
+        @self.app.post("/dashboard/api/evals/playground/run", tags=["Dashboard - Evals"])
+        async def playground_run(request: Request, username: str = Depends(self._get_auth_user_dependency),
+                                 body: Dict[str, Any] = Body(...)):
+            """
+            Run one prompt, or the agent's active eval suite, on 2-3 variants of the
+            agent and return replies, scores, latency and cost side by side. A variant
+            is the current config, or a stored version, with an optional other model
+            and other instructions. Nothing is saved or deployed.
+            """
+            import json as _json
+            from shared.utils.agent_improver import MAX_INSTRUCTION_CHARS
+            from shared.utils.eval_playground import (MAX_VARIANTS, MIN_VARIANTS, Case, Variant,
+                                                      add_costs, run_variant, summarize)
+            from shared.utils.eval_runner import EvalRunner
+
+            agent_name = body.get("agent_name")
+            mode = body.get("mode")
+            if mode not in ("prompt", "suite"):
+                raise HTTPException(status_code=400, detail="mode must be prompt or suite")
+            raw_variants = body.get("variants")
+            if not isinstance(raw_variants, list) or not MIN_VARIANTS <= len(raw_variants) <= MAX_VARIANTS:
+                raise HTTPException(status_code=400,
+                                    detail=f"Give {MIN_VARIANTS} to {MAX_VARIANTS} variants")
+
+            session = self.db_client.get_session() if self.db_client else None
+            if not session:
+                raise HTTPException(status_code=503, detail="Database not available")
+            try:
+                config = _agent_row(session, agent_name if isinstance(agent_name, str) else "")
+                current = self._build_config_snapshot(config)
+                variants = []
+                for i, raw in enumerate(raw_variants):
+                    if not isinstance(raw, dict):
+                        raise HTTPException(status_code=400, detail="Each variant must be an object")
+                    snapshot = dict(current)
+                    version_id = raw.get("version_id")
+                    if version_id not in (None, ""):
+                        version = session.get(self.AgentConfigVersion, version_id) \
+                            if isinstance(version_id, int) else None
+                        if version is None or version.agent_config_id != config.id:
+                            raise HTTPException(status_code=400, detail="The version is not one of this agent's")
+                        snapshot = dict(_json.loads(version.config_snapshot or "{}"), name=config.name)
+                    model = raw.get("model_name")
+                    if model not in (None, ""):
+                        if not isinstance(model, str) or len(model) > 255 or any(c.isspace() for c in model):
+                            raise HTTPException(status_code=400, detail="model_name must be a single model name")
+                        snapshot["model_name"] = model
+                    instruction = raw.get("instruction")
+                    if instruction not in (None, ""):
+                        if not isinstance(instruction, str) or len(instruction) > MAX_INSTRUCTION_CHARS:
+                            raise HTTPException(status_code=400, detail="instruction is too long")
+                        snapshot["instruction"] = instruction
+                    label = raw.get("label") if isinstance(raw.get("label"), str) and raw.get("label").strip() \
+                        else f"Variant {chr(65 + i)}"
+                    variants.append(Variant(label=label.strip()[:60], snapshot=snapshot))
+
+                if mode == "suite":
+                    rows = (session.query(self.TestCase)
+                            .filter(self.TestCase.agent_name == config.name, self.TestCase.is_active.is_(True))
+                            .order_by(self.TestCase.id).all())
+                    if not rows:
+                        raise HTTPException(status_code=400, detail="This agent has no active test cases")
+                    cases = [Case(id=r.id, input=r.input, expected_output=r.expected_output,
+                                  eval_method=r.eval_method, threshold=r.threshold, judge_model=r.judge_model)
+                             for r in rows]
+                else:
+                    prompt = body.get("prompt")
+                    if not isinstance(prompt, str) or not prompt.strip() or len(prompt) > 20000:
+                        raise HTTPException(status_code=400, detail="prompt is required, at most 20000 characters")
+                    expected = body.get("expected_output")
+                    method = body.get("eval_method") or "semantic"
+                    if method not in ("exact_match", "semantic", "llm_judge"):
+                        raise HTTPException(status_code=400, detail="eval_method must be exact_match, semantic or llm_judge")
+                    cases = [Case(input=prompt,
+                                  expected_output=expected.strip() if isinstance(expected, str) and expected.strip() else None,
+                                  eval_method=method)]
+            finally:
+                session.close()
+
+            # Have OpenRouter's prices before the runs log their calls, so a variant on
+            # an openrouter model is not compared as unpriced
+            from starlette.concurrency import run_in_threadpool
+            from shared.utils.model_pricing import OPENROUTER_PREFIX, price_for
+            for model in {v.snapshot.get("model_name") or "" for v in variants}:
+                if model.startswith(OPENROUTER_PREFIX):
+                    await run_in_threadpool(price_for, model, True)
+                    break
+
+            scorer = EvalRunner()
+            for variant in variants:
+                await run_variant(variant, cases, scorer)
+
+            session = self.db_client.get_session()
+            try:
+                add_costs(session, variants)
+            finally:
+                session.close()
+
+            return {
+                "agent_name": config.name,
+                "mode": mode,
+                "variants": [{"label": v.label, "model_name": v.snapshot.get("model_name"),
+                              "error": v.error, "summary": summarize(v)} for v in variants],
+                "cases": [{"id": c.id, "input": c.input, "expected_output": c.expected_output,
+                           "results": [{k: v for k, v in variant.results[i].items() if k != "invocation_ids"}
+                                       if i < len(variant.results) else None
+                                       for variant in variants]}
+                          for i, c in enumerate(cases)],
+            }
+
         @self.app.post("/dashboard/api/evals/improve/apply", tags=["Dashboard - Evals"])
         async def apply_improvement(request: Request, username: str = Depends(self._get_auth_user_dependency),
                                     body: Dict[str, Any] = Body(...)):

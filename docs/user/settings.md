@@ -69,8 +69,9 @@ price, the price in use per million tokens (input / output) and where it comes f
   again, or have no price.
 - **Another model** adds a price for a model not used yet.
 - **Fill in missing costs** prices the calls logged without a cost whose model has a
-  price now, for example calls made before OpenRouter's list was fetched. Calls that
-  already have a cost keep it.
+  price now, for example after setting a price by hand. Calls that already have a
+  cost keep it. Calls to `openrouter/` models logged before OpenRouter's list was
+  fetched are priced on their own as soon as it arrives.
 
 Prices are list prices. Discounts for cached input are not applied (the logs do not
 record cached tokens), nor are the higher prices some providers charge for very long
