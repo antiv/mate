@@ -20,18 +20,18 @@ Every environment variable the code reads: **134** in total. Descriptions come f
 | `ADK_PORT` | `8001` | — | `shared/utils/utils.py` |
 | `AGENTS_LIST` | — | — | `shared/utils/langgraph/studio_graph.py` |
 | `AGENT_FRAMEWORK` | `adk` | Server Configuration Agent runtime framework on port ADK_PORT: adk (Google ADK, default) or langgraph | `shared/utils/eval_agent_runner.py`, `shared/utils/server_control_service.py` |
-| `ALERTS_ENABLED` | `false` | Run the alert/trigger scheduler loop | `shared/utils/alert_service.py` |
-| `ALERTS_INTERVAL_SECONDS` | `60` | Scheduler tick interval in seconds (minimum 10) | `shared/utils/trigger_runner.py` |
-| `ALLOWED_API_ROLES` | — | Comma-separated roles allowed to call the API (empty = configured default) | `server/pat_auth.py` |
+| `ALERTS_ENABLED` | `false` | Evaluate alert rules on a schedule | `shared/utils/alert_service.py` |
+| `ALERTS_INTERVAL_SECONDS` | `60` | Seconds between alert rule evaluations (minimum 10) | `shared/utils/trigger_runner.py` |
+| `ALLOWED_API_ROLES` | — | Comma-separated roles allowed on the OpenAI-compatible API (empty = admin,developer) | `server/pat_auth.py` |
 | `ALLOWED_ORIGINS` | `http://localhost:8000,http://127.0.0.1:8000` | Comma-separated CORS allowlist. Dashboard and widget chat are same-origin; /widget/public-config stays open on its own. | `auth_server.py` |
 | `ARTIFACT_SERVICE` | `none` | local_folder, supabase or s3; unset or none keeps artifacts in memory, lost on restart | `shared/utils/settings.py` |
 | `AUDIT_RETENTION_DAYS` | `0` | Audit log retention (EU AI Act compliance). 0 = keep forever; N = delete entries older than N days | `shared/utils/audit_service.py` |
 | `AUTH_PASSWORD` | `mate` | — | `auth_server.py` |
 | `AUTH_USERNAME` | `admin` | Authentication (Basic Auth fallback — always available) | `auth_server.py`, `shared/utils/user_cleanup.py`, `shared/utils/user_service.py` |
 | `BROWSER_ALLOW_PRIVATE_NETWORK` | `false` | Allow the browser to reach private-network hosts | `shared/utils/tools/browser_tools.py` |
-| `BROWSER_CDP_URL` | `http://localhost:9222` | Chrome DevTools endpoint for browser sessions | `shared/utils/tools/browser_tools.py` |
+| `BROWSER_CDP_URL` | `http://localhost:9222` | Chrome DevTools endpoint, used only with BROWSER_MODE=cdp | `shared/utils/tools/browser_tools.py` |
 | `BROWSER_HEADLESS` | `true` | Run Chromium headless | `shared/utils/tools/browser_tools.py` |
-| `BROWSER_MODE` | `headless` | Browser automation mode | `shared/utils/tools/browser_tools.py` |
+| `BROWSER_MODE` | `headless` | headless (launch Chromium) or cdp (attach to a running Chrome) | `shared/utils/tools/browser_tools.py` |
 | `CLEANUP_USER_ENABLED` | `true` | Temporary User Cleanup Configuration (deletes inactive widget and API users) | `shared/utils/trigger_runner.py` |
 | `CLEANUP_USER_TTL_DAYS` | `5` | — | `shared/utils/user_cleanup.py` |
 | `CONTEXT_CACHE_INTERVALS` | `5` | Cache refresh interval count | `shared/utils/utils.py` |
@@ -41,7 +41,7 @@ Every environment variable the code reads: **134** in total. Descriptions come f
 | `CONTEXT_COMPACTION_INTERVAL` | `3` | — | `shared/utils/utils.py` |
 | `CONTEXT_COMPACTION_OVERLAP_SIZE` | `1` | — | `shared/utils/utils.py` |
 | `CONTEXT_COMPACTION_SUMMARIZER_MODEL` | — | — | `shared/utils/utils.py` |
-| `CREDENTIAL_SERVICE` | `database` | Credential backend: database, file, or plugin name | `adk_main.py` |
+| `CREDENTIAL_SERVICE` | `database` | database or in_memory; any other value means database | `adk_main.py` |
 | `CSP_EXTRA_SOURCES` | — | Extra hosts for scripts, styles, fonts, connections and frames, e.g. https://cdn.example.com (comma separated). | `server/csp.py` |
 | `CSP_MODE` | `report-only` | Content-Security-Policy: report-only (log violations, block nothing), enforce, or off. See docs/dev/content-security-policy.md. | `server/csp.py` |
 | `DB_AUTO_CREATE_TABLES` | `true` | Create missing tables at startup | `shared/utils/database_client.py` |
@@ -87,13 +87,13 @@ Every environment variable the code reads: **134** in total. Descriptions come f
 | `MATE_FEEDBACK_URL` | — | Standalone feedback endpoint base URL | `shared/utils/standalone_feedback.py` |
 | `MATE_PLUGINS_ENABLED` | `false` | App-wide MATE plugin: RBAC/guardrails/token tracking as ADK Plugin instead of per-agent callbacks; covers all agents incl. runtime-created ones (requires ADK >= 2.0) | `shared/utils/agent_manager.py`, `shared/utils/utils.py` |
 | `MCP_EXPOSED_AGENTS` | `chess_mate_root` | — | `shared/utils/mcp/agent_mcp_manager.py` |
-| `MEMORY_SERVICE` | `database` | Memory backend: database, file, or plugin name | `adk_main.py` |
-| `MODEL_NAME` | — | Default model override for the OpenAI-compatible proxy | `server/proxy_routes.py`, `server/widget_routes.py` |
+| `MEMORY_SERVICE` | `database` | database; any other value keeps memory in RAM (lost on restart) | `adk_main.py` |
+| `MODEL_NAME` | — | Model assumed for attachment handling when an agent has none (decides if PDFs/images are converted to text) | `server/proxy_routes.py`, `server/widget_routes.py` |
 | `MYSTERY_GEN_MODEL` | — | Model for the mystery-game generator (falls back to default) | `shared/utils/tools/mystery_game.py` |
 | `OAUTH_ALLOWED_DOMAINS` | — | Comma-separated email domains allowed to sign in via SSO. Empty = anyone with a provider account can create a session. | `server/oauth_routes.py` |
 | `OAUTH_ALLOWED_EMAILS` | — | Comma-separated individual emails allowed to sign in. | `server/oauth_routes.py` |
 | `OAUTH_DEFAULT_ROLE` | `pending` | Role for new SSO users. Default 'pending' = no agent access until an admin grants a role on /dashboard/users. Roles: admin (full), user (dashboard agents), widget (public embeddable widget/trial agents — auto-assigned), pending (no access). Agents with NO roles set are admin-only. | `server/oauth_routes.py` |
-| `OLLAMA_HOST` | `http://localhost:11434` | Ollama server for local models | `shared/utils/tools/image_tools.py` |
+| `OLLAMA_HOST` | `http://localhost:11434` | Ollama server for the image_data_extraction (vision) tool only | `shared/utils/tools/image_tools.py` |
 | `OPENAI_API_KEY` | — | LLM Provider API Keys Only set keys for providers you actually use. Model prefix in agent config determines which provider is used: gemini-* → Google Gemini (uses GOOGLE_API_KEY) openai/gpt-4o → OpenAI anthropic/claude-* → Anthropic deepseek/deepseek-* → DeepSeek ollama_chat/model → Local Ollama (set OLLAMA_API_BASE) openrouter/provider/model → OpenRouter (aggregator) mistral/*, groq/*, cohere/*, together_ai/* → respective providers | `shared/utils/tools/image_tools.py` |
 | `OPENAI_API_KEY_BACKUP` | — | Fallback OpenAI key for the image tool | `shared/utils/tools/image_tools.py` |
 | `OPENROUTER_API_KEY` | — | — | `shared/utils/langgraph/model_factory.py`, `shared/utils/tools/image_tools.py`, `shared/utils/utils.py` |
@@ -102,7 +102,7 @@ Every environment variable the code reads: **134** in total. Descriptions come f
 | `OTEL_SERVICE_NAME` | `mate` | — | `shared/utils/tracing/tracing_config.py` |
 | `OTEL_TRACES_DB_EXPORT` | `true` | — | `shared/utils/tracing/tracing_config.py` |
 | `OTEL_TRACING_ENABLED` | `false` | OpenTelemetry Distributed Tracing (optional) | `auth_server.py`, `shared/utils/tracing/tracing_config.py` |
-| `PORT` | `8000` | Main server bind port (langgraph entrypoint) | `adk_main.py`, `langgraph_main.py` |
+| `PORT` | `8000` | Only when running adk_main.py/langgraph_main.py directly; auth_server.py sets it from ADK_PORT | `adk_main.py`, `langgraph_main.py` |
 | `PRINT_CONTEXT_FEATURES_STATUS` | `true` | Log context-feature flags at agent startup | `shared/template_agent/agent.py` |
 | `RATE_LIMIT_ENABLED` | `false` | Rate Limits & Budgets (optional) | `auth_server.py`, `server/openai_routes.py`, `server/proxy_routes.py` |
 | `REDIS_URL` | — | Optional: distributed rate limiting | `shared/utils/rate_limit_service.py` |
@@ -133,7 +133,7 @@ Every environment variable the code reads: **134** in total. Descriptions come f
 | `WIZARD_AGENT_MODEL` | `openrouter/google/gemini-2.5-flash` | Default chat model for trial agents (litellm format). A tier template can override it via model_name. Both default to Gemini Flash via OpenRouter (needs OPENROUTER_API_KEY). | `shared/utils/wizard/provisioning_service.py` |
 | `WIZARD_ANALYSIS_MODEL` | — | LLM that extracts the business summary + services from a scanned site. | `shared/utils/tools/mystery_game.py`, `shared/utils/wizard/site_analyzer.py` |
 | `WIZARD_CALENDAR_TIMEZONE` | `Europe/Belgrade` | Timezone for created events (naive datetimes are normalized to it) | `shared/utils/tools/google_calendar_tools.py` |
-| `WIZARD_CAPTCHA_PROVIDER` | — | CAPTCHA provider for trial signup (empty = disabled) | `server/wizard_routes.py` |
+| `WIZARD_CAPTCHA_PROVIDER` | — | Placeholder: when set, signup only requires a non-empty captcha token; no provider verifies it yet | `server/wizard_routes.py` |
 | `WIZARD_CLEANUP_ENABLED` | `true` | Periodically purge idle/expired wizard sessions | `shared/utils/trigger_runner.py` |
 | `WIZARD_CONTACT_EMAIL` | `sales@example.com` | Contact address shown during signup | `shared/utils/wizard/pricing.py` |
 | `WIZARD_CRAWL_MAX_DEPTH` | `3` | Max link depth when the wizard crawls a site | `shared/utils/wizard/site_crawler.py` |
