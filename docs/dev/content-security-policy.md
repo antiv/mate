@@ -76,8 +76,8 @@ input, keyup and submits for the whole page through event delegation:
 <select data-change="applyFilters">
 ```
 
-- `data-args` is a JSON array. `"$event"` becomes the event and `"$el"` the
-  element. In a Jinja template, build it with `tojson` inside single quotes:
+- `data-args` is a JSON array. `"$event"` becomes the event, `"$el"` the
+  element and `"$value"` its value (what `this.value` was). In a Jinja template, build it with `tojson` inside single quotes:
   `data-args='{{ [agent.name] | tojson }}'`. In HTML built by JavaScript, use
   `data-args="${mateActions.attr([t.id, t.name])}"`, which escapes it for the
   attribute. Values stay data, so a name with a quote in it cannot break out
@@ -85,10 +85,15 @@ input, keyup and submits for the whole page through event delegation:
 - The function runs with `this` set to the element. Nested handlers run
   innermost first, and `event.stopPropagation()` stops the outer ones.
   `data-click="stop"` is the built-in for `onclick="event.stopPropagation()"`.
+  `data-stop` on an element stops propagation after its handler runs, and
+  `data-prevent` calls `preventDefault()` before it, for handlers that began
+  with `event.stopPropagation();` or `event.preventDefault();`.
   It only stops other `data-click` handlers: a listener added with
   `addEventListener` on an outer element has already run by then.
 - Only functions the page allows can be called:
-  `mateActions.allow('closeModal', 'sessionsApp.loadSessions')`. Markup that
+  `mateActions.allow('closeModal', 'sessionsApp.loadSessions')`. A script file
+  allows the functions it defines, at its top, so every page that loads it gets
+  them; a page's inline script allows the ones it defines itself. Markup that
   gets injected into a page therefore cannot call an arbitrary global. Names are
   resolved when the event fires, so a page may allow a function before the
   script that defines it has run.
@@ -101,12 +106,24 @@ input, keyup and submits for the whole page through event delegation:
 2. Replace every `on*=` attribute in the template, and in HTML its scripts
    build, with `data-*` actions or listeners, and allow the functions it calls.
 3. Replace `href="javascript:…"` with a button and an action.
-4. Add the template to `CONVERTED` in `shared/test/test_csp.py`, which checks
-   that it stays free of inline handlers and un-nonced scripts.
-5. Open the page in a browser with the strict policy enforced, use what you
-   changed, and check that no `securitypolicyviolation` events fire.
+4. Add the template to `CONVERTED` in `shared/test/test_csp.py`, and a script
+   that builds HTML to `CONVERTED_JS`. The test checks they stay free of inline
+   handlers and un-nonced scripts.
+5. Bump the `?v=` of every script file you changed, in each template that
+   loads it, so browsers do not pair the new markup with a cached old script.
+6. Open the page in a browser with the strict policy enforced, use what you
+   changed, and check that no `securitypolicyviolation` events fire. Also check
+   that every `data-*` action in the DOM can run, with `mateActions.can(name)`,
+   after opening each modal, since some markup only exists then.
 
-Converted so far: `base.html`, `login.html`, `dashboard/index.html`.
+Converted so far:
+
+- `base.html`, `login.html`, `dashboard/index.html`
+- the Agents page and the Visual Builder (`dashboard/agents.html`,
+  `dashboard/agents_visual.html`), the modals they include, and the scripts
+  that build their markup (`agent-management.js`, `modals/file-search.js`,
+  `modals/memory-blocks.js`, `modals/version-history.js`,
+  `modals/widget-keys.js`)
 
 ## Also allowed
 

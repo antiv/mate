@@ -13,6 +13,11 @@
 /**
  * Show a notification toast (replaces alert)
  */
+// Handlers this file's markup calls through data-click and friends (csp-actions.js)
+mateActions.allow('applyConfigModal', 'clearJsonField', 'closeConfigModal', 'exportAgents',
+                  'openConfigModal', 'openMemoryBlocksFromEditModal', 'resetContentConfig',
+                  'resetPlannerConfig', 'resetToolConfig');
+
 function showAlert(message, type = 'info') {
     if (typeof showNotification === 'function') {
         showNotification(message, type);

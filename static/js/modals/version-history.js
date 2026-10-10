@@ -4,6 +4,11 @@
  * Relies on Monaco Editor (already loaded by the agents page).
  */
 
+// Handlers this file's markup calls through data-click and friends (csp-actions.js)
+mateActions.allow('_vhRunEvals', '_vhSelectVersion', '_vhTagVersion',
+                  'hideVersionHistoryModal', 'rollbackToVersion',
+                  'showVersionHistoryForForm');
+
 (function () {
     'use strict';
 
@@ -14,6 +19,12 @@
     let _diffEditor = null;
 
     // ── Public API (attached to window) ──────────────────────────────────
+
+    // The agent form's History button: the version history of the agent it is editing
+    window.showVersionHistoryForForm = function (idPrefix) {
+        window.showVersionHistoryModal(document.getElementById(idPrefix + 'Id').value,
+                                       document.getElementById(idPrefix + 'Name').value);
+    };
 
     window.showVersionHistoryModal = function (configId, agentName) {
         _agentConfigId = configId;
@@ -108,7 +119,7 @@
             const timeStr = date ? date.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
             return `
             <div class="px-3 py-2 cursor-pointer border-b border-gray-100 dark:border-gray-700 hover:bg-blue-50 dark:hover:bg-gray-700/50 transition-colors ${isSelected ? 'bg-blue-50 dark:bg-gray-700 ring-1 ring-inset ring-blue-400 dark:ring-blue-600' : ''}"
-                 onclick="window._vhSelectVersion(${v.id})">
+                 data-click="_vhSelectVersion" data-args="${mateActions.attr([v.id])}">
                 <div class="flex items-center justify-between">
                     <span class="text-xs font-mono font-semibold text-gray-800 dark:text-gray-200">
                         ${_changeTypeIcon(v.change_type)}v${v.version_number}
@@ -118,7 +129,7 @@
                 ${v.tag ? `<span class="inline-block mt-0.5 px-1.5 py-0.5 text-[10px] bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-300 rounded">${_escHtml(v.tag)}</span>` : ''}
                 ${v.changed_by ? `<div class="text-[10px] text-gray-400 mt-0.5"><i class="fas fa-user mr-0.5"></i>${_escHtml(v.changed_by)}</div>` : ''}
                 <div class="flex items-center mt-1 space-x-1">
-                    <button onclick="event.stopPropagation(); window._vhTagVersion(${v.id}, ${JSON.stringify(v.tag || '').replace(/"/g, '&quot;')})" class="text-[10px] text-gray-400 hover:text-yellow-600 dark:hover:text-yellow-400" title="Tag this version">
+                    <button data-click="_vhTagVersion" data-args="${mateActions.attr([v.id, v.tag || ''])}" data-stop class="text-[10px] text-gray-400 hover:text-yellow-600 dark:hover:text-yellow-400" title="Tag this version">
                         <i class="fas fa-tag"></i>
                     </button>
                 </div>

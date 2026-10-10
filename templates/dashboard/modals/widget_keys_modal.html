@@ -8,7 +8,7 @@
                     <h3 class="text-sm font-semibold text-gray-900 dark:text-white">Widget API Keys</h3>
                     <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Agent: <span id="widgetKeysAgentName" class="font-medium"></span></p>
                 </div>
-                <button onclick="hideWidgetKeysModal()" class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
+                <button data-click="hideWidgetKeysModal" class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
                     <i class="fas fa-times text-lg"></i>
                 </button>
             </div>
@@ -30,7 +30,7 @@
                             <label class="block text-xs text-gray-600 dark:text-gray-400 mb-1">Allowed Origins (comma-separated, leave blank for all)</label>
                             <input type="text" id="widgetKeyOrigins" placeholder="e.g. https://example.com, https://app.example.com" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500">
                         </div>
-                        <button onclick="generateWidgetKey()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 text-xs rounded flex items-center">
+                        <button data-click="generateWidgetKey" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 text-xs rounded flex items-center">
                             <i class="fas fa-key mr-1.5"></i>
                             Generate Key
                         </button>
@@ -47,7 +47,7 @@
         <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-lg w-full">
             <div class="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
                 <h3 class="text-sm font-semibold text-gray-900 dark:text-white">Embed Code</h3>
-                <button onclick="document.getElementById('widgetEmbedModal').classList.add('hidden')" class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
+                <button data-click="hideWidgetEmbedModal" class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
                     <i class="fas fa-times"></i>
                 </button>
             </div>
@@ -55,7 +55,7 @@
                 <p class="text-xs text-gray-600 dark:text-gray-400 mb-2">Add this snippet to your website's HTML, just before the closing <code>&lt;/body&gt;</code> tag:</p>
                 <div class="relative">
                     <pre id="widgetEmbedCode" class="bg-gray-100 dark:bg-gray-900 text-xs p-3 rounded-lg overflow-x-auto text-gray-800 dark:text-gray-200 font-mono whitespace-pre-wrap"></pre>
-                    <button onclick="copyEmbedCode()" class="absolute top-2 right-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200" title="Copy to clipboard">
+                    <button data-click="copyEmbedCode" class="absolute top-2 right-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200" title="Copy to clipboard">
                         <i class="fas fa-copy"></i>
                     </button>
                 </div>

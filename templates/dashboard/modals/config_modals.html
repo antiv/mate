@@ -2,7 +2,7 @@
 {% macro config_modals(id_prefix) %}
 <!-- Tool Configuration Modal -->
 <div id="{{ id_prefix }}ToolConfigModal" class="fixed inset-0 z-[120] hidden">
-    <div class="absolute inset-0 bg-black/60" onclick="closeConfigModal('{{ id_prefix }}', 'ToolConfig')"></div>
+    <div class="absolute inset-0 bg-black/60" data-click="closeConfigModal" data-args='[{{ id_prefix|string|tojson }}, "ToolConfig"]'></div>
     <div class="relative z-10 mx-auto my-6 w-full max-w-3xl px-2">
         <div
             class="config-modal-box bg-white dark:bg-gray-800 rounded-lg shadow-2xl border border-gray-200 dark:border-gray-700 flex flex-col min-h-[560px] max-h-[90vh]">
@@ -13,7 +13,7 @@
                 </div>
                 <button type="button"
                     class="text-gray-500 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-100"
-                    onclick="closeConfigModal('{{ id_prefix }}', 'ToolConfig')">
+                    data-click="closeConfigModal" data-args='[{{ id_prefix|string|tojson }}, "ToolConfig"]'>
                     <i class="fas fa-times text-base"></i>
                 </button>
             </div>
@@ -167,7 +167,7 @@
                                 <span class="text-xs font-medium text-gray-700 dark:text-gray-300">Manual JSON</span>
                             </div>
                             <button type="button"
-                                onclick="toggleJsonEditor('{{ id_prefix }}ToolConfig', '{{ id_prefix }}ToolConfigEditor')"
+                                data-click="toggleJsonEditor" data-args='[{{ (id_prefix ~ "ToolConfig")|tojson }}, {{ (id_prefix ~ "ToolConfigEditor")|tojson }}]'
                                 class="text-xs bg-blue-500 hover:bg-blue-600 text-white px-1.5 py-0.5 rounded">
                                 <i class="fas fa-code mr-0.5"></i>JSON
                             </button>
@@ -193,16 +193,16 @@
             <div class="px-4 py-3 border-t border-gray-200 dark:border-gray-700 flex justify-end space-x-2">
                 <button type="button"
                     class="px-3 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded text-gray-600 dark:text-gray-300 hover:border-gray-400 dark:hover:border-gray-500"
-                    onclick="closeConfigModal('{{ id_prefix }}', 'ToolConfig')">
+                    data-click="closeConfigModal" data-args='[{{ id_prefix|string|tojson }}, "ToolConfig"]'>
                     Cancel
                 </button>
                 <button type="button"
                     class="px-3 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded text-gray-600 dark:text-gray-300 hover:border-gray-400 dark:hover:border-gray-500"
-                    onclick="resetToolConfig('{{ id_prefix }}')">
+                    data-click="resetToolConfig" data-args='[{{ id_prefix|string|tojson }}]'>
                     Reset
                 </button>
                 <button type="button" class="px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded"
-                    onclick="applyConfigModal('{{ id_prefix }}', 'ToolConfig')">
+                    data-click="applyConfigModal" data-args='[{{ id_prefix|string|tojson }}, "ToolConfig"]'>
                     Save
                 </button>
             </div>
@@ -212,7 +212,7 @@
 
 <!-- MCP Configuration Modal -->
 <div id="{{ id_prefix }}McpServersConfigModal" class="fixed inset-0 z-[120] hidden">
-    <div class="absolute inset-0 bg-black/60" onclick="closeConfigModal('{{ id_prefix }}', 'McpServersConfig')"></div>
+    <div class="absolute inset-0 bg-black/60" data-click="closeConfigModal" data-args='[{{ id_prefix|string|tojson }}, "McpServersConfig"]'></div>
     <div class="relative z-10 mx-auto my-6 w-full max-w-3xl px-2">
         <div
             class="config-modal-box bg-white dark:bg-gray-800 rounded-lg shadow-2xl border border-gray-200 dark:border-gray-700 flex flex-col min-h-[480px] max-h-[85vh]">
@@ -224,7 +224,7 @@
                 </div>
                 <button type="button"
                     class="text-gray-500 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-100"
-                    onclick="closeConfigModal('{{ id_prefix }}', 'McpServersConfig')">
+                    data-click="closeConfigModal" data-args='[{{ id_prefix|string|tojson }}, "McpServersConfig"]'>
                     <i class="fas fa-times text-base"></i>
                 </button>
             </div>
@@ -232,7 +232,7 @@
                 <div class="flex items-center justify-between">
                     <span class="text-xs font-medium text-gray-700 dark:text-gray-300">JSON Configuration</span>
                     <button type="button"
-                        onclick="toggleJsonEditor('{{ id_prefix }}McpServersConfig', '{{ id_prefix }}McpServersConfigEditor')"
+                        data-click="toggleJsonEditor" data-args='[{{ (id_prefix ~ "McpServersConfig")|tojson }}, {{ (id_prefix ~ "McpServersConfigEditor")|tojson }}]'
                         class="text-xs bg-blue-500 hover:bg-blue-600 text-white px-1.5 py-0.5 rounded">
                         <i class="fas fa-code mr-0.5"></i>JSON
                     </button>
@@ -258,16 +258,16 @@
             <div class="px-4 py-3 border-t border-gray-200 dark:border-gray-700 flex justify-end space-x-2">
                 <button type="button"
                     class="px-3 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded text-gray-600 dark:text-gray-300 hover:border-gray-400 dark:hover:border-gray-500"
-                    onclick="closeConfigModal('{{ id_prefix }}', 'McpServersConfig')">
+                    data-click="closeConfigModal" data-args='[{{ id_prefix|string|tojson }}, "McpServersConfig"]'>
                     Cancel
                 </button>
                 <button type="button"
                     class="px-3 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded text-gray-600 dark:text-gray-300 hover:border-gray-400 dark:hover:border-gray-500"
-                    onclick="clearJsonField('{{ id_prefix }}', 'McpServersConfig')">
+                    data-click="clearJsonField" data-args='[{{ id_prefix|string|tojson }}, "McpServersConfig"]'>
                     Clear
                 </button>
                 <button type="button" class="px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded"
-                    onclick="applyConfigModal('{{ id_prefix }}', 'McpServersConfig')">
+                    data-click="applyConfigModal" data-args='[{{ id_prefix|string|tojson }}, "McpServersConfig"]'>
                     Save
                 </button>
             </div>
@@ -277,7 +277,7 @@
 
 <!-- Planner Configuration Modal -->
 <div id="{{ id_prefix }}PlannerConfigModal" class="fixed inset-0 z-[120] hidden">
-    <div class="absolute inset-0 bg-black/60" onclick="closeConfigModal('{{ id_prefix }}', 'PlannerConfig')"></div>
+    <div class="absolute inset-0 bg-black/60" data-click="closeConfigModal" data-args='[{{ id_prefix|string|tojson }}, "PlannerConfig"]'></div>
     <div class="relative z-10 mx-auto my-6 w-full max-w-3xl px-2">
         <div
             class="config-modal-box bg-white dark:bg-gray-800 rounded-lg shadow-2xl border border-gray-200 dark:border-gray-700 flex flex-col min-h-[480px] max-h-[85vh]">
@@ -288,7 +288,7 @@
                 </div>
                 <button type="button"
                     class="text-gray-500 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-100"
-                    onclick="closeConfigModal('{{ id_prefix }}', 'PlannerConfig')">
+                    data-click="closeConfigModal" data-args='[{{ id_prefix|string|tojson }}, "PlannerConfig"]'>
                     <i class="fas fa-times text-base"></i>
                 </button>
             </div>
@@ -332,7 +332,7 @@
                                 <span class="text-xs font-medium text-gray-700 dark:text-gray-300">Manual JSON</span>
                             </div>
                             <button type="button"
-                                onclick="toggleJsonEditor('{{ id_prefix }}PlannerConfig', '{{ id_prefix }}PlannerConfigEditor')"
+                                data-click="toggleJsonEditor" data-args='[{{ (id_prefix ~ "PlannerConfig")|tojson }}, {{ (id_prefix ~ "PlannerConfigEditor")|tojson }}]'
                                 class="text-xs bg-blue-500 hover:bg-blue-600 text-white px-1.5 py-0.5 rounded">
                                 <i class="fas fa-code mr-0.5"></i>JSON
                             </button>
@@ -355,16 +355,16 @@
             <div class="px-4 py-3 border-t border-gray-200 dark:border-gray-700 flex justify-end space-x-2">
                 <button type="button"
                     class="px-3 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded text-gray-600 dark:text-gray-300 hover:border-gray-400 dark:hover:border-gray-500"
-                    onclick="closeConfigModal('{{ id_prefix }}', 'PlannerConfig')">
+                    data-click="closeConfigModal" data-args='[{{ id_prefix|string|tojson }}, "PlannerConfig"]'>
                     Cancel
                 </button>
                 <button type="button"
                     class="px-3 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded text-gray-600 dark:text-gray-300 hover:border-gray-400 dark:hover:border-gray-500"
-                    onclick="resetPlannerConfig('{{ id_prefix }}')">
+                    data-click="resetPlannerConfig" data-args='[{{ id_prefix|string|tojson }}]'>
                     Reset
                 </button>
                 <button type="button" class="px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded"
-                    onclick="applyConfigModal('{{ id_prefix }}', 'PlannerConfig')">
+                    data-click="applyConfigModal" data-args='[{{ id_prefix|string|tojson }}, "PlannerConfig"]'>
                     Save
                 </button>
             </div>
@@ -374,7 +374,7 @@
 
 <!-- Generate Content Modal -->
 <div id="{{ id_prefix }}GenerateContentConfigModal" class="fixed inset-0 z-[120] hidden">
-    <div class="absolute inset-0 bg-black/60" onclick="closeConfigModal('{{ id_prefix }}', 'GenerateContentConfig')">
+    <div class="absolute inset-0 bg-black/60" data-click="closeConfigModal" data-args='[{{ id_prefix|string|tojson }}, "GenerateContentConfig"]'>
     </div>
     <div class="relative z-10 mx-auto my-6 w-full max-w-3xl px-2">
         <div
@@ -387,7 +387,7 @@
                 </div>
                 <button type="button"
                     class="text-gray-500 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-100"
-                    onclick="closeConfigModal('{{ id_prefix }}', 'GenerateContentConfig')">
+                    data-click="closeConfigModal" data-args='[{{ id_prefix|string|tojson }}, "GenerateContentConfig"]'>
                     <i class="fas fa-times text-base"></i>
                 </button>
             </div>
@@ -438,7 +438,7 @@
                                 <span class="text-xs font-medium text-gray-700 dark:text-gray-300">Manual JSON</span>
                             </div>
                             <button type="button"
-                                onclick="toggleJsonEditor('{{ id_prefix }}GenerateContentConfig', '{{ id_prefix }}GenerateContentConfigEditor')"
+                                data-click="toggleJsonEditor" data-args='[{{ (id_prefix ~ "GenerateContentConfig")|tojson }}, {{ (id_prefix ~ "GenerateContentConfigEditor")|tojson }}]'
                                 class="text-xs bg-blue-500 hover:bg-blue-600 text-white px-1.5 py-0.5 rounded">
                                 <i class="fas fa-code mr-0.5"></i>JSON
                             </button>
@@ -458,16 +458,16 @@
             <div class="px-4 py-3 border-t border-gray-200 dark:border-gray-700 flex justify-end space-x-2">
                 <button type="button"
                     class="px-3 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded text-gray-600 dark:text-gray-300 hover:border-gray-400 dark:hover:border-gray-500"
-                    onclick="closeConfigModal('{{ id_prefix }}', 'GenerateContentConfig')">
+                    data-click="closeConfigModal" data-args='[{{ id_prefix|string|tojson }}, "GenerateContentConfig"]'>
                     Cancel
                 </button>
                 <button type="button"
                     class="px-3 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded text-gray-600 dark:text-gray-300 hover:border-gray-400 dark:hover:border-gray-500"
-                    onclick="resetContentConfig('{{ id_prefix }}')">
+                    data-click="resetContentConfig" data-args='[{{ id_prefix|string|tojson }}]'>
                     Reset
                 </button>
                 <button type="button" class="px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded"
-                    onclick="applyConfigModal('{{ id_prefix }}', 'GenerateContentConfig')">
+                    data-click="applyConfigModal" data-args='[{{ id_prefix|string|tojson }}, "GenerateContentConfig"]'>
                     Save
                 </button>
             </div>
@@ -477,7 +477,7 @@
 
 <!-- Input Schema Modal -->
 <div id="{{ id_prefix }}InputSchemaModal" class="fixed inset-0 z-[120] hidden">
-    <div class="absolute inset-0 bg-black/60" onclick="closeConfigModal('{{ id_prefix }}', 'InputSchema')"></div>
+    <div class="absolute inset-0 bg-black/60" data-click="closeConfigModal" data-args='[{{ id_prefix|string|tojson }}, "InputSchema"]'></div>
     <div class="relative z-10 mx-auto my-6 w-full max-w-3xl px-2">
         <div
             class="config-modal-box bg-white dark:bg-gray-800 rounded-lg shadow-2xl border border-gray-200 dark:border-gray-700 flex flex-col min-h-[440px] max-h-[85vh]">
@@ -489,7 +489,7 @@
                 </div>
                 <button type="button"
                     class="text-gray-500 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-100"
-                    onclick="closeConfigModal('{{ id_prefix }}', 'InputSchema')">
+                    data-click="closeConfigModal" data-args='[{{ id_prefix|string|tojson }}, "InputSchema"]'>
                     <i class="fas fa-times text-base"></i>
                 </button>
             </div>
@@ -497,7 +497,7 @@
                 <div class="flex items-center justify-between">
                     <span class="text-xs font-medium text-gray-700 dark:text-gray-300">JSON Schema</span>
                     <button type="button"
-                        onclick="toggleJsonEditor('{{ id_prefix }}InputSchema', '{{ id_prefix }}InputSchemaEditor')"
+                        data-click="toggleJsonEditor" data-args='[{{ (id_prefix ~ "InputSchema")|tojson }}, {{ (id_prefix ~ "InputSchemaEditor")|tojson }}]'
                         class="text-xs bg-blue-500 hover:bg-blue-600 text-white px-1.5 py-0.5 rounded">
                         <i class="fas fa-code mr-0.5"></i>JSON
                     </button>
@@ -514,16 +514,16 @@
             <div class="px-4 py-3 border-t border-gray-200 dark:border-gray-700 flex justify-end space-x-2">
                 <button type="button"
                     class="px-3 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded text-gray-600 dark:text-gray-300 hover:border-gray-400 dark:hover:border-gray-500"
-                    onclick="closeConfigModal('{{ id_prefix }}', 'InputSchema')">
+                    data-click="closeConfigModal" data-args='[{{ id_prefix|string|tojson }}, "InputSchema"]'>
                     Cancel
                 </button>
                 <button type="button"
                     class="px-3 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded text-gray-600 dark:text-gray-300 hover:border-gray-400 dark:hover:border-gray-500"
-                    onclick="clearJsonField('{{ id_prefix }}', 'InputSchema')">
+                    data-click="clearJsonField" data-args='[{{ id_prefix|string|tojson }}, "InputSchema"]'>
                     Clear
                 </button>
                 <button type="button" class="px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded"
-                    onclick="applyConfigModal('{{ id_prefix }}', 'InputSchema')">
+                    data-click="applyConfigModal" data-args='[{{ id_prefix|string|tojson }}, "InputSchema"]'>
                     Save
                 </button>
             </div>
@@ -533,7 +533,7 @@
 
 <!-- Guardrail Configuration Modal -->
 <div id="{{ id_prefix }}GuardrailConfigModal" class="fixed inset-0 z-[120] hidden">
-    <div class="absolute inset-0 bg-black/60" onclick="closeConfigModal('{{ id_prefix }}', 'GuardrailConfig')"></div>
+    <div class="absolute inset-0 bg-black/60" data-click="closeConfigModal" data-args='[{{ id_prefix|string|tojson }}, "GuardrailConfig"]'></div>
     <div class="relative z-10 mx-auto my-6 w-full max-w-4xl px-2">
         <div
             class="config-modal-box bg-white dark:bg-gray-800 rounded-lg shadow-2xl border border-gray-200 dark:border-gray-700 flex flex-col min-h-[600px] max-h-[90vh]">
@@ -545,7 +545,7 @@
                 </div>
                 <button type="button"
                     class="text-gray-500 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-100"
-                    onclick="closeConfigModal('{{ id_prefix }}', 'GuardrailConfig')">
+                    data-click="closeConfigModal" data-args='[{{ id_prefix|string|tojson }}, "GuardrailConfig"]'>
                     <i class="fas fa-times text-base"></i>
                 </button>
             </div>
@@ -695,7 +695,7 @@
                                 <span class="text-xs font-medium text-gray-700 dark:text-gray-300">Manual JSON</span>
                             </div>
                             <button type="button"
-                                onclick="toggleJsonEditor('{{ id_prefix }}GuardrailConfig', '{{ id_prefix }}GuardrailConfigEditor')"
+                                data-click="toggleJsonEditor" data-args='[{{ (id_prefix ~ "GuardrailConfig")|tojson }}, {{ (id_prefix ~ "GuardrailConfigEditor")|tojson }}]'
                                 class="text-xs bg-blue-500 hover:bg-blue-600 text-white px-1.5 py-0.5 rounded">
                                 <i class="fas fa-code mr-0.5"></i>JSON
                             </button>
@@ -721,16 +721,16 @@
             <div class="px-4 py-3 border-t border-gray-200 dark:border-gray-700 flex justify-end space-x-2">
                 <button type="button"
                     class="px-3 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded text-gray-600 dark:text-gray-300 hover:border-gray-400 dark:hover:border-gray-500"
-                    onclick="closeConfigModal('{{ id_prefix }}', 'GuardrailConfig')">
+                    data-click="closeConfigModal" data-args='[{{ id_prefix|string|tojson }}, "GuardrailConfig"]'>
                     Cancel
                 </button>
                 <button type="button"
                     class="px-3 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded text-gray-600 dark:text-gray-300 hover:border-gray-400 dark:hover:border-gray-500"
-                    onclick="clearJsonField('{{ id_prefix }}', 'GuardrailConfig')">
+                    data-click="clearJsonField" data-args='[{{ id_prefix|string|tojson }}, "GuardrailConfig"]'>
                     Clear
                 </button>
                 <button type="button" class="px-3 py-1.5 text-xs bg-orange-600 hover:bg-orange-700 text-white rounded"
-                    onclick="applyConfigModal('{{ id_prefix }}', 'GuardrailConfig')">
+                    data-click="applyConfigModal" data-args='[{{ id_prefix|string|tojson }}, "GuardrailConfig"]'>
                     Save
                 </button>
             </div>
@@ -740,7 +740,7 @@
 
 <!-- Output Schema Modal -->
 <div id="{{ id_prefix }}OutputSchemaModal" class="fixed inset-0 z-[120] hidden">
-    <div class="absolute inset-0 bg-black/60" onclick="closeConfigModal('{{ id_prefix }}', 'OutputSchema')"></div>
+    <div class="absolute inset-0 bg-black/60" data-click="closeConfigModal" data-args='[{{ id_prefix|string|tojson }}, "OutputSchema"]'></div>
     <div class="relative z-10 mx-auto my-6 w-full max-w-3xl px-2">
         <div
             class="config-modal-box bg-white dark:bg-gray-800 rounded-lg shadow-2xl border border-gray-200 dark:border-gray-700 flex flex-col min-h-[440px] max-h-[85vh]">
@@ -752,7 +752,7 @@
                 </div>
                 <button type="button"
                     class="text-gray-500 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-100"
-                    onclick="closeConfigModal('{{ id_prefix }}', 'OutputSchema')">
+                    data-click="closeConfigModal" data-args='[{{ id_prefix|string|tojson }}, "OutputSchema"]'>
                     <i class="fas fa-times text-base"></i>
                 </button>
             </div>
@@ -760,7 +760,7 @@
                 <div class="flex items-center justify-between">
                     <span class="text-xs font-medium text-gray-700 dark:text-gray-300">JSON Schema</span>
                     <button type="button"
-                        onclick="toggleJsonEditor('{{ id_prefix }}OutputSchema', '{{ id_prefix }}OutputSchemaEditor')"
+                        data-click="toggleJsonEditor" data-args='[{{ (id_prefix ~ "OutputSchema")|tojson }}, {{ (id_prefix ~ "OutputSchemaEditor")|tojson }}]'
                         class="text-xs bg-blue-500 hover:bg-blue-600 text-white px-1.5 py-0.5 rounded">
                         <i class="fas fa-code mr-0.5"></i>JSON
                     </button>
@@ -777,16 +777,16 @@
             <div class="px-4 py-3 border-t border-gray-200 dark:border-gray-700 flex justify-end space-x-2">
                 <button type="button"
                     class="px-3 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded text-gray-600 dark:text-gray-300 hover:border-gray-400 dark:hover:border-gray-500"
-                    onclick="closeConfigModal('{{ id_prefix }}', 'OutputSchema')">
+                    data-click="closeConfigModal" data-args='[{{ id_prefix|string|tojson }}, "OutputSchema"]'>
                     Cancel
                 </button>
                 <button type="button"
                     class="px-3 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded text-gray-600 dark:text-gray-300 hover:border-gray-400 dark:hover:border-gray-500"
-                    onclick="clearJsonField('{{ id_prefix }}', 'OutputSchema')">
+                    data-click="clearJsonField" data-args='[{{ id_prefix|string|tojson }}, "OutputSchema"]'>
                     Clear
                 </button>
                 <button type="button" class="px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded"
-                    onclick="applyConfigModal('{{ id_prefix }}', 'OutputSchema')">
+                    data-click="applyConfigModal" data-args='[{{ id_prefix|string|tojson }}, "OutputSchema"]'>
                     Save
                 </button>
             </div>

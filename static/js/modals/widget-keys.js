@@ -5,6 +5,11 @@
  *            toggleWidgetKey, deleteWidgetKey, showWidgetEmbedCode, copyEmbedCode
  */
 
+// Handlers this file's markup calls through data-click and friends (csp-actions.js)
+mateActions.allow('copyEmbedCode', 'deleteWidgetKey', 'generateWidgetKey',
+                  'hideWidgetEmbedModal', 'hideWidgetKeysModal', 'showWidgetEmbedCode',
+                  'toggleWidgetKey');
+
 let _widgetKeysAgent = '';
 let _widgetKeysProjectId = null;
 
@@ -20,6 +25,10 @@ function showWidgetKeysModal(agentName, projectId) {
 
 function hideWidgetKeysModal() {
     document.getElementById('widgetKeysModal').classList.add('hidden');
+}
+
+function hideWidgetEmbedModal() {
+    document.getElementById('widgetEmbedModal').classList.add('hidden');
 }
 
 function _loadWidgetKeys() {
@@ -60,13 +69,13 @@ function _renderKeyCard(k) {
                     <span class="ml-2 px-1.5 py-0.5 text-[10px] rounded-full ${statusClass}">${statusText}</span>
                 </div>
                 <div class="flex items-center space-x-1">
-                    <button onclick="showWidgetEmbedCode(${k.id})" class="text-blue-600 hover:text-blue-800 dark:text-blue-400 p-1" title="Embed code">
+                    <button data-click="showWidgetEmbedCode" data-args="${mateActions.attr([k.id])}" class="text-blue-600 hover:text-blue-800 dark:text-blue-400 p-1" title="Embed code">
                         <i class="fas fa-code text-xs"></i>
                     </button>
-                    <button onclick="toggleWidgetKey(${k.id}, ${!k.is_active})" class="text-yellow-600 hover:text-yellow-800 dark:text-yellow-400 p-1" title="${k.is_active ? 'Deactivate' : 'Activate'}">
+                    <button data-click="toggleWidgetKey" data-args="${mateActions.attr([k.id, !k.is_active])}" class="text-yellow-600 hover:text-yellow-800 dark:text-yellow-400 p-1" title="${k.is_active ? 'Deactivate' : 'Activate'}">
                         <i class="fas fa-${k.is_active ? 'pause' : 'play'} text-xs"></i>
                     </button>
-                    <button onclick="deleteWidgetKey(${k.id})" class="text-red-600 hover:text-red-800 dark:text-red-400 p-1" title="Delete">
+                    <button data-click="deleteWidgetKey" data-args="${mateActions.attr([k.id])}" class="text-red-600 hover:text-red-800 dark:text-red-400 p-1" title="Delete">
                         <i class="fas fa-trash text-xs"></i>
                     </button>
                 </div>

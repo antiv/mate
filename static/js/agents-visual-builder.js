@@ -5,6 +5,10 @@
 
 /* global window, document, fetch */
 
+// Handlers this file's markup calls through data-click and friends (csp-actions.js)
+mateActions.allow('applyConfigModal', 'closeConfigModal', 'hideEditAgentModal',
+                  'openFileSearchModal', 'resetToolConfig', 'toggleJsonEditor');
+
 (function () {
     const React = window.React;
     const ReactDOM = window.ReactDOM;

@@ -5,7 +5,7 @@
             <!-- Modal Header -->
             <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
                 <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Memory blocks</h3>
-                <button onclick="hideMemoryBlocksModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+                <button data-click="hideMemoryBlocksModal" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
                     <i class="fas fa-times"></i>
                 </button>
             </div>
@@ -21,10 +21,10 @@
                         <div id="filterConditions" class="flex items-center space-x-2 flex-wrap">
                             <!-- Filter conditions will be added here dynamically -->
                         </div>
-                        <button onclick="addFilterCondition()" class="px-3 py-1.5 text-xs font-medium bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 rounded-lg hover:bg-blue-200 dark:hover:bg-blue-800">
+                        <button data-click="addFilterCondition" class="px-3 py-1.5 text-xs font-medium bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 rounded-lg hover:bg-blue-200 dark:hover:bg-blue-800">
                             + Add Condition
                         </button>
-                        <button onclick="searchMemoryBlocks()" class="px-4 py-1.5 text-xs font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center">
+                        <button data-click="searchMemoryBlocks" class="px-4 py-1.5 text-xs font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center">
                             <i class="fas fa-search mr-1.5"></i>
                             Search
                         </button>
@@ -33,11 +33,11 @@
                 
                 <!-- Create Block Button -->
                 <div class="mb-4 flex justify-end space-x-2">
-                    <button onclick="showDeletedMemoryBlocks()" class="px-4 py-2 text-sm font-medium bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 flex items-center">
+                    <button data-click="showDeletedMemoryBlocks" class="px-4 py-2 text-sm font-medium bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 flex items-center">
                         <i class="fas fa-trash-restore mr-2"></i>
                         Deleted blocks
                     </button>
-                    <button onclick="showCreateMemoryBlockModal()" class="px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center">
+                    <button data-click="showCreateMemoryBlockModal" class="px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center">
                         <i class="fas fa-plus mr-2"></i>
                         Create block
                     </button>
@@ -83,7 +83,7 @@
                     <button class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
                         <i class="fas fa-window-restore"></i>
                     </button>
-                    <button onclick="hideEditMemoryBlockModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+                    <button data-click="hideEditMemoryBlockModal" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
                         <i class="fas fa-times"></i>
                     </button>
                 </div>
@@ -91,7 +91,7 @@
             
             <!-- Modal Body -->
             <div class="flex-1 overflow-y-auto px-6 py-4">
-                <form id="editMemoryBlockForm" onsubmit="updateMemoryBlock(event)" class="space-y-4">
+                <form id="editMemoryBlockForm" data-submit="updateMemoryBlock" data-args='["$event"]' class="space-y-4">
                     <input type="hidden" id="editBlockId" />
                     <input type="hidden" id="editBlockAgentName" />
                     
@@ -102,7 +102,7 @@
                         </label>
                         <div class="flex items-center space-x-2">
                             <input type="text" id="editBlockLabel" required class="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                            <button type="button" onclick="deleteMemoryBlock()" class="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300">
+                            <button type="button" data-click="deleteMemoryBlock" class="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300">
                                 <i class="fas fa-trash"></i>
                             </button>
                         </div>
@@ -158,10 +158,10 @@
             
             <!-- Modal Footer -->
             <div class="px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex justify-end space-x-3">
-                <button type="button" onclick="hideEditMemoryBlockModal()" class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-200 dark:bg-gray-600 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500">
+                <button type="button" data-click="hideEditMemoryBlockModal" class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-200 dark:bg-gray-600 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500">
                     Cancel
                 </button>
-                <button type="button" onclick="updateMemoryBlock()" class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700">
+                <button type="button" data-click="updateMemoryBlock" class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700">
                     Update
                 </button>
             </div>
@@ -176,7 +176,7 @@
             <!-- Modal Header -->
             <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
                 <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Create Memory Block</h3>
-                <button onclick="hideCreateMemoryBlockModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+                <button data-click="hideCreateMemoryBlockModal" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
                     <i class="fas fa-times"></i>
                 </button>
             </div>
@@ -244,10 +244,10 @@
             
             <!-- Modal Footer -->
             <div class="px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex justify-end space-x-3">
-                <button type="button" onclick="hideCreateMemoryBlockModal()" class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-200 dark:bg-gray-600 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500">
+                <button type="button" data-click="hideCreateMemoryBlockModal" class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-200 dark:bg-gray-600 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500">
                     Cancel
                 </button>
-                <button type="button" onclick="createMemoryBlock()" class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700">
+                <button type="button" data-click="createMemoryBlock" class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700">
                     Create
                 </button>
             </div>
@@ -261,7 +261,7 @@
         <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col">
             <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
                 <h3 id="memoryBlockHistoryTitle" class="text-lg font-semibold text-gray-900 dark:text-white">History</h3>
-                <button onclick="hideMemoryBlockHistory()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+                <button data-click="hideMemoryBlockHistory" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
                     <i class="fas fa-times"></i>
                 </button>
             </div>
