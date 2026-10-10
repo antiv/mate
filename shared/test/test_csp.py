@@ -451,6 +451,15 @@ class TestConvertedTemplates(unittest.TestCase):
         "dashboard/modals/template_sync_modal.html",
         "dashboard/modals/version_history_modal.html",
         "dashboard/modals/widget_keys_modal.html",
+        "dashboard/alerts.html",
+        "dashboard/audit_logs.html",
+        "dashboard/guardrail_logs.html",
+        "dashboard/integrations.html",
+        "dashboard/rate_limits.html",
+        "dashboard/sessions.html",
+        "dashboard/traces.html",
+        "dashboard/triggers.html",
+        "dashboard/modals/trigger_modal.html",
     ]
     # Scripts that build HTML: the markup they generate must not have handlers either
     CONVERTED_JS = [
@@ -459,6 +468,10 @@ class TestConvertedTemplates(unittest.TestCase):
         "modals/memory-blocks.js",
         "modals/version-history.js",
         "modals/widget-keys.js",
+        "alerts-page.js",
+        "sessions.js",
+        "traces.js",
+        "triggers-page.js",
     ]
     _TEMPLATES = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
                               "templates")

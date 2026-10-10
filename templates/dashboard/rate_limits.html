@@ -14,7 +14,7 @@
                 Budget notifications live on the <a href="/dashboard/alerts" class="text-blue-600 hover:underline">Alerts</a> page now.
             </p>
         </div>
-        <button onclick="openAddModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm flex items-center min-h-[44px] touch-target flex-shrink-0">
+        <button data-click="openAddModal" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm flex items-center min-h-[44px] touch-target flex-shrink-0">
             <i class="fas fa-plus mr-2"></i>Add Config
         </button>
     </div>
@@ -36,7 +36,7 @@
                 <input type="text" id="usageUserId" placeholder="user_id" class="w-full sm:flex-1 min-w-0 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-sm">
                 <input type="text" id="usageAgentName" placeholder="agent_name" class="w-full sm:flex-1 min-w-0 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-sm">
                 <input type="number" id="usageProjectId" placeholder="project_id" class="w-full sm:w-24 min-w-0 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-sm">
-                <button onclick="loadUsage()" class="bg-gray-600 hover:bg-gray-700 text-white px-3 py-1.5 rounded text-sm min-h-[44px] touch-target w-full sm:w-auto">Load</button>
+                <button data-click="loadUsage" class="bg-gray-600 hover:bg-gray-700 text-white px-3 py-1.5 rounded text-sm min-h-[44px] touch-target w-full sm:w-auto">Load</button>
             </div>
         </div>
     </div>
@@ -97,7 +97,7 @@
                 <input type="url" id="formAlertWebhook" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 rounded px-2 py-1.5 text-sm" placeholder="https://...">
             </div>
             <div class="flex justify-end gap-2 pt-2">
-                <button type="button" onclick="closeModal()" class="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded text-sm text-gray-700 dark:text-gray-300">Cancel</button>
+                <button type="button" data-click="closeModal" class="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded text-sm text-gray-700 dark:text-gray-300">Cancel</button>
                 <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm">Save</button>
             </div>
         </form>
@@ -106,11 +106,10 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
-    function jsArg(value) {
-        return JSON.stringify(value == null ? '' : String(value))
-            .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    }
+<script nonce="{{ request.state.csp_nonce }}">
+    // Handlers this page's markup calls through data-click (csp-actions.js)
+    mateActions.allow('closeModal', 'deleteConfig', 'editConfigByIndex', 'loadUsage',
+                      'loadUsageFor', 'openAddModal');
 
     let editingId = null;
     let configsCache = [];
@@ -135,9 +134,9 @@
                     </span>
                 </div>
                 <div class="flex gap-1">
-                    <button onclick="loadUsageFor(${jsArg(c.scope)}, ${jsArg(c.scope_id)})" class="text-blue-600 dark:text-blue-400 text-xs px-2 py-1 hover:underline">Usage</button>
-                    <button onclick="editConfigByIndex(${i})" class="text-gray-600 dark:text-gray-400 text-xs px-2 py-1 hover:underline">Edit</button>
-                    <button onclick="deleteConfig(${jsArg(c.scope)}, ${jsArg(c.scope_id)})" class="text-red-600 dark:text-red-400 text-xs px-2 py-1 hover:underline">Delete</button>
+                    <button data-click="loadUsageFor" data-args="${mateActions.attr([c.scope, c.scope_id])}" class="text-blue-600 dark:text-blue-400 text-xs px-2 py-1 hover:underline">Usage</button>
+                    <button data-click="editConfigByIndex" data-args="[${i}]" class="text-gray-600 dark:text-gray-400 text-xs px-2 py-1 hover:underline">Edit</button>
+                    <button data-click="deleteConfig" data-args="${mateActions.attr([c.scope, c.scope_id])}" class="text-red-600 dark:text-red-400 text-xs px-2 py-1 hover:underline">Delete</button>
                 </div>
             </div>
         `).join('');

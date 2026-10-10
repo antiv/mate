@@ -2,6 +2,9 @@
  * Dashboard traces page - OpenTelemetry trace viewer
  */
 
+// Handlers this file's markup calls through data-click and friends (csp-actions.js)
+mateActions.allow('closeTraceDetail', 'loadTraces', 'showTraceDetail');
+
 async function loadTraces() {
     const hours = parseInt(document.getElementById('timeRangeSelect').value, 10) || 24;
     const tbody = document.getElementById('tracesTableBody');
@@ -32,7 +35,7 @@ async function loadTraces() {
                 <td data-label="Duration" class="px-3 py-2 text-xs text-gray-600 dark:text-gray-400">${t.total_duration_ms != null ? t.total_duration_ms + ' ms' : '-'}</td>
                 <td data-label="Spans" class="px-3 py-2 text-xs text-gray-600 dark:text-gray-400">${t.span_count}</td>
                 <td data-label="Actions" class="px-3 py-2">
-                    <button type="button" data-trace-id="${escapeHtml(t.trace_id)}" data-hours="${hours}" onclick="showTraceDetail(this.dataset.traceId, parseInt(this.dataset.hours, 10))" class="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 text-xs min-h-[44px] touch-target px-2">
+                    <button type="button" data-click="showTraceDetail" data-args="${mateActions.attr([t.trace_id, hours])}" class="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 text-xs min-h-[44px] touch-target px-2">
                         <i class="fas fa-expand-alt mr-1"></i>View
                     </button>
                 </td>
@@ -121,4 +124,13 @@ function escapeHtml(s) {
     return div.innerHTML;
 }
 
-document.addEventListener('DOMContentLoaded', () => loadTraces());
+document.addEventListener('DOMContentLoaded', () => {
+    loadTraces();
+    // A click on the backdrop, outside the dialog, closes the trace
+    const modalEl = document.getElementById('traceDetailModal');
+    if (modalEl) {
+        modalEl.addEventListener('click', (event) => {
+            if (event.target === modalEl) closeTraceDetail();
+        });
+    }
+});

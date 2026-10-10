@@ -5,7 +5,7 @@
             <!-- Modal header -->
             <div class="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
                 <h3 id="triggerModalTitle" class="text-sm font-semibold text-gray-900 dark:text-white">Create Trigger</h3>
-                <button onclick="TriggerPage.closeModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+                <button data-click="TriggerPage.closeModal" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
                     <i class="fas fa-times text-sm"></i>
                 </button>
             </div>
@@ -22,7 +22,7 @@
                     </div>
                     <div>
                         <label for="triggerType" class="block text-xs font-medium text-gray-700 dark:text-gray-300">Type *</label>
-                        <select id="triggerType" onchange="TriggerPage.updateTypeVisibility()"
+                        <select id="triggerType" data-change="TriggerPage.updateTypeVisibility"
                             class="mt-1 block w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500">
                             <option value="cron">Cron (schedule)</option>
                             <option value="webhook">Webhook (HTTP POST)</option>
@@ -88,7 +88,7 @@
                         Fire with: <code class="bg-gray-100 dark:bg-gray-700 px-1 rounded">POST {url}</code> and <code class="bg-gray-100 dark:bg-gray-700 px-1 rounded">X-MATE-Trigger-Key: &lt;key&gt;</code> header
                     </p>
                     <div class="flex items-center gap-2">
-                        <button type="button" id="regenerateKeyBtn" onclick="TriggerPage.regenerateKey()"
+                        <button type="button" id="regenerateKeyBtn" data-click="TriggerPage.regenerateKey"
                             class="px-2 py-1 text-xs bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200 rounded hover:bg-yellow-200 dark:hover:bg-yellow-800">
                             <i class="fas fa-sync-alt mr-1"></i>Regenerate Key
                         </button>
@@ -108,7 +108,7 @@
                             </span>
                         </label>
                         <div class="flex items-center gap-2">
-                            <button type="button" id="regenerateSigningSecretBtn" onclick="TriggerPage.regenerateSigningSecret()"
+                            <button type="button" id="regenerateSigningSecretBtn" data-click="TriggerPage.regenerateSigningSecret"
                                 class="px-2 py-1 text-xs bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200 rounded hover:bg-yellow-200 dark:hover:bg-yellow-800">
                                 <i class="fas fa-sync-alt mr-1"></i>Regenerate Signing Secret
                             </button>
@@ -133,7 +133,7 @@
                 <div class="border-t border-gray-200 dark:border-gray-700 pt-3 space-y-3">
                     <div>
                         <label for="triggerOutputType" class="block text-xs font-medium text-gray-700 dark:text-gray-300">Output Destination</label>
-                        <select id="triggerOutputType" onchange="TriggerPage.updateOutputVisibility()"
+                        <select id="triggerOutputType" data-change="TriggerPage.updateOutputVisibility"
                             class="mt-1 block w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500">
                             <option value="memory_block">Memory Block</option>
                             <option value="http_callback">HTTP Callback</option>
@@ -181,11 +181,11 @@
 
                 <!-- Footer buttons -->
                 <div class="flex justify-end gap-2 pt-2 border-t border-gray-200 dark:border-gray-700">
-                    <button type="button" onclick="TriggerPage.closeModal()"
+                    <button type="button" data-click="TriggerPage.closeModal"
                         class="px-3 py-1.5 text-xs text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700">
                         Cancel
                     </button>
-                    <button type="button" id="triggerSubmitBtn" onclick="TriggerPage.submitForm()"
+                    <button type="button" id="triggerSubmitBtn" data-click="TriggerPage.submitForm"
                         class="px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded flex items-center gap-1">
                         <i id="triggerSubmitLoader" class="fas fa-spinner fa-spin hidden"></i>
                         <span id="triggerSubmitText">Create Trigger</span>

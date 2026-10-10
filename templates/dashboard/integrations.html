@@ -11,7 +11,7 @@
             <h2 class="text-xl font-bold text-gray-900 dark:text-white">Chat Integrations</h2>
             <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">Connect an agent to external chat platforms so it can reply inside Slack, Discord, and more</p>
         </div>
-        <button onclick="IntegrationsPage.openCreateModal()" class="px-3 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center space-x-1">
+        <button data-click="IntegrationsPage.openCreateModal" class="px-3 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center space-x-1">
             <i class="fas fa-plus mr-1"></i>New Integration
         </button>
     </div>
@@ -20,7 +20,7 @@
     <div class="bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 rounded px-3 py-2 text-xs">
         <i class="fas fa-info-circle mr-1 text-blue-500"></i>
         Slack Event Request URL: <code id="slackRequestUrl" class="bg-white/60 dark:bg-black/30 px-1 rounded font-mono"></code>
-        <button onclick="IntegrationsPage.copyRequestUrl()" class="ml-1 text-blue-600 dark:text-blue-300 hover:underline"><i class="fas fa-copy"></i> copy</button>
+        <button data-click="IntegrationsPage.copyRequestUrl" class="ml-1 text-blue-600 dark:text-blue-300 hover:underline"><i class="fas fa-copy"></i> copy</button>
         — paste this under <strong>Event Subscriptions</strong> in your Slack app, subscribe to <code>app_mention</code>.
     </div>
 
@@ -54,7 +54,7 @@
         <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div class="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
                 <h3 id="integrationModalTitle" class="text-sm font-semibold text-gray-900 dark:text-white">New Integration</h3>
-                <button onclick="IntegrationsPage.closeModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+                <button data-click="IntegrationsPage.closeModal" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
                     <i class="fas fa-times text-sm"></i>
                 </button>
             </div>
@@ -86,7 +86,7 @@
                 <div class="grid grid-cols-2 gap-3">
                     <div>
                         <label for="integrationProject" class="block text-xs font-medium text-gray-700 dark:text-gray-300">Project *</label>
-                        <select id="integrationProject" onchange="IntegrationsPage.onProjectChange()"
+                        <select id="integrationProject" data-change="IntegrationsPage.onProjectChange"
                             class="mt-1 block w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500">
                             <option value="">— select project —</option>
                         </select>
@@ -134,11 +134,11 @@
 
                 <!-- Footer -->
                 <div class="flex justify-end gap-2 pt-2 border-t border-gray-200 dark:border-gray-700">
-                    <button type="button" onclick="IntegrationsPage.closeModal()"
+                    <button type="button" data-click="IntegrationsPage.closeModal"
                         class="px-3 py-1.5 text-xs text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700">
                         Cancel
                     </button>
-                    <button type="button" id="integrationSubmitBtn" onclick="IntegrationsPage.submitForm()"
+                    <button type="button" id="integrationSubmitBtn" data-click="IntegrationsPage.submitForm"
                         class="px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded flex items-center gap-1">
                         <i id="integrationSubmitLoader" class="fas fa-spinner fa-spin hidden"></i>
                         <span id="integrationSubmitText">Create</span>
@@ -149,7 +149,7 @@
     </div>
 </div>
 
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
 window._integrationsPageData = {
     projects: {{ projects | tojson }},
     agents: {{ agents | tojson }},
@@ -192,15 +192,15 @@ const IntegrationsPage = {
                     ? '<span class="inline-flex items-center gap-1 text-green-600 dark:text-green-400"><i class="fas fa-circle text-[6px]"></i>Yes</span>'
                     : '<span class="inline-flex items-center gap-1 text-gray-400"><i class="fas fa-circle text-[6px]"></i>No</span>';
                 return `<tr class="border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                    <td class="px-4 py-2 font-medium text-gray-900 dark:text-white capitalize">${r.platform}</td>
-                    <td class="px-4 py-2 text-gray-700 dark:text-gray-300">${r.label || '<span class="text-gray-400">—</span>'}</td>
-                    <td class="px-4 py-2 text-gray-600 dark:text-gray-400 font-mono">${r.agent_name}</td>
-                    <td class="px-4 py-2 text-gray-500 dark:text-gray-400 font-mono">${r.team_id || '<span class="text-gray-400">—</span>'}</td>
+                    <td class="px-4 py-2 font-medium text-gray-900 dark:text-white capitalize">${escHtml(r.platform)}</td>
+                    <td class="px-4 py-2 text-gray-700 dark:text-gray-300">${r.label ? escHtml(r.label) : '<span class="text-gray-400">—</span>'}</td>
+                    <td class="px-4 py-2 text-gray-600 dark:text-gray-400 font-mono">${escHtml(r.agent_name)}</td>
+                    <td class="px-4 py-2 text-gray-500 dark:text-gray-400 font-mono">${r.team_id ? escHtml(r.team_id) : '<span class="text-gray-400">—</span>'}</td>
                     <td class="px-4 py-2 text-center">${active}</td>
                     <td class="px-4 py-2 text-right">
                         <div class="flex items-center justify-end gap-3">
-                            <button onclick='IntegrationsPage.openEditModal(${JSON.stringify(r)})' title="Edit" class="text-blue-600 dark:text-blue-400 hover:text-blue-800"><i class="fas fa-edit"></i></button>
-                            <button onclick="IntegrationsPage.deleteIntegration(${r.id})" title="Delete" class="text-red-600 dark:text-red-400 hover:text-red-800"><i class="fas fa-trash"></i></button>
+                            <button data-click="IntegrationsPage.openEditModal" data-args="${mateActions.attr([r])}" title="Edit" class="text-blue-600 dark:text-blue-400 hover:text-blue-800"><i class="fas fa-edit"></i></button>
+                            <button data-click="IntegrationsPage.deleteIntegration" data-args="[${r.id}]" title="Delete" class="text-red-600 dark:text-red-400 hover:text-red-800"><i class="fas fa-trash"></i></button>
                         </div>
                     </td>
                 </tr>`;
@@ -335,6 +335,14 @@ const IntegrationsPage = {
         }
     },
 };
+
+// A top-level const is not on window, where csp-actions.js looks names up
+window.IntegrationsPage = IntegrationsPage;
+// Handlers this page's markup calls through data-click and friends (csp-actions.js)
+mateActions.allow('IntegrationsPage.closeModal', 'IntegrationsPage.copyRequestUrl',
+                  'IntegrationsPage.deleteIntegration', 'IntegrationsPage.onProjectChange',
+                  'IntegrationsPage.openCreateModal', 'IntegrationsPage.openEditModal',
+                  'IntegrationsPage.submitForm');
 
 document.addEventListener('DOMContentLoaded', () => IntegrationsPage.init());
 </script>
