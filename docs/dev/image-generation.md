@@ -16,6 +16,17 @@ image model LiteLLM supports. Examples are OpenAI (GPT Image, DALL-E), Azure, Op
 fal.ai, Recraft, Stability, xAI and Dashscope. The model is named the way agent models are,
 `provider/model`.
 
+OpenRouter models (`openrouter/...`) are the exception. OpenRouter serves image
+models through chat completions and returns an image only when the request asks
+for one with `modalities: ["image", "text"]`. LiteLLM's `aimage_generation` for
+OpenRouter leaves `modalities` out, so the model answers in text and no image
+comes back. The tool therefore calls `litellm.acompletion` with `modalities` for
+these models (`_openrouter_image`) and takes the image from the message's
+`images`. `size` and `quality` become OpenRouter's `image_config`
+(`aspect_ratio`, `image_size`) as LiteLLM maps them, and `aspect_ratio` passes
+through. If the model still answers without an image, for example because it
+refused the prompt, the error includes the start of what it said.
+
 ## Turning it on for an agent
 
 In the agent form, tick **Image Tools** and type a model in **Image Model**. The field
