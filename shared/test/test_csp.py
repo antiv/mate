@@ -153,17 +153,33 @@ class TestMiddleware(unittest.TestCase):
         self.assertIn(csp.CSP_REPORT_ONLY_HEADER, r.headers)
         self.assertNotIn(csp.CSP_HEADER, r.headers)
 
-    def test_enforce(self):
-        # Until every page is off inline handlers: enforce the legacy policy,
-        # and report what the strict one would still block
+    def test_enforce_enforces_the_strict_policy(self):
+        # Every page is off inline handlers, so nothing needs 'unsafe-inline'
         with patch.dict(os.environ, {"CSP_MODE": "enforce"}):
-            r = _app().get("/page")
-        enforced = _directives(r.headers[csp.CSP_HEADER])["script-src"]
-        reported = _directives(r.headers[csp.CSP_REPORT_ONLY_HEADER])["script-src"]
-        self.assertIn("'unsafe-inline'", enforced)
-        self.assertFalse(any(s.startswith("'nonce-") for s in enforced))
-        self.assertNotIn("'unsafe-inline'", reported)
-        self.assertTrue(any(s.startswith("'nonce-") for s in reported))
+            for path in ("/page", "/own", "/nonced"):
+                r = _app().get(path)
+                enforced = _directives(r.headers[csp.CSP_HEADER])["script-src"]
+                self.assertNotIn("'unsafe-inline'", enforced, path)
+                self.assertTrue(any(s.startswith("'nonce-") for s in enforced), path)
+                self.assertNotIn(csp.CSP_REPORT_ONLY_HEADER, r.headers, path)
+
+    def test_enforce_carries_the_nonce_the_page_was_rendered_with(self):
+        with patch.dict(os.environ, {"CSP_MODE": "enforce"}):
+            r = _app().get("/nonced")
+        page_nonce = r.text.split('nonce="')[1].split('"')[0]
+        self.assertIn(f"'nonce-{page_nonce}'", _directives(r.headers[csp.CSP_HEADER])["script-src"])
+
+    def test_enforce_keeps_the_legacy_policy_for_adks_dev_ui_only(self):
+        app = FastAPI()
+        app.middleware("http")(csp.add_csp_header)
+
+        @app.get("/dev-ui/")
+        def dev_ui():
+            return HTMLResponse("<p>adk</p>")
+
+        with patch.dict(os.environ, {"CSP_MODE": "enforce", "ADK_DEV_UI": "true"}):
+            policy = TestClient(app).get("/dev-ui/").headers[csp.CSP_HEADER]
+        self.assertIn("'unsafe-inline'", _directives(policy)["script-src"])
 
     def test_off(self):
         with patch.dict(os.environ, {"CSP_MODE": "off"}):
@@ -210,6 +226,42 @@ class TestMiddleware(unittest.TestCase):
     def test_a_page_with_its_own_policy_keeps_it(self):
         r = _app().get("/own")
         self.assertEqual(_directives(r.headers[csp.CSP_REPORT_ONLY_HEADER])["frame-ancestors"], ["*"])
+
+
+class TestLibraryPages(unittest.TestCase):
+
+    def test_bare_inline_scripts_get_the_nonce(self):
+        html = '<script src="https://cdn.jsdelivr.net/x.js"></script><script>start()</script>'
+        out = csp.nonce_inline_scripts(html, "abc")
+        self.assertIn('<script nonce="abc">start()</script>', out)
+        self.assertIn('<script src="https://cdn.jsdelivr.net/x.js"></script>', out)
+
+    def test_fastapis_swagger_ui_has_no_inline_script_left_without_it(self):
+        import re
+        from fastapi.openapi.docs import get_swagger_ui_html
+        html = csp.nonce_inline_scripts(get_swagger_ui_html(openapi_url="/x.json", title="t").body.decode(), "abc")
+        for tag in re.findall(r"<script\b[^>]*>", html):
+            self.assertTrue("src=" in tag or 'nonce="abc"' in tag, tag)
+
+
+class TestWizardFrameAncestors(unittest.TestCase):
+    """Partner sites frame the agent wizard, as customer sites frame the widget."""
+
+    def test_a_partner_without_an_allowlist_may_be_embedded_anywhere(self):
+        self.assertEqual(csp.wizard_frame_ancestors(None), "*")
+        self.assertEqual(csp.wizard_frame_ancestors([]), "*")
+
+    def test_the_allowlist_becomes_the_sources(self):
+        sources = csp.wizard_frame_ancestors(["https://partner.example", "https://shop.example:8443/"]).split()
+        self.assertEqual(sources, ["'self'", "https://partner.example", "https://shop.example:8443"])
+
+    def test_wildcards_the_origin_check_never_matches_are_left_out(self):
+        self.assertEqual(csp.wizard_frame_ancestors(["https://*.example.com"]), "'self'")
+
+    def test_an_entry_cannot_add_a_directive(self):
+        value = csp.wizard_frame_ancestors(["https://a.example; script-src *"])
+        self.assertNotIn(";", value)
+        self.assertNotIn("script-src", value)
 
 
 class TestCanvasPage(unittest.TestCase):
@@ -358,6 +410,40 @@ class TestWidgetChatPage(unittest.TestCase):
         unknown = self._get(None, key=None)
         self.assertEqual(unknown.status_code, 401)
         self.assertEqual(self._ancestors(unknown), ["*"])
+
+
+class TestWizardPage(unittest.TestCase):
+
+    def _get(self, origins, referer="https://partner.example/"):
+        from server import wizard_routes
+        from shared.utils.wizard import partners, pricing
+        app = FastAPI()
+        app.middleware("http")(csp.add_csp_header)
+        app.include_router(wizard_routes.router)
+        partner = {"partner_key": "p1", "allowed_origins": origins}
+        with patch.object(partners, "get_partner", return_value=partner), \
+                patch.object(pricing, "normalize_currency", return_value="EUR"):
+            return TestClient(app, base_url="http://mate.local").get(
+                "/wizard/embed?partner=p1", headers={"Referer": referer})
+
+    def _ancestors(self, response):
+        return _directives(response.headers[csp.CSP_REPORT_ONLY_HEADER])["frame-ancestors"]
+
+    def test_frame_ancestors_follow_the_partners_allowlist(self):
+        r = self._get(["https://partner.example"])
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(self._ancestors(r), ["'self'", "https://partner.example"])
+        # The page's inline scripts, if any, carry the nonce of the policy sent
+        self.assertTrue(any(v.startswith("'nonce-")
+                            for v in _directives(r.headers[csp.CSP_REPORT_ONLY_HEADER])["script-src"]))
+
+    def test_without_an_allowlist_any_site_may_frame_it(self):
+        self.assertEqual(self._ancestors(self._get([])), ["*"])
+
+    def test_the_refusal_may_be_framed_so_its_message_shows(self):
+        r = self._get(["https://partner.example"], referer="https://evil.example/")
+        self.assertEqual(r.status_code, 403)
+        self.assertEqual(self._ancestors(r), ["*"])
 
 
 class TestReports(unittest.TestCase):
@@ -517,6 +603,7 @@ class TestConvertedTemplates(unittest.TestCase):
         "widget/admin.html",
         "widget/chat.html",
         "standalone/chat.html",
+        "wizard/wizard.html",
     ]
     # Scripts that build HTML: the markup they generate must not have handlers either
     CONVERTED_JS = [
@@ -535,6 +622,8 @@ class TestConvertedTemplates(unittest.TestCase):
         "widget/chat.js",
         "workroom-canvas-frame.js",
         "workroom-python.js",
+        "wizard/demo.js",
+        "wizard/wizard.js",
     ]
     _TEMPLATES = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
                               "templates")
@@ -564,6 +653,16 @@ class TestConvertedTemplates(unittest.TestCase):
             with open(os.path.join(static, name), encoding="utf-8") as f:
                 found = re.findall(r"\son[a-z]+=[\"']", f.read())
             self.assertEqual(found, [], name)
+
+    def test_static_pages_have_no_inline_code(self):
+        # A static page cannot carry the response's nonce, so it may have no inline script at all
+        import re
+        page = os.path.join(os.path.dirname(self._TEMPLATES), "static", "wizard-demo.html")
+        with open(page, encoding="utf-8") as f:
+            html = f.read()
+        self.assertEqual(re.findall(r"\son[a-z]+\s*=", html), [])
+        for tag in re.findall(r"<script\b[^>]*>", html):
+            self.assertIn("src=", tag)
 
     def test_no_javascript_urls(self):
         for name in self.CONVERTED:

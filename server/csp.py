@@ -2,18 +2,17 @@
 Content-Security-Policy for the pages this server sends.
 
 A CSP limits what an injected script can do: load code from another host, send
-data to one, or frame the dashboard (#124). There are two policies:
+data to one, or frame the dashboard (#124). MATE's pages get the *strict*
+policy: inline <script> blocks run only with this response's nonce, and inline
+on*= handlers not at all. That is what stops an injected script.
 
-- The *strict* one allows inline <script> blocks only with this request's
-  nonce, and no inline on*= handlers. It is what stops an injected script.
-- The *legacy* one still has 'unsafe-inline', because pages that have not been
-  moved off onclick= handlers yet need it.
-
-CSP_MODE=report-only (the default) sends the strict policy as
-Content-Security-Policy-Report-Only, so nothing breaks while violations are
-collected. CSP_MODE=enforce enforces the legacy policy and reports against the
-strict one, until every page is converted. Browsers post violations to
+CSP_MODE=report-only (the default) sends it as
+Content-Security-Policy-Report-Only, so nothing is blocked while violations are
+collected. CSP_MODE=enforce enforces it. Browsers post violations to
 /csp-report, which logs each distinct one once.
+
+The *legacy* policy, with 'unsafe-inline' for scripts, is left only for ADK's
+dev UI, whose markup is not ours (see _needs_eval).
 
 The dashboard may only be framed by itself. The widget chat page is framed by
 customer sites, so its frame-ancestors come from the widget key's origin
@@ -100,11 +99,10 @@ def new_nonce() -> str:
 
 def build_policy(frame_ancestors: str = "'self'", allow_eval: bool = False,
                  nonce: Optional[str] = None) -> str:
-    """The legacy policy, or with a nonce the strict one (no 'unsafe-inline' for scripts).
+    """The strict policy with a nonce, or without one the legacy policy ('unsafe-inline').
 
     A nonce and 'unsafe-inline' cannot be combined: browsers ignore
-    'unsafe-inline' once a nonce is present, which would break the inline
-    handlers the legacy policy exists for.
+    'unsafe-inline' once a nonce is present. Only ADK's dev UI gets the legacy one.
     """
     extra = extra_sources()
     if nonce is None:
@@ -191,6 +189,30 @@ def widget_frame_ancestors(allowed_origins: Optional[List[str]], strict: bool) -
     return " ".join(sources)
 
 
+def wizard_frame_ancestors(allowed_origins: Optional[List[str]]) -> str:
+    """frame-ancestors for the agent wizard page, matching _partner_origin_ok.
+
+    A partner without an allowlist may be embedded anywhere. The wizard's check
+    compares exact origins, so a wildcard entry, which it never matches, is left
+    out here too rather than widened into a CSP wildcard.
+    """
+    if not allowed_origins:
+        return "*"
+    if not isinstance(allowed_origins, list):
+        return "'self'"
+    plain = [o for o in allowed_origins if isinstance(o, str) and "*" not in o]
+    return widget_frame_ancestors(plain, strict=True)
+
+
+def nonce_inline_scripts(html: str, nonce: str) -> str:
+    """Give the bare <script> tags of HTML we do not write ourselves the response's nonce.
+
+    For pages a library renders, such as FastAPI's Swagger UI, whose one inline
+    script starts the viewer.
+    """
+    return html.replace("<script>", f'<script nonce="{nonce}">')
+
+
 def _origin_to_sources(entry: str) -> List[str]:
     """The CSP sources for an allowlist entry, covering what _origin_matches accepts for it.
 
@@ -232,17 +254,11 @@ def _is_hostname(value: str) -> bool:
 
 def policy_headers(nonce: str, frame_ancestors: str = "'self'",
                    allow_eval: bool = False) -> Dict[str, str]:
-    """The CSP headers for one HTML response, by CSP_MODE."""
-    mode = csp_mode()
-    if mode == "off":
+    """The CSP header for one HTML response, by CSP_MODE."""
+    name = header_name()
+    if name is None:
         return {}
-    strict = build_policy(frame_ancestors, allow_eval, nonce=nonce)
-    if mode == "report-only":
-        return {CSP_REPORT_ONLY_HEADER: strict}
-    # Enforce what every page works with today, and report what the strict
-    # policy would still block, until no page needs 'unsafe-inline'
-    return {CSP_HEADER: build_policy(frame_ancestors, allow_eval),
-            CSP_REPORT_ONLY_HEADER: strict}
+    return {name: build_policy(frame_ancestors, allow_eval, nonce=nonce)}
 
 
 async def add_csp_header(request: Request, call_next):
