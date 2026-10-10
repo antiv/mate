@@ -2,7 +2,8 @@
 """
 Unit tests for the image tool on LiteLLM.
 
-Every image model goes through litellm.aimage_generation. Agent configs saved
+Image models go through litellm.aimage_generation, except OpenRouter's, which
+go through chat completions (see TestOpenRouter). Agent configs saved
 before that (bare OpenAI names, "nano-banana", `true`) must keep working, and the
 keys MATE already uses must reach the provider.
 """
@@ -39,6 +40,12 @@ JPEG = b"\xff\xd8\xff\xe0" + b"\x00" * 32
 
 def _response(b64=None, url=None):
     return SimpleNamespace(data=[SimpleNamespace(b64_json=b64, url=url)])
+
+
+def _chat_response(images=None, content=""):
+    """A chat completion as LiteLLM returns OpenRouter's: images on the message."""
+    message = SimpleNamespace(content=content, images=images)
+    return SimpleNamespace(choices=[SimpleNamespace(message=message)])
 
 
 class TestResolveImageModel(unittest.TestCase):
@@ -179,11 +186,80 @@ class TestGenerate(unittest.TestCase):
         self.assertNotIn("b64", json.dumps(result))
 
     def test_nano_banana_wrapper_sends_google_names_to_openrouter(self):
-        call = AsyncMock(return_value=_response(url="https://img.example/x.png"))
-        with patch("litellm.aimage_generation", call):
+        call = AsyncMock(return_value=_chat_response([{"image_url": {"url": "https://img.example/x.png"}}]))
+        with patch("litellm.acompletion", call):
             asyncio.run(it.generate_image_nano_banana(
                 "a cat", None, model_config={"model": "google/gemini-2.5-flash-image"}))
         self.assertEqual(call.call_args.kwargs["model"], "openrouter/google/gemini-2.5-flash-image")
+
+
+class TestOpenRouter(unittest.TestCase):
+    """OpenRouter answers with an image only when the request asks for one.
+
+    LiteLLM's aimage_generation leaves out modalities for OpenRouter, so the
+    model replied in text and every generation failed with "no image".
+    """
+
+    MODEL = "openrouter/google/gemini-2.5-flash-image"
+
+    def _run(self, reply, config=None):
+        ctx = MagicMock()
+        ctx.save_artifact = AsyncMock(return_value=1)
+        chat = AsyncMock(return_value=reply)
+        image = AsyncMock()
+        with patch("litellm.acompletion", chat), patch("litellm.aimage_generation", image):
+            result = asyncio.run(it._generate_image_internal("a cat", ctx, self.MODEL, config or {}))
+        return result, chat, image, ctx
+
+    def test_asks_for_an_image_through_chat_completions(self):
+        data_url = "data:image/png;base64," + base64.b64encode(PNG).decode()
+        result, chat, image, ctx = self._run(_chat_response([{"image_url": {"url": data_url}}]))
+        self.assertTrue(result["success"])
+        image.assert_not_called()
+        kwargs = chat.call_args.kwargs
+        self.assertEqual(kwargs["model"], self.MODEL)
+        self.assertEqual(kwargs["modalities"], ["image", "text"])
+        self.assertEqual(kwargs["messages"], [{"role": "user", "content": "a cat"}])
+        saved = ctx.save_artifact.call_args.args[1].inline_data
+        self.assertEqual(saved.mime_type, "image/png")
+        self.assertTrue(saved.data.startswith(b"\x89PNG"))
+
+    def test_size_and_quality_become_image_config(self):
+        reply = _chat_response([{"image_url": {"url": "https://img.example/x.png"}}])
+        with patch.object(it, "_download_image", AsyncMock(return_value=PNG)):
+            _, chat, _, _ = self._run(reply, {"size": "1536x1024", "quality": "high"})
+        self.assertEqual(chat.call_args.kwargs["extra_body"],
+                         {"image_config": {"aspect_ratio": "3:2", "image_size": "4K"}})
+        with patch.object(it, "_download_image", AsyncMock(return_value=PNG)):
+            _, chat, _, _ = self._run(reply, {"aspect_ratio": "16:9"})
+        self.assertEqual(chat.call_args.kwargs["extra_body"], {"image_config": {"aspect_ratio": "16:9"}})
+        with patch.object(it, "_download_image", AsyncMock(return_value=PNG)):
+            _, chat, _, _ = self._run(reply)
+        self.assertNotIn("extra_body", chat.call_args.kwargs)
+
+    def test_a_url_goes_through_the_download_guard(self):
+        reply = _chat_response([{"image_url": {"url": "http://169.254.169.254/x.png"}}])
+        guard = AsyncMock(side_effect=ValueError("refusing an internal address"))
+        with patch.object(it, "_download_image", guard):
+            result, _, _, ctx = self._run(reply)
+        guard.assert_called_once_with("http://169.254.169.254/x.png")
+        self.assertFalse(result["success"])
+        ctx.save_artifact.assert_not_called()
+
+    def test_a_text_only_reply_says_what_the_model_said(self):
+        result, _, _, ctx = self._run(_chat_response(None, "I can't draw that.\nTry another prompt."))
+        self.assertFalse(result["success"])
+        self.assertIn("the model said: I can't draw that. Try another prompt.", result["error"])
+        self.assertNotIn("\n", result["error"])
+        ctx.save_artifact.assert_not_called()
+
+    def test_other_providers_keep_the_image_call(self):
+        call = AsyncMock(return_value=_response(b64=base64.b64encode(PNG).decode()))
+        chat = AsyncMock()
+        with patch("litellm.aimage_generation", call), patch("litellm.acompletion", chat):
+            asyncio.run(it._generate_image_internal("a cat", None, "gemini/imagen-4.0-generate-001", {}))
+        call.assert_called_once()
+        chat.assert_not_called()
 
 
 class TestOnlyImageParametersPass(unittest.TestCase):

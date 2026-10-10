@@ -336,6 +336,39 @@ async def generate_image(prompt: str, tool_context: ToolContext = None) -> dict:
     return await _generate_image_internal(prompt, tool_context, None, {})
 
 
+async def _openrouter_image(model: str, prompt: str, params: Dict[str, Any],
+                            credentials: Dict[str, Any]) -> Tuple[Optional[str], Optional[str]]:
+    """(url, base64) of one image from an OpenRouter model.
+
+    OpenRouter serves image models through chat completions, and answers with an
+    image only when the request asks for one with modalities. LiteLLM's image
+    call leaves modalities out, so the model replies in text alone; this calls
+    chat completions with them instead.
+    """
+    import litellm
+    from litellm.llms.openrouter.image_generation.transformation import OpenRouterImageGenerationConfig
+
+    # size and quality become image_config's aspect_ratio and image_size, as LiteLLM maps them
+    mapped = OpenRouterImageGenerationConfig().map_openai_params(
+        {k: v for k, v in params.items() if k in ("size", "quality")}, {}, model, drop_params=True)
+    image_config = dict(mapped.get("image_config") or {})
+    if params.get("aspect_ratio"):
+        image_config["aspect_ratio"] = params["aspect_ratio"]
+    extra = {"extra_body": {"image_config": image_config}} if image_config else {}
+
+    response = await litellm.acompletion(
+        model=model, messages=[{"role": "user", "content": prompt}],
+        modalities=["image", "text"], **extra, **credentials)
+    message = response.choices[0].message
+    for image in getattr(message, "images", None) or []:
+        url = ((image or {}).get("image_url") or {}).get("url") if isinstance(image, dict) else None
+        if url:
+            return (None, url.split(",", 1)[1]) if url.startswith("data:") else (url, None)
+    # A refusal or a question back arrives as text; say what it was
+    said = " ".join(str(message.content or "").split())[:200]
+    raise ValueError("the provider returned no image" + (f"; the model said: {said}" if said else ""))
+
+
 async def _generate_image_internal(prompt: str, tool_context: ToolContext = None,
                                    model: Optional[str] = None, model_config: dict = None) -> dict:
     """
@@ -356,16 +389,18 @@ async def _generate_image_internal(prompt: str, tool_context: ToolContext = None
         import litellm
 
         params = get_model_config(model, model_config)
-        response = await litellm.aimage_generation(
-            model=model, prompt=prompt, drop_params=True, **params, **credentials)
-
-        if not response.data:
-            raise ValueError("the provider returned no image")
-        image_data = response.data[0]
-        image_url = getattr(image_data, 'url', None)
-        image_b64 = getattr(image_data, 'b64_json', None)
-        if not image_url and not image_b64:
-            raise ValueError("the provider returned no image")
+        if model.startswith("openrouter/"):
+            image_url, image_b64 = await _openrouter_image(model, prompt, params, credentials)
+        else:
+            response = await litellm.aimage_generation(
+                model=model, prompt=prompt, drop_params=True, **params, **credentials)
+            if not response.data:
+                raise ValueError("the provider returned no image")
+            image_data = response.data[0]
+            image_url = getattr(image_data, 'url', None)
+            image_b64 = getattr(image_data, 'b64_json', None)
+            if not image_url and not image_b64:
+                raise ValueError("the provider returned no image")
 
         # Outside the artifact block below: a URL refused by _download_image fails the
         # generation, rather than being handed to the agent as a successful image
