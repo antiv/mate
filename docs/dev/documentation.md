@@ -70,8 +70,10 @@ for large files: `dashboard_server.py::*trigger*` reacts to a change in
 `create_trigger` but not to a change in the usage charts.
 
 `--check` also validates guides: required keys present, every `covers` entry still
-matches something, every relative link resolves. And it fails when a migration
-version is missing from one of the `sqlite/`, `postgresql/` and `mysql/` folders.
+matches something, every relative link resolves. It fails when a migration
+version is missing from one of the `sqlite/`, `postgresql/` and `mysql/` folders,
+when an environment variable is read with conflicting defaults, or when a variable
+missing from `.env.example` is not on the allowlist in `scripts/gen_docs.py`.
 
 ## Keeping guides current
 

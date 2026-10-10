@@ -330,6 +330,31 @@ def parse_env_example() -> Dict[str, Dict[str, str]]:
     return result
 
 
+# Variables that intentionally have no .env.example entry, with the reason.
+ENV_ALLOWLIST: Dict[str, str] = {
+    "TIKTOKEN_CACHE_DIR": "set by build_standalone_agent.py, not configured by operators",
+}
+
+
+def check_env_var_drift(
+    sources: Sequence[str],
+) -> Tuple[Dict[str, Dict[str, Set[str]]], List[str], Dict[str, Dict[str, Set[str]]]]:
+    """Return (conflicting_defaults, undocumented_vars, reads).
+
+    - conflicting: variables read with more than one default
+    - undocumented: variables read in code missing from .env.example (excluding ENV_ALLOWLIST)
+    """
+    reads = collect_env_reads(sources)
+    example = parse_env_example()
+    conflicting = {
+        name: entry for name, entry in sorted(reads.items()) if len(entry["defaults"]) > 1
+    }
+    undocumented = sorted(
+        n for n in reads if n not in example and n not in ENV_ALLOWLIST
+    )
+    return conflicting, undocumented, reads
+
+
 def render_configuration(sources: Sequence[str]) -> str:
     reads = collect_env_reads(sources)
     example = parse_env_example()
@@ -965,6 +990,20 @@ def cmd_generate(check: bool) -> int:
         print("Migrations missing from a dialect (add the file to shared/sql/migrations/<dialect>/):")
         for gap in gaps:
             print(f"  - {gap}")
+    sources = python_sources(tracked_files())
+    conflicting_defaults, undocumented_vars, _ = check_env_var_drift(sources)
+    if conflicting_defaults:
+        failed = True
+        print("Conflicting environment variable defaults (define the default once in shared/utils/settings.py):")
+        for name, entry in conflicting_defaults.items():
+            defaults = ", ".join(f"`{d}`" for d in sorted(entry["defaults"]))
+            files = ", ".join(sorted(entry["files"]))
+            print(f"  - {name}: read with defaults {defaults} in {files}")
+    if undocumented_vars:
+        failed = True
+        print("Environment variables missing from .env.example (add a line with a description comment):")
+        for name in undocumented_vars:
+            print(f"  - {name}")
     if not failed:
         print(f"docs OK: {len(reference)} reference pages current, {len(guides())} guides well-formed")
         unverified = [rel(g) for g in guides() if read_frontmatter(g)[0].get("status") == "migrated"]
