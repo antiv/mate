@@ -54,7 +54,7 @@ Things to adjust in `docker-compose.yml` before relying on it:
 - `DB_TYPE` and `ARTIFACT_SERVICE` come from `.env` and default to `sqlite` and
   `local_folder`, which is what the mounted `./data` and `./artifacts` volumes serve.
   To use PostgreSQL or Supabase, set them in `.env` along with their connection
-  settings. `DB_HOST` defaults to `localhost`, which inside the container is the
+  settings; [Artifact storage](artifact-storage.md) covers each artifact backend. `DB_HOST` defaults to `localhost`, which inside the container is the
   container itself, so point it at your database host.
 - It requires `AUTH_PASSWORD` to be set and refuses to start otherwise. `DB_PASSWORD`
   is optional and only matters for PostgreSQL or MySQL.
