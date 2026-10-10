@@ -54,6 +54,11 @@ SKIP_DIRS = {
 # Tests read env vars and declare routes of their own; they are not the product.
 SKIP_PREFIXES = ("shared/test/", "scripts/gen_docs.py")
 
+# These are managed by the application, rather than configured by operators.
+ENV_EXAMPLE_ALLOWLIST = {
+    "TIKTOKEN_CACHE_DIR": "build_standalone_agent.py sets the tokenizer cache directory",
+}
+
 # Source areas a guide is expected to cover, for the coverage report.
 COVERAGE_GLOBS = (
     "auth_server.py", "adk_main.py", "langgraph_main.py", "standalone_server.py",
@@ -330,10 +335,19 @@ def parse_env_example() -> Dict[str, Dict[str, str]]:
     return result
 
 
+def configuration_gaps(
+    reads: Dict[str, Dict[str, Set[str]]], example: Dict[str, Dict[str, str]],
+) -> Tuple[List[str], List[str]]:
+    """Conflicting defaults and reads without an entry in the env template."""
+    conflicts = sorted(name for name, entry in reads.items() if len(entry["defaults"]) > 1)
+    undocumented = sorted(name for name in reads if name not in example)
+    return conflicts, undocumented
+
+
 def render_configuration(sources: Sequence[str]) -> str:
     reads = collect_env_reads(sources)
     example = parse_env_example()
-    undocumented = sorted(n for n in reads if n not in example)
+    conflicts, undocumented = configuration_gaps(reads, example)
     unread = sorted(n for n in example if n not in reads)
 
     rows = []
@@ -341,7 +355,7 @@ def render_configuration(sources: Sequence[str]) -> str:
         entry = reads[name]
         defaults = sorted(entry["defaults"])
         default_text = " / ".join(code(d) for d in defaults) if defaults else "—"
-        if len(defaults) > 1:
+        if name in conflicts:
             default_text += " ⚠"
         files = sorted(entry["files"])
         shown = ", ".join(code(f) for f in files[:3])
@@ -948,6 +962,21 @@ def cmd_generate(check: bool) -> int:
         return 0
 
     failed = False
+    reads = collect_env_reads(python_sources(tracked_files()))
+    conflicts, undocumented = configuration_gaps(reads, parse_env_example())
+    if conflicts:
+        failed = True
+        print("Conflicting environment variable defaults (define the default once in shared/utils/settings.py):")
+        for name in conflicts:
+            defaults = ", ".join(sorted(reads[name]["defaults"]))
+            files = ", ".join(sorted(reads[name]["files"]))
+            print(f"  - {name}: defaults {defaults}; read in {files}")
+    missing = [name for name in undocumented if name not in ENV_EXAMPLE_ALLOWLIST]
+    if missing:
+        failed = True
+        print("Environment variables missing from .env.example (add a commented line with a description):")
+        for name in missing:
+            print(f"  - {name}")
     if stale:
         failed = True
         print("Generated reference is out of date. Run `python scripts/gen_docs.py` and commit:")
