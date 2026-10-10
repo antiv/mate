@@ -76,7 +76,7 @@ session cookie to HTTPS only.
 | `OAUTH_ALLOWED_DOMAINS` or `OAUTH_ALLOWED_EMAILS` | With single sign-on enabled and neither set, anyone with a Google or GitHub account can create a session. |
 | `RATE_LIMIT_ENABLED=true` | Limits and budgets are not applied otherwise. |
 | `WIDGET_ORIGIN_STRICT=true` | A widget key's allowed origins are only logged otherwise. |
-| `CSP_MODE=enforce` | The Content-Security-Policy is report-only by default. Watch the reports first, then enforce. Until every page is off inline handlers, `enforce` still lets inline scripts run; see [Content-Security-Policy](content-security-policy.md). |
+| `CSP_MODE=enforce` | The Content-Security-Policy is report-only by default. Watch the reports first, then enforce. Under `enforce`, an inline script runs only with the response's nonce and no inline handler runs; see [Content-Security-Policy](content-security-policy.md). |
 | `ALERTS_ENABLED=true` | Alert rules are not evaluated otherwise. |
 | `AUDIT_RETENTION_DAYS` | Entries are kept forever by default. |
 

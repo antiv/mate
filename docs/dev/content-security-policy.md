@@ -29,28 +29,29 @@ list, to send data to one, or to let another site frame the dashboard.
 | `frame-src` | `'self'`, `dartpad.dev` (the Work Room's Dart runner) |
 | `object-src` | nothing |
 | `base-uri` | `'self'` |
-| `frame-ancestors` | `'self'` for the dashboard. For the widget chat page, see below |
+| `frame-ancestors` | `'self'` for the dashboard. For the widget chat page and the agent wizard, see below |
 
-## Two policies while pages are converted
+## Inline scripts and modes
 
 An injected script is stopped only if the policy has no `'unsafe-inline'` for
-scripts. Many templates still have `onclick=` handlers, which need it. So there
-are two versions of the policy, which differ only in `script-src`:
+scripts. MATE's policy has none: inline `<script>` blocks run only with this
+response's nonce (`'nonce-…'`), and inline handlers (`onclick=`, `javascript:`
+URLs) do not run at all. Every page is converted to work that way.
 
-- **Strict:** inline `<script>` blocks run only with this response's nonce
-  (`'nonce-…'`), and inline handlers (`onclick=`, `javascript:` URLs) do not
-  run at all.
-- **Legacy:** `'unsafe-inline'` instead of the nonce. Every page works with it.
-
-| `CSP_MODE` | Header(s) sent |
+| `CSP_MODE` | Header sent |
 |---|---|
-| `report-only` (default) | the strict policy as `Content-Security-Policy-Report-Only` |
-| `enforce` | the legacy policy as `Content-Security-Policy`, plus the strict one as `-Report-Only` |
+| `report-only` (default) | the policy as `Content-Security-Policy-Report-Only`: violations are logged, nothing is blocked |
+| `enforce` | the policy as `Content-Security-Policy` |
 | `off` | none |
 
-So under `enforce`, nothing that works today breaks, and the log names the pages
-that still have inline code. Once every template is converted, `enforce` will
-enforce the strict policy, and `'unsafe-inline'` goes away.
+Pages a library renders get the nonce on their inline scripts too
+(`nonce_inline_scripts()`, used for the admin Swagger UI). A static HTML file
+cannot carry a nonce, so it may have no inline script at all; the wizard demo
+page loads its code from `static/js/wizard/demo.js`.
+
+The one exception is ADK's dev UI, below, whose markup is not ours: it keeps a
+*legacy* policy with `'unsafe-inline'`. In 1.4, `enforce` enforced that
+legacy policy on every page.
 
 ### The nonce
 
@@ -207,10 +208,10 @@ so its input is treated as hostile:
   log says how many reports it dropped. A flood of fake reports can therefore
   hide real ones for one window at most, not until a restart.
 
-An inline handler on a page that is not converted yet is logged as
-`script-src-attr blocked 'inline'`, and an inline script without the nonce as
-`script-src-elem blocked 'inline'`. Once the log stays quiet in normal use,
-set `CSP_MODE=enforce`.
+An inline handler is logged as `script-src-attr blocked 'inline'`, and an
+inline script without the nonce as `script-src-elem blocked 'inline'`. Once the
+log stays quiet in normal use, set `CSP_MODE=enforce`. If a page breaks under
+`enforce`, `CSP_MODE=report-only` turns blocking off again while it is fixed.
 
 ## The widget
 
@@ -241,6 +242,16 @@ reads the embedding page from the `Referer` header, which a page can withhold
 The browser enforces `frame-ancestors` whatever the page sends. So with
 `CSP_MODE=enforce` and `WIDGET_ORIGIN_STRICT=true`, a site that is not on the
 allowlist cannot frame the widget even when it hides its referrer.
+
+## The agent wizard
+
+Partner sites frame the agent wizard (`/wizard/embed`), so it gets
+`frame-ancestors` from the partner's allowed origins, as the widget does from
+its key's: no allowlist means any site, otherwise the listed origins and MATE
+itself. The wizard's own origin check compares exact origins, so a wildcard
+entry, which it never matches, is left out of `frame-ancestors` too. Its
+"not enabled for this site" answer may be framed anywhere, so the partner's page
+shows it.
 
 ## Allowing another host
 

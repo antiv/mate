@@ -331,7 +331,7 @@ async def health_check():
 # ---------- Admin documentation ----------
 from server.auth import get_auth_user
 from fastapi import Depends
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.openapi.docs import get_swagger_ui_html, get_redoc_html
 
 
@@ -341,13 +341,16 @@ async def get_admin_openapi_schema(username: str = Depends(get_auth_user)):
 
 
 @app.get("/admin-docs", include_in_schema=False)
-async def get_admin_documentation(username: str = Depends(get_auth_user)):
-    return get_swagger_ui_html(
+async def get_admin_documentation(request: Request, username: str = Depends(get_auth_user)):
+    page = get_swagger_ui_html(
         openapi_url="/admin-openapi.json",
         title=f"{app.title} - Admin API Documentation",
         swagger_favicon_url="/static/favicon.svg",
         swagger_ui_parameters={"persistAuthorization": True, "displayRequestDuration": True, "filter": True},
     )
+    # Swagger UI starts from an inline script, which the policy runs only with the nonce
+    from server.csp import nonce_inline_scripts
+    return HTMLResponse(nonce_inline_scripts(page.body.decode(), request.state.csp_nonce))
 
 
 @app.get("/admin-redoc", include_in_schema=False)

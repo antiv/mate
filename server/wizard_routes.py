@@ -22,6 +22,8 @@ from fastapi import APIRouter, HTTPException, Request, Query
 from fastapi.responses import HTMLResponse, FileResponse, JSONResponse, Response
 from fastapi.templating import Jinja2Templates
 
+from server.csp import set_csp_header, wizard_frame_ancestors
+
 from shared.utils.database_client import get_database_client
 from shared.utils.models import WizardSession, WizardLead
 from shared.utils.template_service import TemplateService
@@ -157,12 +159,14 @@ async def wizard_embed(request: Request, tier: Optional[str] = Query(None),
 
     # Enforce the partner's origin allowlist (where the iframe may be embedded).
     if not _partner_origin_ok(request, partner_data):
-        return HTMLResponse("<h3>This agent wizard is not enabled for this site.</h3>", status_code=403)
+        # Any site may frame this answer, so the embedding page shows it
+        return set_csp_header(HTMLResponse("<h3>This agent wizard is not enabled for this site.</h3>",
+                                           status_code=403), "*")
 
     partner_key = partner_data["partner_key"] if partner_data else ""
     lang_eff = lang or (partner_data or {}).get("default_lang")
     contact_eff = (contact or "").strip() or (partner_data or {}).get("contact_email") or pricing.get_contact_email()
-    return templates.TemplateResponse(request, "wizard/wizard.html", {
+    response = templates.TemplateResponse(request, "wizard/wizard.html", {
         "request": request,
         "preselect_tier": tier or "",
         "lang": pricing.normalize_lang(lang_eff),
@@ -171,6 +175,10 @@ async def wizard_embed(request: Request, tier: Optional[str] = Query(None),
         "partner": partner_key,
         "fresh": fresh,
     })
+    # Partner sites frame this page, so it cannot take the dashboard's
+    # frame-ancestors 'self'. It allows the sites _partner_origin_ok lets through.
+    return set_csp_header(response, wizard_frame_ancestors((partner_data or {}).get("allowed_origins")),
+                          request)
 
 
 @router.get("/demo", response_class=HTMLResponse, include_in_schema=False)
