@@ -14,17 +14,17 @@
         <div class="flex flex-wrap gap-2 items-center flex-shrink-0">
             <input type="text" id="searchInput" placeholder="Search name, email, company…"
                    class="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg w-56">
-            <select id="filterPartner" onchange="loadLeads()" class="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg">
+            <select id="filterPartner" data-change="loadLeads" class="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg">
                 <option value="">All partners</option>
             </select>
-            <select id="filterStatus" onchange="loadLeads()" class="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg">
+            <select id="filterStatus" data-change="loadLeads" class="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg">
                 <option value="">All statuses</option>
                 <option value="new">New</option>
                 <option value="contacted">Contacted</option>
                 <option value="converted">Converted</option>
                 <option value="archived">Archived</option>
             </select>
-            <button type="button" onclick="loadLeads()" class="px-3 py-2 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center min-h-[44px] touch-target">
+            <button type="button" data-click="loadLeads" class="px-3 py-2 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center min-h-[44px] touch-target">
                 <i class="fas fa-sync-alt mr-1"></i>Refresh
             </button>
         </div>
@@ -54,7 +54,10 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
+// Handlers this page's markup calls through data-click and friends (csp-actions.js)
+mateActions.allow('convertLead', 'deleteLead', 'loadLeads', 'updateStatus', 'viewRequest');
+
 function esc(s) {
     return String(s == null ? "" : s)
         .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
@@ -140,7 +143,7 @@ function renderLeads(leads) {
             trialParts.push('<a class="text-blue-600 hover:underline" href="/dashboard/api/wizard/leads/' + l.id + '/snapshot"><i class="fas fa-download mr-1"></i>JSON</a>');
         }
         if (l.trial_alive && l.status !== 'converted') {
-            trialParts.push('<a class="text-green-600 hover:underline cursor-pointer" onclick="convertLead(' + l.id + ', \'' + esc(l.company || '') + '\')"><i class="fas fa-circle-check mr-1"></i>Convert</a>');
+            trialParts.push('<a class="text-green-600 hover:underline cursor-pointer" data-click="convertLead" data-args="' + mateActions.attr([l.id, l.company || '']) + '"><i class="fas fa-circle-check mr-1"></i>Convert</a>');
         }
         const trial = trialParts.length ? trialParts.join(' · ') : '<span class="text-gray-400">—</span>';
         const opts = ["new", "contacted", "converted", "archived"].map(function (s) {
@@ -148,7 +151,7 @@ function renderLeads(leads) {
         }).join("");
         const hasRequest = !!(l.message || (l.requirements && l.requirements.capabilities && l.requirements.capabilities.length));
         const reqLink = hasRequest
-            ? '<div class="text-xs mt-0.5"><a class="text-blue-600 hover:underline cursor-pointer" onclick="viewRequest(' + l.id + ')"><i class="fas fa-clipboard-list mr-1"></i>view request</a></div>'
+            ? '<div class="text-xs mt-0.5"><a class="text-blue-600 hover:underline cursor-pointer" data-click="viewRequest" data-args="[' + l.id + ']"><i class="fas fa-clipboard-list mr-1"></i>view request</a></div>'
             : '';
         const contact =
             '<div class="font-medium text-gray-900 dark:text-white">' + esc(l.name || "—") + '</div>' +
@@ -158,7 +161,7 @@ function renderLeads(leads) {
         var tierCell = '<div class="font-medium">' + esc(l.tier || "—") + '</div>' +
             (l.trial_agent_name ? '<div class="text-xs text-gray-400 dark:text-gray-500 font-mono">' + esc(l.trial_agent_name) + '</div>' : '');
         var deleteBtn = l.status === 'archived'
-            ? '<button onclick="deleteLead(' + l.id + ')" class="text-red-500 hover:text-red-700 text-xs" title="Delete lead"><i class="fas fa-trash"></i></button>'
+            ? '<button data-click="deleteLead" data-args="[' + l.id + ']" class="text-red-500 hover:text-red-700 text-xs" title="Delete lead"><i class="fas fa-trash"></i></button>'
             : '';
         return '<tr>' +
             '<td class="px-4 py-2 whitespace-nowrap text-gray-500 dark:text-gray-400">' + esc(fmtDate(l.created_at)) + '</td>' +
@@ -169,7 +172,7 @@ function renderLeads(leads) {
             '<td class="px-4 py-2 whitespace-nowrap text-gray-700 dark:text-gray-300">' + esc(l.estimated_price || "—") + '</td>' +
             '<td class="px-4 py-2 whitespace-nowrap">' + trial + '</td>' +
             '<td class="px-4 py-2 whitespace-nowrap">' +
-                '<select onchange="updateStatus(' + l.id + ', this.value)" class="text-xs border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1">' + opts + '</select>' +
+                '<select data-change="updateStatus" data-args="' + mateActions.attr([l.id, '$value']) + '" class="text-xs border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1">' + opts + '</select>' +
             '</td>' +
             '<td class="px-4 py-2 whitespace-nowrap">' + deleteBtn + '</td>' +
             '</tr>';

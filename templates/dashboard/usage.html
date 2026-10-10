@@ -21,17 +21,17 @@
         <div class="flex flex-wrap gap-2 items-center">
             <!-- View Toggle Switch -->
             <div class="flex items-center space-x-1 bg-gray-100 dark:bg-gray-700 rounded-lg p-0.5">
-                <button onclick="switchView('analytics')" 
+                <button data-click="switchView" data-args='["analytics"]' 
                         class="px-3 py-2 min-h-[44px] rounded-md text-xs font-medium transition-colors touch-target {% if view == 'analytics' %}bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm{% else %}text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300{% endif %}">
                     <i class="fas fa-chart-bar mr-1"></i>Analytics
                 </button>
-                <button onclick="switchView('logs')" 
+                <button data-click="switchView" data-args='["logs"]' 
                         class="px-3 py-2 min-h-[44px] rounded-md text-xs font-medium transition-colors touch-target {% if view == 'logs' %}bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm{% else %}text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300{% endif %}">
                     <i class="fas fa-table mr-1"></i>Raw Data
                 </button>
             </div>
             
-            <select id="timeRangeSelect" onchange="updateTimeRange()" class="border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg px-2 py-1 text-xs">
+            <select id="timeRangeSelect" data-change="updateTimeRange" class="border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg px-2 py-1 text-xs">
                 {% if view == "analytics" %}
                     <option value="7" {% if days == 7 %}selected{% endif %}>Last 7 days</option>
                     <option value="30" {% if days == 30 %}selected{% endif %}>Last 30 days</option>
@@ -47,7 +47,7 @@
                     <option value="30d">Last 30 Days</option>
                 {% endif %}
             </select>
-            <button onclick="refreshPage()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 text-xs rounded-lg flex items-center min-h-[44px] touch-target">
+            <button data-click="refreshPage" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 text-xs rounded-lg flex items-center min-h-[44px] touch-target">
                 <i class="fas fa-sync-alt mr-1"></i>
                 Refresh
             </button>
@@ -145,7 +145,7 @@
                 <div class="ml-3 min-w-0 flex-1">
                     <div class="flex items-center justify-between gap-2">
                         <h3 class="text-xs font-medium text-gray-500 dark:text-gray-400">Response Latency</h3>
-                        <select id="originSelect" onchange="updateOriginFilter()" title="Which traffic the percentiles cover"
+                        <select id="originSelect" data-change="updateOriginFilter" title="Which traffic the percentiles cover"
                                 class="border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-1 py-0.5 text-xs">
                             <option value="interactive" {% if origin == "interactive" %}selected{% endif %}>Interactive</option>
                             <option value="chat" {% if origin == "chat" %}selected{% endif %}>Chat</option>
@@ -318,7 +318,7 @@
                     <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Raw token usage data</p>
                 </div>
                 <div>
-                    <select id="logPageSize" onchange="updateLogFilters()" class="border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg px-2 py-1 text-xs">
+                    <select id="logPageSize" data-change="updateLogFilters" class="border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg px-2 py-1 text-xs">
                         <option value="50">50 per page</option>
                         <option value="100" selected>100 per page</option>
                         <option value="200">200 per page</option>
@@ -343,7 +343,7 @@
                 </thead>
                 <tbody id="logsTableBody" class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                     {% for log in logs %}
-                    <tr class="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700" onclick="showLogDetails('{{ log.id }}')">
+                    <tr class="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700" data-click="showLogDetails" data-args='{{ [log.id | string] | tojson }}'>
                         <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate" data-label="Timestamp">
                             {% if log.timestamp %}
                                 {{ log.timestamp[:19].replace('T', ' ') }}
@@ -352,7 +352,7 @@
                             {% endif %}
                         </td>
                         <td class="px-3 py-1.5 text-xs font-mono text-gray-900 dark:text-white truncate" data-label="Request ID">
-                            <button onclick="event.stopPropagation(); showLogDetails('{{ log.id }}')" class="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 underline min-h-[44px] touch-target">
+                            <button data-click="showLogDetails" data-args='{{ [log.id | string] | tojson }}' data-stop class="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 underline min-h-[44px] touch-target">
                                 {{ log.request_id[:8] }}...
                             </button>
                         </td>
@@ -406,13 +406,13 @@
                     Showing <span id="currentPageInfo">1-{{ logs|length }}</span> of <span id="totalRecords">{{ logs|length }}</span> records
                 </div>
                 <div class="flex space-x-1">
-                    <button id="prevPageBtn" onclick="changePage(-1)" class="px-2 py-1 border border-gray-300 dark:border-gray-600 rounded-md text-xs text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                    <button id="prevPageBtn" data-click="changePage" data-args="[-1]" class="px-2 py-1 border border-gray-300 dark:border-gray-600 rounded-md text-xs text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed" disabled>
                         <i class="fas fa-chevron-left mr-1"></i> Previous
                     </button>
                     <span class="px-2 py-1 text-xs text-gray-700 dark:text-gray-300">
                         Page <span id="currentPage">1</span> of <span id="totalPages">1</span>
                     </span>
-                    <button id="nextPageBtn" onclick="changePage(1)" class="px-2 py-1 border border-gray-300 dark:border-gray-600 rounded-md text-xs text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                    <button id="nextPageBtn" data-click="changePage" data-args="[1]" class="px-2 py-1 border border-gray-300 dark:border-gray-600 rounded-md text-xs text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed" disabled>
                         Next <i class="fas fa-chevron-right ml-1"></i>
                     </button>
                 </div>
@@ -427,7 +427,7 @@
             <div class="mt-3 flex flex-col flex-1 min-h-0">
                 <div class="flex items-center justify-between mb-4 flex-shrink-0">
                     <h3 class="text-lg font-medium text-gray-900 dark:text-white">Log Details</h3>
-                    <button type="button" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 flex items-center justify-center p-1" onclick="closeModal('logDetailsModal')">
+                    <button type="button" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 flex items-center justify-center p-1" data-click="closeModal" data-args='["logDetailsModal"]'>
                         <i class="fas fa-times"></i>
                     </button>
                 </div>
@@ -435,7 +435,7 @@
                     <!-- Details will be loaded here -->
                 </div>
                 <div class="flex justify-end mt-6 flex-shrink-0">
-                    <button type="button" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 min-h-[44px] rounded-lg transition-colors touch-target" onclick="closeModal('logDetailsModal')">Close</button>
+                    <button type="button" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 min-h-[44px] rounded-lg transition-colors touch-target" data-click="closeModal" data-args='["logDetailsModal"]'>Close</button>
                 </div>
             </div>
         </div>
@@ -445,10 +445,16 @@
 
 {% block scripts %}
 <script src="/static/js/table-sorting.js"></script>
-<script>
-function jsArg(value) {
-    return JSON.stringify(value == null ? '' : String(value))
-        .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+<script nonce="{{ request.state.csp_nonce }}">
+// Handlers this page's markup calls through data-click and friends (csp-actions.js)
+mateActions.allow('changePage', 'closeModal', 'refreshPage', 'showLogDetails', 'switchView',
+                  'updateLogFilters', 'updateOriginFilter', 'updateTimeRange');
+
+// Log fields come from callers: a widget visitor partly chooses their user_id
+function esc(value) {
+    return String(value == null ? '' : value)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
     let dailyChart, tokenChart, agentsChart, hourlyChart;
     
@@ -621,27 +627,27 @@ function jsArg(value) {
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                         <strong class="text-gray-700 dark:text-gray-300">Request ID:</strong>
-                        <p class="text-gray-600 dark:text-gray-400 mt-1 font-mono text-sm">${log.request_id}</p>
+                        <p class="text-gray-600 dark:text-gray-400 mt-1 font-mono text-sm">${esc(log.request_id)}</p>
                     </div>
                     <div>
                         <strong class="text-gray-700 dark:text-gray-300">Session ID:</strong>
-                        <p class="text-gray-600 dark:text-gray-400 mt-1 font-mono text-sm">${log.session_id || 'N/A'}</p>
+                        <p class="text-gray-600 dark:text-gray-400 mt-1 font-mono text-sm">${esc(log.session_id || 'N/A')}</p>
                     </div>
                     <div>
                         <strong class="text-gray-700 dark:text-gray-300">User ID:</strong>
-                        <p class="text-gray-600 dark:text-gray-400 mt-1">${log.user_id || 'N/A'}</p>
+                        <p class="text-gray-600 dark:text-gray-400 mt-1">${esc(log.user_id || 'N/A')}</p>
                     </div>
                     <div>
                         <strong class="text-gray-700 dark:text-gray-300">Agent Name:</strong>
-                        <p class="text-gray-600 dark:text-gray-400 mt-1">${log.agent_name || 'N/A'}</p>
+                        <p class="text-gray-600 dark:text-gray-400 mt-1">${esc(log.agent_name || 'N/A')}</p>
                     </div>
                     <div>
                         <strong class="text-gray-700 dark:text-gray-300">Model Name:</strong>
-                        <p class="text-gray-600 dark:text-gray-400 mt-1">${log.model_name || 'N/A'}</p>
+                        <p class="text-gray-600 dark:text-gray-400 mt-1">${esc(log.model_name || 'N/A')}</p>
                     </div>
                     <div>
                         <strong class="text-gray-700 dark:text-gray-300">Status:</strong>
-                        <p class="text-gray-600 dark:text-gray-400 mt-1">${log.status || 'N/A'}</p>
+                        <p class="text-gray-600 dark:text-gray-400 mt-1">${esc(log.status || 'N/A')}</p>
                     </div>
                     <div>
                         <strong class="text-gray-700 dark:text-gray-300">Timestamp:</strong>
@@ -676,7 +682,7 @@ function jsArg(value) {
                 ${log.error_description ? `
                 <div class="mt-4">
                     <strong class="text-gray-700 dark:text-gray-300">Error Description:</strong>
-                    <p class="text-red-600 dark:text-red-400 mt-1 bg-red-50 dark:bg-red-900 p-3 rounded-lg">${log.error_description}</p>
+                    <p class="text-red-600 dark:text-red-400 mt-1 bg-red-50 dark:bg-red-900 p-3 rounded-lg">${esc(log.error_description)}</p>
                 </div>
                 ` : ''}
             `;
@@ -796,23 +802,23 @@ function jsArg(value) {
         }
         
         tbody.innerHTML = logs.map(log => `
-            <tr class="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700" onclick="showLogDetails(${jsArg(log.id)})">
+            <tr class="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700" data-click="showLogDetails" data-args="${mateActions.attr([String(log.id)])}">
                 <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate" data-label="Timestamp">
                     ${log.timestamp ? log.timestamp.substring(0, 19).replace('T', ' ') : 'N/A'}
                 </td>
                 <td class="px-3 py-1.5 text-xs font-mono text-gray-900 dark:text-white truncate" data-label="Request ID">
-                    <button onclick="event.stopPropagation(); showLogDetails(${jsArg(log.id)})" class="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 underline min-h-[44px] touch-target">
-                        ${log.request_id.substring(0, 8)}...
+                    <button data-click="showLogDetails" data-args="${mateActions.attr([String(log.id)])}" data-stop class="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 underline min-h-[44px] touch-target">
+                        ${esc(log.request_id.substring(0, 8))}...
                     </button>
                 </td>
                 <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate" data-label="User ID">
-                    ${log.user_id || 'N/A'}
+                    ${esc(log.user_id || 'N/A')}
                 </td>
                 <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate" data-label="Agent">
-                    ${log.agent_name || 'N/A'}
+                    ${esc(log.agent_name || 'N/A')}
                 </td>
                 <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate" data-label="Model">
-                    ${log.model_name || 'N/A'}
+                    ${esc(log.model_name || 'N/A')}
                 </td>
                 <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate" data-label="Prompt Tokens">
                     ${log.prompt_tokens || 0}
@@ -836,7 +842,7 @@ function jsArg(value) {
         } else if (status === 'ERROR') {
             return '<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 dark:bg-red-800 dark:text-red-100">ERROR</span>';
         } else {
-            return `<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-600 dark:text-gray-200">${status || 'UNKNOWN'}</span>`;
+            return `<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-600 dark:text-gray-200">${esc(status || 'UNKNOWN')}</span>`;
         }
     }
 
