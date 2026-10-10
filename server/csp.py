@@ -2,13 +2,17 @@
 Content-Security-Policy for the pages this server sends.
 
 A CSP limits what an injected script can do: load code from another host, send
-data to one, or frame the dashboard. This is the first step of #124. The
-policy restricts *where* scripts, styles and connections come from, but keeps
-'unsafe-inline': the templates still have inline <script> blocks and hundreds
-of onclick= handlers.
+data to one, or frame the dashboard (#124). There are two policies:
 
-It is sent as Content-Security-Policy-Report-Only by default (CSP_MODE), so
-nothing breaks while violations are collected. Browsers post them to
+- The *strict* one allows inline <script> blocks only with this request's
+  nonce, and no inline on*= handlers. It is what stops an injected script.
+- The *legacy* one still has 'unsafe-inline', because pages that have not been
+  moved off onclick= handlers yet need it.
+
+CSP_MODE=report-only (the default) sends the strict policy as
+Content-Security-Policy-Report-Only, so nothing breaks while violations are
+collected. CSP_MODE=enforce enforces the legacy policy and reports against the
+strict one, until every page is converted. Browsers post violations to
 /csp-report, which logs each distinct one once.
 
 The dashboard may only be framed by itself. The widget chat page is framed by
@@ -20,8 +24,9 @@ import json
 import logging
 import os
 import re
+import secrets
 import time
-from typing import Iterable, List, Optional
+from typing import Dict, Iterable, List, Optional
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, Request, Response
@@ -88,9 +93,24 @@ def extra_sources() -> List[str]:
     return sources
 
 
-def build_policy(frame_ancestors: str = "'self'", allow_eval: bool = False) -> str:
+def new_nonce() -> str:
+    """A fresh nonce for one response's inline <script> blocks."""
+    return secrets.token_urlsafe(18)
+
+
+def build_policy(frame_ancestors: str = "'self'", allow_eval: bool = False,
+                 nonce: Optional[str] = None) -> str:
+    """The legacy policy, or with a nonce the strict one (no 'unsafe-inline' for scripts).
+
+    A nonce and 'unsafe-inline' cannot be combined: browsers ignore
+    'unsafe-inline' once a nonce is present, which would break the inline
+    handlers the legacy policy exists for.
+    """
     extra = extra_sources()
-    script_keywords = ["'self'", "'unsafe-inline'", "'wasm-unsafe-eval'"]
+    if nonce is None:
+        script_keywords = ["'self'", "'unsafe-inline'", "'wasm-unsafe-eval'"]
+    else:
+        script_keywords = ["'self'", f"'nonce-{nonce}'", "'wasm-unsafe-eval'"]
     if allow_eval:
         script_keywords.append("'unsafe-eval'")
 
@@ -184,17 +204,41 @@ def _is_hostname(value: str) -> bool:
     return re.fullmatch(r"[a-z0-9-]+(?:\.[a-z0-9-]+)*", value) is not None
 
 
+def policy_headers(nonce: str, frame_ancestors: str = "'self'",
+                   allow_eval: bool = False) -> Dict[str, str]:
+    """The CSP headers for one HTML response, by CSP_MODE."""
+    mode = csp_mode()
+    if mode == "off":
+        return {}
+    strict = build_policy(frame_ancestors, allow_eval, nonce=nonce)
+    if mode == "report-only":
+        return {CSP_REPORT_ONLY_HEADER: strict}
+    # Enforce what every page works with today, and report what the strict
+    # policy would still block, until no page needs 'unsafe-inline'
+    return {CSP_HEADER: build_policy(frame_ancestors, allow_eval),
+            CSP_REPORT_ONLY_HEADER: strict}
+
+
 async def add_csp_header(request: Request, call_next):
-    """Middleware: the dashboard policy on every HTML response that has none of its own."""
+    """Middleware: the dashboard policy on every HTML response that has none of its own.
+
+    The nonce is made before the page renders, so templates can put it on their
+    inline scripts as {{ request.state.csp_nonce }}.
+    """
+    request.state.csp_nonce = new_nonce()
     response = await call_next(request)
-    name = header_name()
-    if name is None:
-        return response
     if CSP_HEADER in response.headers or CSP_REPORT_ONLY_HEADER in response.headers:
         return response
     if not response.headers.get("content-type", "").startswith("text/html"):
         return response
-    response.headers[name] = build_policy(allow_eval=_needs_eval(request.url.path))
+    if _needs_eval(request.url.path):
+        # ADK's dev UI is not our markup: it gets the legacy policy only
+        name = header_name()
+        if name is not None:
+            response.headers[name] = build_policy(allow_eval=True)
+        return response
+    for name, policy in policy_headers(request.state.csp_nonce).items():
+        response.headers[name] = policy
     return response
 
 
@@ -210,11 +254,16 @@ def _needs_eval(path: str) -> bool:
     return (path == "/dev-ui" or path.startswith("/dev-ui/")) and adk_dev_ui_enabled()
 
 
-def set_csp_header(response: Response, frame_ancestors: str) -> Response:
-    """Give a response its own policy, e.g. the widget page with its frame-ancestors."""
-    name = header_name()
-    if name is not None:
-        response.headers[name] = build_policy(frame_ancestors)
+def set_csp_header(response: Response, frame_ancestors: str,
+                   request: Optional[Request] = None) -> Response:
+    """Give a response its own policy, e.g. the widget page with its frame-ancestors.
+
+    Pass the request when the response is a template with inline scripts, so the
+    policy carries the nonce they were rendered with.
+    """
+    nonce = getattr(request.state, "csp_nonce", None) if request is not None else None
+    for name, policy in policy_headers(nonce or new_nonce(), frame_ancestors).items():
+        response.headers[name] = policy
     return response
 
 

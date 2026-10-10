@@ -3,9 +3,9 @@ title: "Content-Security-Policy"
 summary: What the CSP allows, how to move from report-only to enforce, and how to add a host.
 audience: dev
 order: 44
-status: migrated
 covers:
   - server/csp.py
+  - static/js/csp-actions.js
 ---
 
 # Content-Security-Policy
@@ -19,7 +19,7 @@ list, to send data to one, or to let another site frame the dashboard.
 
 | Directive | Allows |
 |---|---|
-| `script-src` | `'self'`, inline scripts, WebAssembly (`'wasm-unsafe-eval'`, for Pyodide), and the CDNs the templates use: `cdn.tailwindcss.com`, `cdn.jsdelivr.net`, `cdnjs.cloudflare.com`, `unpkg.com`, `d3js.org` |
+| `script-src` | `'self'`, inline scripts that carry the response's nonce (see below), WebAssembly (`'wasm-unsafe-eval'`, for Pyodide), and the CDNs the templates use: `cdn.tailwindcss.com`, `cdn.jsdelivr.net`, `cdnjs.cloudflare.com`, `unpkg.com`, `d3js.org` |
 | `style-src` | `'self'`, inline styles, `cdn.jsdelivr.net`, `cdnjs.cloudflare.com`, `fonts.googleapis.com` |
 | `font-src` | `'self'`, `data:`, `cdn.jsdelivr.net`, `cdnjs.cloudflare.com`, `fonts.gstatic.com` |
 | `connect-src` | `'self'` (including the Work Room's WebSocket), `cdn.jsdelivr.net`, `cdnjs.cloudflare.com` |
@@ -30,22 +30,99 @@ list, to send data to one, or to let another site frame the dashboard.
 | `base-uri` | `'self'` |
 | `frame-ancestors` | `'self'` for the dashboard. For the widget chat page, see below |
 
-Two things are still allowed that a strict policy would forbid:
+## Two policies while pages are converted
 
-- **Inline scripts and handlers (`'unsafe-inline'`).** The templates have many
-  inline `<script>` blocks and `onclick=` handlers. Removing them page by page
-  and adding nonces is the next step.
+An injected script is stopped only if the policy has no `'unsafe-inline'` for
+scripts. Many templates still have `onclick=` handlers, which need it. So there
+are two versions of the policy, which differ only in `script-src`:
+
+- **Strict:** inline `<script>` blocks run only with this response's nonce
+  (`'nonce-…'`), and inline handlers (`onclick=`, `javascript:` URLs) do not
+  run at all.
+- **Legacy:** `'unsafe-inline'` instead of the nonce. Every page works with it.
+
+| `CSP_MODE` | Header(s) sent |
+|---|---|
+| `report-only` (default) | the strict policy as `Content-Security-Policy-Report-Only` |
+| `enforce` | the legacy policy as `Content-Security-Policy`, plus the strict one as `-Report-Only` |
+| `off` | none |
+
+So under `enforce`, nothing that works today breaks, and the log names the pages
+that still have inline code. Once every template is converted, `enforce` will
+enforce the strict policy, and `'unsafe-inline'` goes away.
+
+### The nonce
+
+The middleware (`add_csp_header`) makes a new nonce for every request before the
+page renders, and puts it in `request.state.csp_nonce`. A template gives it to
+each inline script:
+
+```html
+<script nonce="{{ request.state.csp_nonce }}">
+```
+
+A page that sets its own policy through `set_csp_header` (the widget chat page)
+passes the request, so its policy carries the same nonce.
+
+### Replacing inline handlers
+
+`static/js/csp-actions.js` (loaded by `base.html`) handles clicks, changes,
+input, keyup and submits for the whole page through event delegation:
+
+```html
+<button data-click="closeModal">                          <!-- closeModal() -->
+<button data-click="controlAdkServer" data-args='["start"]'>
+<a href="#" data-click="showTokensModal" data-args='["$event"]'>
+<select data-change="applyFilters">
+```
+
+- `data-args` is a JSON array. `"$event"` becomes the event and `"$el"` the
+  element. In a Jinja template, build it with `tojson` inside single quotes:
+  `data-args='{{ [agent.name] | tojson }}'`. In HTML built by JavaScript, use
+  `data-args="${mateActions.attr([t.id, t.name])}"`, which escapes it for the
+  attribute. Values stay data, so a name with a quote in it cannot break out
+  into code, as it could inside an `onclick="…('${name}')"` string.
+- The function runs with `this` set to the element. Nested handlers run
+  innermost first, and `event.stopPropagation()` stops the outer ones.
+  `data-click="stop"` is the built-in for `onclick="event.stopPropagation()"`.
+  It only stops other `data-click` handlers: a listener added with
+  `addEventListener` on an outer element has already run by then.
+- Only functions the page allows can be called:
+  `mateActions.allow('closeModal', 'sessionsApp.loadSessions')`. Markup that
+  gets injected into a page therefore cannot call an arbitrary global. Names are
+  resolved when the event fires, so a page may allow a function before the
+  script that defines it has run.
+- For HTML that JavaScript creates and keeps a reference to, adding a listener
+  (`el.addEventListener('click', …)`) is simpler than `data-click`.
+
+### Converting a page
+
+1. Put the nonce on each inline `<script>`.
+2. Replace every `on*=` attribute in the template, and in HTML its scripts
+   build, with `data-*` actions or listeners, and allow the functions it calls.
+3. Replace `href="javascript:…"` with a button and an action.
+4. Add the template to `CONVERTED` in `shared/test/test_csp.py`, which checks
+   that it stays free of inline handlers and un-nonced scripts.
+5. Open the page in a browser with the strict policy enforced, use what you
+   changed, and check that no `securitypolicyviolation` events fire.
+
+Converted so far: `base.html`, `login.html`, `dashboard/index.html`.
+
+## Also allowed
+
 - **`eval()` on ADK's dev UI.** A library bundled into ADK's dev UI
   (`/dev-ui/`, admins only) calls `new Function()`. Only pages under `/dev-ui/`
   get `'unsafe-eval'`, and only while the dev UI is served: it is off by
   default when `MATE_ENV=production` (`ADK_DEV_UI` overrides that). MATE's own
   pages never get it.
 
-## Report-Only first
+  The dev UI's markup is ADK's, so it gets the legacy policy only, with no
+  nonce and no strict report.
 
-By default the policy is sent as `Content-Security-Policy-Report-Only`. The
-browser blocks nothing. It reports what it would have blocked to
-`/csp-report`, and the server logs each distinct violation once, as a warning:
+## Violation reports
+
+In report-only mode the browser blocks nothing. It reports what it would have
+blocked to `/csp-report`, and the server logs each distinct violation once, as a warning:
 
 ```
 WARNING [server.csp] CSP violation: script-src-elem blocked 'https://cdn.example.com/lib.js' on /dashboard/agents
@@ -61,13 +138,10 @@ so its input is treated as hostile:
   log says how many reports it dropped. A flood of fake reports can therefore
   hide real ones for one window at most, not until a restart.
 
-Once the log stays quiet in normal use, switch to enforcing:
-
-| `CSP_MODE` | Effect |
-|---|---|
-| `report-only` (default) | Report violations, block nothing |
-| `enforce` | Block violations, and still report them |
-| `off` | Send no policy |
+An inline handler on a page that is not converted yet is logged as
+`script-src-attr blocked 'inline'`, and an inline script without the nonce as
+`script-src-elem blocked 'inline'`. Once the log stays quiet in normal use,
+set `CSP_MODE=enforce`.
 
 ## The widget
 

@@ -302,6 +302,31 @@ class TestConditions(_AlertTestCase):
             self.assertEqual(measured["value"], expected, (scope, scope_id))
 
 
+class TestMessage(_AlertTestCase):
+
+    def _message(self, condition_type, scope, scope_id):
+        rule = AlertRule(name="r", scope=scope, scope_id=scope_id,
+                         condition_type=condition_type, destination_type="http")
+        measurement = {"value": 4, "threshold": 3,
+                       "detail": {"window_minutes": 15, "period": "daily",
+                                  "used": 80, "limit": 100}}
+        return self.service._build_payload(rule, measurement)["message"]
+
+    def test_a_global_rule_names_all_agents_not_none(self):
+        for condition in ("agent_error_count", "guardrail_count",
+                          "model_fallback_count", "budget_threshold"):
+            message = self._message(condition, "global", None)
+            self.assertNotIn("None", message, condition)
+            self.assertIn("all agents", message, condition)
+
+    def test_a_scoped_rule_names_its_scope(self):
+        self.assertEqual(self._message("agent_error_count", "agent", "a1"),
+                         "agent a1 recorded 4 errors in the last 15 minutes")
+        self.assertEqual(self._message("model_fallback_count", "project", "5"),
+                         "The fallback model answered for project 5 4 times in the last "
+                         "15 minutes; check the primary model's provider")
+
+
 class TestDelivery(_AlertTestCase):
 
     def test_email_destination_uses_the_email_sender(self):

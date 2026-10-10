@@ -91,6 +91,9 @@ Payload:
 `rate_limit_alert`. Budget alerts keep that historical name so webhooks written
 against the old rate-limit alert keep working.
 
+`message` names the scope as `<scope> <scope_id>` (`agent support_root`, `project 5`),
+or `all agents` for a global rule, which has no `scope_id`.
+
 ## Cooldown
 
 `cooldown_seconds` (default 3600) is enforced from `alert_rules.last_fired_at` through a
