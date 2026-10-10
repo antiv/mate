@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **`shared/migrate.py` without a `.env` looked for PostgreSQL** (#157) - run on its own, the migration runner fell back to `DB_TYPE=postgresql` and, for SQLite, to `mate_agent.db` relative to the working directory, while the application uses SQLite and `my_agent_data.db` in the project root. `migrate.py status` and `run` therefore failed with "No database engine available", or migrated a different file. The runner, the database client, the session store and the dashboard now read the database settings from one place
 - **MySQL sessions used port 5432** (#157) - with `DB_TYPE=mysql` and `DB_PORT` unset, the application database used 3306 but the ADK session store 5432
+- **Alerts from a global rule read "global None"** - every message from a rule with the global scope began "global None …", in emails, webhooks and, since the Slack and Discord destinations, in chat. It now says "all agents". The `message` text of existing HTTP and email alerts changes accordingly; `scope` and `scope_id` in the payload do not. The fallback alert's message now reads "The fallback model answered for … N times …"
 
 ### Security
 

@@ -359,25 +359,27 @@ class AlertService:
 
     def _build_payload(self, rule: AlertRule, measurement: Dict[str, Any]) -> Dict[str, Any]:
         detail = measurement.get('detail') or {}
+        # A global rule has no scope_id; name what it covers instead of "global None"
+        subject = 'all agents' if rule.scope == 'global' else f"{rule.scope} {rule.scope_id}"
         if rule.condition_type == 'budget_threshold':
             # Keep the historical event name so webhooks written against the old
             # rate-limit alert keep working after the migration.
             event = 'rate_limit_alert'
-            message = (f"{rule.scope} {rule.scope_id} has used {measurement['value']}% of its "
+            message = (f"{subject} has used {measurement['value']}% of its "
                        f"{detail.get('period')} token budget "
                        f"({detail.get('used')}/{detail.get('limit')})")
         elif rule.condition_type == 'agent_error_count':
             event = 'agent_error_alert'
-            message = (f"{rule.scope} {rule.scope_id} recorded {measurement['value']} errors in "
+            message = (f"{subject} recorded {measurement['value']} errors in "
                        f"the last {detail.get('window_minutes')} minutes")
         elif rule.condition_type == 'model_fallback_count':
             event = 'model_fallback_alert'
-            message = (f"{rule.scope} {rule.scope_id} was answered by its fallback model "
+            message = (f"The fallback model answered for {subject} "
                        f"{measurement['value']} times in the last "
                        f"{detail.get('window_minutes')} minutes; check the primary model's provider")
         else:
             event = 'guardrail_alert'
-            message = (f"{rule.scope} {rule.scope_id} triggered guardrails "
+            message = (f"{subject} triggered guardrails "
                        f"{measurement['value']} times in the last "
                        f"{detail.get('window_minutes')} minutes")
         return {
