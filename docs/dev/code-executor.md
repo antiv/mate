@@ -3,7 +3,6 @@ title: "Code executor setup"
 summary: What the code executor tool runs, where, and how to contain it.
 audience: dev
 order: 220
-status: migrated
 covers:
   - shared/utils/tools/code_executor_tools.py
 ---
