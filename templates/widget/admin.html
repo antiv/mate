@@ -5,8 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Widget Admin — {{ agent_name }}</title>
   <!-- Tailwind CSS -->
+  <script src="/static/js/csp-actions.js?v=2"></script>
   <script src="https://cdn.tailwindcss.com"></script>
-  <script>
+  <script nonce="{{ request.state.csp_nonce }}">
       tailwind.config = {
           darkMode: 'class',
       }
@@ -16,7 +17,7 @@
   <!-- Google Fonts -->
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/css/widget/admin.css">
-  <script>
+  <script nonce="{{ request.state.csp_nonce }}">
     // Initialize theme based on localStorage, matching MATE dashboard behavior
     (function() {
       const theme = localStorage.getItem('theme') || 'dark';
@@ -111,7 +112,7 @@
               <h2 class="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
                 <i class="fas fa-brain text-blue-500"></i> Memory Blocks
               </h2>
-              <button onclick="widgetAdmin.showBlockModal(false)" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium shadow-sm transition-colors flex items-center gap-1.5">
+              <button data-click="widgetAdmin.showBlockModal" data-args="[false]" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium shadow-sm transition-colors flex items-center gap-1.5">
                 <i class="fas fa-plus"></i> Add Block
               </button>
             </div>
@@ -212,12 +213,12 @@
 
   <!-- Memory Block Form Modal -->
   <div id="blockModal" class="fixed inset-0 bg-black/50 dark:bg-black/75 flex items-center justify-center hidden z-50 transition-opacity duration-200">
-    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-lg mx-4 border border-gray-200 dark:border-gray-700 overflow-hidden" onclick="event.stopPropagation()">
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-lg mx-4 border border-gray-200 dark:border-gray-700 overflow-hidden">
       <div class="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700">
         <h3 class="text-base font-semibold text-gray-900 dark:text-white flex items-center gap-2" id="blockFormTitle">
           <i class="fas fa-brain text-blue-500"></i> New Memory Block
         </h3>
-        <button onclick="widgetAdmin.hideBlockModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
+        <button data-click="widgetAdmin.hideBlockModal" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
           <i class="fas fa-times text-lg"></i>
         </button>
       </div>
@@ -242,7 +243,7 @@
     </div>
   </div>
 
-  <script>
+  <script nonce="{{ request.state.csp_nonce }}">
     window.WIDGET_API_KEY = "{{ api_key }}";       // public key — preview widget only
     window.WIDGET_ADMIN_KEY = "{{ admin_key }}";   // private key — /widget/api calls
     window.WIDGET_AGENT_NAME = "{{ agent_name }}";
@@ -269,6 +270,6 @@
       document.body.appendChild(s);
     })();
   </script>
-  <script src="/static/js/widget/admin.js?v=2"></script>
+  <script src="/static/js/widget/admin.js?v=3"></script>
 </body>
 </html>

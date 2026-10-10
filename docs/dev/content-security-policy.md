@@ -6,6 +6,7 @@ order: 44
 covers:
   - server/csp.py
   - static/js/csp-actions.js
+  - static/js/workroom-canvas-frame.js
 ---
 
 # Content-Security-Policy
@@ -137,6 +138,44 @@ Converted so far:
 - evals, usage, users, migrations, docs, the template gallery
   (`dashboard/templates.html`, `template-gallery.js`) and the wizard pages
   (`wizard_leads.html`, `wizard_orders.html`, `wizard_pricing.html`)
+- the Work Room (`dashboard/workroom.html`) and the chat script it loads
+  (`standalone/chat.js`), the widget chat and admin pages (`widget/chat.html`,
+  `widget/admin.html`, `widget/admin.js`) and the standalone chat page
+
+Every page is converted. `widget/admin.html` does not extend `base.html`, so it
+loads `csp-actions.js` itself. `standalone/chat.js` runs on pages that may not
+load it, so its "Open in Canvas" button has a listener of its own.
+
+## The Work Room canvas
+
+The canvas runs code an agent wrote: HTML with inline scripts and `onclick=`,
+libraries from any CDN. A `srcdoc` iframe would inherit the Work Room's strict
+policy and block all of that, so the code runs on a page of its own,
+`/dashboard/workroom/canvas`, with its own policy (`canvas_policy()`):
+
+- `sandbox allow-scripts allow-modals`. The browser gives the page an opaque
+  origin however it is opened, in the canvas iframe or in a tab of its own, so
+  the code cannot reach the dashboard's cookies, storage or DOM.
+- Inline scripts, `'unsafe-eval'` and any `https:` source are allowed, for the
+  agent's code.
+- `frame-ancestors 'self'`: only MATE may frame it.
+- It is enforced in every `CSP_MODE`, including `off`, since the sandbox is what
+  makes the page safe to serve.
+
+The page is empty. Its inline script (`workroom-canvas-frame.js`, inlined
+because Chrome refuses a sandboxed page's requests to a loopback or private
+address) says it is ready to the window that framed or opened it, and writes
+the document that window sends back. It listens only to that window, and only
+on MATE's own origin.
+
+"Open in new tab" opens the same page. It used to open the code as a `blob:`
+URL, which ran it on MATE's origin with no sandbox.
+
+Python is different: Pyodide needs workers that a sandbox breaks, so it runs in
+a `srcdoc` iframe under the Work Room's policy. The iframe loads Pyodide from a
+listed CDN and the runner from `static/js/workroom-python.js`. The code is a
+`<script type="application/json">` element, data the browser never runs, so no
+inline script is needed.
 
 ## Also allowed
 
@@ -218,9 +257,6 @@ The hosts are added to `script-src`, `style-src`, `font-src`, `connect-src` and
 
 ## Known gaps
 
-- **Work Room canvas.** Code an agent writes is run in the Work Room in a
-  sandboxed `srcdoc` iframe, and such an iframe inherits the page's policy. A
-  canvas that loads a library from an unlisted CDN (for example
-  `cdn.plot.ly`) shows up as a violation. Under `enforce`, that script is
-  blocked. Add the host to `CSP_EXTRA_SOURCES` if your agents rely on it.
+- **Python in the Work Room canvas** runs without a sandbox, on MATE's origin
+  (see above). Python code can reach the page through Pyodide's `js` module.
 - **Standalone builds** (`standalone_server.py`) do not send this policy yet.

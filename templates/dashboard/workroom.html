@@ -697,7 +697,7 @@
         <!-- Live Browser Modal -->
         <div id="wrBrowserModal" class="fixed inset-0 z-[150] hidden items-center justify-center p-4">
             <!-- Backdrop -->
-            <div class="absolute inset-0" style="background: rgba(20,15,10,0.55);" onclick="closeBrowserModal()"></div>
+            <div class="absolute inset-0" style="background: rgba(20,15,10,0.55);" data-click="closeBrowserModal"></div>
 
             <!-- Modal Container -->
             <div class="relative w-full flex flex-col z-10 overflow-hidden" style="max-width: 900px; height: 80vh; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 18px; box-shadow: var(--shadow-card);">
@@ -715,7 +715,7 @@
 
                     <div style="flex: 1"></div>
 
-                    <button style="width: 28px; height: 28px; border-radius: 8px; border: none; background: var(--bg-surface); color: var(--text-secondary); cursor: pointer;" onclick="closeBrowserModal()">
+                    <button style="width: 28px; height: 28px; border-radius: 8px; border: none; background: var(--bg-surface); color: var(--text-secondary); cursor: pointer;" data-click="closeBrowserModal">
                         <i class="fas fa-times"></i>
                     </button>
                 </div>
@@ -772,7 +772,7 @@
 
 {% block scripts %}
 {% if selected_agent %}
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
 (function () {
     "use strict";
 
@@ -1034,7 +1034,7 @@
     var _aceEditor         = null;
     var ACE_BASE = "https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.6/";
     var ACE_MODES = {
-        html:"html", javascript:"javascript", js:"javascript", css:"css",
+        html:"html", "javascript":"javascript", js:"javascript", css:"css",
         typescript:"typescript", python:"python", java:"java", go:"golang",
         rust:"rust", sql:"sql", json:"json", yaml:"yaml", xml:"xml",
         svg:"xml", bash:"sh", shell:"sh", cpp:"c_cpp", c:"c_cpp", php:"php",
@@ -1044,7 +1044,7 @@
     var RUNNABLE_LANGS = ["html", "javascript", "js", "svg", "css", "python", "py", "dart"];
     var TAB_LANGS      = ["html", "javascript", "js", "svg", "css"]; // only these produce a renderable page
     var LANG_EXT = {
-        html:".html", javascript:".js", js:".js", css:".css", svg:".svg",
+        html:".html", "javascript":".js", js:".js", css:".css", svg:".svg",
         python:".py", typescript:".ts", java:".java", go:".go", rust:".rs",
         sql:".sql", json:".json", yaml:".yml", xml:".xml", bash:".sh", shell:".sh",
         cpp:".cpp", c:".c", php:".php", ruby:".rb", kotlin:".kt", dart:".dart"
@@ -1082,11 +1082,42 @@
         }
     }
 
+    // Code an agent wrote runs on the canvas page, which its own policy sandboxes
+    // (see canvas_policy in server/csp.py). The page asks for the document when
+    // it is ready; it gets it only from the window that opened it.
+    var CANVAS_PAGE = "/dashboard/workroom/canvas";
+    var _canvasDocs = [];  // [{win, frame, html}] waiting for "mate-canvas-ready"
+
+    function _openCanvasPage(target, html) {
+        if (target.tagName === "IFRAME") {
+            _canvasDocs.push({ frame: target, html: html });
+            target.src = CANVAS_PAGE;
+        } else {
+            _canvasDocs.push({ win: target, html: html });
+        }
+    }
+
+    window.addEventListener("message", function (event) {
+        if (!event.data || event.data.type !== "mate-canvas-ready") return;
+        for (var i = 0; i < _canvasDocs.length; i++) {
+            var d = _canvasDocs[i];
+            var win = d.win || (d.frame && d.frame.contentWindow);
+            if (win && event.source === win) {
+                _canvasDocs.splice(i, 1);
+                // The sandboxed page has an opaque origin, which postMessage can only reach with "*"
+                win.postMessage({ type: "mate-canvas-doc", html: d.html }, "*");
+                return;
+            }
+        }
+    });
+
     function _buildSrcdoc() {
         var lang = _canvasLang.toLowerCase();
         if (lang === "html" || lang === "svg") return _canvasCode;
         if (lang === "css") return "<html><body><style>" + _canvasCode + "</style></body></html>";
-        return "<html><body><script>" + _canvasCode + "<\/script></body></html>";
+        // Runs on the canvas page under its own policy, not on this page: split
+        // so it does not read as one of this page's tags, which need the nonce
+        return "<html><body><" + "script>" + _canvasCode + "<\/script></body></html>";
     }
 
     function _showCodeEditor(code) {
@@ -1224,7 +1255,9 @@
     // SecurityErrors in some browsers. An iframe with allow-same-origin
     // gives Pyodide the storage access it needs while keeping code sandboxed.
     function _buildPythonSrcdoc(code) {
-        var escaped = JSON.stringify(code); // safe JS string literal
+        // The code is data for workroom-python.js, never script: "<" is escaped
+        // so a closing script tag in the code cannot end the element
+        var json = JSON.stringify(code).replace(/</g, "\\u003c");
         return '<!DOCTYPE html><html><head>' +
             '<script src="https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js"><\/script>' +
             '<style>' +
@@ -1234,22 +1267,8 @@
             '.err{color:#dc2626}.ok{color:#22c55e}.info{color:#94a3b8}' +
             '<\/style></head><body>' +
             '<div id="o"><span class="info">&#9881; Loading Python…<\/span><\/div>' +
-            '<script>(async()=>{' +
-            'function esc(s){var d=document.createElement("div");d.textContent=s;return d.innerHTML;}' +
-            'try{' +
-            'var py=await loadPyodide();' +
-            'py.runPython("import sys,io;_o=io.StringIO();_e=io.StringIO();sys.stdout=_o;sys.stderr=_e");' +
-            'var err=null;' +
-            'try{py.runPython(' + escaped + ');}catch(e){err=String(e);}' +
-            'var so=py.runPython("_o.getvalue()");' +
-            'var se=py.runPython("_e.getvalue()");' +
-            'var el=document.getElementById("o");el.innerHTML="";' +
-            'if(so)el.innerHTML+="<pre>"+esc(so)+"<\/pre>";' +
-            'if(se)el.innerHTML+="<pre class=err>"+esc(se)+"<\/pre>";' +
-            'if(err)el.innerHTML+="<pre class=err>"+esc(err)+"<\/pre>";' +
-            'if(!so&&!se&&!err)el.innerHTML="<span class=ok>&#10003; Ran successfully (no output)<\/span>";' +
-            '}catch(e){document.getElementById("o").innerHTML="<pre class=err>&#10008; "+e+"<\/pre>";}' +
-            '})();<\/script>' +
+            '<script type="application/json" id="mateCode">' + json + '<\/script>' +
+            '<script src="/static/js/workroom-python.js"><\/script>' +
             '</body></html>';
     }
 
@@ -1259,7 +1278,7 @@
         body.innerHTML = "";
         var iframe = document.createElement("iframe");
         iframe.sandbox = "allow-scripts allow-modals";
-        iframe.srcdoc = _buildSrcdoc();
+        _openCanvasPage(iframe, _buildSrcdoc());
         body.appendChild(iframe);
         _canvasMode = "run";
         _updateCanvasButtons();
@@ -1418,15 +1437,13 @@
     });
 
     document.getElementById("wrCanvasNewTabBtn").addEventListener("click", function () {
-        var content, mime;
         if (_isRunnable()) {
-            content = _buildSrcdoc();
-            mime = "text/html";
-        } else {
-            content = _canvasCode;
-            mime = "text/plain";
+            // Not a blob: page, which would run the agent's code on MATE's origin
+            var tab = window.open(CANVAS_PAGE, "_blank");
+            if (tab) _openCanvasPage(tab, _buildSrcdoc());
+            return;
         }
-        var blob = new Blob([content], { type: mime });
+        var blob = new Blob([_canvasCode], { type: "text/plain" });
         var url  = URL.createObjectURL(blob);
         var win  = window.open(url, "_blank");
         // Revoke after the new tab has had time to load
@@ -1489,7 +1506,10 @@
             pill.setAttribute("data-rawcode", encoded);
             pill.innerHTML = '<i class="fas fa-code"></i>'
                 + '<span>' + lang + '</span>'
-                + '<button class="mate-pill-btn" onclick="if(window.mateOpenCanvas)window.mateOpenCanvas(this.closest(\'.mate-code-pill\'))">open in canvas</button>';
+                + '<button class="mate-pill-btn">open in canvas</button>';
+            pill.querySelector(".mate-pill-btn").addEventListener("click", function () {
+                window.mateOpenCanvas(pill);
+            });
             block.parentNode.replaceChild(pill, block);
         });
     };
@@ -1538,6 +1558,7 @@
     }
     
     window.closeBrowserModal = closeBrowserModal;
+    mateActions.allow('closeBrowserModal');
 
     function connectBrowserWebsocket() {
         if (_browserWs) return;

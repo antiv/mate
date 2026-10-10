@@ -145,6 +145,32 @@ def build_policy(frame_ancestors: str = "'self'", allow_eval: bool = False,
     return "; ".join(directives)
 
 
+CANVAS_PATH = "/dashboard/workroom/canvas"
+
+
+def canvas_policy() -> str:
+    """The policy of the Work Room canvas page, which runs code an agent wrote.
+
+    Agent code uses inline scripts, onclick= and CDNs no list could name, so this
+    page allows them. What makes that safe is the sandbox directive: the browser
+    gives the page an opaque origin whoever opens it, framed or in a tab of its
+    own, so the code cannot reach the dashboard's cookies, storage or DOM. Only
+    MATE may frame it. Unlike the dashboard's policy it is always enforced,
+    whatever CSP_MODE says, since without the sandbox the page must not run.
+    """
+    return "; ".join([
+        "sandbox allow-scripts allow-modals",
+        "default-src 'self' https: data: blob:",
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval' https: blob:",
+        "style-src 'self' 'unsafe-inline' https:",
+        "img-src 'self' https: data: blob:",
+        "font-src 'self' https: data:",
+        "worker-src 'self' https: blob:",
+        "object-src 'none'",
+        "frame-ancestors 'self'",
+    ])
+
+
 def widget_frame_ancestors(allowed_origins: Optional[List[str]], strict: bool) -> str:
     """frame-ancestors for the widget chat page, matching what _check_origin lets through.
 

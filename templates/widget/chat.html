@@ -56,7 +56,7 @@
     </div>
   </div>
 
-  <script>
+  <script nonce="{{ request.state.csp_nonce }}">
     window.WIDGET_API_KEY = {{ api_key | tojson }};
     window.WIDGET_AGENT_NAME = {{ agent_name | tojson }};
     window.WIDGET_CONFIG = {{ widget_config | tojson }};

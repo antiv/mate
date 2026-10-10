@@ -1140,7 +1140,7 @@
         + '<div class="mate-code-header">'
         + '<span class="mate-code-lang">' + l + '</span>'
         + '<span class="mate-canvas-indicator">open in canvas</span>'
-        + '<button class="mate-canvas-btn" onclick="if(window.mateOpenCanvas)window.mateOpenCanvas(this.closest(\'.mate-code-block\'))">Open in Canvas</button>'
+        + '<button class="mate-canvas-btn">Open in Canvas</button>'
         + '</div>'
         + '<pre><code>' + escaped + '</code></pre>'
         + '</div>');
@@ -1421,6 +1421,17 @@
     return messageEl._rawMarkdown || messageEl.innerText || "";
   }
 
+
+  // "Open in Canvas" on a code block. A listener rather than an onclick=, which
+  // the Content-Security-Policy blocks. The Work Room loads this file again for
+  // each session, so the listener is added only once.
+  if (!window._mateCanvasBtnListener) {
+    window._mateCanvasBtnListener = true;
+    document.addEventListener("click", function (e) {
+      var btn = e.target instanceof Element ? e.target.closest(".mate-canvas-btn") : null;
+      if (btn && window.mateOpenCanvas) window.mateOpenCanvas(btn.closest(".mate-code-block"));
+    });
+  }
 
   // --- Boot ------------------------------------------------------------
   if (document.readyState === "loading") {
