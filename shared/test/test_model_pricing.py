@@ -165,6 +165,35 @@ class TestRecompute(_DbTest):
         self.assertAlmostEqual(self.Session().query(TokenUsageLog).one().cost_usd, 0.2)
 
 
+class TestOpenRouterArrival(_DbTest):
+    """Calls logged while OpenRouter's list was on its way are priced when it arrives."""
+
+    def test_waiting_calls_are_priced_when_the_list_arrives(self):
+        session = self.Session()
+        self._row(session, "openrouter/deepseek/deepseek-chat-v3.1")       # waiting for the list
+        self._row(session, "openrouter/unknown/x")                        # not on it either
+        self._row(session, "ollama_chat/gemma4")                          # not OpenRouter's to price
+        session.commit()
+        session.close()
+        response = MagicMock()
+        response.json.return_value = OPENROUTER_PAYLOAD
+        db = MagicMock()
+        db.get_session.side_effect = lambda: self.Session()
+        # The fetch stores the list in the module; put back what was there
+        saved = (mp._openrouter, mp._openrouter_fetched_at)
+        self.addCleanup(lambda: setattr(mp, "_openrouter", saved[0]))
+        self.addCleanup(lambda: setattr(mp, "_openrouter_fetched_at", saved[1]))
+        # Pricing reads the list the fetch just stored
+        with patch("httpx.get", return_value=response), \
+                patch("shared.utils.database_client.get_database_client", return_value=db), \
+                patch.object(mp, "_openrouter_prices", side_effect=lambda wait=False: mp._openrouter):
+            mp._fetch_openrouter()
+        costs = {r.model_name: r.cost_usd for r in self.Session().query(TokenUsageLog).all()}
+        self.assertAlmostEqual(costs["openrouter/deepseek/deepseek-chat-v3.1"], 0.2)
+        self.assertIsNone(costs["openrouter/unknown/x"])
+        self.assertIsNone(costs["ollama_chat/gemma4"])
+
+
 class TestPriceRows(_DbTest):
 
     def test_models_used_or_priced_by_hand_are_listed(self):

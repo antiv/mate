@@ -89,8 +89,8 @@ def forget_manual_prices() -> None:
 
 # --- OpenRouter ---------------------------------------------------------------
 # Fetched in the background, never while a call is being logged: until the list
-# arrives, an openrouter model has no price, and the Settings page can fill the
-# missing costs in afterwards.
+# arrives, an openrouter model has no price. The calls logged meanwhile are
+# priced as soon as it does (_price_waiting_calls).
 
 _openrouter: Dict[str, Price] = {}
 _openrouter_fetched_at = 0.0
@@ -126,6 +126,28 @@ def _fetch_openrouter() -> None:
     with _openrouter_lock:
         _openrouter, _openrouter_fetched_at = prices, time.monotonic()
     logger.info(f"Fetched OpenRouter prices for {len(prices)} models")
+    _price_waiting_calls()
+
+
+def _price_waiting_calls() -> None:
+    """Price the openrouter calls logged without a cost, typically while the list was on its way."""
+    try:
+        from .database_client import get_database_client
+        from .models import TokenUsageLog
+        session = get_database_client().get_session()
+        if session is None:
+            return
+        try:
+            names = [row[0] for row in session.query(TokenUsageLog.model_name).filter(
+                TokenUsageLog.status == "SUCCESS", TokenUsageLog.cost_usd.is_(None),
+                TokenUsageLog.model_name.like(OPENROUTER_PREFIX + "%")).distinct().all()]
+            priced = sum(recompute_costs(session, model_name=name) for name in names)
+            if priced:
+                logger.info(f"Priced {priced} openrouter calls logged before the price list arrived")
+        finally:
+            session.close()
+    except Exception as e:
+        logger.warning(f"Could not price the calls waiting for OpenRouter's prices: {e}")
 
 
 def _openrouter_prices(wait: bool = False) -> Dict[str, Price]:

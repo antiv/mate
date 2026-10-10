@@ -16,6 +16,13 @@
         </button>
     </div>
 
+    <!-- Tabs: the suites, and the Playground (static/js/evals-playground.js) -->
+    <div class="flex gap-1 border-b border-gray-200 dark:border-gray-700" role="tablist">
+        <button type="button" class="evals-tab px-3 py-2 text-sm font-medium border-b-2 border-blue-600 text-blue-600 dark:text-blue-400" data-tab="suites" role="tab" aria-selected="true">Suites</button>
+        <button type="button" class="evals-tab px-3 py-2 text-sm font-medium border-b-2 border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200" data-tab="playground" role="tab" aria-selected="false"><i class="fas fa-flask mr-1"></i>Playground</button>
+    </div>
+
+    <div id="suitesView" class="space-y-4">
     <!-- Two-column layout: suites + test cases -->
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
 
@@ -128,6 +135,54 @@
                 </tbody>
             </table>
         </div>
+    </div>
+    </div>
+
+    <!-- Playground: the same prompt or eval suite on 2-3 variants of an agent -->
+    <div id="playgroundView" class="hidden space-y-4">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 space-y-3">
+            <p class="text-xs text-gray-500 dark:text-gray-400">
+                Run one prompt, or the agent's active test cases, on two or three variants of an agent: another model,
+                other instructions, or a stored version. Replies, scores, latency and cost appear side by side.
+                Nothing is saved or deployed; the runs are real model calls and show on the Usage page.
+            </p>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                    <label for="pgAgent" class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Agent</label>
+                    <select id="pgAgent" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-sm"></select>
+                </div>
+                <div>
+                    <label for="pgMode" class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Run</label>
+                    <select id="pgMode" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-sm">
+                        <option value="prompt">One prompt</option>
+                        <option value="suite">The agent's eval suite</option>
+                    </select>
+                </div>
+                <div id="pgSuiteInfo" class="hidden text-xs text-gray-500 dark:text-gray-400 self-end pb-2"></div>
+            </div>
+            <div id="pgPromptFields" class="space-y-2">
+                <textarea id="pgPrompt" rows="3" placeholder="The prompt to send to every variant"
+                          class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-sm"></textarea>
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <input id="pgExpected" type="text" placeholder="Expected answer (optional, to score the replies)"
+                           class="sm:col-span-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-sm">
+                    <select id="pgMethod" class="border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-sm" aria-label="Scoring method">
+                        <option value="semantic">Semantic similarity</option>
+                        <option value="exact_match">Exact match</option>
+                        <option value="llm_judge">LLM judge</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <div id="pgVariants" class="grid grid-cols-1 lg:grid-cols-3 gap-3"></div>
+        <div class="flex items-center gap-2">
+            <button type="button" id="pgAddVariant" class="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 dark:text-gray-200 rounded-lg"><i class="fas fa-plus mr-1"></i>Add a variant</button>
+            <button type="button" id="pgRun" class="px-3 py-1.5 text-sm bg-green-600 hover:bg-green-700 text-white rounded-lg"><i class="fas fa-play mr-1"></i>Run</button>
+            <span id="pgStatus" class="text-xs text-gray-500 dark:text-gray-400"></span>
+        </div>
+
+        <div id="pgResults" class="space-y-3"></div>
     </div>
 </div>
 
@@ -295,6 +350,7 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="/static/js/evals-playground.js?v=1"></script>
 <script nonce="{{ request.state.csp_nonce }}">
 // Handlers this page's markup calls through data-click and friends (csp-actions.js)
 mateActions.allow('addRatedToEvals', 'applyImprove', 'checkImprove', 'closeAddModal', 'closeImprove',

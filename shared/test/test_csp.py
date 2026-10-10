@@ -624,6 +624,7 @@ class TestConvertedTemplates(unittest.TestCase):
         "workroom-python.js",
         "wizard/demo.js",
         "wizard/wizard.js",
+        "evals-playground.js",
     ]
     _TEMPLATES = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
                               "templates")

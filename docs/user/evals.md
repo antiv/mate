@@ -8,6 +8,8 @@ covers:
   - shared/utils/eval_runner.py
   - shared/utils/eval_agent_runner.py
   - shared/utils/agent_improver.py
+  - shared/utils/eval_playground.py
+  - static/js/evals-playground.js
   - shared/utils/feedback_service.py
   - shared/utils/dashboard/dashboard_server.py::*eval*
 ---
@@ -101,3 +103,37 @@ rewrite the agent's instruction so the case would pass.
 Only the instruction and the memory blocks you ticked can change. Tools, model and
 roles are never touched. If someone edited the instruction in the meantime, Apply is
 refused and you start again from the current text.
+
+## Playground
+
+The **Playground** tab compares two or three variants of one agent on the same
+prompts: which model answers best for the money, or whether new instructions help.
+
+1. Pick the **Agent**, and what to **Run**:
+   - **One prompt**: type it. Add an **expected answer** and a scoring method to
+     have the replies scored; without one they are only compared.
+   - **The agent's eval suite**: all its active test cases, each scored with its
+     own method.
+2. Set up each variant. A variant starts from the agent's **current config** or a
+   stored **version**, and can change:
+   - the **model** (any model name the agent could use, such as
+     `openrouter/google/gemini-2.5-flash-lite`);
+   - the **instructions**. **Edit the current instructions** copies them in to start
+     from. Empty fields keep what the start has.
+3. **Run**. The variants answer one after the other.
+
+The **Comparison** shows, per variant, the average score (and in a suite how many
+cases passed), the average reply time, the cost in US dollars and the tokens used.
+Below it, each prompt has every variant's reply with its own score, time and cost.
+
+- Nothing is saved or deployed. To keep a winning variant, change the agent, or
+  apply instructions with **Suggest a fix**.
+- The runs are real model calls. They cost money, and appear on the
+  [Usage page](usage-and-audit.md) under the agent, by the user `eval_runner`, as eval
+  runs do.
+- Cost is shown for models with a price (see [Model prices](settings.md#model-prices)).
+  A variant on a model without one shows how many calls were left unpriced.
+- A variant that cannot run, for example because of a model name that does not
+  exist, shows its error; the other variants still run.
+- Sub-agents always run with their current config: a variant changes the agent
+  you picked, not the agents it delegates to.
