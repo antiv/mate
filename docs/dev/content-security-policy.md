@@ -98,7 +98,13 @@ input, keyup and submits for the whole page through event delegation:
   resolved when the event fires, so a page may allow a function before the
   script that defines it has run.
 - For HTML that JavaScript creates and keeps a reference to, adding a listener
-  (`el.addEventListener('click', …)`) is simpler than `data-click`.
+  (`el.addEventListener('click', …)`) is simpler than `data-click`. The same
+  goes for a modal that closes on a click on its backdrop
+  (`onclick="if (event.target === this) …"`): add a listener that checks
+  `event.target`.
+- Names are looked up on `window`. A page object declared with a top-level
+  `const` (`const AlertPage = …`) is not on `window`, so assign it there
+  (`window.AlertPage = AlertPage`) before its methods can be actions.
 
 ### Converting a page
 
@@ -124,6 +130,10 @@ Converted so far:
   that build their markup (`agent-management.js`, `modals/file-search.js`,
   `modals/memory-blocks.js`, `modals/version-history.js`,
   `modals/widget-keys.js`)
+- the monitoring pages: alerts, audit logs, guardrail logs, sessions, traces,
+  rate limits, integrations and triggers (with `modals/trigger_modal.html`),
+  and the scripts that build their markup (`alerts-page.js`, `sessions.js`,
+  `traces.js`, `triggers-page.js`)
 
 ## Also allowed
 

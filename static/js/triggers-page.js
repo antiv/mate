@@ -2,6 +2,14 @@
  * Triggers Page — MATE Dashboard
  * Manages cron / webhook / stub trigger CRUD and execution.
  */
+
+// Handlers this file's markup calls through data-click and friends (csp-actions.js)
+mateActions.allow('TriggerPage.closeModal', 'TriggerPage.deleteTrigger',
+                  'TriggerPage.hideSecretsBanner', 'TriggerPage.loadTriggers',
+                  'TriggerPage.openCreateModal', 'TriggerPage.openEditModal',
+                  'TriggerPage.regenerateKey', 'TriggerPage.regenerateSigningSecret',
+                  'TriggerPage.submitForm', 'TriggerPage.testFire', 'TriggerPage.toggleTrigger',
+                  'TriggerPage.updateOutputVisibility', 'TriggerPage.updateTypeVisibility');
 const TriggerPage = (function () {
     'use strict';
 
@@ -59,7 +67,7 @@ const TriggerPage = (function () {
             const lastRun = t.last_fired_at ? _relativeTime(t.last_fired_at) : '<span class="text-gray-400">Never</span>';
             const lastStatus = _lastStatus(t);
             const enabledToggle = `
-                <button onclick="TriggerPage.toggleTrigger(${t.id})" title="${t.is_enabled ? 'Disable' : 'Enable'}"
+                <button data-click="TriggerPage.toggleTrigger" data-args="[${t.id}]" title="${t.is_enabled ? 'Disable' : 'Enable'}"
                     class="relative inline-flex items-center h-4 rounded-full w-7 transition-colors focus:outline-none ${t.is_enabled ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-600'}">
                     <span class="inline-block w-3 h-3 transform bg-white rounded-full transition-transform shadow ${t.is_enabled ? 'translate-x-3.5' : 'translate-x-0.5'}"></span>
                 </button>`;
@@ -77,13 +85,13 @@ const TriggerPage = (function () {
                 <td class="px-4 py-2 text-gray-500 dark:text-gray-400">${lastRun} ${lastStatus}</td>
                 <td class="px-4 py-2 text-right">
                     <div class="flex items-center justify-end gap-2">
-                        <button onclick="TriggerPage.testFire(${t.id})" title="Test fire" class="text-green-600 dark:text-green-400 hover:text-green-800">
+                        <button data-click="TriggerPage.testFire" data-args="[${t.id}]" title="Test fire" class="text-green-600 dark:text-green-400 hover:text-green-800">
                             <i class="fas fa-play text-xs"></i>
                         </button>
-                        <button onclick="TriggerPage.openEditModal(${t.id})" title="Edit" class="text-blue-600 dark:text-blue-400 hover:text-blue-800">
+                        <button data-click="TriggerPage.openEditModal" data-args="[${t.id}]" title="Edit" class="text-blue-600 dark:text-blue-400 hover:text-blue-800">
                             <i class="fas fa-edit text-xs"></i>
                         </button>
-                        <button onclick="TriggerPage.deleteTrigger(${t.id})" title="Delete" class="text-red-500 dark:text-red-400 hover:text-red-700">
+                        <button data-click="TriggerPage.deleteTrigger" data-args="[${t.id}]" title="Delete" class="text-red-500 dark:text-red-400 hover:text-red-700">
                             <i class="fas fa-trash text-xs"></i>
                         </button>
                     </div>
@@ -468,7 +476,11 @@ const TriggerPage = (function () {
 
         banner.classList.remove('hidden');
         // Auto-hide after 60 seconds
-        setTimeout(() => banner.classList.add('hidden'), 60000);
+        setTimeout(hideSecretsBanner, 60000);
+    }
+
+    function hideSecretsBanner() {
+        document.getElementById('fireKeyBanner').classList.add('hidden');
     }
 
     function _typeLabel(type) {
@@ -545,5 +557,8 @@ const TriggerPage = (function () {
         testFire,
         regenerateKey,
         regenerateSigningSecret,
+        hideSecretsBanner,
     };
 })();
+// A top-level const is not on window, where csp-actions.js looks names up
+window.TriggerPage = TriggerPage;

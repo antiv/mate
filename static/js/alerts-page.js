@@ -2,6 +2,12 @@
  * Alerts Page — MATE Dashboard
  * CRUD for alert rules plus a non-destructive test fire.
  */
+
+// Handlers this file's markup calls through data-click and friends (csp-actions.js)
+mateActions.allow('AlertPage.closeModal', 'AlertPage.deleteRule', 'AlertPage.loadRules',
+                  'AlertPage.onConditionChange', 'AlertPage.onDestinationChange',
+                  'AlertPage.openCreateModal', 'AlertPage.openEditModal', 'AlertPage.saveRule',
+                  'AlertPage.testRule', 'AlertPage.toggleRule');
 const AlertPage = (function () {
     'use strict';
 
@@ -20,6 +26,8 @@ const AlertPage = (function () {
         .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
     function init() {
+        // Enter in a field must not submit the form and reload the page; Save saves
+        document.getElementById('ruleForm').addEventListener('submit', (e) => e.preventDefault());
         loadRules();
     }
 
@@ -85,10 +93,10 @@ const AlertPage = (function () {
                 <td class="px-3 py-2">${esc(lastFired)}<div class="text-gray-500">${esc(rule.fire_count)} fired</div>${error}</td>
                 <td class="px-3 py-2">${status}</td>
                 <td class="px-3 py-2 text-right whitespace-nowrap">
-                    <button onclick="AlertPage.testRule(${rule.id})" class="text-blue-600 hover:text-blue-800 mr-2" title="Test"><i class="fas fa-vial"></i></button>
-                    <button onclick="AlertPage.toggleRule(${rule.id})" class="text-gray-600 hover:text-gray-800 mr-2" title="Enable/disable"><i class="fas fa-power-off"></i></button>
-                    <button onclick="AlertPage.openEditModal(${rule.id})" class="text-gray-600 hover:text-gray-800 mr-2" title="Edit"><i class="fas fa-pen"></i></button>
-                    <button onclick="AlertPage.deleteRule(${rule.id})" class="text-red-600 hover:text-red-800" title="Delete"><i class="fas fa-trash"></i></button>
+                    <button data-click="AlertPage.testRule" data-args="[${rule.id}]" class="text-blue-600 hover:text-blue-800 mr-2" title="Test"><i class="fas fa-vial"></i></button>
+                    <button data-click="AlertPage.toggleRule" data-args="[${rule.id}]" class="text-gray-600 hover:text-gray-800 mr-2" title="Enable/disable"><i class="fas fa-power-off"></i></button>
+                    <button data-click="AlertPage.openEditModal" data-args="[${rule.id}]" class="text-gray-600 hover:text-gray-800 mr-2" title="Edit"><i class="fas fa-pen"></i></button>
+                    <button data-click="AlertPage.deleteRule" data-args="[${rule.id}]" class="text-red-600 hover:text-red-800" title="Delete"><i class="fas fa-trash"></i></button>
                 </td>
             </tr>`;
         }).join('');
@@ -278,3 +286,5 @@ const AlertPage = (function () {
         testRule,
     };
 })();
+// A top-level const is not on window, where csp-actions.js looks names up
+window.AlertPage = AlertPage;

@@ -12,13 +12,13 @@
             </p>
         </div>
         <div class="flex flex-wrap items-center gap-2 flex-shrink-0">
-            <select id="timeRangeSelect" onchange="loadTraces()" class="border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg px-2 py-1.5 text-xs min-h-[44px] touch-target">
+            <select id="timeRangeSelect" data-change="loadTraces" class="border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg px-2 py-1.5 text-xs min-h-[44px] touch-target">
                 <option value="1">Last 1 hour</option>
                 <option value="6">Last 6 hours</option>
                 <option value="24" selected>Last 24 hours</option>
                 <option value="72">Last 3 days</option>
             </select>
-            <button onclick="loadTraces()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 text-xs rounded-lg flex items-center min-h-[44px] touch-target">
+            <button data-click="loadTraces" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 text-xs rounded-lg flex items-center min-h-[44px] touch-target">
                 <i class="fas fa-sync-alt mr-1"></i>Refresh
             </button>
         </div>
@@ -46,11 +46,11 @@
     </div>
 
     <!-- Trace Detail Modal -->
-    <div id="traceDetailModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden z-50 overflow-y-auto" onclick="if (event.target === this) closeTraceDetail()">
-        <div class="trace-detail-modal-panel relative top-4 md:top-20 mx-auto p-4 md:p-5 w-full max-w-3xl max-h-[85vh] flex flex-col bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700" onclick="event.stopPropagation()">
+    <div id="traceDetailModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden z-50 overflow-y-auto">
+        <div class="trace-detail-modal-panel relative top-4 md:top-20 mx-auto p-4 md:p-5 w-full max-w-3xl max-h-[85vh] flex flex-col bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700">
             <div class="flex justify-between items-center mb-3 flex-shrink-0">
                 <h3 class="font-semibold text-gray-900 dark:text-white">Trace Detail</h3>
-                <button type="button" onclick="closeTraceDetail()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1">
+                <button type="button" data-click="closeTraceDetail" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1">
                     <i class="fas fa-times"></i>
                 </button>
             </div>
@@ -61,5 +61,5 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="/static/js/traces.js"></script>
+<script src="/static/js/traces.js?v=2"></script>
 {% endblock %}

@@ -14,21 +14,21 @@
                 Enable with <code class="bg-gray-100 dark:bg-gray-700 px-1 rounded">ALERTS_ENABLED=true</code>.
             </p>
         </div>
-        <button onclick="AlertPage.openCreateModal()" class="px-3 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center space-x-1">
+        <button data-click="AlertPage.openCreateModal" class="px-3 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center space-x-1">
             <i class="fas fa-plus mr-1"></i>New Rule
         </button>
     </div>
 
     <!-- Filters -->
     <div class="flex flex-wrap gap-2 items-center">
-        <select id="filterCondition" onchange="AlertPage.loadRules()" class="text-xs border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500">
+        <select id="filterCondition" data-change="AlertPage.loadRules" class="text-xs border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500">
             <option value="">All Conditions</option>
             <option value="agent_error_count">Agent errors</option>
             <option value="budget_threshold">Budget threshold</option>
             <option value="guardrail_count">Guardrail hits</option>
             <option value="model_fallback_count">Fallback model used</option>
         </select>
-        <select id="filterScope" onchange="AlertPage.loadRules()" class="text-xs border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500">
+        <select id="filterScope" data-change="AlertPage.loadRules" class="text-xs border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500">
             <option value="">All Scopes</option>
             <option value="global">Global</option>
             <option value="project">Project</option>
@@ -63,7 +63,7 @@
 <div id="ruleModal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center dashboard-modal">
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-lg w-full mx-4 p-4 max-h-[90vh] overflow-y-auto">
         <h3 id="ruleModalTitle" class="text-lg font-semibold text-gray-900 dark:text-white mb-4">New Alert Rule</h3>
-        <form id="ruleForm" class="space-y-3" onsubmit="return false;">
+        <form id="ruleForm" class="space-y-3">
             <div>
                 <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Name</label>
                 <input type="text" id="formName" required placeholder="e.g. Support bot failing"
@@ -73,7 +73,7 @@
             <div class="grid grid-cols-2 gap-2">
                 <div>
                     <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Condition</label>
-                    <select id="formCondition" onchange="AlertPage.onConditionChange()"
+                    <select id="formCondition" data-change="AlertPage.onConditionChange"
                             class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-sm">
                         <option value="agent_error_count">Agent errors</option>
                         <option value="budget_threshold">Budget threshold</option>
@@ -137,7 +137,7 @@
             <div class="grid grid-cols-2 gap-2">
                 <div>
                     <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Destination</label>
-                    <select id="formDestination" onchange="AlertPage.onDestinationChange()"
+                    <select id="formDestination" data-change="AlertPage.onDestinationChange"
                             class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-sm">
                         <option value="http">HTTP POST</option>
                         <option value="email">Email</option>
@@ -167,15 +167,15 @@
             </div>
 
             <div class="flex justify-end gap-2 pt-2">
-                <button type="button" onclick="AlertPage.closeModal()" class="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 dark:text-gray-200 rounded-lg">Cancel</button>
-                <button type="button" onclick="AlertPage.saveRule()" class="px-3 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg">Save</button>
+                <button type="button" data-click="AlertPage.closeModal" class="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 dark:text-gray-200 rounded-lg">Cancel</button>
+                <button type="button" data-click="AlertPage.saveRule" class="px-3 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg">Save</button>
             </div>
         </form>
     </div>
 </div>
 
-<script src="/static/js/alerts-page.js?v=2"></script>
-<script>
+<script src="/static/js/alerts-page.js?v=3"></script>
+<script nonce="{{ request.state.csp_nonce }}">
     document.addEventListener('DOMContentLoaded', function () { AlertPage.init(); });
 </script>
 {% endblock %}

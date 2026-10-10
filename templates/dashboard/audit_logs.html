@@ -12,7 +12,7 @@
             </p>
         </div>
         <div class="flex flex-wrap gap-2 items-center flex-shrink-0">
-            <button type="button" onclick="runRetention()" class="px-3 py-2 text-xs border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 min-h-[44px] touch-target">
+            <button type="button" data-click="runRetention" class="px-3 py-2 text-xs border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 min-h-[44px] touch-target">
                 <i class="fas fa-broom mr-1"></i>Run retention
             </button>
             <a id="exportCsvLink" href="#" class="px-3 py-2 text-xs bg-gray-600 hover:bg-gray-700 text-white rounded-lg flex items-center min-h-[44px] touch-target">
@@ -21,7 +21,7 @@
             <a id="exportJsonLink" href="#" class="px-3 py-2 text-xs bg-gray-600 hover:bg-gray-700 text-white rounded-lg flex items-center min-h-[44px] touch-target">
                 <i class="fas fa-file-code mr-1"></i>Export JSON
             </a>
-            <button type="button" onclick="loadLogs()" class="px-3 py-2 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center min-h-[44px] touch-target">
+            <button type="button" data-click="loadLogs" class="px-3 py-2 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center min-h-[44px] touch-target">
                 <i class="fas fa-sync-alt mr-1"></i>Refresh
             </button>
         </div>
@@ -57,7 +57,7 @@
             </div>
         </div>
         <div class="mt-2 flex justify-end">
-            <button type="button" onclick="applyFilters()" class="px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded">Apply</button>
+            <button type="button" data-click="applyFilters" class="px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded">Apply</button>
         </div>
     </div>
 
@@ -90,8 +90,11 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
 (function() {
+    // Handlers this page's markup calls through data-click (csp-actions.js)
+    mateActions.allow('applyFilters', 'loadLogs', 'runRetention', 'auditLogNext', 'auditLogPrev');
+
     const LIMIT = 100;
     let currentOffset = 0;
     let totalCount = 0;
@@ -185,8 +188,8 @@
             } else {
                 var prevDisabled = currentOffset === 0;
                 var nextDisabled = currentOffset + LIMIT >= totalCount;
-                pagination.innerHTML = '<button onclick="window.auditLogPrev()" ' + (prevDisabled ? 'disabled' : '') + ' class="px-2 py-1 text-xs rounded ' + (prevDisabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-200 dark:hover:bg-gray-600') + '">Prev</button> ' +
-                    '<button onclick="window.auditLogNext()" ' + (nextDisabled ? 'disabled' : '') + ' class="px-2 py-1 text-xs rounded ' + (nextDisabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-200 dark:hover:bg-gray-600') + '">Next</button>';
+                pagination.innerHTML = '<button data-click="auditLogPrev" ' + (prevDisabled ? 'disabled' : '') + ' class="px-2 py-1 text-xs rounded ' + (prevDisabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-200 dark:hover:bg-gray-600') + '">Prev</button> ' +
+                    '<button data-click="auditLogNext" ' + (nextDisabled ? 'disabled' : '') + ' class="px-2 py-1 text-xs rounded ' + (nextDisabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-200 dark:hover:bg-gray-600') + '">Next</button>';
             }
         } catch (e) {
             tbody.innerHTML = '<tr><td colspan="7" class="px-3 py-4 text-sm text-red-600 dark:text-red-400">Failed to load: ' + esc(e.message || 'Unknown error') + '</td></tr>';

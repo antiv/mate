@@ -11,20 +11,20 @@
             <h2 class="text-xl font-bold text-gray-900 dark:text-white">Triggers</h2>
             <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">Activate agents autonomously via cron schedules, webhooks, or external events</p>
         </div>
-        <button onclick="TriggerPage.openCreateModal()" class="px-3 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center space-x-1">
+        <button data-click="TriggerPage.openCreateModal" class="px-3 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center space-x-1">
             <i class="fas fa-plus mr-1"></i>New Trigger
         </button>
     </div>
 
     <!-- Filters -->
     <div class="flex flex-wrap gap-2 items-center">
-        <select id="filterProject" onchange="TriggerPage.loadTriggers()" class="text-xs border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500">
+        <select id="filterProject" data-change="TriggerPage.loadTriggers" class="text-xs border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500">
             <option value="">All Projects</option>
             {% for project in projects %}
             <option value="{{ project.id }}">{{ project.name }}</option>
             {% endfor %}
         </select>
-        <select id="filterType" onchange="TriggerPage.loadTriggers()" class="text-xs border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500">
+        <select id="filterType" data-change="TriggerPage.loadTriggers" class="text-xs border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500">
             <option value="">All Types</option>
             <option value="cron">Cron</option>
             <option value="webhook">Webhook</option>
@@ -114,7 +114,7 @@
                     <p class="text-xs text-yellow-700 dark:text-yellow-300 mt-1">Paste into your sender's webhook secret field. Used only when <em>Require signed requests</em> is on.</p>
                 </div>
             </div>
-            <button onclick="document.getElementById('fireKeyBanner').classList.add('hidden')" class="text-yellow-600 dark:text-yellow-300 hover:text-yellow-900">
+            <button data-click="TriggerPage.hideSecretsBanner" class="text-yellow-600 dark:text-yellow-300 hover:text-yellow-900">
                 <i class="fas fa-times"></i>
             </button>
         </div>
@@ -124,12 +124,10 @@
 <!-- Trigger Modal -->
 {% include "dashboard/modals/trigger_modal.html" %}
 
-<script src="/static/js/triggers-page.js"></script>
-<script>
-function jsArg(value) {
-    return JSON.stringify(value == null ? '' : String(value))
-        .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
+<script src="/static/js/triggers-page.js?v=2"></script>
+<script nonce="{{ request.state.csp_nonce }}">
+    // Handlers this page's markup calls through data-click (csp-actions.js)
+    mateActions.allow('rescheduleSystemJob', 'toggleSystemJob');
     window._triggerPageData = {
         projects: {{ projects | tojson }},
         agents: {{ agents | tojson }},
@@ -158,14 +156,14 @@ function jsArg(value) {
 
                 const isEnabled = j.next_run_time !== null;
                 const enabledToggle = `
-                    <button onclick="toggleSystemJob(${jsArg(j.id)})" title="${isEnabled ? 'Pause Task' : 'Resume Task'}"
+                    <button data-click="toggleSystemJob" data-args="${mateActions.attr([j.id])}" title="${isEnabled ? 'Pause Task' : 'Resume Task'}"
                         class="relative inline-flex items-center h-4 rounded-full w-7 transition-colors focus:outline-none ${isEnabled ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-600'}">
                         <span class="inline-block w-3 h-3 transform bg-white rounded-full transition-transform shadow ${isEnabled ? 'translate-x-3.5' : 'translate-x-0.5'}"></span>
                     </button>`;
 
                 const actions = `
                     <div class="flex items-center justify-end gap-2">
-                        <button onclick="rescheduleSystemJob(${jsArg(j.id)})" title="Edit Schedule (Cron)" class="text-blue-600 dark:text-blue-400 hover:text-blue-800">
+                        <button data-click="rescheduleSystemJob" data-args="${mateActions.attr([j.id])}" title="Edit Schedule (Cron)" class="text-blue-600 dark:text-blue-400 hover:text-blue-800">
                             <i class="fas fa-edit text-xs"></i>
                         </button>
                     </div>`;
