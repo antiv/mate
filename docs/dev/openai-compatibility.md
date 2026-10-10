@@ -3,7 +3,6 @@ title: "OpenAI-compatible API: clients and details"
 summary: Configure coding assistants against MATE, with personal access tokens and tool calling in detail.
 audience: dev
 order: 51
-status: migrated
 covers:
   - server/openai_routes.py
   - server/openai_translate.py
