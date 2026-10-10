@@ -79,6 +79,17 @@
                     <input type="number" id="formTokensPerMonth" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 rounded px-2 py-1.5 text-sm" placeholder="500000" min="0">
                 </div>
             </div>
+            <div class="grid grid-cols-2 gap-2">
+                <div>
+                    <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">USD/day</label>
+                    <input type="number" id="formUsdPerDay" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 rounded px-2 py-1.5 text-sm" placeholder="5.00" min="0" step="0.01">
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">USD/month</label>
+                    <input type="number" id="formUsdPerMonth" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 rounded px-2 py-1.5 text-sm" placeholder="100.00" min="0" step="0.01">
+                </div>
+                <p class="col-span-2 text-[11px] text-gray-500 dark:text-gray-400">Spend over the last 24 hours and 30 days, at list prices. Calls whose model has no price do not count; see <a href="/dashboard/settings#model-prices" class="text-blue-600 hover:underline">model prices</a>.</p>
+            </div>
             <div>
                 <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Max tokens/request (agent)</label>
                 <input type="number" id="formMaxTokensPerRequest" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 rounded px-2 py-1.5 text-sm" placeholder="4096" min="0">
@@ -130,6 +141,8 @@
                     <span class="text-xs text-gray-500 dark:text-gray-400 ml-2">
                         ${c.requests_per_minute ? c.requests_per_minute + '/min' : ''}
                         ${c.tokens_per_day ? '| ' + c.tokens_per_day + ' tokens/day' : ''}
+                        ${c.usd_per_day != null ? '| $' + c.usd_per_day.toFixed(2) + '/day' : ''}
+                        ${c.usd_per_month != null ? '| $' + c.usd_per_month.toFixed(2) + '/month' : ''}
                         ${c.action_on_limit ? '| ' + c.action_on_limit : ''}
                     </span>
                 </div>
@@ -182,6 +195,7 @@
                 <div>Tokens (last hour): <strong>${(res.tokens_last_hour ?? 0).toLocaleString()}</strong></div>
                 <div>Tokens (last day): <strong>${(res.tokens_last_day ?? 0).toLocaleString()}</strong></div>
                 <div>Tokens (last 30 days): <strong>${(res.tokens_last_month ?? 0).toLocaleString()}</strong></div>
+                <div>Spent (last day / 30 days): <strong>$${(res.usd_last_day ?? 0).toFixed(2)}</strong> / <strong>$${(res.usd_last_month ?? 0).toFixed(2)}</strong></div>
             </div>
         `;
     }
@@ -205,6 +219,9 @@
         document.getElementById('formTokensPerDay').value = c.tokens_per_day || '';
         document.getElementById('formTokensPerMonth').value = c.tokens_per_month || '';
         document.getElementById('formMaxTokensPerRequest').value = c.max_tokens_per_request || '';
+        // 0 is a real dollar budget (spend nothing), so only null leaves the field empty
+        document.getElementById('formUsdPerDay').value = c.usd_per_day ?? '';
+        document.getElementById('formUsdPerMonth').value = c.usd_per_month ?? '';
         document.getElementById('formActionOnLimit').value = c.action_on_limit || 'block';
         document.getElementById('formAlertWebhook').value = c.alert_webhook_url || '';
         document.getElementById('configModal').classList.remove('hidden');
@@ -226,6 +243,8 @@
             tokens_per_day: document.getElementById('formTokensPerDay').value ? parseInt(document.getElementById('formTokensPerDay').value) : null,
             tokens_per_month: document.getElementById('formTokensPerMonth').value ? parseInt(document.getElementById('formTokensPerMonth').value) : null,
             max_tokens_per_request: document.getElementById('formMaxTokensPerRequest').value ? parseInt(document.getElementById('formMaxTokensPerRequest').value) : null,
+            usd_per_day: document.getElementById('formUsdPerDay').value !== '' ? parseFloat(document.getElementById('formUsdPerDay').value) : null,
+            usd_per_month: document.getElementById('formUsdPerMonth').value !== '' ? parseFloat(document.getElementById('formUsdPerMonth').value) : null,
             action_on_limit: document.getElementById('formActionOnLimit').value,
             alert_webhook_url: document.getElementById('formAlertWebhook').value || null,
             alert_thresholds: [80, 90, 100],

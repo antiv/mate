@@ -10,7 +10,7 @@ generated: true
 
 # Database reference
 
-**34** tables defined in `shared/utils/models.py`; migrations are at **V041**. Migrations apply automatically on startup and are the source of truth for the schema: the models describe it, the migrations create it.
+**34** tables defined in `shared/utils/models.py`; migrations are at **V042**. Migrations apply automatically on startup and are the source of truth for the schema: the models describe it, the migrations create it.
 
 ## Migrations
 
@@ -59,6 +59,7 @@ A ✗ means that dialect has no file for that version. All dialects are in step.
 | V039 | widget feedback key | ✓ | ✓ | ✓ |
 | V040 | system settings | ✓ | ✓ | ✓ |
 | V041 | token costs | ✓ | ✓ | ✓ |
+| V042 | usd budgets | ✓ | ✓ | ✓ |
 
 ## `users`
 
@@ -480,6 +481,8 @@ Model `RateLimitConfig`. Model for rate limit and budget configuration per user,
 | `tokens_per_day` | `Integer` | — | — | — |
 | `tokens_per_month` | `Integer` | — | — | — |
 | `max_tokens_per_request` | `Integer` | — | — | — |
+| `usd_per_day` | `Float` | — | — | Spend in US dollars over the last 24 hours / 30 days, priced calls only |
+| `usd_per_month` | `Float` | — | — | — |
 | `action_on_limit` | `String(20)` | not null | `'block'` | warn, throttle, block |
 | `alert_thresholds` | `Text` | — | — | JSON array e.g. [80, 90, 100] |
 | `alert_webhook_url` | `Text` | — | — | — |
