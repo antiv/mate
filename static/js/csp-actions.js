@@ -7,7 +7,10 @@
  *   <a data-click="showTokensModal" data-args='["$event"]'>   gets the event
  *   <select data-change="applyFilters">
  *
- * In data-args, "$event" is replaced by the event and "$el" by the element.
+ * In data-args, "$event" is replaced by the event, "$el" by the element and
+ * "$value" by the element's value (what `this.value` was in an inline handler).
+ * data-prevent calls event.preventDefault() before the handler, data-stop
+ * event.stopPropagation() after it.
  * The handler runs with `this` set to the element, as an inline handler did.
  * Handlers on nested elements run innermost first, and event.stopPropagation()
  * in one stops the outer ones, also as before.
@@ -59,13 +62,14 @@
             return [];
         }
         if (!Array.isArray(list)) list = [list];
-        return list.map((a) => (a === '$event' ? event : a === '$el' ? el : a));
+        return list.map((a) => (a === '$event' ? event : a === '$el' ? el : a === '$value' ? el.value : a));
     }
 
     function dispatch(event, attr) {
         let el = event.target instanceof Element ? event.target.closest(`[${attr}]`) : null;
         while (el) {
             const name = el.getAttribute(attr);
+            if (el.hasAttribute('data-prevent')) event.preventDefault();
             const fn = resolve(name);
             if (fn) {
                 // A method keeps its object as `this`; a plain function gets the element
@@ -75,6 +79,7 @@
             } else {
                 console.warn(`mateActions: "${name}" is not an allowed action`);
             }
+            if (el.hasAttribute('data-stop')) event.stopPropagation();
             if (event.cancelBubble) break;
             el = el.parentElement && el.parentElement.closest(`[${attr}]`);
         }
@@ -93,6 +98,8 @@
 
     window.mateActions = {
         allow(...names) { names.forEach((n) => allowed.add(n)); },
+        /** Whether an action name would run: allowed and defined. */
+        can(name) { return resolve(name) !== null; },
         attr,
     };
 })();

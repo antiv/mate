@@ -3,6 +3,11 @@
 // ============================================================================
 
 // Export agents functionality
+// Handlers this file's markup calls through data-click and friends (csp-actions.js)
+mateActions.allow('_cancelBuildBanner', '_triggerBuildDownload', 'downloadBinary',
+                  'exportAgents', 'hideSaveTemplateModal', 'importAgents',
+                  'refreshAgentsPage', 'reinitializeAllAgents', 'submitSaveTemplate');
+
 async function exportAgents() {
     try {
         if (!window.selectedProjectId) {
@@ -402,7 +407,7 @@ function _showBuildProgress(buildId, agentName) {
                 <span class="text-indigo-200 text-sm ml-2" id="buildProgressText">Starting build...</span>
             </div>
         </div>
-        <button onclick="_cancelBuildBanner()" class="text-indigo-200 hover:text-white text-sm px-2 py-1 rounded hover:bg-indigo-700" title="Dismiss (build continues in background)">
+        <button data-click="_cancelBuildBanner" class="text-indigo-200 hover:text-white text-sm px-2 py-1 rounded hover:bg-indigo-700" title="Dismiss (build continues in background)">
             <i class="fas fa-times"></i>
         </button>
     `;
@@ -440,10 +445,10 @@ function _completeBuildBanner(filename, fileSize, buildId) {
             </div>
         </div>
         <div class="flex items-center gap-2">
-            <button onclick="_triggerBuildDownload(${jsArg(buildId)}, ${jsArg(filename)})" class="bg-white text-green-700 font-semibold text-sm px-4 py-1.5 rounded-lg hover:bg-green-50 transition-colors">
+            <button data-click="_triggerBuildDownload" data-args="${mateActions.attr([buildId, filename])}" class="bg-white text-green-700 font-semibold text-sm px-4 py-1.5 rounded-lg hover:bg-green-50 transition-colors">
                 <i class="fas fa-download mr-1.5"></i> Download
             </button>
-            <button onclick="_cancelBuildBanner()" class="text-green-200 hover:text-white text-sm px-2 py-1 rounded hover:bg-green-700">
+            <button data-click="_cancelBuildBanner" class="text-green-200 hover:text-white text-sm px-2 py-1 rounded hover:bg-green-700">
                 <i class="fas fa-times"></i>
             </button>
         </div>
@@ -466,7 +471,7 @@ function _failBuildBanner(error) {
                 <span class="text-red-200 text-sm ml-2">${error.substring(0, 200)}</span>
             </div>
         </div>
-        <button onclick="_cancelBuildBanner()" class="text-red-200 hover:text-white text-sm px-2 py-1 rounded hover:bg-red-700">
+        <button data-click="_cancelBuildBanner" class="text-red-200 hover:text-white text-sm px-2 py-1 rounded hover:bg-red-700">
             <i class="fas fa-times"></i>
         </button>
     `;

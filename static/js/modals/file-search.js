@@ -2,6 +2,12 @@
 // File Search Modal Functions
 // ============================================================================
 
+// Handlers this file's markup calls through data-click and friends (csp-actions.js)
+mateActions.allow('closeFileSearchModal', 'deleteFileFromStore', 'deleteFileSearchStore',
+                  'filterStoreFiles', 'handleAssignOrCreateStore',
+                  'handleStoreSelectChange', 'openFileSearchModal', 'showAllStoreFiles',
+                  'toggleStoreFiles', 'unassignFileSearchStore', 'uploadFileToStoreById');
+
 function openFileSearchModal(prefix) {
     const modal = document.getElementById(`${prefix}FileSearchModal`);
     if (!modal) {
@@ -144,7 +150,7 @@ function updateFileSearchModalContent(prefix, stores, files, agentName, allStore
                     <div class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
                         <!-- Store Header (Always Visible) -->
                         <div class="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-900/50 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800/50" 
-                             onclick="toggleStoreFiles(${jsArg(storeId)}, ${jsArg(prefix)}, ${jsArg(store.store_name)})"
+                             data-click="toggleStoreFiles" data-args="${mateActions.attr([storeId, prefix, store.store_name])}"
                              data-store-name="${store.store_name}">
                             <div class="flex items-center space-x-2 flex-1">
                                 <i class="fas fa-chevron-${isExpanded ? 'down' : 'right'} text-xs text-gray-500 dark:text-gray-400 transition-transform" id="${storeId}-icon"></i>
@@ -153,9 +159,9 @@ function updateFileSearchModalContent(prefix, stores, files, agentName, allStore
                                     <p class="text-xs text-gray-500 dark:text-gray-400">${fileCount} file${fileCount !== 1 ? 's' : ''} • ${store.store_name}</p>
                                 </div>
                             </div>
-                            <div class="flex items-center space-x-1" onclick="event.stopPropagation()">
+                            <div class="flex items-center space-x-1" data-click="stop">
                                 <button 
-                                    onclick="event.stopPropagation(); event.preventDefault(); unassignFileSearchStore(${jsArg(prefix)}, ${jsArg(agentName)}, ${jsArg(store.store_name)})"
+                                    data-click="unassignFileSearchStore" data-args="${mateActions.attr([prefix, agentName, store.store_name])}" data-stop data-prevent
                                     class="px-2 py-1 text-xs text-orange-600 hover:text-orange-700 border border-orange-300 rounded"
                                     title="Remove from this agent"
                                     type="button"
@@ -163,7 +169,7 @@ function updateFileSearchModalContent(prefix, stores, files, agentName, allStore
                                     Remove
                                 </button>
                                 <button 
-                                    onclick="event.stopPropagation(); event.preventDefault(); deleteFileSearchStore(${jsArg(prefix)}, ${jsArg(store.store_name)}, ${jsArg(store.display_name || store.store_name)})"
+                                    data-click="deleteFileSearchStore" data-args="${mateActions.attr([prefix, store.store_name, store.display_name || store.store_name])}" data-stop data-prevent
                                     class="px-2 py-1 text-xs text-red-600 hover:text-red-700 border border-red-300 rounded"
                                     title="Delete store completely"
                                     type="button"
@@ -186,7 +192,7 @@ function updateFileSearchModalContent(prefix, stores, files, agentName, allStore
                                     <button 
                                         type="button" 
                                         id="${storeId}-upload-button"
-                                        onclick="uploadFileToStoreById(${jsArg(storeId)}, ${jsArg(prefix)}, ${jsArg(store.store_name)})"
+                                        data-click="uploadFileToStoreById" data-args="${mateActions.attr([storeId, prefix, store.store_name])}"
                                         class="px-3 py-1 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
                                     >
                                         <i class="fas fa-upload text-[10px] mr-1"></i>
@@ -211,7 +217,7 @@ function updateFileSearchModalContent(prefix, stores, files, agentName, allStore
                                             id="${storeId}-search" 
                                             placeholder="Search files..." 
                                             class="w-full px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                                            oninput="filterStoreFiles('${storeId}', '${store.store_name}')"
+                                            data-input="filterStoreFiles" data-args="${mateActions.attr([String(storeId), String(store.store_name)])}"
                                         >
                                     </div>
                                 ` : ''}
@@ -223,7 +229,7 @@ function updateFileSearchModalContent(prefix, stores, files, agentName, allStore
                                                 <p class="text-xs text-gray-500 dark:text-gray-400">${file.status || 'unknown'}${file.file_size ? ` • ${formatFileSize(file.file_size)}` : ''}</p>
                                             </div>
                                             <button 
-                                                onclick="event.stopPropagation(); event.preventDefault(); deleteFileFromStore(${jsArg(prefix)}, ${jsArg(store.store_name)}, ${jsArg(file.document_name)})"
+                                                data-click="deleteFileFromStore" data-args="${mateActions.attr([prefix, store.store_name, file.document_name])}" data-stop data-prevent
                                                 class="ml-2 px-2 py-1 text-xs text-red-600 hover:text-red-700 border border-red-300 rounded flex-shrink-0"
                                                 title="Delete file"
                                                 type="button"
@@ -235,7 +241,7 @@ function updateFileSearchModalContent(prefix, stores, files, agentName, allStore
                                     ${!showAll ? `
                                         <div class="p-2 text-center border-t border-gray-200 dark:border-gray-700" id="${storeId}-show-all-container" data-show-all="true">
                                             <button 
-                                                onclick="showAllStoreFiles(${jsArg(storeId)}, ${jsArg(store.store_name)}, ${storeFiles.length})"
+                                                data-click="showAllStoreFiles" data-args="${mateActions.attr([storeId, store.store_name, storeFiles.length])}"
                                                 class="text-xs text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
                                                 type="button"
                                             >
@@ -374,7 +380,7 @@ function filterStoreFiles(storeId, storeName) {
                     <p class="text-xs text-gray-500 dark:text-gray-400">${file.status || 'unknown'}${file.file_size ? ` • ${formatFileSize(file.file_size)}` : ''}</p>
                 </div>
                 <button 
-                    onclick="event.stopPropagation(); event.preventDefault(); deleteFileFromStore(${jsArg(prefix)}, ${jsArg(actualStoreName)}, ${jsArg(file.document_name)})"
+                    data-click="deleteFileFromStore" data-args="${mateActions.attr([prefix, actualStoreName, file.document_name])}" data-stop data-prevent
                     class="ml-2 px-2 py-1 text-xs text-red-600 hover:text-red-700 border border-red-300 rounded flex-shrink-0"
                     title="Delete file"
                     type="button"
@@ -389,7 +395,7 @@ function filterStoreFiles(storeId, storeName) {
             filesList.innerHTML += `
                 <div class="p-2 text-center border-t border-gray-200 dark:border-gray-700" id="${storeId}-show-all-container" data-show-all="true">
                     <button 
-                        onclick="showAllStoreFiles(${jsArg(storeId)}, ${jsArg(actualStoreName)}, ${storeFiles.length})"
+                        data-click="showAllStoreFiles" data-args="${mateActions.attr([storeId, actualStoreName, storeFiles.length])}"
                         class="text-xs text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
                         type="button"
                     >
@@ -416,7 +422,7 @@ function filterStoreFiles(storeId, storeName) {
                 <p class="text-xs text-gray-500 dark:text-gray-400">${file.status || 'unknown'}${file.file_size ? ` • ${formatFileSize(file.file_size)}` : ''}</p>
             </div>
             <button 
-                onclick="event.stopPropagation(); event.preventDefault(); deleteFileFromStore(${jsArg(prefix)}, ${jsArg(actualStoreName)}, ${jsArg(file.document_name)})"
+                data-click="deleteFileFromStore" data-args="${mateActions.attr([prefix, actualStoreName, file.document_name])}" data-stop data-prevent
                 class="ml-2 px-2 py-1 text-xs text-red-600 hover:text-red-700 border border-red-300 rounded flex-shrink-0"
                 title="Delete file"
                 type="button"
@@ -474,7 +480,7 @@ function showAllStoreFiles(storeId, storeName, totalCount) {
                 <p class="text-xs text-gray-500 dark:text-gray-400">${file.status || 'unknown'}${file.file_size ? ` • ${formatFileSize(file.file_size)}` : ''}</p>
             </div>
             <button 
-                onclick="event.stopPropagation(); event.preventDefault(); deleteFileFromStore(${jsArg(prefix)}, ${jsArg(actualStoreName)}, ${jsArg(file.document_name)})"
+                data-click="deleteFileFromStore" data-args="${mateActions.attr([prefix, actualStoreName, file.document_name])}" data-stop data-prevent
                 class="ml-2 px-2 py-1 text-xs text-red-600 hover:text-red-700 border border-red-300 rounded flex-shrink-0"
                 title="Delete file"
                 type="button"

@@ -36,7 +36,7 @@
                                 '1.0' }})
                             </span>
                             <div class="h-3 w-px bg-purple-200 dark:bg-purple-700 mx-1"></div>
-                            <button onclick="showTemplateSyncModal({{ selected_project.id }})"
+                            <button data-click="showTemplateSyncModal" data-args='[{{ selected_project.id|tojson }}]'
                                 class="text-[10px] sm:text-xs font-medium text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 transition-colors flex items-center group bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/30 dark:hover:bg-blue-800/50 px-2 py-0.5 rounded">
                                 <i class="fas fa-sync-alt mr-1 group-hover:animate-spin-once"></i> Check for Updates
                             </button>
@@ -48,17 +48,17 @@
                 </div>
                 <div class="flex flex-wrap gap-2 min-w-0 flex-1 sm:flex-initial justify-end">
                     <button
-                        onclick="window.location.href = '/dashboard/agents{% if selected_project_id %}?project_id={{ selected_project_id }}{% endif %}'"
+                        data-click="backToAgentsTable"
                         class="bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 px-3 py-2 text-xs rounded-lg flex items-center min-h-[44px] touch-target mb-2 sm:mb-0">
                         <i class="fas fa-table mr-1.5"></i>
                         Agents Table
                     </button>
                     {% if selected_project_id %}
-                    <button onclick="saveProjectAsTemplate()"
+                    <button data-click="saveProjectAsTemplate"
                         class="bg-purple-600 hover:bg-purple-700 text-white px-3 py-2 text-xs rounded-lg flex items-center transition-colors shadow-sm ml-2">
                         <i class="fas fa-save mr-1.5"></i> Save as Template
                     </button>
-                    <button onclick="downloadBinary()"
+                    <button data-click="downloadBinary"
                         class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 text-xs rounded-lg flex items-center transition-colors shadow-sm ml-2"
                         title="Build & download standalone executable">
                         <i class="fas fa-box mr-1.5"></i> Download Binary
@@ -90,7 +90,7 @@
                             <option value="{{ project.id }}">{{ project.name }}</option>
                             {% endfor %}
                         </select>
-                        <button onclick="loadVisualBuilderProject()"
+                        <button data-click="loadVisualBuilderProject"
                             class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
                             <i class="fas fa-arrow-right mr-1.5"></i>Load
                         </button>
@@ -117,7 +117,7 @@
 'editAgentLoader',
 'editAgentBtnText',
 'Update Agent',
-'hideEditAgentModal()',
+'hideEditAgentModal',
 show_id_field=True,
 show_type_empty_option=False,
 submit_btn_color='bg-blue-600 hover:bg-blue-700',
@@ -132,6 +132,8 @@ projects_list=projects
 {% include 'dashboard/modals/template_sync_modal.html' %}
 {% include 'dashboard/modals/save_template_modal.html' %}
 {% include 'dashboard/modals/edit_instruction_modal.html' %}
+{# The agent form's History button opens it #}
+{% include 'dashboard/modals/version_history_modal.html' %}
 <textarea id="vbInstruction" class="hidden"></textarea>
 {% endblock %}
 
@@ -151,20 +153,28 @@ projects_list=projects
 <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.44.0/min/vs/loader.js"></script>
 
 <!-- Agent Management Scripts (Required for editAgent) -->
-<script src="/static/js/agent-utils.js?v=20"></script>
+<script src="/static/js/agent-utils.js?v=21"></script>
 <script src="/static/js/agent-config.js?v=20"></script>
 <script src="/static/js/agent-tools.js?v=24"></script>
-<script src="/static/js/modals/file-search.js?v=23"></script>
-<script src="/static/js/agent-forms.js?v=21"></script>
+<script src="/static/js/modals/file-search.js?v=24"></script>
+<script src="/static/js/agent-forms.js?v=22"></script>
 <script src="/static/js/modals/agent-edit-helpers.js?v=21"></script>
-<script src="/static/js/modals/parent-agents-modal.js?v=20"></script>
-<script src="/static/js/modals/memory-blocks.js?v=22"></script>
-<script src="/static/js/modals/widget-keys.js?v=22"></script>
-<script src="/static/js/modals/template-sync.js?v=20"></script>
-<script src="/static/js/agents-visual-builder.js?v=21"></script>
+<script src="/static/js/modals/parent-agents-modal.js?v=21"></script>
+<script src="/static/js/modals/memory-blocks.js?v=23"></script>
+<script src="/static/js/modals/widget-keys.js?v=23"></script>
+<script src="/static/js/modals/template-sync.js?v=21"></script>
+<script src="/static/js/modals/version-history.js?v=2"></script>
+<script src="/static/js/agents-visual-builder.js?v=22"></script>
 
-<script src="/static/js/agent-management.js?v=21"></script>
-<script>
+<script src="/static/js/agent-management.js?v=22"></script>
+<script nonce="{{ request.state.csp_nonce }}">
+    mateActions.allow('backToAgentsTable', 'loadVisualBuilderProject', 'saveProjectAsTemplate');
+
+    function backToAgentsTable() {
+        const projectId = window.selectedProjectId;
+        window.location.href = '/dashboard/agents' + (projectId ? '?project_id=' + encodeURIComponent(projectId) : '');
+    }
+
     window.visualBuilderInitialState = {
         configs: JSON.parse(document.getElementById('visual-configs-json').textContent || '[]'),
         projects: JSON.parse(document.getElementById('visual-projects-json').textContent || '[]'),

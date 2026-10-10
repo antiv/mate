@@ -437,6 +437,28 @@ class TestConvertedTemplates(unittest.TestCase):
         "base.html",
         "login.html",
         "dashboard/index.html",
+        "dashboard/agents.html",
+        "dashboard/agents_visual.html",
+        "dashboard/modals/agent_modal_macro.html",
+        "dashboard/modals/config_modals.html",
+        "dashboard/modals/edit_instruction_modal.html",
+        "dashboard/modals/file_search_modal.html",
+        "dashboard/modals/import_agents_modal.html",
+        "dashboard/modals/memory_blocks_modal.html",
+        "dashboard/modals/parent_agents_modal.html",
+        "dashboard/modals/project_modal.html",
+        "dashboard/modals/save_template_modal.html",
+        "dashboard/modals/template_sync_modal.html",
+        "dashboard/modals/version_history_modal.html",
+        "dashboard/modals/widget_keys_modal.html",
+    ]
+    # Scripts that build HTML: the markup they generate must not have handlers either
+    CONVERTED_JS = [
+        "agent-management.js",
+        "modals/file-search.js",
+        "modals/memory-blocks.js",
+        "modals/version-history.js",
+        "modals/widget-keys.js",
     ]
     _TEMPLATES = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
                               "templates")
@@ -458,6 +480,14 @@ class TestConvertedTemplates(unittest.TestCase):
                 if "src=" in tag or 'type="application/json"' in tag:
                     continue
                 self.assertIn('nonce="{{ request.state.csp_nonce }}"', tag, f"{name}: {tag}")
+
+    def test_no_handlers_in_generated_markup(self):
+        import re
+        static = os.path.join(os.path.dirname(self._TEMPLATES), "static", "js")
+        for name in self.CONVERTED_JS:
+            with open(os.path.join(static, name), encoding="utf-8") as f:
+                found = re.findall(r"\son[a-z]+=[\"']", f.read())
+            self.assertEqual(found, [], name)
 
     def test_no_javascript_urls(self):
         for name in self.CONVERTED:

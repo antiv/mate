@@ -8,6 +8,13 @@
 // ============================================================================
 
 // Monaco Editor instances
+// Handlers this file's markup calls through data-click and friends (csp-actions.js)
+mateActions.allow('filterAgents', 'hideCloneAgentModal', 'hideCopyAgentModal',
+                  'hideCreateAgentModal', 'hideEditAgentModal', 'hideImportModal',
+                  'openInstructionModal', 'showCreateAgentModal', 'showImportModal',
+                  'submitCloneAgent', 'toggleJsonEditor', 'updateClonePreview',
+                  'updateCloneSuffix');
+
 let monacoEditors = {};
 
 /**

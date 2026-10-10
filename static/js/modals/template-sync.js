@@ -2,6 +2,9 @@
  * Template Sync Modal Logic
  */
 
+// Handlers this file's markup calls through data-click and friends (csp-actions.js)
+mateActions.allow('hideTemplateSyncModal', 'performTemplateSync', 'showTemplateSyncModal');
+
 function showTemplateSyncModal(projectId) {
     const modal = document.getElementById('templateSyncModal');
     if (!modal) return;

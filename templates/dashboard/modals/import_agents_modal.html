@@ -40,8 +40,8 @@
                 </div>
                 
                 <div class="flex justify-end space-x-3 mt-6">
-                    <button type="button" onclick="hideImportModal()" class="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-200 dark:bg-gray-600 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500">Cancel</button>
-                    <button type="button" id="importSubmitBtn" onclick="importAgents()" class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center" disabled>
+                    <button type="button" data-click="hideImportModal" class="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-200 dark:bg-gray-600 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500">Cancel</button>
+                    <button type="button" id="importSubmitBtn" data-click="importAgents" class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center" disabled>
                         <i id="importLoader" class="fas fa-spinner fa-spin mr-2 hidden"></i>
                         <span id="importBtnText">Import Agents</span>
                     </button>
