@@ -96,7 +96,9 @@ change to the setting needs a restart.
 
 Two more MCP servers are built in, serving MATE's own image generation and Google
 Drive tools to any MCP client: `/images/mcp` and `/gdrive/mcp`. Endpoints, tools and
-client configuration are in [Exposed MCP servers](mcp-servers.md).
+client configuration are in [Exposed MCP servers](mcp-servers.md). Apart from its
+health check, `/images/mcp` needs a signed-in caller, as it spends the server's
+provider keys.
 
 ## Agent-to-agent (A2A)
 

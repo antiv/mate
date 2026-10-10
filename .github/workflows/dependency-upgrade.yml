@@ -6,33 +6,44 @@ name: Dependency upgrade
 # below 2.1) stay where they are: moving those is a decision made by hand,
 # after reading their changelogs. If the tests fail, no pull request is opened
 # and the run is marked failed, which GitHub reports to the workflow's owner.
+#
+# Two jobs, because installing new releases runs their code: the job that does
+# it holds a read-only token and no stored credentials, and only takes releases
+# at least a week old, so a hijacked release has time to be pulled first. The
+# job that opens the pull request installs nothing. Actions are pinned by commit.
 on:
   schedule:
     - cron: "17 6 1 * *"  # 06:17 UTC on the 1st
   workflow_dispatch:
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 jobs:
-  upgrade:
+  compile-and-test:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: read
+    outputs:
+      changed: ${{ steps.diff.outputs.changed }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+        with:
+          persist-credentials: false
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
         with:
           python-version: "3.11"
 
-      - name: Recompile the lock with the newest allowed releases
+      - name: Recompile the lock with the newest releases at least a week old
         run: |
           python -m pip install --upgrade pip uv
           uv pip compile requirements.txt -o requirements.lock --universal \
-            --python-version 3.11 --generate-hashes --upgrade
+            --python-version 3.11 --generate-hashes --upgrade \
+            --exclude-newer "$(date -u -d '7 days ago' +%Y-%m-%dT%H:%M:%SZ)"
 
       - name: Anything changed?
         id: diff
@@ -54,7 +65,7 @@ jobs:
         if: steps.diff.outputs.changed == 'true'
         run: |
           git show HEAD:requirements.lock > /tmp/old.lock
-          python - <<'PY' > /tmp/body.md
+          python - <<'PY' > body.md
           import re
           def pins(text):
               return dict(re.findall(r"^([A-Za-z0-9_.\-\[\]]+)==([^\s;\\]+)", text, re.M))
@@ -62,8 +73,8 @@ jobs:
           new = pins(open("requirements.lock").read())
           rows = [(k, old.get(k, "new"), new.get(k, "removed"))
                   for k in sorted(set(old) | set(new)) if old.get(k) != new.get(k)]
-          print("Monthly `uv pip compile --upgrade` of `requirements.lock`. The unit tests "
-                "passed on it before this pull request was opened.\n")
+          print("Monthly `uv pip compile --upgrade` of `requirements.lock`, taking releases at "
+                "least a week old. The unit tests passed on it before this pull request was opened.\n")
           print("Before merging, read the changelogs of the large libraries that moved "
                 "(google-genai, litellm, langgraph, langchain-*, fastapi, starlette, mcp, a2a-sdk) "
                 "and run both runtimes (`AGENT_FRAMEWORK=adk` and `langgraph`), on PostgreSQL if you can.\n")
@@ -72,18 +83,50 @@ jobs:
               print(f"| {name} | {a} | {b} |")
           PY
 
+      - name: Hand the lock to the next job
+        if: steps.diff.outputs.changed == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+        with:
+          name: upgraded-lock
+          path: |
+            requirements.lock
+            body.md
+          retention-days: 7
+
+  open-pull-request:
+    needs: compile-and-test
+    if: needs.compile-and-test.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
+        with:
+          name: upgraded-lock
+          path: /tmp/upgraded
+
+      # Only the lock is taken from the first job; nothing is installed or run here.
+      - name: Take the new lock
+        run: cp /tmp/upgraded/requirements.lock requirements.lock
+
       # A pull request opened with the default token does not start CI on itself.
       # Set a DEPENDENCY_PR_TOKEN secret (a fine-grained token or GitHub App token
       # with contents and pull-requests write) to get the usual checks on it.
       - name: Open the pull request
-        if: steps.diff.outputs.changed == 'true'
-        uses: peter-evans/create-pull-request@v7
+        uses: peter-evans/create-pull-request@22a9089034f40e5a961c8808d113e2c98fb63676  # v7
         with:
           token: ${{ secrets.DEPENDENCY_PR_TOKEN || github.token }}
           branch: deps/monthly-upgrade
           delete-branch: true
           commit-message: "Monthly dependency upgrade"
           title: "Monthly dependency upgrade"
-          body-path: /tmp/body.md
+          body-path: /tmp/upgraded/body.md
           add-paths: requirements.lock
           labels: dependencies

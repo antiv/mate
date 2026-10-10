@@ -8,6 +8,7 @@ the end of the file.
 """
 
 import asyncio
+import ipaddress
 import os
 import base64
 import re
@@ -15,6 +16,7 @@ import time
 import logging
 
 from typing import Dict, Any, Optional, Tuple
+from urllib.parse import urlparse
 
 try:
     from openai import OpenAI  # type: ignore
@@ -128,15 +130,18 @@ _MODEL_ALIASES = {"nano-banana": "openrouter/google/gemini-2.5-flash-image"}
 # The tool name agents saw for these before, kept so instructions naming it still work
 _LEGACY_TOOL_NAMES = {"openrouter/google/gemini-2.5-flash-image": "generate_image_nano_banana"}
 
-# Request parameters come from tool_config, which an agent with create_agent can
-# write. Where the request goes and with which credentials is the server's call:
-# these come from the environment only.
-_BLOCKED_PARAMS = frozenset({
-    "api_base", "base_url", "api_key", "api_version", "organization", "custom_llm_provider",
-    "extra_headers", "headers", "aws_access_key_id", "aws_secret_access_key",
-    "aws_session_token", "aws_region_name", "vertex_project", "vertex_location",
-    "vertex_credentials", "timeout", "client",
+# Request parameters come from tool_config, which an agent with update_agent can
+# write when a chat steers it. LiteLLM takes hundreds of keyword arguments that
+# change where a call goes or what it runs (api_base, mock_response, callbacks and
+# their hosts, cloud endpoints, ssl_verify), so only these image parameters pass;
+# endpoints and credentials come from the environment.
+_ALLOWED_PARAMS = frozenset({
+    "size", "quality", "n", "style", "response_format", "aspect_ratio", "seed",
+    "negative_prompt", "output_format", "background", "output_compression", "moderation",
 })
+
+# Largest image accepted from a provider URL
+_MAX_IMAGE_BYTES = 25 * 1024 * 1024
 
 # LiteLLM's validate_environment reports these image-only providers as configured
 # whatever the environment holds; their key names are from LiteLLM's own code.
@@ -268,13 +273,53 @@ def get_model_config(model: str, custom_config: dict = None) -> dict:
         if model == "dall-e-3":
             config["quality"] = "standard"
     if custom_config:
-        blocked = sorted(k for k in custom_config if k in _BLOCKED_PARAMS)
-        if blocked:
-            logger.warning("Ignoring image tool settings that only the environment may set: %s",
-                           ", ".join(blocked))
-        config.update({k: v for k, v in custom_config.items()
-                       if k != "model" and k not in _BLOCKED_PARAMS})
+        ignored = sorted(k for k in custom_config if k != "model" and k not in _ALLOWED_PARAMS)
+        if ignored:
+            logger.warning("Ignoring image tool settings that are not image parameters: %s",
+                           ", ".join(ignored))
+        config.update({k: v for k, v in custom_config.items() if k in _ALLOWED_PARAMS})
     return config
+
+
+def _image_private_network_allowed() -> bool:
+    return os.getenv("IMAGE_ALLOW_PRIVATE_NETWORK", "false").lower() in ("true", "1", "yes")
+
+
+def _is_internal_address(ip: str) -> bool:
+    addr = ipaddress.ip_address(ip.split("%", 1)[0])
+    if getattr(addr, "ipv4_mapped", None):
+        addr = addr.ipv4_mapped
+    return (addr.is_private or addr.is_loopback or addr.is_link_local or addr.is_reserved
+            or addr.is_multicast or addr.is_unspecified)
+
+
+async def _download_image(url: str) -> bytes:
+    """The image at a URL a provider returned, refusing internal addresses.
+
+    The URL comes back from the provider, so it is treated like any other outside
+    input: http(s) only, no redirects, no private, loopback or link-local hosts
+    (cloud metadata, the ADK server) unless IMAGE_ALLOW_PRIVATE_NETWORK is set for a
+    local image model, and at most _MAX_IMAGE_BYTES. A data: URL is decoded here.
+    """
+    if url.startswith("data:"):
+        return base64.b64decode(url.split(",", 1)[1])
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https") or not parsed.hostname:
+        raise ValueError(f"the provider returned an image URL that is not http(s)")
+    if not _image_private_network_allowed():
+        infos = await asyncio.get_running_loop().getaddrinfo(parsed.hostname, parsed.port or None)
+        if any(_is_internal_address(info[4][0]) for info in infos):
+            raise ValueError(f"the provider returned an image URL on an internal address ({parsed.hostname})")
+    import httpx
+    async with httpx.AsyncClient(follow_redirects=False, timeout=30) as client:
+        async with client.stream("GET", url) as response:
+            response.raise_for_status()
+            data = bytearray()
+            async for chunk in response.aiter_bytes():
+                data.extend(chunk)
+                if len(data) > _MAX_IMAGE_BYTES:
+                    raise ValueError("the image at the provider's URL is too large")
+    return bytes(data)
 
 
 async def generate_image(prompt: str, tool_context: ToolContext = None) -> dict:
@@ -322,22 +367,19 @@ async def _generate_image_internal(prompt: str, tool_context: ToolContext = None
         if not image_url and not image_b64:
             raise ValueError("the provider returned no image")
 
+        # Outside the artifact block below: a URL refused by _download_image fails the
+        # generation, rather than being handed to the agent as a successful image
+        image_bytes = None
+        if tool_context is not None:
+            if image_b64:
+                # Model returns base64 data directly (a data: URL from some providers)
+                image_bytes = base64.b64decode(image_b64.split(",", 1)[1] if image_b64.startswith("data:") else image_b64)
+            else:
+                image_bytes = await _download_image(image_url)
+
         artifact_info = None
         try:
             if tool_context is not None:
-                image_bytes = None
-
-                if image_b64:
-                    # Model returns base64 data directly (a data: URL from some providers)
-                    image_bytes = base64.b64decode(image_b64.split(",", 1)[1] if image_b64.startswith("data:") else image_b64)
-                elif image_url:
-                    # Model returns URL, download the image
-                    import httpx
-                    async with httpx.AsyncClient(follow_redirects=True) as ac:
-                        image_response = await ac.get(image_url, timeout=30)
-                    image_response.raise_for_status()
-                    image_bytes = image_response.content
-
                 if image_bytes:
                     # EU AI Act Art. 50(2), from 2 December 2026: generated content
                     # must be machine-readably marked as such. Marked before the
@@ -414,8 +456,11 @@ async def _generate_image_internal(prompt: str, tool_context: ToolContext = None
         return result
 
     except Exception as e:
-        error_msg = f"Image generation failed: {str(e)}"
-        logger.error(f"Image generation error for model {model}: {error_msg}")
+        # The agent (and so the chat) gets the first line only; LiteLLM's messages
+        # can carry tracebacks and server paths, which stay in the log.
+        first_line = (str(e).strip().splitlines() or [type(e).__name__])[0][:300]
+        error_msg = f"Image generation failed: {first_line}"
+        logger.error(f"Image generation error for model {model}: {e}")
 
         # Determine error type for better handling
         error_type = "unknown_error"

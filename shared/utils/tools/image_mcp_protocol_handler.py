@@ -203,11 +203,6 @@ class ImageMCPProtocolHandler:
                             "type": "string", 
                             "description": "Name for the asset to track versions",
                             "default": "generated_image"
-                        },
-                        "model_config": {
-                            "type": "object", 
-                            "description": "Model configuration parameters (e.g., model name, API settings)",
-                            "default": {}
                         }
                     },
                     "required": ["prompt"]
@@ -260,8 +255,9 @@ class ImageMCPProtocolHandler:
                     }
                 
                 asset_name = arguments.get("asset_name", "generated_image")
-                model_config = arguments.get("model_config", {})
-                result = await generate_image_nano_banana(prompt, MockToolContext(), asset_name, model_config)
+                # model_config is not taken from callers: it would let them pick any
+                # model and request parameters on the server's keys
+                result = await generate_image_nano_banana(prompt, MockToolContext(), asset_name)
                 
                 # Prepare response content
                 content = [
