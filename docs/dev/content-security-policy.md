@@ -134,6 +134,9 @@ Converted so far:
   rate limits, integrations and triggers (with `modals/trigger_modal.html`),
   and the scripts that build their markup (`alerts-page.js`, `sessions.js`,
   `traces.js`, `triggers-page.js`)
+- evals, usage, users, migrations, docs, the template gallery
+  (`dashboard/templates.html`, `template-gallery.js`) and the wizard pages
+  (`wizard_leads.html`, `wizard_orders.html`, `wizard_pricing.html`)
 
 ## Also allowed
 

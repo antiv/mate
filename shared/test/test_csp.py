@@ -460,6 +460,15 @@ class TestConvertedTemplates(unittest.TestCase):
         "dashboard/traces.html",
         "dashboard/triggers.html",
         "dashboard/modals/trigger_modal.html",
+        "dashboard/docs.html",
+        "dashboard/evals.html",
+        "dashboard/migrations.html",
+        "dashboard/templates.html",
+        "dashboard/usage.html",
+        "dashboard/users.html",
+        "dashboard/wizard_leads.html",
+        "dashboard/wizard_orders.html",
+        "dashboard/wizard_pricing.html",
     ]
     # Scripts that build HTML: the markup they generate must not have handlers either
     CONVERTED_JS = [
@@ -472,6 +481,7 @@ class TestConvertedTemplates(unittest.TestCase):
         "sessions.js",
         "traces.js",
         "triggers-page.js",
+        "template-gallery.js",
     ]
     _TEMPLATES = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
                               "templates")

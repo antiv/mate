@@ -7,11 +7,11 @@
     <div class="flex justify-between items-center">
         <h1 class="text-xl font-bold text-gray-900 dark:text-white">Database Migrations</h1>
         <div class="flex space-x-2">
-            <button class="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 text-xs rounded-lg flex items-center space-x-1.5 transition-colors" onclick="runAllMigrations()">
+            <button class="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 text-xs rounded-lg flex items-center space-x-1.5 transition-colors" data-click="runAllMigrations">
                 <i class="fas fa-play"></i>
                 <span>Run All</span>
             </button>
-            <button class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 text-xs rounded-lg flex items-center space-x-1.5 transition-colors" onclick="refreshMigrations()">
+            <button class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 text-xs rounded-lg flex items-center space-x-1.5 transition-colors" data-click="refreshMigrations">
                 <i class="fas fa-sync-alt"></i>
                 <span>Refresh</span>
             </button>
@@ -86,7 +86,7 @@
                     </thead>
                     <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                         {% for migration in migrations %}
-                        <tr class="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700" onclick="event.stopPropagation(); showMigrationDetails('{{ migration.version }}', '{{ migration.name }}', '{{ migration.applied_at or 'Not Applied' }}', '{{ migration.checksum or 'No checksum' }}')">
+                        <tr class="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700" data-click="showMigrationDetails" data-args='{{ [migration.version, migration.name, (migration.applied_at or 'Not Applied') | string, migration.checksum or 'No checksum'] | tojson }}'>
                             <td class="px-3 py-1.5" data-label="Version">
                                 <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-600 dark:text-gray-200">
                                     {{ migration.version }}
@@ -118,18 +118,18 @@
                             <td class="px-3 py-1.5 text-xs font-medium" data-label="Actions">
                                 <div class="flex flex-wrap gap-2">
                                     <button class="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300 min-h-[44px] min-w-[44px] touch-target inline-flex items-center justify-center" 
-                                            onclick="event.stopPropagation(); showMigrationDetails('{{ migration.version }}', '{{ migration.name }}', '{{ migration.applied_at or 'Not Applied' }}', '{{ migration.checksum or 'No checksum' }}')"
+                                            data-click="showMigrationDetails" data-args='{{ [migration.version, migration.name, (migration.applied_at or 'Not Applied') | string, migration.checksum or 'No checksum'] | tojson }}' data-stop
                                             title="View Details">
                                         <i class="fas fa-eye"></i>
                                     </button>
                                     {% if migration.applied_at %}
                                     <button class="text-yellow-600 hover:text-yellow-900 dark:text-yellow-400 dark:hover:text-yellow-300 min-h-[44px] min-w-[44px] touch-target inline-flex items-center justify-center" 
-                                            onclick="event.stopPropagation(); rerunMigration('{{ migration.version }}', '{{ migration.name }}')"
+                                            data-click="rerunMigration" data-args='{{ [migration.version, migration.name] | tojson }}' data-stop
                                             title="Re-run Migration">
                                         <i class="fas fa-redo"></i>
                                     </button>
                                     <button class="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300 min-h-[44px] min-w-[44px] touch-target inline-flex items-center justify-center" 
-                                            onclick="event.stopPropagation(); deleteMigration('{{ migration.version }}', '{{ migration.name }}')"
+                                            data-click="deleteMigration" data-args='{{ [migration.version, migration.name] | tojson }}' data-stop
                                             title="Delete Migration Record">
                                         <i class="fas fa-trash"></i>
                                     </button>
@@ -158,7 +158,7 @@
         <div class="mt-3">
             <div class="flex items-center justify-between mb-4">
                 <h3 class="text-lg font-medium text-gray-900 dark:text-white">Migration Details</h3>
-                <button type="button" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300" onclick="closeModal('migrationDetailsModal')">
+                <button type="button" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300" data-click="closeModal" data-args='["migrationDetailsModal"]'>
                     <i class="fas fa-times"></i>
                 </button>
             </div>
@@ -181,7 +181,7 @@
                 </div>
             </div>
             <div class="flex justify-end mt-6">
-                <button type="button" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg transition-colors" onclick="closeModal('migrationDetailsModal')">Close</button>
+                <button type="button" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg transition-colors" data-click="closeModal" data-args='["migrationDetailsModal"]'>Close</button>
             </div>
         </div>
     </div>
@@ -193,7 +193,7 @@
         <div class="mt-3">
             <div class="flex items-center justify-between mb-4">
                 <h3 class="text-lg font-medium text-gray-900 dark:text-white">Re-run Migration</h3>
-                <button type="button" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300" onclick="closeModal('rerunMigrationModal')">
+                <button type="button" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300" data-click="closeModal" data-args='["rerunMigrationModal"]'>
                     <i class="fas fa-times"></i>
                 </button>
             </div>
@@ -211,7 +211,7 @@
                 </div>
             </div>
             <div class="flex justify-end gap-3">
-                <button type="button" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 min-h-[44px] rounded-lg transition-colors touch-target" onclick="closeModal('rerunMigrationModal')">Cancel</button>
+                <button type="button" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 min-h-[44px] rounded-lg transition-colors touch-target" data-click="closeModal" data-args='["rerunMigrationModal"]'>Cancel</button>
                 <button type="button" class="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 min-h-[44px] rounded-lg transition-colors touch-target" id="confirm-rerun-migration">Re-run</button>
             </div>
         </div>
@@ -224,7 +224,7 @@
         <div class="mt-3">
             <div class="flex items-center justify-between mb-4">
                 <h3 class="text-lg font-medium text-gray-900 dark:text-white">Delete Migration</h3>
-                <button type="button" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300" onclick="closeModal('deleteMigrationModal')">
+                <button type="button" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300" data-click="closeModal" data-args='["deleteMigrationModal"]'>
                     <i class="fas fa-times"></i>
                 </button>
             </div>
@@ -242,7 +242,7 @@
                 </div>
             </div>
             <div class="flex justify-end gap-3">
-                <button type="button" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 min-h-[44px] rounded-lg transition-colors touch-target" onclick="closeModal('deleteMigrationModal')">Cancel</button>
+                <button type="button" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 min-h-[44px] rounded-lg transition-colors touch-target" data-click="closeModal" data-args='["deleteMigrationModal"]'>Cancel</button>
                 <button type="button" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 min-h-[44px] rounded-lg transition-colors touch-target" id="confirm-delete-migration">Delete</button>
             </div>
         </div>
@@ -252,7 +252,11 @@
 
 {% block scripts %}
 <script src="/static/js/table-sorting.js"></script>
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
+// Handlers this page's markup calls through data-click (csp-actions.js)
+mateActions.allow('closeModal', 'deleteMigration', 'refreshMigrations', 'rerunMigration',
+                  'runAllMigrations', 'showMigrationDetails');
+
 let migrationToDelete = null;
 let migrationToRerun = null;
 
@@ -394,12 +398,15 @@ function showAlert(type, message) {
     alertDiv.className = `px-4 py-3 rounded mb-4 ${alertClasses}`;
     alertDiv.innerHTML = `
         <div class="flex justify-between items-center">
-            <span>${message}</span>
-            <button type="button" class="ml-4 text-lg font-bold" onclick="this.parentElement.parentElement.remove()">
+            <span></span>
+            <button type="button" class="ml-4 text-lg font-bold">
                 <span>&times;</span>
             </button>
         </div>
     `;
+    // The message can echo a server error, so it is text, not markup
+    alertDiv.querySelector('span').textContent = message;
+    alertDiv.querySelector('button').addEventListener('click', () => alertDiv.remove());
     
     const container = document.querySelector('.p-6');
     container.insertBefore(alertDiv, container.firstChild);

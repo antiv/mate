@@ -11,11 +11,11 @@
             <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">Manage users and their roles</p>
         </div>
         <div class="flex items-center gap-2">
-            <button onclick="triggerCleanup()" class="border border-red-500 text-red-500 hover:bg-red-50 dark:hover:bg-red-950 px-3 py-1.5 text-sm rounded-lg flex items-center transition-colors">
+            <button data-click="triggerCleanup" class="border border-red-500 text-red-500 hover:bg-red-50 dark:hover:bg-red-950 px-3 py-1.5 text-sm rounded-lg flex items-center transition-colors">
                 <i class="fas fa-trash-alt mr-1.5 text-xs"></i>
                 Clean Up Inactive Users
             </button>
-            <button onclick="showCreateUserModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 text-sm rounded-lg flex items-center">
+            <button data-click="showCreateUserModal" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 text-sm rounded-lg flex items-center">
                 <i class="fas fa-plus mr-1.5 text-xs"></i>
                 Add User
             </button>
@@ -46,8 +46,8 @@
                     class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-sm">
             </div>
             <div class="flex items-end gap-2">
-                <button type="button" onclick="applyFilters()" class="flex-1 px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded min-h-[34px]">Apply</button>
-                <button type="button" onclick="clearFilters()" class="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded min-h-[34px]">Clear</button>
+                <button type="button" data-click="applyFilters" class="flex-1 px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded min-h-[34px]">Apply</button>
+                <button type="button" data-click="clearFilters" class="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded min-h-[34px]">Clear</button>
             </div>
         </div>
     </div>
@@ -77,7 +77,7 @@
             <div class="flex items-center gap-3">
                 <div class="flex items-center gap-1.5">
                     <label for="pageSizeSelect">Per page:</label>
-                    <select id="pageSizeSelect" onchange="changePageSize()" class="border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-1.5 py-0.5 text-xs">
+                    <select id="pageSizeSelect" data-change="changePageSize" class="border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-1.5 py-0.5 text-xs">
                         <option value="10">10</option>
                         <option value="25" selected>25</option>
                         <option value="50">50</option>
@@ -86,11 +86,11 @@
                     </select>
                 </div>
                 <div class="flex items-center gap-1" id="pageButtons">
-                    <button id="btnFirst" onclick="goToPage(1)" class="px-2 py-0.5 rounded hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-40 disabled:cursor-not-allowed" title="First page">&laquo;</button>
-                    <button id="btnPrev"  onclick="prevPage()"  class="px-2 py-0.5 rounded hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-40 disabled:cursor-not-allowed">Prev</button>
+                    <button id="btnFirst" data-click="goToPage" data-args="[1]" class="px-2 py-0.5 rounded hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-40 disabled:cursor-not-allowed" title="First page">&laquo;</button>
+                    <button id="btnPrev"  data-click="prevPage" class="px-2 py-0.5 rounded hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-40 disabled:cursor-not-allowed">Prev</button>
                     <span id="pageIndicator" class="px-2">1 / 1</span>
-                    <button id="btnNext"  onclick="nextPage()"  class="px-2 py-0.5 rounded hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-40 disabled:cursor-not-allowed">Next</button>
-                    <button id="btnLast"  onclick="goToPage(totalPages())" class="px-2 py-0.5 rounded hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-40 disabled:cursor-not-allowed" title="Last page">&raquo;</button>
+                    <button id="btnNext"  data-click="nextPage" class="px-2 py-0.5 rounded hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-40 disabled:cursor-not-allowed">Next</button>
+                    <button id="btnLast"  data-click="lastPage" class="px-2 py-0.5 rounded hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-40 disabled:cursor-not-allowed" title="Last page">&raquo;</button>
                 </div>
             </div>
         </div>
@@ -116,7 +116,7 @@
                     </div>
                 </div>
                 <div class="flex justify-end gap-3 mt-6">
-                    <button type="button" onclick="hideCreateUserModal()" class="px-4 py-2 min-h-[44px] text-gray-700 dark:text-gray-300 bg-gray-200 dark:bg-gray-600 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500 touch-target">Cancel</button>
+                    <button type="button" data-click="hideCreateUserModal" class="px-4 py-2 min-h-[44px] text-gray-700 dark:text-gray-300 bg-gray-200 dark:bg-gray-600 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500 touch-target">Cancel</button>
                     <button type="submit" id="createUserSubmitBtn" class="px-4 py-2 min-h-[44px] bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center touch-target">
                         <i id="createUserLoader" class="fas fa-spinner fa-spin mr-2 hidden"></i>
                         <span id="createUserBtnText">Create User</span>
@@ -167,7 +167,7 @@
                     </div>
                 </div>
                 <div class="flex justify-end gap-3 mt-6">
-                    <button type="button" onclick="hideEditUserModal()" class="px-4 py-2 min-h-[44px] text-gray-700 dark:text-gray-300 bg-gray-200 dark:bg-gray-600 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500 touch-target">Cancel</button>
+                    <button type="button" data-click="hideEditUserModal" class="px-4 py-2 min-h-[44px] text-gray-700 dark:text-gray-300 bg-gray-200 dark:bg-gray-600 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500 touch-target">Cancel</button>
                     <button type="submit" id="editUserSubmitBtn" class="px-4 py-2 min-h-[44px] bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center touch-target">
                         <i id="editUserLoader" class="fas fa-spinner fa-spin mr-2 hidden"></i>
                         <span id="editUserBtnText">Update User</span>
@@ -180,8 +180,13 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
 (function () {
+    // Handlers this page's markup calls through data-click and friends (csp-actions.js)
+    mateActions.allow('applyFilters', 'changePageSize', 'clearFilters', 'deleteUser', 'editUser',
+                      'goToPage', 'hideCreateUserModal', 'hideEditUserModal', 'lastPage',
+                      'nextPage', 'prevPage', 'showCreateUserModal', 'triggerCleanup');
+
     // ── Data ─────────────────────────────────────────────────────────────────
     const ALL_USERS = {{ users | tojson | safe }};
 
@@ -258,6 +263,7 @@
 
     window.prevPage = function () { goToPage(page - 1); };
     window.nextPage = function () { goToPage(page + 1); };
+    window.lastPage = function () { goToPage(totalPages()); };
 
     // ── Render ────────────────────────────────────────────────────────────────
     function formatDate(iso) {
@@ -268,14 +274,6 @@
         return String(s ?? '')
             .replace(/&/g, '&amp;').replace(/</g, '&lt;')
             .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-    }
-
-    // A value as a JS argument in a double-quoted onclick attribute. User ids
-    // include widget visitors', which the visitor partly chooses, and esc()
-    // inside '...' left a quote free to end the string.
-    function jsArg(value) {
-        return JSON.stringify(value == null ? '' : String(value))
-            .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
 
     function render() {
@@ -323,7 +321,7 @@
                     nameEmail += `<div class="text-gray-400 dark:text-gray-500 truncate">${esc(u.email)}</div>`;
             }
 
-            return `<tr class="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700" onclick="event.stopPropagation(); editUser(${jsArg(u.user_id)})">
+            return `<tr class="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700" data-click="editUser" data-args="${mateActions.attr([u.user_id])}">
                 <td class="px-3 py-1.5 text-xs font-medium text-gray-900 dark:text-white truncate" data-label="User ID">${esc(u.user_id)}</td>
                 <td class="px-3 py-1.5 text-xs text-gray-700 dark:text-gray-300" data-label="Name / Email">${nameEmail}</td>
                 <td class="px-3 py-1.5 text-xs" data-label="Provider">${providerBadge(provider)}</td>
@@ -335,10 +333,10 @@
                 </td>
                 <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate" data-label="Created">${createdAt}</td>
                 <td class="px-3 py-1.5 text-xs font-medium space-x-1" data-label="Actions">
-                    <button onclick="event.stopPropagation(); editUser(${jsArg(u.user_id)})" class="text-blue-600 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300 min-h-[44px] min-w-[44px] touch-target px-2">
+                    <button data-click="editUser" data-args="${mateActions.attr([u.user_id])}" data-stop class="text-blue-600 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300 min-h-[44px] min-w-[44px] touch-target px-2">
                         <i class="fas fa-edit"></i> Edit
                     </button>
-                    <button onclick="event.stopPropagation(); deleteUser(${jsArg(u.user_id)})" class="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300 min-h-[44px] min-w-[44px] touch-target px-2">
+                    <button data-click="deleteUser" data-args="${mateActions.attr([u.user_id])}" data-stop class="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300 min-h-[44px] min-w-[44px] touch-target px-2">
                         <i class="fas fa-trash"></i> Delete
                     </button>
                 </td>
