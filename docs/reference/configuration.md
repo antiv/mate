@@ -20,49 +20,49 @@ Every environment variable the code reads: **133** in total. Descriptions come f
 | `ADK_PORT` | `8001` | — | `shared/utils/utils.py` |
 | `AGENTS_LIST` | — | — | `shared/utils/langgraph/studio_graph.py` |
 | `AGENT_FRAMEWORK` | `adk` | Server Configuration Agent runtime framework on port ADK_PORT: adk (Google ADK, default) or langgraph | `shared/utils/eval_agent_runner.py`, `shared/utils/server_control_service.py` |
-| `ALERTS_ENABLED` | `false` | — | `shared/utils/alert_service.py` |
-| `ALERTS_INTERVAL_SECONDS` | `60` | — | `shared/utils/trigger_runner.py` |
-| `ALLOWED_API_ROLES` | — | — | `server/pat_auth.py` |
+| `ALERTS_ENABLED` | `false` | Run the alert/trigger scheduler loop | `shared/utils/alert_service.py` |
+| `ALERTS_INTERVAL_SECONDS` | `60` | Scheduler tick interval in seconds (minimum 10) | `shared/utils/trigger_runner.py` |
+| `ALLOWED_API_ROLES` | — | Comma-separated roles allowed to call the API (empty = configured default) | `server/pat_auth.py` |
 | `ALLOWED_ORIGINS` | `http://localhost:8000,http://127.0.0.1:8000` | Comma-separated CORS allowlist. Dashboard and widget chat are same-origin; /widget/public-config stays open on its own. | `auth_server.py` |
 | `ARTIFACT_SERVICE` | `none` | local_folder, supabase or s3; unset or none keeps artifacts in memory, lost on restart | `shared/utils/settings.py` |
 | `AUDIT_RETENTION_DAYS` | `0` | Audit log retention (EU AI Act compliance). 0 = keep forever; N = delete entries older than N days | `shared/utils/audit_service.py` |
 | `AUTH_PASSWORD` | `mate` | — | `auth_server.py` |
 | `AUTH_USERNAME` | `admin` | Authentication (Basic Auth fallback — always available) | `auth_server.py`, `shared/utils/user_cleanup.py`, `shared/utils/user_service.py` |
-| `BROWSER_ALLOW_PRIVATE_NETWORK` | `false` | — | `shared/utils/tools/browser_tools.py` |
-| `BROWSER_CDP_URL` | `http://localhost:9222` | — | `shared/utils/tools/browser_tools.py` |
-| `BROWSER_HEADLESS` | `true` | — | `shared/utils/tools/browser_tools.py` |
-| `BROWSER_MODE` | `headless` | — | `shared/utils/tools/browser_tools.py` |
+| `BROWSER_ALLOW_PRIVATE_NETWORK` | `false` | Allow the browser to reach private-network hosts | `shared/utils/tools/browser_tools.py` |
+| `BROWSER_CDP_URL` | `http://localhost:9222` | Chrome DevTools endpoint for browser sessions | `shared/utils/tools/browser_tools.py` |
+| `BROWSER_HEADLESS` | `true` | Run Chromium headless | `shared/utils/tools/browser_tools.py` |
+| `BROWSER_MODE` | `headless` | Browser automation mode | `shared/utils/tools/browser_tools.py` |
 | `CLEANUP_USER_ENABLED` | `true` | Temporary User Cleanup Configuration (deletes inactive widget and API users) | `shared/utils/trigger_runner.py` |
 | `CLEANUP_USER_TTL_DAYS` | `5` | — | `shared/utils/user_cleanup.py` |
-| `CONTEXT_CACHE_INTERVALS` | `5` | — | `shared/utils/utils.py` |
-| `CONTEXT_CACHE_MIN_TOKENS` | `2048` | — | `shared/utils/utils.py` |
-| `CONTEXT_CACHE_TTL_SECONDS` | `600` | — | `shared/utils/utils.py` |
+| `CONTEXT_CACHE_INTERVALS` | `5` | Cache refresh interval count | `shared/utils/utils.py` |
+| `CONTEXT_CACHE_MIN_TOKENS` | `2048` | Minimum context tokens before caching kicks in | `shared/utils/utils.py` |
+| `CONTEXT_CACHE_TTL_SECONDS` | `600` | Cached-context time to live in seconds | `shared/utils/utils.py` |
 | `CONTEXT_COMPACTION_ENABLED` | `false` | Context Compaction (requires ADK >= 1.16.0) | `shared/utils/utils.py` |
 | `CONTEXT_COMPACTION_INTERVAL` | `3` | — | `shared/utils/utils.py` |
 | `CONTEXT_COMPACTION_OVERLAP_SIZE` | `1` | — | `shared/utils/utils.py` |
 | `CONTEXT_COMPACTION_SUMMARIZER_MODEL` | — | — | `shared/utils/utils.py` |
-| `CREDENTIAL_SERVICE` | `database` | — | `adk_main.py` |
+| `CREDENTIAL_SERVICE` | `database` | Credential backend: database, file, or plugin name | `adk_main.py` |
 | `CSP_EXTRA_SOURCES` | — | Extra hosts for scripts, styles, fonts, connections and frames, e.g. https://cdn.example.com (comma separated). | `server/csp.py` |
 | `CSP_MODE` | `report-only` | Content-Security-Policy: report-only (log violations, block nothing), enforce, or off. See docs/dev/content-security-policy.md. | `server/csp.py` |
-| `DB_AUTO_CREATE_TABLES` | `true` | — | `shared/utils/database_client.py` |
+| `DB_AUTO_CREATE_TABLES` | `true` | Create missing tables at startup | `shared/utils/database_client.py` |
 | `DB_CONNECT_RETRIES` | `5` | connection attempts at startup, 3s apart, for a database that starts after the app | `shared/utils/database_client.py` |
 | `DB_HOST` | `localhost` | default localhost | `shared/utils/settings.py` |
 | `DB_NAME` | `mate_agent` | default mate_agent | `shared/utils/settings.py` |
 | `DB_PASSWORD` | — | required for PostgreSQL and MySQL | `shared/utils/settings.py` |
 | `DB_PATH` | `my_agent_data.db` | SQLite file; a relative path is taken from the project root (default my_agent_data.db) | `shared/utils/settings.py` |
 | `DB_PORT` | `(computed)` | default 5432, or 3306 for MySQL | `shared/utils/settings.py` |
-| `DB_SKIP_SEED` | — | — | `shared/utils/database_client.py` |
+| `DB_SKIP_SEED` | — | Set to true/1/yes to skip database seeding | `shared/utils/database_client.py` |
 | `DB_TYPE` | `sqlite` | sqlite (default), postgresql or mysql | `shared/utils/settings.py` |
 | `DB_USER` | — | required for PostgreSQL and MySQL | `shared/utils/settings.py` |
 | `DISTRIBUTION_DOMAIN` | — | — | `shared/utils/tools/image_tools.py` |
 | `DISTRIBUTION_S3_BUCKET_NAME` | `test-bucket` | — | `adk_main.py`, `shared/utils/langgraph/artifact_adapter.py` |
 | `DISTRIBUTION_S3_ENDPOINT` | — | — | `adk_main.py`, `shared/utils/langgraph/artifact_adapter.py` |
 | `EMBEDDING_MODEL` | `(computed)` | Embedding model for semantic search over memory blocks (litellm format). Any litellm-supported embedding model works, e.g.: gemini/gemini-embedding-001 (default, uses GOOGLE_API_KEY) text-embedding-3-small (OpenAI) mistral/mistral-embed When no key/model is available, search falls back to keyword (LIKE) matching. | `shared/utils/embedding_service.py` |
-| `EVAL_IMPROVE_MODEL` | — | — | `shared/utils/agent_improver.py` |
-| `EVAL_JUDGE_MODEL` | — | — | `shared/utils/agent_improver.py`, `shared/utils/eval_runner.py` |
-| `EVAL_REGRESSION_WEBHOOK_URL` | — | — | `shared/utils/dashboard/dashboard_server.py` |
-| `GEMINI_API_KEY` | — | — | `shared/utils/embedding_service.py`, `shared/utils/langgraph/model_factory.py`, `shared/utils/tools/image_tools.py` |
-| `GEMINI_MODEL` | `gemini-2.5-flash` | — | `shared/utils/langgraph/model_factory.py`, `shared/utils/tools/subagent_delegation_tool.py`, `shared/utils/utils.py` |
+| `EVAL_IMPROVE_MODEL` | — | Model used to rewrite agents; falls back to EVAL_JUDGE_MODEL | `shared/utils/agent_improver.py` |
+| `EVAL_JUDGE_MODEL` | — | Model used to judge agent runs (falls back below) | `shared/utils/agent_improver.py`, `shared/utils/eval_runner.py` |
+| `EVAL_REGRESSION_WEBHOOK_URL` | — | POST target for eval regression reports | `shared/utils/dashboard/dashboard_server.py` |
+| `GEMINI_API_KEY` | — | Google Gemini key (falls back to GOOGLE_API_KEY) | `shared/utils/embedding_service.py`, `shared/utils/langgraph/model_factory.py`, `shared/utils/tools/image_tools.py` |
+| `GEMINI_MODEL` | `gemini-2.5-flash` | Default Gemini model | `shared/utils/langgraph/model_factory.py`, `shared/utils/tools/subagent_delegation_tool.py`, `shared/utils/utils.py` |
 | `GITHUB_CLIENT_ID` | — | GitHub (OAuth 2.0) — create at https://github.com/settings/developers Authorization callback URL: https://<your-domain>/auth/callback/github | `server/oauth_routes.py` |
 | `GITHUB_CLIENT_SECRET` | — | — | `server/oauth_routes.py` |
 | `GOOGLE_API_KEY` | — | — | `shared/utils/embedding_service.py`, `shared/utils/langgraph/model_factory.py`, `shared/utils/tools/file_search_tools.py` +1 more |
@@ -70,7 +70,7 @@ Every environment variable the code reads: **133** in total. Descriptions come f
 | `GOOGLE_CLIENT_SECRET` | — | — | `server/oauth_routes.py` |
 | `GOOGLE_CONF_URL` | `https://accounts.google.com/.well-known/openid-configuration` | — | `server/oauth_routes.py` |
 | `GOOGLE_DRIVE_FOLDER_ID` | — | for gdrive mcp + Google Calendar tool (shared service account) | `shared/utils/tools/cv_analyzer_tools.py`, `shared/utils/tools/google_drive_tools.py` |
-| `GOOGLE_SERVICE_ACCOUNT_FILE` | `service-account-key.json` | — | `shared/utils/tools/google_calendar_tools.py`, `shared/utils/tools/google_drive_tools.py` |
+| `GOOGLE_SERVICE_ACCOUNT_FILE` | `service-account-key.json` | Service-account key for Google tools | `shared/utils/tools/google_calendar_tools.py`, `shared/utils/tools/google_drive_tools.py` |
 | `GOOGLE_SERVICE_ACCOUNT_INFO` | — | — | `shared/utils/mcp/google_drive_mcp_server.py`, `shared/utils/tools/google_calendar_tools.py`, `shared/utils/tools/google_drive_mcp_protocol_handler.py` +1 more |
 | `IMAGE_MODEL` | — | Default model for the image tool when an agent names none: any LiteLLM image model, e.g. gpt-image-1, gemini/gemini-2.5-flash-image or black_forest_labs/flux-pro-1.1 (needs BFL_API_KEY). The dashboard's Settings page overrides it. Unset: dall-e-3. | `shared/utils/dashboard/dashboard_server.py`, `shared/utils/tools/image_tools.py` |
 | `LLAMACPP_BASE_URL` | `http://localhost:8080/v1` | — | `shared/utils/langgraph/model_factory.py`, `shared/utils/utils.py` |
@@ -78,53 +78,53 @@ Every environment variable the code reads: **133** in total. Descriptions come f
 | `LM_STUDIO_BASE_URL` | `http://localhost:1234/v1` | Alternative Local API Servers (defaults are used if not set) | `shared/utils/langgraph/model_factory.py`, `shared/utils/utils.py` |
 | `LOCALAI_BASE_URL` | `http://localhost:8080/v1` | — | `shared/utils/langgraph/model_factory.py`, `shared/utils/utils.py` |
 | `LOG_LEVEL` | `info` | debug, info, warning, error, critical | `adk_main.py`, `auth_server.py`, `langgraph_main.py` +1 more |
-| `MATE_AI_DISCLOSURE` | — | — | `standalone_server.py` |
-| `MATE_ALLOW_CODE_EXECUTOR_ON_WIDGET` | — | — | `shared/utils/tools/tool_factory.py` |
+| `MATE_AI_DISCLOSURE` | — | Public AI-use disclosure text for standalone builds | `standalone_server.py` |
+| `MATE_ALLOW_CODE_EXECUTOR_ON_WIDGET` | — | Allow the code executor tool on public widget agents | `shared/utils/tools/tool_factory.py` |
 | `MATE_ALLOW_INSECURE_DEFAULTS` | `false` | Escape hatch: allow those defaults in production anyway. | `auth_server.py` |
 | `MATE_ENV` | `development` | Set to 'production' to refuse startup on insecure defaults (default AUTH_PASSWORD, missing SECRET_KEY) and to force SESSION_SECURE_COOKIE on. | `auth_server.py`, `shared/utils/utils.py` |
-| `MATE_FEEDBACK_KEY` | — | — | `shared/utils/standalone_feedback.py` |
-| `MATE_FEEDBACK_URL` | — | — | `shared/utils/standalone_feedback.py` |
+| `MATE_FEEDBACK_KEY` | — | API key for the standalone feedback endpoint | `shared/utils/standalone_feedback.py` |
+| `MATE_FEEDBACK_URL` | — | Standalone feedback endpoint base URL | `shared/utils/standalone_feedback.py` |
 | `MATE_PLUGINS_ENABLED` | `false` | App-wide MATE plugin: RBAC/guardrails/token tracking as ADK Plugin instead of per-agent callbacks; covers all agents incl. runtime-created ones (requires ADK >= 2.0) | `shared/utils/agent_manager.py`, `shared/utils/utils.py` |
 | `MCP_EXPOSED_AGENTS` | `chess_mate_root` | — | `shared/utils/mcp/agent_mcp_manager.py` |
-| `MEMORY_SERVICE` | `database` | — | `adk_main.py` |
-| `MODEL_NAME` | — | — | `server/proxy_routes.py`, `server/widget_routes.py` |
-| `MYSTERY_GEN_MODEL` | — | — | `shared/utils/tools/mystery_game.py` |
+| `MEMORY_SERVICE` | `database` | Memory backend: database, file, or plugin name | `adk_main.py` |
+| `MODEL_NAME` | — | Default model override for the OpenAI-compatible proxy | `server/proxy_routes.py`, `server/widget_routes.py` |
+| `MYSTERY_GEN_MODEL` | — | Model for the mystery-game generator (falls back to default) | `shared/utils/tools/mystery_game.py` |
 | `OAUTH_ALLOWED_DOMAINS` | — | Comma-separated email domains allowed to sign in via SSO. Empty = anyone with a provider account can create a session. | `server/oauth_routes.py` |
 | `OAUTH_ALLOWED_EMAILS` | — | Comma-separated individual emails allowed to sign in. | `server/oauth_routes.py` |
 | `OAUTH_DEFAULT_ROLE` | `pending` | Role for new SSO users. Default 'pending' = no agent access until an admin grants a role on /dashboard/users. Roles: admin (full), user (dashboard agents), widget (public embeddable widget/trial agents — auto-assigned), pending (no access). Agents with NO roles set are admin-only. | `server/oauth_routes.py` |
-| `OLLAMA_HOST` | `http://localhost:11434` | — | `shared/utils/tools/image_tools.py` |
+| `OLLAMA_HOST` | `http://localhost:11434` | Ollama server for local models | `shared/utils/tools/image_tools.py` |
 | `OPENAI_API_KEY` | — | LLM Provider API Keys Only set keys for providers you actually use. Model prefix in agent config determines which provider is used: gemini-* → Google Gemini (uses GOOGLE_API_KEY) openai/gpt-4o → OpenAI anthropic/claude-* → Anthropic deepseek/deepseek-* → DeepSeek ollama_chat/model → Local Ollama (set OLLAMA_API_BASE) openrouter/provider/model → OpenRouter (aggregator) mistral/*, groq/*, cohere/*, together_ai/* → respective providers | `shared/utils/tools/image_tools.py` |
-| `OPENAI_API_KEY_BACKUP` | — | — | `shared/utils/tools/image_tools.py` |
+| `OPENAI_API_KEY_BACKUP` | — | Fallback OpenAI key for the image tool | `shared/utils/tools/image_tools.py` |
 | `OPENROUTER_API_KEY` | — | — | `shared/utils/langgraph/model_factory.py`, `shared/utils/tools/image_tools.py`, `shared/utils/utils.py` |
-| `OPENROUTER_BASE_URL` | `https://openrouter.ai/api/v1` | — | `shared/utils/langgraph/model_factory.py`, `shared/utils/tools/image_tools.py`, `shared/utils/utils.py` |
+| `OPENROUTER_BASE_URL` | `https://openrouter.ai/api/v1` | OpenRouter endpoint override | `shared/utils/langgraph/model_factory.py`, `shared/utils/tools/image_tools.py`, `shared/utils/utils.py` |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | — | — | `shared/utils/tracing/tracer.py` |
 | `OTEL_SERVICE_NAME` | `mate` | — | `shared/utils/tracing/tracing_config.py` |
 | `OTEL_TRACES_DB_EXPORT` | `true` | — | `shared/utils/tracing/tracing_config.py` |
 | `OTEL_TRACING_ENABLED` | `false` | OpenTelemetry Distributed Tracing (optional) | `auth_server.py`, `shared/utils/tracing/tracing_config.py` |
-| `PORT` | `8000` | — | `adk_main.py`, `langgraph_main.py` |
-| `PRINT_CONTEXT_FEATURES_STATUS` | `true` | — | `shared/template_agent/agent.py` |
+| `PORT` | `8000` | Main server bind port (langgraph entrypoint) | `adk_main.py`, `langgraph_main.py` |
+| `PRINT_CONTEXT_FEATURES_STATUS` | `true` | Log context-feature flags at agent startup | `shared/template_agent/agent.py` |
 | `RATE_LIMIT_ENABLED` | `false` | Rate Limits & Budgets (optional) | `auth_server.py`, `server/openai_routes.py`, `server/proxy_routes.py` |
 | `REDIS_URL` | — | Optional: distributed rate limiting | `shared/utils/rate_limit_service.py` |
 | `RESUMABILITY_ENABLED` | `false` | Resumability: pause/resume invocations, human-in-the-loop tool approval (requires ADK >= 2.0) | `shared/utils/utils.py` |
-| `ROOT_AGENT_NAME` | — | — | `standalone_server.py` |
+| `ROOT_AGENT_NAME` | — | Root agent served by the standalone server | `standalone_server.py` |
 | `SECRET_KEY` | — | Signs the encrypted session cookie; set in production! | `auth_server.py` |
-| `SESSION_DB_URL` | `sqlite+aiosqlite:///standalone_session.db` | — | `standalone_server.py` |
+| `SESSION_DB_URL` | `sqlite+aiosqlite:///standalone_session.db` | Session store URL (standalone builds) | `standalone_server.py` |
 | `SESSION_SECURE_COOKIE` | `false` | Set to true behind TLS in production | `auth_server.py` |
-| `SMTP_FROM` | `(computed)` | — | `shared/utils/notify.py`, `shared/utils/shop_service.py` |
-| `SMTP_HOST` | — | — | `shared/utils/notify.py`, `shared/utils/shop_service.py`, `shared/utils/trigger_runner.py` |
-| `SMTP_PASS` | — | — | `shared/utils/notify.py`, `shared/utils/shop_service.py` |
-| `SMTP_PORT` | `587` | — | `shared/utils/notify.py`, `shared/utils/shop_service.py` |
-| `SMTP_USER` | — | — | `shared/utils/notify.py`, `shared/utils/shop_service.py` |
-| `STANDALONE_HOST` | `127.0.0.1` | — | `standalone_server.py` |
-| `STANDALONE_PORT` | `8080` | — | `standalone_server.py` |
-| `STUDIO_AGENT` | — | — | `shared/utils/langgraph/studio_graph.py` |
+| `SMTP_FROM` | `(computed)` | From address (defaults to SMTP_USER) | `shared/utils/notify.py`, `shared/utils/shop_service.py` |
+| `SMTP_HOST` | — | SMTP server for alert and trigger emails; empty disables sending | `shared/utils/notify.py`, `shared/utils/shop_service.py`, `shared/utils/trigger_runner.py` |
+| `SMTP_PASS` | — | SMTP login password | `shared/utils/notify.py`, `shared/utils/shop_service.py` |
+| `SMTP_PORT` | `587` | SMTP port (587 = STARTTLS) | `shared/utils/notify.py`, `shared/utils/shop_service.py` |
+| `SMTP_USER` | — | SMTP login username | `shared/utils/notify.py`, `shared/utils/shop_service.py` |
+| `STANDALONE_HOST` | `127.0.0.1` | Standalone server bind host | `standalone_server.py` |
+| `STANDALONE_PORT` | `8080` | Standalone server bind port | `standalone_server.py` |
+| `STUDIO_AGENT` | — | Agent loaded by the LangGraph Studio harness | `shared/utils/langgraph/studio_graph.py` |
 | `SUPABASE_BUCKET` | `artifacts` | bucket for both Supabase artifacts and the Supabase storage tools (default artifacts); image links assume it is public | `shared/utils/settings.py` |
 | `SUPABASE_KEY` | — | — | `adk_main.py`, `shared/utils/artifacts/supabase_artifact_service.py`, `shared/utils/langgraph/artifact_adapter.py` +1 more |
 | `SUPABASE_URL` | — | — | `adk_main.py`, `shared/utils/artifacts/supabase_artifact_service.py`, `shared/utils/langgraph/artifact_adapter.py` +2 more |
 | `TAVILY_API_KEY` | — | Web search for the google_search tool. With a key, results come from the Tavily API; without one, the tool falls back to DuckDuckGo. | `shared/utils/tools/google_tools.py` |
-| `TEMPLATES_REMOTE_URL` | — | — | `shared/utils/template_service.py` |
+| `TEMPLATES_REMOTE_URL` | — | Remote template gallery URL (empty = bundled templates) | `shared/utils/template_service.py` |
 | `TIKTOKEN_CACHE_DIR` | — | — | `build_standalone_agent.py` |
-| `TITLE_GEN_MODEL` | — | — | `shared/utils/dashboard/dashboard_server.py`, `shared/utils/wizard/site_analyzer.py` |
+| `TITLE_GEN_MODEL` | — | Model for generated titles (falls back to default) | `shared/utils/dashboard/dashboard_server.py`, `shared/utils/wizard/site_analyzer.py` |
 | `TOKEN_TTL_HOURS` | `24` | Lifetime of bearer tokens from POST /auth/token. | `shared/utils/auth_utils.py` |
 | `TRUSTED_PROXY_HOSTS` | `*` | Comma-separated proxy IPs to trust for X-Forwarded-*. Restrict in production — "*" lets any client spoof them, and audit logs then fall back to the socket peer address. | `auth_server.py`, `shared/utils/audit_service.py` |
 | `WIDGET_LEGACY_ADMIN_KEY` | `false` | true = the public widget key still works on /widget/api admin routes. Transitional only; keep false. | `server/widget_routes.py` |
@@ -132,27 +132,27 @@ Every environment variable the code reads: **133** in total. Descriptions come f
 | `WIZARD_AGENT_MODEL` | `openrouter/google/gemini-2.5-flash` | Default chat model for trial agents (litellm format). A tier template can override it via model_name. Both default to Gemini Flash via OpenRouter (needs OPENROUTER_API_KEY). | `shared/utils/wizard/provisioning_service.py` |
 | `WIZARD_ANALYSIS_MODEL` | — | LLM that extracts the business summary + services from a scanned site. | `shared/utils/tools/mystery_game.py`, `shared/utils/wizard/site_analyzer.py` |
 | `WIZARD_CALENDAR_TIMEZONE` | `Europe/Belgrade` | Timezone for created events (naive datetimes are normalized to it) | `shared/utils/tools/google_calendar_tools.py` |
-| `WIZARD_CAPTCHA_PROVIDER` | — | — | `server/wizard_routes.py` |
-| `WIZARD_CLEANUP_ENABLED` | `true` | — | `shared/utils/trigger_runner.py` |
-| `WIZARD_CONTACT_EMAIL` | `sales@example.com` | — | `shared/utils/wizard/pricing.py` |
-| `WIZARD_CRAWL_MAX_DEPTH` | `3` | — | `shared/utils/wizard/site_crawler.py` |
-| `WIZARD_CRAWL_MAX_PAGES` | `10` | — | `shared/utils/wizard/site_crawler.py` |
-| `WIZARD_CRAWL_PAGE_TIMEOUT_MS` | `20000` | — | `shared/utils/wizard/site_crawler.py` |
-| `WIZARD_CRAWL_TIME_BUDGET_S` | `90` | — | `shared/utils/wizard/site_crawler.py` |
-| `WIZARD_CURRENCY` | `EUR` | — | `shared/utils/wizard/pricing.py` |
+| `WIZARD_CAPTCHA_PROVIDER` | — | CAPTCHA provider for trial signup (empty = disabled) | `server/wizard_routes.py` |
+| `WIZARD_CLEANUP_ENABLED` | `true` | Periodically purge idle/expired wizard sessions | `shared/utils/trigger_runner.py` |
+| `WIZARD_CONTACT_EMAIL` | `sales@example.com` | Contact address shown during signup | `shared/utils/wizard/pricing.py` |
+| `WIZARD_CRAWL_MAX_DEPTH` | `3` | Max link depth when the wizard crawls a site | `shared/utils/wizard/site_crawler.py` |
+| `WIZARD_CRAWL_MAX_PAGES` | `10` | Max pages per wizard crawl | `shared/utils/wizard/site_crawler.py` |
+| `WIZARD_CRAWL_PAGE_TIMEOUT_MS` | `20000` | Per-page crawl timeout in milliseconds | `shared/utils/wizard/site_crawler.py` |
+| `WIZARD_CRAWL_TIME_BUDGET_S` | `90` | Total crawl time budget in seconds | `shared/utils/wizard/site_crawler.py` |
+| `WIZARD_CURRENCY` | `EUR` | Default billing currency (ISO code) | `shared/utils/wizard/pricing.py` |
 | `WIZARD_DEFAULT_SLOT_MIN` | `30` | Default appointment length (min) when not set per agent | `shared/utils/tools/google_calendar_tools.py`, `shared/utils/wizard/provisioning_service.py` |
 | `WIZARD_DEMO_CALENDAR_ID` | — | Calendar id used by trial agents (default: SA 'primary') | `shared/utils/tools/google_calendar_tools.py` |
-| `WIZARD_SESSION_IDLE_HOURS` | `4` | — | `shared/utils/wizard/cleanup.py` |
-| `WIZARD_SHOP_CURRENCY` | `EUR` | — | `shared/utils/wizard/provisioning_service.py` |
-| `WIZARD_TIER3_TRIAL_TTL_DAYS` | `2` | — | `server/wizard_routes.py` |
-| `WIZARD_TRIAL_MAX_PAGES` | `5` | — | `server/wizard_routes.py` |
-| `WIZARD_TRIAL_TTL_DAYS` | `7` | — | `server/wizard_routes.py`, `shared/utils/wizard/cleanup.py` |
+| `WIZARD_SESSION_IDLE_HOURS` | `4` | Idle hours before a wizard session is purged | `shared/utils/wizard/cleanup.py` |
+| `WIZARD_SHOP_CURRENCY` | `EUR` | Shop/checkout currency fallback | `shared/utils/wizard/provisioning_service.py` |
+| `WIZARD_TIER3_TRIAL_TTL_DAYS` | `2` | Trial duration in days for tier 3 | `server/wizard_routes.py` |
+| `WIZARD_TRIAL_MAX_PAGES` | `5` | Max wizard pages per trial | `server/wizard_routes.py` |
+| `WIZARD_TRIAL_TTL_DAYS` | `7` | Trial duration in days | `server/wizard_routes.py`, `shared/utils/wizard/cleanup.py` |
 
 ## Read by the code but missing from `.env.example`
 
-57 variables have no entry (and so no description) in `.env.example`:
+1 variables have no entry (and so no description) in `.env.example`:
 
-`ALERTS_ENABLED`, `ALERTS_INTERVAL_SECONDS`, `ALLOWED_API_ROLES`, `BROWSER_ALLOW_PRIVATE_NETWORK`, `BROWSER_CDP_URL`, `BROWSER_HEADLESS`, `BROWSER_MODE`, `CONTEXT_CACHE_INTERVALS`, `CONTEXT_CACHE_MIN_TOKENS`, `CONTEXT_CACHE_TTL_SECONDS`, `CREDENTIAL_SERVICE`, `DB_AUTO_CREATE_TABLES`, `DB_SKIP_SEED`, `EVAL_IMPROVE_MODEL`, `EVAL_JUDGE_MODEL`, `EVAL_REGRESSION_WEBHOOK_URL`, `GEMINI_API_KEY`, `GEMINI_MODEL`, `GOOGLE_SERVICE_ACCOUNT_FILE`, `MATE_AI_DISCLOSURE`, `MATE_ALLOW_CODE_EXECUTOR_ON_WIDGET`, `MATE_FEEDBACK_KEY`, `MATE_FEEDBACK_URL`, `MEMORY_SERVICE`, `MODEL_NAME`, `MYSTERY_GEN_MODEL`, `OLLAMA_HOST`, `OPENAI_API_KEY_BACKUP`, `OPENROUTER_BASE_URL`, `PORT`, `PRINT_CONTEXT_FEATURES_STATUS`, `ROOT_AGENT_NAME`, `SESSION_DB_URL`, `SMTP_FROM`, `SMTP_HOST`, `SMTP_PASS`, `SMTP_PORT`, `SMTP_USER`, `STANDALONE_HOST`, `STANDALONE_PORT`, `STUDIO_AGENT`, `TEMPLATES_REMOTE_URL`, `TIKTOKEN_CACHE_DIR`, `TITLE_GEN_MODEL`, `WIZARD_CAPTCHA_PROVIDER`, `WIZARD_CLEANUP_ENABLED`, `WIZARD_CONTACT_EMAIL`, `WIZARD_CRAWL_MAX_DEPTH`, `WIZARD_CRAWL_MAX_PAGES`, `WIZARD_CRAWL_PAGE_TIMEOUT_MS`, `WIZARD_CRAWL_TIME_BUDGET_S`, `WIZARD_CURRENCY`, `WIZARD_SESSION_IDLE_HOURS`, `WIZARD_SHOP_CURRENCY`, `WIZARD_TIER3_TRIAL_TTL_DAYS`, `WIZARD_TRIAL_MAX_PAGES`, `WIZARD_TRIAL_TTL_DAYS`
+`TIKTOKEN_CACHE_DIR`
 
 ## In `.env.example` but not read by MATE's own code
 
