@@ -5,6 +5,7 @@
 
 // Handlers this file's markup calls through data-click and friends (csp-actions.js)
 mateActions.allow('AlertPage.closeModal', 'AlertPage.deleteRule', 'AlertPage.loadRules',
+                  'AlertPage.onBudgetUnitChange',
                   'AlertPage.onConditionChange', 'AlertPage.onDestinationChange',
                   'AlertPage.openCreateModal', 'AlertPage.openEditModal', 'AlertPage.saveRule',
                   'AlertPage.testRule', 'AlertPage.toggleRule');
@@ -53,7 +54,7 @@ const AlertPage = (function () {
     function _describeCondition(rule) {
         const c = rule.condition_config || {};
         if (rule.condition_type === 'budget_threshold') {
-            return `${esc(c.threshold_pct ?? 90)}% of ${esc(c.period || 'day')} budget`;
+            return `${esc(c.threshold_pct ?? 90)}% of ${esc(c.period || 'day')} ${c.unit === 'usd' ? 'dollar' : 'token'} budget`;
         }
         return `${esc(c.threshold ?? '?')} in ${esc(c.window_minutes ?? '?')} min`;
     }
@@ -108,6 +109,20 @@ const AlertPage = (function () {
         document.getElementById('countFields').classList.toggle('hidden', isBudget);
     }
 
+    // Dollar budgets exist per day and per month only, as on the Rate Limits page
+    function onBudgetUnitChange() {
+        const usd = document.getElementById('formBudgetUnit').value === 'usd';
+        const period = document.getElementById('formPeriod');
+        period.querySelector('option[value="hour"]').disabled = usd;
+        if (usd && period.value === 'hour') period.value = 'day';
+        const limit = document.getElementById('formTokenLimit');
+        document.getElementById('formLimitLabel').textContent = usd
+            ? 'Limit in USD (blank = use the Rate Limits budget)'
+            : 'Token limit (blank = use the Rate Limits budget)';
+        limit.step = usd ? '0.01' : '1';
+        limit.min = usd ? '0.01' : '1';
+    }
+
     function onDestinationChange() {
         const destination = document.getElementById('formDestination').value;
         const isEmail = destination === 'email';
@@ -122,6 +137,7 @@ const AlertPage = (function () {
         document.getElementById('ruleModalTitle').textContent = 'New Alert Rule';
         document.getElementById('ruleForm').reset();
         onConditionChange();
+        onBudgetUnitChange();
         onDestinationChange();
         document.getElementById('ruleModal').classList.remove('hidden');
     }
@@ -142,8 +158,10 @@ const AlertPage = (function () {
         document.getElementById('formThreshold').value = c.threshold ?? 5;
         document.getElementById('formWindow').value = c.window_minutes ?? 15;
         document.getElementById('formThresholdPct').value = c.threshold_pct ?? 90;
+        document.getElementById('formBudgetUnit').value = c.unit === 'usd' ? 'usd' : 'tokens';
+        onBudgetUnitChange();
         document.getElementById('formPeriod').value = c.period || 'day';
-        document.getElementById('formTokenLimit').value = c.token_limit || '';
+        document.getElementById('formTokenLimit').value = (c.unit === 'usd' ? c.usd_limit : c.token_limit) ?? '';
 
         const d = rule.destination_config || {};
         // headers come back redacted, so only the address fields are safe to prefill
@@ -171,7 +189,12 @@ const AlertPage = (function () {
                 period: document.getElementById('formPeriod').value,
             };
             const limit = document.getElementById('formTokenLimit').value;
-            if (limit) conditionConfig.token_limit = parseInt(limit, 10);
+            if (document.getElementById('formBudgetUnit').value === 'usd') {
+                conditionConfig.unit = 'usd';
+                if (limit) conditionConfig.usd_limit = parseFloat(limit);
+            } else if (limit) {
+                conditionConfig.token_limit = parseInt(limit, 10);
+            }
         } else {
             conditionConfig = {
                 threshold: parseInt(document.getElementById('formThreshold').value, 10),
@@ -279,6 +302,7 @@ const AlertPage = (function () {
         openEditModal,
         closeModal,
         onConditionChange,
+        onBudgetUnitChange,
         onDestinationChange,
         saveRule,
         toggleRule,

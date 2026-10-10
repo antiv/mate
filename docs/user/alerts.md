@@ -1,6 +1,6 @@
 ---
 title: Alerts
-summary: Be told by webhook, Slack, Discord or email when an agent starts failing, keeps falling back to its fallback model, guardrails fire repeatedly, or a token budget is nearly used up.
+summary: Be told by webhook, Slack, Discord or email when an agent starts failing, keeps falling back to its fallback model, guardrails fire repeatedly, or a token or dollar budget is nearly used up.
 audience: user
 order: 140
 covers:
@@ -27,9 +27,13 @@ in **Control Room → Alerts**.
 | **Agent errors** | Failed requests reach a count within a time window. | **Threshold (count)** and **Window (minutes)** |
 | **Guardrail hits** | Guardrail hits reach a count within a time window. | the same |
 | **Fallback model used** | Requests answered by an agent's [fallback model](fallback-model.md) reach a count within a time window. | the same |
-| **Budget threshold** | Token use reaches a percentage of a budget. | **Threshold (% of budget)**, the **Period** (hour, day or month) and optionally a **Token limit** |
+| **Budget threshold** | Token use or spend in dollars reaches a percentage of a budget. | **Budget in** tokens or US dollars, **Threshold (% of budget)**, the **Period** (hour, day or month; day or month for dollars) and optionally a limit |
 
-For a budget rule, leave **Token limit** empty to use the budget already configured
+A dollar budget counts the [cost](usage-and-audit.md#cost) of priced calls only; calls
+whose model has no price add nothing. Its message reads, for example, "agent support
+has used 90% of its day budget ($9.00 of $10.00)".
+
+For a budget rule, leave the limit empty to use the budget already configured
 for the same scope on the [Rate Limits](rate-limits.md) page, so the number lives in
 one place.
 

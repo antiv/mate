@@ -3782,6 +3782,8 @@ class DashboardServer:
                 "tokens_last_hour": usage.tokens_last_hour,
                 "tokens_last_day": usage.tokens_last_day,
                 "tokens_last_month": usage.tokens_last_month,
+                "usd_last_day": usage.usd_last_day,
+                "usd_last_month": usage.usd_last_month,
             }
 
         @self.app.post("/dashboard/api/rate-limits", tags=["Dashboard - Rate Limits"])
@@ -3798,6 +3800,17 @@ class DashboardServer:
                 raise HTTPException(status_code=400, detail="scope and scope_id required")
             if scope not in ("user", "agent", "project"):
                 raise HTTPException(status_code=400, detail="scope must be user, agent, or project")
+            import math
+            budgets = {}
+            for key in ("usd_per_day", "usd_per_month"):
+                value = body.get(key)
+                if value is None or value == "":
+                    budgets[key] = None
+                elif isinstance(value, bool) or not isinstance(value, (int, float)) \
+                        or not math.isfinite(value) or value < 0:
+                    raise HTTPException(status_code=400, detail=f"{key} must be a number of dollars, 0 or more")
+                else:
+                    budgets[key] = float(value)
             svc = get_rate_limit_service()
             result = svc.upsert_config(
                 scope=scope,
@@ -3807,6 +3820,8 @@ class DashboardServer:
                 tokens_per_day=body.get("tokens_per_day"),
                 tokens_per_month=body.get("tokens_per_month"),
                 max_tokens_per_request=body.get("max_tokens_per_request"),
+                usd_per_day=budgets["usd_per_day"],
+                usd_per_month=budgets["usd_per_month"],
                 action_on_limit=body.get("action_on_limit", "block"),
                 alert_thresholds=body.get("alert_thresholds", [80, 90, 100]),
                 alert_webhook_url=body.get("alert_webhook_url"),
@@ -7538,7 +7553,20 @@ class DashboardServer:
                     raise HTTPException(status_code=400, detail="destination_config.to is required for email")
                 fields["destination_config"] = destination_config
             if body.get("condition_config") is not None:
-                fields["condition_config"] = body.get("condition_config")
+                config = body.get("condition_config")
+                if isinstance(config, dict) and config.get("unit", "tokens") not in ("tokens", "usd"):
+                    raise HTTPException(status_code=400, detail="unit must be tokens or usd")
+                if isinstance(config, dict) and config.get("unit") == "usd":
+                    import math
+                    from shared.utils.alert_service import USD_PERIODS
+                    if config.get("period", "day") not in USD_PERIODS:
+                        raise HTTPException(status_code=400,
+                                            detail="A budget in dollars is per day or per month")
+                    limit = config.get("usd_limit")
+                    if limit is not None and (isinstance(limit, bool) or not isinstance(limit, (int, float))
+                                              or not math.isfinite(limit) or limit <= 0):
+                        raise HTTPException(status_code=400, detail="usd_limit must be a number of dollars above 0")
+                fields["condition_config"] = config
             for key in ("cooldown_seconds",):
                 if key in body and body[key] is not None:
                     fields[key] = int(body[key])

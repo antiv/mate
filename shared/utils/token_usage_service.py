@@ -390,6 +390,41 @@ class TokenUsageService:
         finally:
             session.close()
 
+    def get_cost_since(self, scope: str, scope_id: str, since: datetime) -> float:
+        """US dollars a user, agent or project spent since the given datetime.
+
+        Only calls whose model has a price have a cost; the rest add nothing.
+        """
+        session = self._get_session()
+        if not session:
+            return 0.0
+        try:
+            query = session.query(func.coalesce(func.sum(TokenUsageLog.cost_usd), 0.0)).filter(
+                TokenUsageLog.timestamp >= since)
+            if scope == "user":
+                query = query.filter(TokenUsageLog.user_id == scope_id)
+            elif scope == "agent":
+                query = query.filter(TokenUsageLog.agent_name == scope_id)
+            elif scope == "project":
+                from .models import AgentConfig
+                try:
+                    project_id = int(scope_id)
+                except (TypeError, ValueError):
+                    return 0.0
+                agent_names = [r[0] for r in session.query(AgentConfig.name).filter(
+                    AgentConfig.project_id == project_id).all()]
+                if not agent_names:
+                    return 0.0
+                query = query.filter(TokenUsageLog.agent_name.in_(agent_names))
+            else:
+                return 0.0
+            return float(query.scalar() or 0.0)
+        except SQLAlchemyError as e:
+            logger.error("Failed to get cost since: %s", e)
+            return 0.0
+        finally:
+            session.close()
+
     def get_error_count_since(self, since: datetime, agent_name: Optional[str] = None,
                               user_id: Optional[str] = None,
                               project_id: Optional[int] = None) -> int:
