@@ -10,7 +10,7 @@ generated: true
 
 # HTTP API reference
 
-Every HTTP route declared in the code: **257** routes. 36 have no docstring and so no summary here.
+Every HTTP route declared in the code: **261** routes. 36 have no docstring and so no summary here.
 
 This page lists what exists and where it is implemented. For request and response schemas, and to try a call, use the live Swagger UI under **Documentation → API** in the dashboard.
 
@@ -18,7 +18,7 @@ Requests to `/dashboard/api/*` require an admin, apart from the short allowlist 
 
 ## Auth server and dashboard
 
-Port 8000. Everything a browser or an external client talks to. 237 routes.
+Port 8000. Everything a browser or an external client talks to. 241 routes.
 
 ### Authentication
 
@@ -256,6 +256,10 @@ ADK server control API endpoints (start, stop, restart).
 |---|---|---|---|
 | `GET` | `/dashboard/api/settings/image-model` | The default image model for agents that name none, where it comes from, and whether its key is set | shared/utils/dashboard/dashboard_server.py · get_image_model_setting |
 | `PUT` | `/dashboard/api/settings/image-model` | Set the default image model; an empty model falls back to IMAGE_MODEL, then dall-e-3 | shared/utils/dashboard/dashboard_server.py · put_image_model_setting |
+| `DELETE` | `/dashboard/api/settings/model-prices` | Remove a manual price: the model's calls are priced from the published lists again, or have no cost | shared/utils/dashboard/dashboard_server.py · delete_model_price |
+| `GET` | `/dashboard/api/settings/model-prices` | Every model used or priced by hand: its price per million tokens, where it comes from, and calls without a cost | shared/utils/dashboard/dashboard_server.py · get_model_prices |
+| `PUT` | `/dashboard/api/settings/model-prices` | Set a model's price by hand, in US dollars per million tokens, and price all its calls with it | shared/utils/dashboard/dashboard_server.py · put_model_price |
+| `POST` | `/dashboard/api/settings/model-prices/fill-missing` | Price the calls logged without a cost whose model has a price now | shared/utils/dashboard/dashboard_server.py · fill_missing_costs |
 
 ### Dashboard - Templates
 

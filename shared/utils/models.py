@@ -97,6 +97,11 @@ class TokenUsageLog(Base):
     status = Column(String(50), nullable=True, default='SUCCESS')  # SUCCESS, ERROR, ACCESS_DENIED, etc.
     error_description = Column(Text, nullable=True)  # Description of error if status is not SUCCESS
     timestamp = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    # The call's cost in US dollars, priced when logged; NULL when the model has no
+    # known price, which is not the same as free (see shared/utils/model_pricing.py)
+    cost_usd = Column(Float, nullable=True)
+    # Answered by the agent's fallback model after its own model failed
+    is_fallback = Column(Boolean, nullable=False, default=False)
     
     def to_dict(self) -> dict:
         """Convert model instance to dictionary."""
@@ -113,8 +118,27 @@ class TokenUsageLog(Base):
             'tool_use_tokens': self.tool_use_tokens,
             'status': self.status,
             'error_description': self.error_description,
-            'timestamp': self.timestamp.isoformat() if self.timestamp else None
+            'timestamp': self.timestamp.isoformat() if self.timestamp else None,
+            'cost_usd': self.cost_usd,
+            'is_fallback': bool(self.is_fallback),
         }
+
+
+class ModelPrice(Base):
+    """A model's price an admin set, in US dollars per million tokens.
+
+    For models the published price lists do not cover (a self-hosted model, a
+    provider LiteLLM has not mapped). It wins over them. See shared/utils/model_pricing.py.
+    """
+
+    __tablename__ = 'model_prices'
+
+    model_name = Column(String(255), primary_key=True)
+    input_usd_per_mtok = Column(Float, nullable=False)
+    output_usd_per_mtok = Column(Float, nullable=False)
+    updated_by = Column(String(255), nullable=True)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc),
+                        onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
 
 class GuardrailLog(Base):
