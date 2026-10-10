@@ -10,7 +10,7 @@ generated: true
 
 # HTTP API reference
 
-Every HTTP route declared in the code: **256** routes. 36 have no docstring and so no summary here.
+Every HTTP route declared in the code: **257** routes. 36 have no docstring and so no summary here.
 
 This page lists what exists and where it is implemented. For request and response schemas, and to try a call, use the live Swagger UI under **Documentation → API** in the dashboard.
 
@@ -18,7 +18,7 @@ Requests to `/dashboard/api/*` require an admin, apart from the short allowlist 
 
 ## Auth server and dashboard
 
-Port 8000. Everything a browser or an external client talks to. 236 routes.
+Port 8000. Everything a browser or an external client talks to. 237 routes.
 
 ### Authentication
 
@@ -208,6 +208,7 @@ Web interface pages for system management.
 | `GET` | `/dashboard/wizard-leads` | Dashboard page listing leads captured by the public Agent Builder Wizard | shared/utils/dashboard/dashboard_server.py · dashboard_wizard_leads |
 | `GET` | `/dashboard/wizard-pricing` | Dashboard page to edit Agent Builder Wizard tier prices and currencies | shared/utils/dashboard/dashboard_server.py · dashboard_wizard_pricing |
 | `GET` | `/dashboard/workroom` | — | shared/utils/dashboard/dashboard_server.py · dashboard_workroom |
+| `GET` | `/dashboard/workroom/canvas` | An empty page that runs the code shown in the Work Room canvas | shared/utils/dashboard/dashboard_server.py · dashboard_workroom_canvas |
 | `GET` | `/login` | Login page for dashboard (no auth required) | server/auth_routes.py · login_page |
 
 ### Dashboard - Projects

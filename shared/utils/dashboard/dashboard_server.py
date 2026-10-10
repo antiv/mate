@@ -6695,7 +6695,8 @@ class DashboardServer:
                 "is_admin": True,
             })
 
-        @self.app.get("/dashboard/workroom/canvas", response_class=HTMLResponse, include_in_schema=False)
+        @self.app.get("/dashboard/workroom/canvas", response_class=HTMLResponse, include_in_schema=False,
+                      tags=["Dashboard - Pages"])
         async def dashboard_workroom_canvas(username: str = Depends(self._get_auth_user_dependency)):
             """An empty page that runs the code shown in the Work Room canvas.
 
