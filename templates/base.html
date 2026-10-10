@@ -871,13 +871,16 @@
 
             notification.id = 'mate-notification-' + Date.now();
             notification.className = 'mate-notification';
+            // The message often echoes server or user text (an error detail, a name),
+            // so it is set as text below, never parsed as HTML
             notification.innerHTML = `
                 <i class="fas ${icon}" style="font-size: 15px; color: ${iconColor}; flex-shrink: 0;"></i>
-                <span style="font-size: 13px; color: var(--text-primary); flex: 1;">${message}</span>
+                <span class="mate-notification-text" style="font-size: 13px; color: var(--text-primary); flex: 1;"></span>
                 <button onclick="this.parentElement.remove()" style="border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; flex-shrink: 0;">
                     <i class="fas fa-times text-sm"></i>
                 </button>
             `;
+            notification.querySelector('.mate-notification-text').textContent = String(message ?? '');
             document.body.appendChild(notification);
 
             // Auto remove after 5 seconds

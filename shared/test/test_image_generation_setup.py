@@ -16,6 +16,8 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from shared.utils.tools import image_tools as it
@@ -182,6 +184,93 @@ class TestGenerate(unittest.TestCase):
             asyncio.run(it.generate_image_nano_banana(
                 "a cat", None, model_config={"model": "google/gemini-2.5-flash-image"}))
         self.assertEqual(call.call_args.kwargs["model"], "openrouter/google/gemini-2.5-flash-image")
+
+
+class TestOnlyImageParametersPass(unittest.TestCase):
+    """tool_config can be written by an agent steered from a chat (update_agent)."""
+
+    def test_litellm_control_arguments_are_dropped(self):
+        hostile = {
+            "mock_response": "http://169.254.169.254/latest/meta-data/",
+            "success_callback": ["langsmith"], "langsmith_base_url": "https://evil.example",
+            "aws_bedrock_runtime_endpoint": "https://evil.example", "ssl_verify": False,
+            "api_base": "http://10.0.0.1", "metadata": {"a": 1}, "caching": True,
+            "size": "1024x1024", "aspect_ratio": "16:9",
+        }
+        config = it.get_model_config("black_forest_labs/flux-pro-1.1", hostile)
+        self.assertEqual(config, {"size": "1024x1024", "aspect_ratio": "16:9"})
+
+    def test_every_litellm_control_argument_is_outside_the_allowlist(self):
+        from litellm.types.utils import all_litellm_params
+        self.assertEqual(it._ALLOWED_PARAMS & set(all_litellm_params), set())
+
+
+class TestDownloadImage(unittest.TestCase):
+
+    def _resolve_to(self, ip):
+        loop = MagicMock()
+        loop.getaddrinfo = AsyncMock(return_value=[(None, None, None, "", (ip, 0))])
+        return patch("shared.utils.tools.image_tools.asyncio.get_running_loop", return_value=loop)
+
+    def _serve(self, handler):
+        transport = httpx.MockTransport(handler)
+        real = httpx.AsyncClient
+        return patch("httpx.AsyncClient", side_effect=lambda **kw: real(transport=transport, **kw))
+
+    @patch.dict(os.environ, {}, clear=True)
+    def test_internal_addresses_are_refused(self):
+        for ip in ("169.254.169.254", "127.0.0.1", "10.0.0.5", "::1", "::ffff:127.0.0.1"):
+            with self._resolve_to(ip), self.assertRaisesRegex(ValueError, "internal address"):
+                asyncio.run(it._download_image("http://img.example/x.png"))
+
+    def test_only_http_urls(self):
+        for url in ("file:///etc/passwd", "ftp://img.example/x", "gopher://x"):
+            with self.assertRaises(ValueError):
+                asyncio.run(it._download_image(url))
+
+    @patch.dict(os.environ, {}, clear=True)
+    def test_redirects_are_not_followed(self):
+        # A public URL must not bounce the download to an internal one
+        with self._resolve_to("93.184.216.34"), self._serve(
+                lambda r: httpx.Response(302, headers={"Location": "http://169.254.169.254/"})):
+            with self.assertRaises(httpx.HTTPStatusError):
+                asyncio.run(it._download_image("http://img.example/x.png"))
+
+    @patch.dict(os.environ, {}, clear=True)
+    def test_a_public_image_is_downloaded(self):
+        with self._resolve_to("93.184.216.34"), self._serve(lambda r: httpx.Response(200, content=PNG)):
+            self.assertEqual(asyncio.run(it._download_image("https://img.example/x.png")), PNG)
+
+    @patch.dict(os.environ, {}, clear=True)
+    def test_an_oversized_image_is_refused(self):
+        with self._resolve_to("93.184.216.34"), \
+                patch.object(it, "_MAX_IMAGE_BYTES", 10), \
+                self._serve(lambda r: httpx.Response(200, content=b"x" * 100)):
+            with self.assertRaisesRegex(ValueError, "too large"):
+                asyncio.run(it._download_image("https://img.example/x.png"))
+
+    @patch.dict(os.environ, {"IMAGE_ALLOW_PRIVATE_NETWORK": "true"}, clear=True)
+    def test_a_local_image_model_can_be_allowed(self):
+        with self._resolve_to("127.0.0.1"), self._serve(lambda r: httpx.Response(200, content=PNG)):
+            self.assertEqual(asyncio.run(it._download_image("http://localhost:9997/x.png")), PNG)
+
+    @patch.dict(os.environ, {}, clear=True)
+    def test_a_refused_url_fails_the_generation(self):
+        # Not "success" with the internal URL handed to the agent
+        ctx = MagicMock()
+        ctx.save_artifact = AsyncMock(return_value=1)
+        call = AsyncMock(return_value=_response(url="http://169.254.169.254/latest/meta-data/"))
+        with patch("litellm.aimage_generation", call), self._resolve_to("169.254.169.254"):
+            result = asyncio.run(it._generate_image_internal("a cat", ctx, "dall-e-3", {}))
+        self.assertFalse(result["success"])
+        self.assertNotIn("url", result)
+        ctx.save_artifact.assert_not_called()
+
+    def test_the_agent_gets_one_line_of_an_error(self):
+        call = AsyncMock(side_effect=Exception("Boom: bad request\nTraceback (most recent call last):\n  File \"/srv/x.py\""))
+        with patch("litellm.aimage_generation", call):
+            result = asyncio.run(it._generate_image_internal("a cat", None, "dall-e-3", {}))
+        self.assertEqual(result["error"], "Image generation failed: Boom: bad request")
 
 
 class TestValidateSetup(unittest.TestCase):

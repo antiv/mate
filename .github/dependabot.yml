@@ -1,0 +1,11 @@
+# Python packages are upgraded by .github/workflows/dependency-upgrade.yml, which
+# recompiles requirements.lock with uv and runs the tests before opening a pull
+# request. Dependabot only keeps the workflows' own actions current.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    labels:
+      - dependencies

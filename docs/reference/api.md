@@ -383,7 +383,7 @@ Image generation MCP server endpoints (DALL-E, Stable Diffusion, etc.).
 |---|---|---|---|
 | `GET` | `/images/mcp` | Image MCP server info endpoint | shared/utils/mcp/image_mcp_server.py · image_mcp_info |
 | `POST` | `/images/mcp` | Handle Image MCP protocol requests at the root /images/mcp endpoint | shared/utils/mcp/image_mcp_server.py · image_mcp_protocol_handler |
-| `GET` | `/images/mcp/health` | Image MCP server health check (no auth required) | shared/utils/mcp/image_mcp_server.py · image_mcp_health_check |
+| `GET` | `/images/mcp/health` | Image MCP server health check (no auth required, so no setup details) | shared/utils/mcp/image_mcp_server.py · image_mcp_health_check |
 | `POST` | `/images/mcp/initialize` | Image MCP protocol initialize endpoint | shared/utils/mcp/image_mcp_server.py · image_mcp_initialize |
 | `GET` | `/images/mcp/sse` | Image MCP Server-Sent Events endpoint for real-time communication | shared/utils/mcp/image_mcp_server.py · image_mcp_sse |
 | `POST` | `/images/mcp/tools/call` | Image MCP protocol tools/call endpoint | shared/utils/mcp/image_mcp_server.py · image_mcp_call_tool |

@@ -20,7 +20,7 @@ MATE exposes:
 ### 1. Image Generation MCP Server (`/images/mcp`)
 
 **Endpoints:**
-- `GET /images/mcp/health` - Health check (no auth required)
+- `GET /images/mcp/health` - Health check (no auth required; status only)
 - `GET /images/mcp` - Server info endpoint
 - `POST /images/mcp/initialize` - MCP protocol initialization
 - `POST /images/mcp/tools/list` - List available tools
@@ -37,8 +37,10 @@ MATE exposes:
   - Quality: standard, hd
   - Single image only
 - `generate_image_nano_banana` - Generate images using Nano Banana (Gemini 2.5 Flash Image via OpenRouter) model
-  - Optional `model_config.model` for another image model; `asset_name` is accepted and ignored
+  - `asset_name` is accepted and ignored; `model_config` is no longer taken from callers
   - All three go through the agents' image tool path; see [Image generation](image-generation.md)
+
+Every route except the health check needs a signed-in caller.
 
 **Requirements:** Image generation API keys configured (OpenAI, Google, etc.)
 
