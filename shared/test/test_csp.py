@@ -16,7 +16,8 @@ become a directive.
 import os
 import sys
 import unittest
-from unittest.mock import patch
+from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
@@ -209,6 +210,49 @@ class TestMiddleware(unittest.TestCase):
     def test_a_page_with_its_own_policy_keeps_it(self):
         r = _app().get("/own")
         self.assertEqual(_directives(r.headers[csp.CSP_REPORT_ONLY_HEADER])["frame-ancestors"], ["*"])
+
+
+class TestCanvasPage(unittest.TestCase):
+    """The Work Room canvas runs code an agent wrote, on a page of its own.
+
+    The code needs inline scripts and any CDN, so the page cannot have the
+    dashboard's policy. The sandbox directive gives it an opaque origin however
+    it is opened, so that code cannot reach the dashboard.
+    """
+
+    def test_the_page_is_sandboxed_without_its_origin(self):
+        d = _directives(csp.canvas_policy())
+        self.assertEqual(d["sandbox"], ["allow-scripts", "allow-modals"])
+        self.assertNotIn("allow-same-origin", csp.canvas_policy())
+        self.assertNotIn("allow-top-navigation", csp.canvas_policy())
+        self.assertEqual(d["frame-ancestors"], ["'self'"])
+
+    def test_agent_code_may_use_inline_scripts_and_any_cdn(self):
+        d = _directives(csp.canvas_policy())
+        self.assertIn("'unsafe-inline'", d["script-src"])
+        self.assertIn("https:", d["script-src"])
+        self.assertFalse(any(s.startswith("'nonce-") for s in d["script-src"]))
+
+    def _get(self, mode):
+        from shared.utils.dashboard.dashboard_server import DashboardServer
+        app = FastAPI()
+        app.middleware("http")(csp.add_csp_header)
+        with patch("shared.utils.database_client.get_database_client", return_value=MagicMock()):
+            server = DashboardServer(app, project_root=Path(self._TEMPLATES).parent)
+        app.dependency_overrides[server._get_auth_user_dependency] = lambda: "someone"
+        with patch.dict(os.environ, {"CSP_MODE": mode}):
+            return TestClient(app).get(csp.CANVAS_PATH)
+
+    _TEMPLATES = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+                              "templates")
+
+    def test_the_route_enforces_its_policy_in_every_mode(self):
+        for mode in ("report-only", "enforce", "off"):
+            r = self._get(mode)
+            self.assertEqual(r.status_code, 200, mode)
+            self.assertEqual(r.headers[csp.CSP_HEADER], csp.canvas_policy(), mode)
+            self.assertNotIn(csp.CSP_REPORT_ONLY_HEADER, r.headers, mode)
+            self.assertIn("mate-canvas-ready", r.text)  # the frame script, inline
 
 
 class TestWidgetFrameAncestors(unittest.TestCase):
@@ -469,6 +513,10 @@ class TestConvertedTemplates(unittest.TestCase):
         "dashboard/wizard_leads.html",
         "dashboard/wizard_orders.html",
         "dashboard/wizard_pricing.html",
+        "dashboard/workroom.html",
+        "widget/admin.html",
+        "widget/chat.html",
+        "standalone/chat.html",
     ]
     # Scripts that build HTML: the markup they generate must not have handlers either
     CONVERTED_JS = [
@@ -482,6 +530,11 @@ class TestConvertedTemplates(unittest.TestCase):
         "traces.js",
         "triggers-page.js",
         "template-gallery.js",
+        "standalone/chat.js",
+        "widget/admin.js",
+        "widget/chat.js",
+        "workroom-canvas-frame.js",
+        "workroom-python.js",
     ]
     _TEMPLATES = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
                               "templates")

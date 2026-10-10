@@ -5,6 +5,11 @@
  *   WIDGET_API_KEY (public, preview widget), WIDGET_ADMIN_KEY (private, API calls),
  *   WIDGET_AGENT_NAME, WIDGET_PROJECT_ID
  */
+
+// Handlers this file's markup calls through data-click and friends (csp-actions.js)
+mateActions.allow('widgetAdmin.deleteBlock', 'widgetAdmin.deleteFile', 'widgetAdmin.editBlock',
+                  'widgetAdmin.hideBlockModal', 'widgetAdmin.showBlockModal');
+
 (function () {
   "use strict";
 
@@ -136,8 +141,8 @@
           + '<div class="text-xs text-gray-500 dark:text-gray-400 mt-1 break-all font-mono font-normal">' + escapeHtml(truncated) + '</div>'
           + '</div>'
           + '<div class="flex items-center gap-2 flex-shrink-0">'
-          + '<button class="px-2.5 py-1.5 text-xs font-medium border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-750 rounded-lg transition-colors" onclick="widgetAdmin.editBlock(\'' + b.block_id + '\')"><i class="fas fa-edit"></i> Edit</button>'
-          + '<button class="px-2.5 py-1.5 text-xs font-medium border border-red-200 dark:border-red-800/40 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/20 rounded-lg transition-colors" onclick="widgetAdmin.deleteBlock(\'' + b.block_id + '\')"><i class="fas fa-trash"></i> Delete</button>'
+          + '<button class="px-2.5 py-1.5 text-xs font-medium border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-750 rounded-lg transition-colors" data-click="widgetAdmin.editBlock" data-args="' + mateActions.attr([b.block_id]) + '"><i class="fas fa-edit"></i> Edit</button>'
+          + '<button class="px-2.5 py-1.5 text-xs font-medium border border-red-200 dark:border-red-800/40 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/20 rounded-lg transition-colors" data-click="widgetAdmin.deleteBlock" data-args="' + mateActions.attr([b.block_id]) + '"><i class="fas fa-trash"></i> Delete</button>'
           + '</div></div>';
       }).join("");
     });
@@ -220,7 +225,7 @@
                 + '</div>'
                 + '<div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">' + (f.mime_type || "") + ' — ' + _fmtSize(f.file_size) + '</div>'
                 + '</div>'
-                + '<button class="px-2.5 py-1.5 text-xs font-medium border border-red-200 dark:border-red-800/40 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/20 rounded-lg transition-colors flex-shrink-0" onclick="widgetAdmin.deleteFile(' + f.id + ')"><i class="fas fa-trash"></i> Delete</button>'
+                + '<button class="px-2.5 py-1.5 text-xs font-medium border border-red-200 dark:border-red-800/40 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/20 rounded-lg transition-colors flex-shrink-0" data-click="widgetAdmin.deleteFile" data-args="[' + f.id + ']"><i class="fas fa-trash"></i> Delete</button>'
                 + '</div>';
             }).join("");
 
@@ -342,7 +347,7 @@
   loadFiles();
   loadAppearance();
 
-  // Expose for inline onclick
+  // Expose for the data-click actions above
   window.widgetAdmin = {
     editBlock: editBlock,
     deleteBlock: deleteBlock,

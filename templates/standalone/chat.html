@@ -53,14 +53,14 @@
     </div>
   </div>
 
-  <script>
+  <script nonce="{{ request.state.csp_nonce }}">
     // Standalone mode — talks directly to local ADK endpoints
     window.STANDALONE_AGENT_NAME = "{{ agent_name }}";
     // Ratings go to a central MATE (MATE_FEEDBACK_URL); without one they would be lost
     window.STANDALONE_RATINGS = {{ 'true' if ratings_enabled else 'false' }};
     window.MATE_FEEDBACK_ENDPOINT = "/feedback";
   </script>
-  <script src="/static/js/standalone/chat.js?v=10"></script>
+  <script src="/static/js/standalone/chat.js?v=11"></script>
 </body>
 
 </html>

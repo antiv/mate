@@ -6695,6 +6695,23 @@ class DashboardServer:
                 "is_admin": True,
             })
 
+        @self.app.get("/dashboard/workroom/canvas", response_class=HTMLResponse, include_in_schema=False,
+                      tags=["Dashboard - Pages"])
+        async def dashboard_workroom_canvas(username: str = Depends(self._get_auth_user_dependency)):
+            """An empty page that runs the code shown in the Work Room canvas.
+
+            The code arrives by postMessage from the Work Room (workroom-canvas-frame.js).
+            The page's own policy sandboxes it, see server.csp.canvas_policy.
+            The script is inline: Chrome refuses a sandboxed page's requests to a
+            loopback or private address, which is where MATE often runs.
+            """
+            from server.csp import CSP_HEADER, canvas_policy
+
+            script = (self.project_root / "static" / "js" / "workroom-canvas-frame.js").read_text(encoding="utf-8")
+            html = ('<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>'
+                    f'<script>{script}</script></body></html>')
+            return HTMLResponse(html, headers={CSP_HEADER: canvas_policy()})
+
         @self.app.get("/dashboard/workroom", response_class=HTMLResponse, tags=["Dashboard - Pages"])
         async def dashboard_workroom(request: Request, agent: Optional[str] = None, session: Optional[str] = None, username: str = Depends(self._get_auth_user_dependency)):
             is_admin = self._get_is_admin(request)
