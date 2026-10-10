@@ -298,6 +298,13 @@ class DashboardServer:
                 'database_info': self._get_database_info()
             }
             result.update(self._get_quality_stats(session, start_date, end_date, origins))
+            try:
+                result['cost'] = self._get_cost_stats(session, start_date, end_date)
+            except Exception as e:
+                # Like the quality panels: a failure here must not blank the page
+                logger.warning(f"Cost stats failed: {e}")
+                session.rollback()
+                result['cost'] = None
             return result
         except Exception as e:
             print(f"Error getting usage stats: {e}")
@@ -432,6 +439,67 @@ class DashboardServer:
         """
         return cls.ORIGIN_FILTERS.get((origin or '').strip().lower(),
                                       cls.INTERACTIVE_ORIGINS)
+
+    def _get_cost_stats(self, session, start_date, end_date) -> Dict[str, Any]:
+        """What the period's successful calls cost in US dollars, by agent and project.
+
+        A call whose model has no known price has no cost (NULL), so totals cover
+        priced calls only; the share of tokens without a price says how much of the
+        traffic the totals leave out. See shared/utils/model_pricing.py.
+        """
+        from sqlalchemy import case, func
+
+        log = self.TokenUsageLog
+        tokens = func.coalesce(log.prompt_tokens, 0) + func.coalesce(log.response_tokens, 0)
+        unpriced = log.cost_usd.is_(None)
+        in_period = (log.status == 'SUCCESS', log.timestamp >= start_date, log.timestamp <= end_date)
+
+        totals = session.query(
+            func.sum(log.cost_usd),
+            func.sum(case((log.is_fallback.is_(True), log.cost_usd), else_=0)),
+            func.sum(case((log.is_fallback.is_(True), 1), else_=0)),
+            func.sum(case((unpriced, 1), else_=0)),
+            func.sum(case((unpriced, tokens), else_=0)),
+            func.sum(tokens),
+        ).filter(*in_period).one()
+        total_tokens = int(totals[5] or 0)
+
+        by_agent = session.query(
+            log.agent_name,
+            func.count(log.id),
+            func.sum(log.cost_usd),
+            func.sum(case((unpriced, 1), else_=0)),
+            func.sum(case((log.is_fallback.is_(True), log.cost_usd), else_=0)),
+        ).filter(*in_period).group_by(log.agent_name).all()
+
+        agent_rows = []
+        project_totals: Dict[Any, Dict[str, Any]] = {}
+        names = [row[0] for row in by_agent if row[0]]
+        project_of = dict(session.query(self.AgentConfig.name, self.AgentConfig.project_id)
+                          .filter(self.AgentConfig.name.in_(names)).all()) if names else {}
+        project_names = dict(session.query(self.Project.id, self.Project.name).all())
+        for agent, calls, cost, unpriced_calls, fallback_cost in by_agent:
+            row = {"agent": agent or "unknown", "calls": int(calls or 0), "cost_usd": float(cost or 0),
+                   "unpriced_calls": int(unpriced_calls or 0), "fallback_cost_usd": float(fallback_cost or 0)}
+            agent_rows.append(row)
+            project_id = project_of.get(agent)
+            project = project_totals.setdefault(project_id, {
+                "project": project_names.get(project_id, "No project"),
+                "calls": 0, "cost_usd": 0.0, "unpriced_calls": 0})
+            project["calls"] += row["calls"]
+            project["cost_usd"] += row["cost_usd"]
+            project["unpriced_calls"] += row["unpriced_calls"]
+
+        by_cost = lambda r: (-r["cost_usd"], -r["calls"])  # noqa: E731
+        return {
+            "total_usd": float(totals[0] or 0),
+            "fallback_usd": float(totals[1] or 0),
+            "fallback_calls": int(totals[2] or 0),
+            "unpriced_calls": int(totals[3] or 0),
+            "unpriced_tokens_pct": round(100 * int(totals[4] or 0) / total_tokens, 1) if total_tokens else 0.0,
+            "by_agent": sorted(agent_rows, key=by_cost),
+            "by_project": sorted(project_totals.values(), key=by_cost),
+        }
 
     def _get_quality_stats(self, session, start_date, end_date,
                            origins: Optional[tuple] = None) -> Dict[str, Any]:
@@ -7313,6 +7381,118 @@ class DashboardServer:
             except Exception as e:
                 logger.debug("Audit log for image model setting: %s", e)
             return _image_model_state()
+
+        # ── Model prices (cost in US dollars, see shared/utils/model_pricing.py) ──
+
+        def _with_session(work):
+            session = self.db_client.get_session() if self.db_client else None
+            if session is None:
+                raise HTTPException(status_code=503, detail="Database unavailable")
+            try:
+                return work(session)
+            finally:
+                session.close()
+
+        def _price_rows(session) -> Dict[str, Any]:
+            from shared.utils.model_pricing import model_price_rows
+            return {"models": model_price_rows(session)}
+
+        def _reprice(session, model_name: str) -> None:
+            from shared.utils.model_pricing import forget_manual_prices, recompute_costs
+            forget_manual_prices()
+            recompute_costs(session, model_name=model_name, only_missing=False)
+
+        def _audit_price(username: str, request: Request, model_name: str, before, after) -> None:
+            try:
+                from shared.utils.audit_service import ACTION_CONFIG_CHANGE, log
+                log(username, ACTION_CONFIG_CHANGE, "model_price", resource_id=model_name,
+                    details={"before": before, "after": after}, request=request)
+            except Exception as e:
+                logger.debug("Audit log for model price: %s", e)
+
+        @self.app.get("/dashboard/api/settings/model-prices", tags=["Dashboard - Settings"])
+        async def get_model_prices(request: Request, username: str = Depends(self._get_auth_user_dependency)):
+            """Every model used or priced by hand: its price per million tokens, where it comes from, and calls without a cost."""
+            if not self._get_is_admin(request):
+                raise HTTPException(status_code=403, detail="Forbidden")
+            from starlette.concurrency import run_in_threadpool
+            return await run_in_threadpool(_with_session, _price_rows)
+
+        @self.app.put("/dashboard/api/settings/model-prices", tags=["Dashboard - Settings"])
+        async def put_model_price(request: Request, username: str = Depends(self._get_auth_user_dependency),
+                                  body: Dict[str, Any] = Body(...)):
+            """Set a model's price by hand, in US dollars per million tokens, and price all its calls with it."""
+            if not self._get_is_admin(request):
+                raise HTTPException(status_code=403, detail="Forbidden")
+            import math
+            model_name = body.get("model_name")
+            if not isinstance(model_name, str) or not model_name.strip() or len(model_name.strip()) > 255 \
+                    or any(c.isspace() for c in model_name.strip()):
+                raise HTTPException(status_code=400, detail="model_name must be a single name of at most 255 characters")
+            model_name = model_name.strip()
+            prices = {}
+            for key in ("input_usd_per_mtok", "output_usd_per_mtok"):
+                value = body.get(key)
+                if isinstance(value, bool) or not isinstance(value, (int, float)) \
+                        or not math.isfinite(value) or not 0 <= value <= 100000:
+                    raise HTTPException(status_code=400, detail=f"{key} must be a number from 0 to 100000")
+                prices[key] = float(value)
+
+            def work(session):
+                from shared.utils.models import ModelPrice
+                row = session.get(ModelPrice, model_name)
+                before = ({"input_usd_per_mtok": row.input_usd_per_mtok,
+                           "output_usd_per_mtok": row.output_usd_per_mtok} if row else None)
+                if row is None:
+                    row = ModelPrice(model_name=model_name)
+                    session.add(row)
+                row.input_usd_per_mtok = prices["input_usd_per_mtok"]
+                row.output_usd_per_mtok = prices["output_usd_per_mtok"]
+                row.updated_by = username
+                session.commit()
+                _reprice(session, model_name)
+                _audit_price(username, request, model_name, before, prices)
+                return _price_rows(session)
+
+            from starlette.concurrency import run_in_threadpool
+            return await run_in_threadpool(_with_session, work)
+
+        @self.app.delete("/dashboard/api/settings/model-prices", tags=["Dashboard - Settings"])
+        async def delete_model_price(request: Request, model: str = Query(...),
+                                     username: str = Depends(self._get_auth_user_dependency)):
+            """Remove a manual price: the model's calls are priced from the published lists again, or have no cost."""
+            if not self._get_is_admin(request):
+                raise HTTPException(status_code=403, detail="Forbidden")
+
+            def work(session):
+                from shared.utils.models import ModelPrice
+                row = session.get(ModelPrice, model)
+                if row is None:
+                    raise HTTPException(status_code=404, detail="No manual price for this model")
+                before = {"input_usd_per_mtok": row.input_usd_per_mtok,
+                          "output_usd_per_mtok": row.output_usd_per_mtok}
+                session.delete(row)
+                session.commit()
+                _reprice(session, model)
+                _audit_price(username, request, model, before, None)
+                return _price_rows(session)
+
+            from starlette.concurrency import run_in_threadpool
+            return await run_in_threadpool(_with_session, work)
+
+        @self.app.post("/dashboard/api/settings/model-prices/fill-missing", tags=["Dashboard - Settings"])
+        async def fill_missing_costs(request: Request, username: str = Depends(self._get_auth_user_dependency)):
+            """Price the calls logged without a cost whose model has a price now."""
+            if not self._get_is_admin(request):
+                raise HTTPException(status_code=403, detail="Forbidden")
+
+            def work(session):
+                from shared.utils.model_pricing import recompute_costs
+                priced = recompute_costs(session, only_missing=True)
+                return {"priced": priced, **_price_rows(session)}
+
+            from starlette.concurrency import run_in_threadpool
+            return await run_in_threadpool(_with_session, work)
 
         def _validate_alert_rule(body: dict, partial: bool = False) -> dict:
             """Shared validation for create and update. Raises HTTPException on bad input."""

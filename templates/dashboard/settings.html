@@ -41,7 +41,46 @@
             <dd id="imageModelCheck"></dd>
         </dl>
     </div>
+
+    <!-- Model prices: what each call costs on the Usage page -->
+    <div id="model-prices" class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 space-y-3">
+        <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
+            <div>
+                <h3 class="text-sm font-semibold text-gray-900 dark:text-white"><i class="fas fa-dollar-sign mr-1.5 text-gray-400"></i>Model prices</h3>
+                <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    Every call is priced in US dollars when it is logged, from LiteLLM's price list, or OpenRouter's for
+                    <code class="bg-gray-100 dark:bg-gray-700 px-1 rounded">openrouter/</code> models.
+                    A model neither covers has no price, and its calls are left out of the cost.
+                    Set a price here for such a model (0 for a free, self-hosted one), or to replace a listed price;
+                    saving it reprices all the model's calls.
+                </p>
+            </div>
+            <button type="button" id="fillMissingCosts" class="flex-shrink-0 px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 dark:text-gray-200 rounded-lg"
+                    title="Price the calls logged before their model had a price">Fill in missing costs</button>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-xs">
+                <thead>
+                    <tr class="text-left text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
+                        <th class="px-2 py-1 font-medium">Model</th>
+                        <th class="px-2 py-1 font-medium text-right">Calls</th>
+                        <th class="px-2 py-1 font-medium text-right">Unpriced</th>
+                        <th class="px-2 py-1 font-medium">Price per 1M tokens (in / out)</th>
+                        <th class="px-2 py-1 font-medium">Set by hand (USD per 1M, in / out)</th>
+                    </tr>
+                </thead>
+                <tbody id="modelPricesBody" class="divide-y divide-gray-100 dark:divide-gray-700">
+                    <tr><td colspan="5" class="px-2 py-3 text-gray-500 dark:text-gray-400">Loading…</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="flex flex-col sm:flex-row gap-2 pt-1">
+            <input type="text" id="newPriceModel" placeholder="Another model, e.g. ollama_chat/llama3" autocomplete="off"
+                   class="flex-1 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1 text-xs">
+            <button type="button" id="newPriceAdd" class="px-3 py-1 text-xs border border-gray-300 dark:border-gray-600 dark:text-gray-200 rounded">Add a price</button>
+        </div>
+    </div>
 </div>
 
-<script src="/static/js/settings-page.js?v=1"></script>
+<script src="/static/js/settings-page.js?v=2"></script>
 {% endblock %}

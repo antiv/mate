@@ -125,9 +125,11 @@ def make_model_fallback_callback(agent_name: str, primary_model: Optional[str],
             return None
 
         # Token logging reads the model from state; without this the fallback's
-        # tokens would be booked against the model that failed.
+        # tokens would be booked against the model that failed. The flag lets the
+        # Usage page show what the fallback cost apart.
         try:
             callback_context.state['current_model_name'] = fallback_model
+            callback_context.state['current_model_is_fallback'] = True
         except Exception:
             pass
         user_id, _ = _get_adk_session_info(callback_context)

@@ -185,6 +185,84 @@
         </div>
     </div>
 
+    {% macro usd(value) %}{% if value >= 1 or value == 0 %}${{ "{:,.2f}".format(value) }}{% else %}${{ "%.4f"|format(value) }}{% endif %}{% endmacro %}
+    {% if stats.cost %}
+    <!-- Cost: list prices in US dollars; calls whose model has no price are left out -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-3">
+            <div class="flex items-center">
+                <div class="w-10 h-10 rounded-full bg-amber-100 dark:bg-amber-900 flex items-center justify-center">
+                    <i class="fas fa-dollar-sign text-sm text-amber-600 dark:text-amber-400"></i>
+                </div>
+                <div class="ml-3 min-w-0">
+                    <h3 class="text-xs font-medium text-gray-500 dark:text-gray-400">Cost (USD)</h3>
+                    <p class="text-lg font-bold text-gray-900 dark:text-white" id="totalCost">{{ usd(stats.cost.total_usd) }}</p>
+                    <p class="text-xs text-gray-500 dark:text-gray-400">list prices, priced calls only</p>
+                </div>
+            </div>
+        </div>
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-3">
+            <div class="flex items-center">
+                <div class="w-10 h-10 rounded-full bg-orange-100 dark:bg-orange-900 flex items-center justify-center">
+                    <i class="fas fa-life-ring text-sm text-orange-600 dark:text-orange-400"></i>
+                </div>
+                <div class="ml-3 min-w-0">
+                    <h3 class="text-xs font-medium text-gray-500 dark:text-gray-400">Fallback Model Cost</h3>
+                    <p class="text-lg font-bold text-gray-900 dark:text-white" id="fallbackCost">{{ usd(stats.cost.fallback_usd) }}</p>
+                    <p class="text-xs text-gray-500 dark:text-gray-400">{{ stats.cost.fallback_calls }} calls answered by a fallback model</p>
+                </div>
+            </div>
+        </div>
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-3">
+            <div class="flex items-center">
+                <div class="w-10 h-10 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center">
+                    <i class="fas fa-question text-sm text-gray-500 dark:text-gray-400"></i>
+                </div>
+                <div class="ml-3 min-w-0">
+                    <h3 class="text-xs font-medium text-gray-500 dark:text-gray-400">Without a Price</h3>
+                    <p class="text-lg font-bold text-gray-900 dark:text-white" id="unpricedShare">{{ stats.cost.unpriced_tokens_pct }}% of tokens</p>
+                    <p class="text-xs text-gray-500 dark:text-gray-400">{{ stats.cost.unpriced_calls }} calls ·
+                        {% if is_admin %}<a href="/dashboard/settings#model-prices" class="text-blue-600 dark:text-blue-400 hover:underline">set prices</a>{% else %}not in the cost{% endif %}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {% for title, rows, key in [("Cost by Agent", stats.cost.by_agent, "agent"), ("Cost by Project", stats.cost.by_project, "project")] %}
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+            <h3 class="text-sm font-semibold text-gray-900 dark:text-white mb-2">{{ title }}</h3>
+            {% if rows %}
+            <div class="overflow-x-auto max-h-72 overflow-y-auto">
+                <table class="w-full text-xs">
+                    <thead>
+                        <tr class="text-left text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
+                            <th class="px-2 py-1 font-medium">{{ key|capitalize }}</th>
+                            <th class="px-2 py-1 font-medium text-right">Calls</th>
+                            <th class="px-2 py-1 font-medium text-right">Cost</th>
+                            <th class="px-2 py-1 font-medium text-right">Unpriced calls</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
+                        {% for row in rows %}
+                        <tr class="text-gray-700 dark:text-gray-300">
+                            <td class="px-2 py-1">{{ row[key] }}{% if row.fallback_cost_usd %} <span class="text-orange-600 dark:text-orange-400" title="of which the fallback model">({{ usd(row.fallback_cost_usd) }} fallback)</span>{% endif %}</td>
+                            <td class="px-2 py-1 text-right">{{ "{:,}".format(row.calls) }}</td>
+                            <td class="px-2 py-1 text-right font-medium">{{ usd(row.cost_usd) }}</td>
+                            <td class="px-2 py-1 text-right {% if row.unpriced_calls %}text-gray-500{% else %}text-gray-300 dark:text-gray-600{% endif %}">{{ row.unpriced_calls }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="text-xs text-gray-500 dark:text-gray-400">No calls in this period.</p>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
     {% if stats.satisfaction and stats.satisfaction.per_agent %}
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
         <h3 class="text-sm font-semibold text-gray-900 dark:text-white mb-2">Satisfaction by Agent</h3>

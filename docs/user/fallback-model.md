@@ -63,6 +63,9 @@ fallback were set.
 - **Usage logs:** the `model_name` of each `token_usage_logs` row is the model
   that answered, so the fallback's calls show up under its name on the
   dashboard. On ADK, the primary's failure also leaves an `ERROR` row.
+- **Cost:** those calls are also marked as answered by the fallback, so the
+  [Usage page](usage-and-audit.md#cost) shows what the fallback cost apart from
+  the rest.
 - **Audit log:** each fallback writes an `agent.model_fallback` entry with the
   primary and fallback model, and on ADK the primary's error.
 - **Server log:** a warning names the agent, both models and the error.
