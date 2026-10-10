@@ -352,7 +352,8 @@ async def widget_chat_page(request: Request, key: str = Query(...)):
     })
     # Customer sites frame this page, so it cannot take the dashboard's
     # frame-ancestors 'self'. It allows the sites _check_origin lets through.
-    return set_csp_header(response, widget_frame_ancestors(wk.get_allowed_origins(), ORIGIN_STRICT))
+    return set_csp_header(response, widget_frame_ancestors(wk.get_allowed_origins(), ORIGIN_STRICT),
+                          request)
 
 
 @router.get("/public-config", include_in_schema=False)

@@ -7,8 +7,9 @@
     <title>{% block title %}MATE Dashboard{% endblock %}</title>
     <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
     <link rel="manifest" href="/static/manifest.json">
+    <script src="/static/js/csp-actions.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script>
+    <script nonce="{{ request.state.csp_nonce }}">
         tailwind.config = {
             darkMode: 'class',
         }
@@ -436,27 +437,27 @@
                 <div id="adkStatusIndicator" class="w-2 h-2 bg-gray-400 rounded-full"></div>
                 <span id="adkStatusText" class="text-sm text-gray-600 dark:text-gray-400">Checking...</span>
                 <div class="flex gap-1">
-                    <button id="startAdkBtn" onclick="controlAdkServer('start')" title="Start" class="mate-adk-btn hidden touch-target">
+                    <button id="startAdkBtn" data-click="controlAdkServer" data-args='["start"]' title="Start" class="mate-adk-btn hidden touch-target">
                         <i class="fas fa-play"></i>
                     </button>
-                    <button id="stopAdkBtn" onclick="controlAdkServer('stop')" title="Stop" class="mate-adk-btn hidden touch-target">
+                    <button id="stopAdkBtn" data-click="controlAdkServer" data-args='["stop"]' title="Stop" class="mate-adk-btn hidden touch-target">
                         <i class="fas fa-stop"></i>
                     </button>
-                    <button id="restartAdkBtn" onclick="controlAdkServer('restart')" title="Restart" class="mate-adk-btn hidden touch-target">
+                    <button id="restartAdkBtn" data-click="controlAdkServer" data-args='["restart"]' title="Restart" class="mate-adk-btn hidden touch-target">
                         <i class="fas fa-redo"></i>
                     </button>
                 </div>
             </div>
             {% endif %}
             <!-- Theme Switcher -->
-            <div class="theme-switcher touch-target" onclick="toggleTheme()" role="button" tabindex="0" aria-label="Toggle theme">
+            <div class="theme-switcher touch-target" data-click="toggleTheme" role="button" tabindex="0" aria-label="Toggle theme">
                 <span class="mate-theme-thumb">
                     <i class="fas fa-sun theme-icon sun"></i>
                     <i class="fas fa-moon theme-icon moon"></i>
                 </span>
             </div>
             <div class="relative">
-                <button id="userMenuButton" onclick="toggleUserMenu()" class="mate-avatar touch-target">{{ (username or 'U')[:2] | upper }}</button>
+                <button id="userMenuButton" data-click="toggleUserMenu" class="mate-avatar touch-target">{{ (username or 'U')[:2] | upper }}</button>
                 <div id="userMenuDropdown" class="hidden mate-menu">
                     <div style="padding: 12px 14px; border-bottom: 1px solid var(--border);">
                         <div style="font-weight: 700; font-size: 13px; color: var(--text-primary);">{{ username }}</div>
@@ -467,10 +468,10 @@
                             {% else %}Dashboard User{% endif %}
                         </div>
                     </div>
-                    <a href="#" onclick="showTokensModal(event)" class="mate-menu-item">
+                    <a href="#" data-click="showTokensModal" data-args='["$event"]' class="mate-menu-item">
                         <i class="fas fa-key" style="width: 14px;"></i>Personal Tokens
                     </a>
-                    <a href="#" onclick="confirmLogout(event)" class="mate-menu-item danger">
+                    <a href="#" data-click="confirmLogout" data-args='["$event"]' class="mate-menu-item danger">
                         <i class="fas fa-sign-out-alt" style="width: 14px;"></i>Logout
                     </a>
                 </div>
@@ -498,7 +499,7 @@
         <aside id="sidebar" class="sidebar-collapsible">
             <div class="flex justify-between items-center p-3 md:hidden" style="border-bottom: 1px solid var(--border);">
                 <span class="text-sm font-semibold" style="color: var(--text-primary);">Menu</span>
-                <button type="button" onclick="closeMobileSidebar()" class="touch-target p-2" style="color: var(--text-secondary); background: none; border: none; cursor: pointer;" aria-label="Close menu">
+                <button type="button" data-click="closeMobileSidebar" class="touch-target p-2" style="color: var(--text-secondary); background: none; border: none; cursor: pointer;" aria-label="Close menu">
                     <i class="fas fa-times"></i>
                 </button>
             </div>
@@ -512,7 +513,7 @@
                         <i class="fas fa-robot sidebar-icon"></i>
                         <span class="sidebar-text">Agents</span>
                     </a>
-                    <a href="/dashboard/agents/visual" id="sidebarVisualBuilderLink" class="mate-nav-item {% if request.url.path == '/dashboard/agents/visual' %}sidebar-active{% endif %}" title="Visual Builder" onclick="return handleVisualBuilderNav(event)">
+                    <a href="/dashboard/agents/visual" id="sidebarVisualBuilderLink" class="mate-nav-item {% if request.url.path == '/dashboard/agents/visual' %}sidebar-active{% endif %}" title="Visual Builder" data-click="handleVisualBuilderNav" data-args='["$event"]'>
                         <i class="fas fa-sitemap sidebar-icon"></i>
                         <span class="sidebar-text">Visual Builder</span>
                     </a>
@@ -669,7 +670,7 @@
 
             <!-- Minimize Toggle Button -->
             <div class="mate-sidebar-foot">
-                <button id="sidebarToggle" onclick="toggleSidebar()" title="Toggle sidebar">
+                <button id="sidebarToggle" data-click="toggleSidebar" title="Toggle sidebar">
                     <i id="sidebarToggleIcon" class="fas fa-chevron-left"></i>
                 </button>
             </div>
@@ -690,7 +691,7 @@
                     <i class="fas fa-key" style="color: var(--accent); font-size: 13px;"></i>
                     Personal Access Tokens
                 </h3>
-                <button type="button" onclick="closeTokensModal()" class="touch-target" style="width: 30px; height: 30px; border-radius: 9px; border: none; background: var(--bg-surface-2); color: var(--text-secondary); cursor: pointer;">
+                <button type="button" data-click="closeTokensModal" class="touch-target" style="width: 30px; height: 30px; border-radius: 9px; border: none; background: var(--bg-surface-2); color: var(--text-secondary); cursor: pointer;">
                     <i class="fas fa-times"></i>
                 </button>
             </div>
@@ -724,7 +725,7 @@
                         </div>
                     </div>
                     <div class="flex justify-end">
-                        <button type="button" onclick="generateToken()" style="padding: 9px 16px; border-radius: 9px; border: none; background: var(--accent); color: white; font-size: 12.5px; font-weight: 700; cursor: pointer;">
+                        <button type="button" data-click="generateToken" style="padding: 9px 16px; border-radius: 9px; border: none; background: var(--accent); color: white; font-size: 12.5px; font-weight: 700; cursor: pointer;">
                             <i class="fas fa-plus" style="margin-right: 6px;"></i>Generate Token
                         </button>
                     </div>
@@ -737,7 +738,7 @@
                         <span style="font-size: 11px; color: var(--text-secondary);">Save it now — it won't be shown again.</span>
                         <div class="flex items-center gap-2">
                             <input type="text" id="generatedTokenVal" readonly class="flex-1 select-all" style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: 9px; padding: 9px 11px; font-family: ui-monospace, monospace; font-size: 11.5px; color: var(--text-primary); min-width: 0;">
-                            <button type="button" onclick="copyGeneratedToken()" style="padding: 9px 12px; border-radius: 9px; border: none; background: var(--success); color: white; font-size: 12px; font-weight: 700; cursor: pointer; flex-shrink: 0;">
+                            <button type="button" data-click="copyGeneratedToken" style="padding: 9px 12px; border-radius: 9px; border: none; background: var(--success); color: white; font-size: 12px; font-weight: 700; cursor: pointer; flex-shrink: 0;">
                                 <i class="fas fa-copy" style="margin-right: 5px;"></i>Copy
                             </button>
                         </div>
@@ -771,14 +772,19 @@
 
             <!-- Modal Footer -->
             <div class="flex justify-end" style="padding: 12px 22px; border-top: 1px solid var(--border);">
-                <button type="button" onclick="closeTokensModal()" style="padding: 9px 16px; border-radius: 10px; border: 1px solid var(--border); background: transparent; color: var(--text-secondary); font-size: 12.5px; font-weight: 600; cursor: pointer;">
+                <button type="button" data-click="closeTokensModal" style="padding: 9px 16px; border-radius: 10px; border: 1px solid var(--border); background: transparent; color: var(--text-secondary); font-size: 12.5px; font-weight: 600; cursor: pointer;">
                     Close
                 </button>
             </div>
         </div>
     </div>
 
-    <script>
+    <script nonce="{{ request.state.csp_nonce }}">
+        mateActions.allow('controlAdkServer', 'toggleTheme', 'toggleUserMenu', 'showTokensModal',
+                          'confirmLogout', 'closeMobileSidebar', 'toggleSidebar', 'closeTokensModal',
+                          'generateToken', 'copyGeneratedToken', 'revokeToken',
+                          'handleVisualBuilderNav');
+
         // Theme management
         function initTheme() {
             // Check localStorage first, then default to dark theme
@@ -876,11 +882,12 @@
             notification.innerHTML = `
                 <i class="fas ${icon}" style="font-size: 15px; color: ${iconColor}; flex-shrink: 0;"></i>
                 <span class="mate-notification-text" style="font-size: 13px; color: var(--text-primary); flex: 1;"></span>
-                <button onclick="this.parentElement.remove()" style="border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; flex-shrink: 0;">
+                <button class="mate-notification-close" style="border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; flex-shrink: 0;">
                     <i class="fas fa-times text-sm"></i>
                 </button>
             `;
             notification.querySelector('.mate-notification-text').textContent = String(message ?? '');
+            notification.querySelector('.mate-notification-close').addEventListener('click', () => notification.remove());
             document.body.appendChild(notification);
 
             // Auto remove after 5 seconds
@@ -922,7 +929,7 @@
                 }
 
                 modal.innerHTML = `
-                    <div onclick="event.stopPropagation()" style="background: var(--bg-surface); border-radius: 18px; max-width: 400px; width: 100%; box-shadow: var(--shadow-card); border: 1px solid var(--border); padding: 22px; display: flex; flex-direction: column; gap: 14px;">
+                    <div style="background: var(--bg-surface); border-radius: 18px; max-width: 400px; width: 100%; box-shadow: var(--shadow-card); border: 1px solid var(--border); padding: 22px; display: flex; flex-direction: column; gap: 14px;">
                         <div style="display: flex; align-items: center; gap: 10px;">
                             <div style="width: 38px; height: 38px; border-radius: 11px; background: ${chipBg}; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
                                 <i class="fas ${iconClass}" style="color: ${chipFg}; font-size: 15px;"></i>
@@ -1226,7 +1233,7 @@
                                 <td class="px-4 py-3 text-gray-500 dark:text-gray-400">${expiresVal}</td>
                                 <td class="px-4 py-3">${statusBadge}</td>
                                 <td class="px-4 py-3 text-right">
-                                    <button type="button" onclick="revokeToken(${t.id}, '${esc(t.name)}')" class="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 font-medium inline-flex items-center gap-1 transition-colors">
+                                    <button type="button" data-click="revokeToken" data-args="${mateActions.attr([t.id, t.name])}" class="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 font-medium inline-flex items-center gap-1 transition-colors">
                                         <i class="fas fa-trash-alt text-[10px]"></i> Revoke
                                     </button>
                                 </td>

@@ -20,7 +20,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.testclient import TestClient
 
@@ -52,6 +52,16 @@ def _app():
     @app.get("/own")
     def own():
         return csp.set_csp_header(HTMLResponse("<p>widget</p>"), "*")
+
+    @app.get("/nonced")
+    def nonced(request: Request):
+        # What a template does with {{ request.state.csp_nonce }}
+        return HTMLResponse(f'<script nonce="{request.state.csp_nonce}"></script>')
+
+    @app.get("/own-nonced")
+    def own_nonced(request: Request):
+        return csp.set_csp_header(
+            HTMLResponse(f'<script nonce="{request.state.csp_nonce}"></script>'), "*", request)
 
     return TestClient(app)
 
@@ -94,6 +104,45 @@ class TestPolicy(unittest.TestCase):
         self.assertNotIn("https://ok.example;", policy)
 
 
+class TestStrictPolicy(unittest.TestCase):
+
+    def test_a_nonce_replaces_unsafe_inline_for_scripts_only(self):
+        d = _directives(csp.build_policy(nonce="abc"))
+        self.assertIn("'nonce-abc'", d["script-src"])
+        self.assertNotIn("'unsafe-inline'", d["script-src"])
+        self.assertIn("'wasm-unsafe-eval'", d["script-src"])
+        self.assertIn("https://cdn.jsdelivr.net", d["script-src"])
+        # Styles keep it: Tailwind's CDN injects <style>, and a style cannot run code
+        self.assertIn("'unsafe-inline'", d["style-src"])
+
+    def test_report_only_mode_reports_against_the_strict_policy(self):
+        with patch.dict(os.environ, {"CSP_MODE": "report-only"}):
+            r = _app().get("/page")
+        script_src = _directives(r.headers[csp.CSP_REPORT_ONLY_HEADER])["script-src"]
+        self.assertNotIn("'unsafe-inline'", script_src)
+        self.assertNotIn(csp.CSP_HEADER, r.headers)
+
+    def test_the_header_carries_the_nonce_the_page_was_rendered_with(self):
+        client = _app()
+        nonces = set()
+        for path in ("/nonced", "/own-nonced"):
+            for _ in range(2):
+                r = client.get(path)
+                page_nonce = r.text.split('nonce="')[1].split('"')[0]
+                self.assertIn(f"'nonce-{page_nonce}'",
+                              _directives(r.headers[csp.CSP_REPORT_ONLY_HEADER])["script-src"], path)
+                nonces.add(page_nonce)
+        self.assertEqual(len(nonces), 4, "each response gets its own nonce")
+        for nonce in nonces:
+            self.assertGreaterEqual(len(nonce), 20)
+
+    def test_a_policy_without_a_request_still_gets_a_nonce(self):
+        r = _app().get("/own")
+        script_src = _directives(r.headers[csp.CSP_REPORT_ONLY_HEADER])["script-src"]
+        self.assertTrue(any(s.startswith("'nonce-") for s in script_src))
+        self.assertNotIn("'unsafe-inline'", script_src)
+
+
 class TestMiddleware(unittest.TestCase):
 
     def test_report_only_by_default(self):
@@ -104,10 +153,16 @@ class TestMiddleware(unittest.TestCase):
         self.assertNotIn(csp.CSP_HEADER, r.headers)
 
     def test_enforce(self):
+        # Until every page is off inline handlers: enforce the legacy policy,
+        # and report what the strict one would still block
         with patch.dict(os.environ, {"CSP_MODE": "enforce"}):
             r = _app().get("/page")
-        self.assertIn(csp.CSP_HEADER, r.headers)
-        self.assertNotIn(csp.CSP_REPORT_ONLY_HEADER, r.headers)
+        enforced = _directives(r.headers[csp.CSP_HEADER])["script-src"]
+        reported = _directives(r.headers[csp.CSP_REPORT_ONLY_HEADER])["script-src"]
+        self.assertIn("'unsafe-inline'", enforced)
+        self.assertFalse(any(s.startswith("'nonce-") for s in enforced))
+        self.assertNotIn("'unsafe-inline'", reported)
+        self.assertTrue(any(s.startswith("'nonce-") for s in reported))
 
     def test_off(self):
         with patch.dict(os.environ, {"CSP_MODE": "off"}):
@@ -140,6 +195,8 @@ class TestMiddleware(unittest.TestCase):
         with patch.dict(os.environ, {"ADK_DEV_UI": "true"}):
             policy = client.get("/dev-ui/").headers[csp.CSP_REPORT_ONLY_HEADER]
         self.assertIn("'unsafe-eval'", _directives(policy)["script-src"])
+        # ADK's markup is not ours to put nonces on: it keeps the legacy policy
+        self.assertIn("'unsafe-inline'", _directives(policy)["script-src"])
         policy = client.get("/dev-uix").headers[csp.CSP_REPORT_ONLY_HEADER]
         self.assertNotIn("'unsafe-eval'", _directives(policy)["script-src"])
         policy = _app().get("/page").headers[csp.CSP_REPORT_ONLY_HEADER]
@@ -366,3 +423,42 @@ class TestReports(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestConvertedTemplates(unittest.TestCase):
+    """Pages moved off inline handlers must stay off them.
+
+    The strict policy blocks on*= attributes and inline scripts without the
+    nonce. Add a template here once it is converted; the last step of #124
+    is when this list covers every template.
+    """
+
+    CONVERTED = [
+        "base.html",
+        "login.html",
+        "dashboard/index.html",
+    ]
+    _TEMPLATES = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+                              "templates")
+
+    def _read(self, name):
+        with open(os.path.join(self._TEMPLATES, name), encoding="utf-8") as f:
+            return f.read()
+
+    def test_no_inline_event_handlers(self):
+        import re
+        for name in self.CONVERTED:
+            found = re.findall(r"\son[a-z]+\s*=", self._read(name))
+            self.assertEqual(found, [], name)
+
+    def test_inline_scripts_carry_the_nonce(self):
+        import re
+        for name in self.CONVERTED:
+            for tag in re.findall(r"<script\b[^>]*>", self._read(name)):
+                if "src=" in tag or 'type="application/json"' in tag:
+                    continue
+                self.assertIn('nonce="{{ request.state.csp_nonce }}"', tag, f"{name}: {tag}")
+
+    def test_no_javascript_urls(self):
+        for name in self.CONVERTED:
+            self.assertNotIn("javascript:", self._read(name), name)

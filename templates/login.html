@@ -10,7 +10,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="/static/css/redesign.css">
     <script src="https://cdn.tailwindcss.com"></script>
-    <script>
+    <script nonce="{{ request.state.csp_nonce }}">
         // Initialize theme before rendering to avoid flash
         (function() {
             const savedTheme = localStorage.getItem('theme') || 'dark';
@@ -144,7 +144,7 @@
 </head>
 <body>
     <div class="login-card">
-        <button class="theme-toggle-btn" onclick="toggleTheme()" title="Toggle Theme">
+        <button class="theme-toggle-btn" title="Toggle Theme">
             <i class="fas fa-sun"></i>
             <i class="fas fa-moon"></i>
         </button>
@@ -237,7 +237,7 @@
         </form>
     </div>
 
-    <script>
+    <script nonce="{{ request.state.csp_nonce }}">
         function toggleTheme() {
             const html = document.documentElement;
             const isDark = html.classList.contains('dark');
@@ -249,6 +249,8 @@
                 localStorage.setItem('theme', 'dark');
             }
         }
+
+        document.querySelector('.theme-toggle-btn').addEventListener('click', toggleTheme);
 
         document.getElementById('loginForm').addEventListener('submit', async function(e) {
             e.preventDefault();
