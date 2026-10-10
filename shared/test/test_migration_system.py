@@ -332,5 +332,68 @@ class TestRunMigrations(unittest.TestCase):
             self.assertFalse(ms.run_migrations())
 
 
+class TestApplyMigration(unittest.TestCase):
+
+    def _apply(self, error_message):
+        from sqlalchemy.exc import OperationalError
+        ms = MigrationSystem()
+        conn = MagicMock()
+        calls = []
+
+        def execute(statement, *args):
+            calls.append(str(statement))
+            if len(calls) == 1:
+                raise OperationalError(str(statement), {}, Exception(error_message))
+        conn.execute.side_effect = execute
+        engine = MagicMock()
+        engine.connect.return_value.__enter__.return_value = conn
+        with tempfile.NamedTemporaryFile('w', suffix='.sql', delete=False) as f:
+            f.write("CREATE INDEX idx_a ON a(x);\nCREATE INDEX idx_b ON b(y);\n")
+        self.addCleanup(os.remove, f.name)
+        with patch.object(ms, '_get_database_type', return_value='mysql'):
+            return ms._apply_migration(engine, '001', 'test', f.name), calls
+
+    def test_a_mysql_rerun_skips_indexes_that_exist(self):
+        # MySQL has no CREATE INDEX IF NOT EXISTS: a re-run reports a duplicate key name
+        applied, calls = self._apply("(1061, \"Duplicate key name 'idx_a'\")")
+        self.assertTrue(applied)
+        self.assertIn("idx_b", calls[1], "the next statement still runs")
+        self.assertIn("schema_migrations", calls[-1], "the migration is recorded")
+
+    def test_an_unexpected_error_fails_the_migration(self):
+        applied, calls = self._apply("(1064, 'You have an error in your SQL syntax')")
+        self.assertFalse(applied)
+        self.assertEqual(len(calls), 1)
+
+
+class TestMySQLMigrationFiles(unittest.TestCase):
+    """The MySQL files must be MySQL 8: a fresh database runs every one of them."""
+
+    MYSQL_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+                             'shared', 'sql', 'migrations', 'mysql')
+
+    def _files(self):
+        for name in sorted(os.listdir(self.MYSQL_DIR)):
+            if name.endswith('.sql'):
+                with open(os.path.join(self.MYSQL_DIR, name), encoding='utf-8') as f:
+                    yield name, f.read()
+
+    def test_no_add_column_if_not_exists(self):
+        # MariaDB has it, MySQL does not; a re-run's "Duplicate column name" is skipped instead
+        import re
+        for name, sql in self._files():
+            self.assertIsNone(re.search(r'ADD\s+COLUMN\s+IF\s+NOT\s+EXISTS', sql, re.IGNORECASE), name)
+
+    def test_text_columns_have_no_literal_default(self):
+        # MySQL refuses DEFAULT 'x' on TEXT, BLOB and JSON; it takes an expression, DEFAULT ('x')
+        import re
+        pattern = re.compile(r"\b(TINY|MEDIUM|LONG)?(TEXT|BLOB)\b|\bJSON\b", re.IGNORECASE)
+        for name, sql in self._files():
+            for line in sql.splitlines():
+                code = line.split('--', 1)[0]
+                if pattern.search(code):
+                    self.assertIsNone(re.search(r"\bDEFAULT\s+'", code, re.IGNORECASE), f"{name}: {line.strip()}")
+
+
 if __name__ == '__main__':
     unittest.main()

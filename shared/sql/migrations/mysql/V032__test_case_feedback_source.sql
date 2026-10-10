@@ -6,4 +6,4 @@
 -- page. source_feedback_id records which one, so the same response is not added
 -- twice. No foreign key: a feedback row going away must not touch the test case.
 
-ALTER TABLE test_cases ADD COLUMN IF NOT EXISTS source_feedback_id INTEGER NULL;
+ALTER TABLE test_cases ADD COLUMN source_feedback_id INTEGER NULL;

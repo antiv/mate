@@ -26,6 +26,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **MATE did not start on a new MySQL database** (#178) - the schema was never created on a new MySQL database, so the server ran without tables.
+  - **The migrations stopped at V001.** MySQL takes a default on a `TEXT` column only as an expression (`DEFAULT ('x')`), and the `credentials` unique key was longer than MySQL's 3072 bytes. Twenty later migrations then failed on the missing tables or on `ADD COLUMN IF NOT EXISTS`, which MySQL does not have.
+  - **The fix edits the released MySQL files**, which the guide otherwise rules out. Those statements never ran on any MySQL, and nothing re-runs a version that is already recorded.
+  - **The credentials key now takes the first 255 characters** of `credential_key`.
+  - **Re-runs skip indexes that exist.** On MySQL, a re-run now skips "Duplicate key name" errors, as it already skipped duplicate columns.
+  - **The agent server kept no sessions on MySQL.** It did not recognise the `mysql+pymysql://` session URL and fell back to an in-memory store, which also failed to start, so every new chat failed. Sessions are now stored in MySQL through `aiomysql`.
+  - **Checked** on a fresh MySQL 8.0: all 42 migrations at startup, every dashboard page, prices, dollar budgets and alert rules, and a conversation, which was stored and priced.
 - **`DB_TYPE=mysql` failed at startup on a default install** - MATE connects to MySQL with `pymysql`, and ADK keeps sessions on MySQL with `aiomysql`, but both were commented out in `requirements.txt` and missing from `requirements.lock`, so the server stopped with `No module named 'pymysql'`. Both are now installed, like the PostgreSQL drivers (#178)
 - **The Visual Builder's History button did nothing** - the agent form on the Visual Builder has a History button, but the page loaded neither the version history panel nor its script, so clicking it raised an error. It now opens the agent's version history, as on the Agents page
 - **`shared/migrate.py` without a `.env` looked for PostgreSQL** (#157) - run on its own, the migration runner fell back to `DB_TYPE=postgresql` and, for SQLite, to `mate_agent.db` relative to the working directory, while the application uses SQLite and `my_agent_data.db` in the project root. `migrate.py status` and `run` therefore failed with "No database engine available", or migrated a different file. The runner, the database client, the session store and the dashboard now read the database settings from one place

@@ -338,8 +338,12 @@ class MigrationSystem:
                                 # Log the error but continue with other statements
                                 # This allows migrations to be more resilient to schema changes
                                 logger.warning(f"Statement failed (may be expected): {statement[:100]}... Error: {e}")
-                                # For certain expected errors (like duplicate columns), continue
-                                if "duplicate column name" in str(e).lower() or "already exists" in str(e).lower():
+                                # For certain expected errors (like duplicate columns), continue.
+                                # MySQL has no ADD COLUMN / CREATE INDEX IF NOT EXISTS: a re-run
+                                # reports "Duplicate column name" / "Duplicate key name" instead.
+                                error = str(e).lower()
+                                if ("duplicate column name" in error or "duplicate key name" in error
+                                        or "already exists" in error):
                                     logger.info(f"Skipping statement due to expected error: {e}")
                                     continue
                                 else:
