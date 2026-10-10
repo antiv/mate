@@ -38,17 +38,44 @@ jobs:
         with:
           python-version: "3.11"
 
+      # The week-old cutoff also applies to what the lock already has, so a
+      # package main took in the last week would move back. The second pass
+      # keeps such a package at its current version.
       - name: Recompile the lock with the newest releases at least a week old
         run: |
-          python -m pip install --upgrade pip uv
-          uv pip compile requirements.txt -o requirements.lock --universal \
-            --python-version 3.11 --generate-hashes --upgrade \
-            --exclude-newer "$(date -u -d '7 days ago' +%Y-%m-%dT%H:%M:%SZ)"
+          python -m pip install --upgrade pip uv packaging
+          cp requirements.lock /tmp/old.lock
+          cutoff="$(date -u -d '7 days ago' +%Y-%m-%dT%H:%M:%SZ)"
+          compile() {
+            uv pip compile requirements.txt -o requirements.lock --universal \
+              --python-version 3.11 --generate-hashes --upgrade \
+              --exclude-newer "$cutoff" "$@"
+          }
+          compile
+          python - <<'PY' > /tmp/keep.txt
+          import re
+          from packaging.version import Version
+          def pins(path):
+              return dict(re.findall(r"^([A-Za-z0-9_.\-]+)==([^\s;\\]+)", open(path).read(), re.M))
+          old, new = pins("/tmp/old.lock"), pins("requirements.lock")
+          for name, version in new.items():
+              if name in old and Version(version) < Version(old[name]):
+                  print(f"{name}=={old[name]}")
+          PY
+          if [ -s /tmp/keep.txt ]; then
+            echo "Kept at their current version:"; cat /tmp/keep.txt
+            now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            exempt=()
+            while IFS='=' read -r name _; do exempt+=(--exclude-newer-package "$name=$now"); done < /tmp/keep.txt
+            compile -c /tmp/keep.txt "${exempt[@]}"
+          fi
 
+      # Comments are left out: the header records the cutoff date, which
+      # changes on every run.
       - name: Anything changed?
         id: diff
         run: |
-          if git diff --quiet -- requirements.lock; then
+          if diff -q <(grep -v '^ *#' /tmp/old.lock) <(grep -v '^ *#' requirements.lock) > /dev/null; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
           else
             echo "changed=true" >> "$GITHUB_OUTPUT"
