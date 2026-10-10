@@ -42,6 +42,16 @@ committed pages differ from what the code produces. To improve a reference page,
 improve its source: a route's docstring, a column's comment, a variable's line in
 `.env.example`.
 
+`--check` also fails if an environment variable has conflicting defaults in the
+code, or is read without an entry in `.env.example`, even when the generated
+reference is current. Define a shared default once in `shared/utils/settings.py`;
+document a new variable with a commented assignment and description in
+`.env.example`. Intentionally internal variables belong in
+`ENV_EXAMPLE_ALLOWLIST` in `scripts/gen_docs.py`, with a reason for each exception.
+Currently only `TIKTOKEN_CACHE_DIR` is exempt from the template requirement:
+`build_standalone_agent.py` sets it rather than operators. The exception does not
+suppress conflicting defaults or remove the variable from the reference page.
+
 ## Guides declare what they describe
 
 Every page under `user/` and `dev/` starts with frontmatter:
