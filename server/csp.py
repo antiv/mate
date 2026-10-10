@@ -43,8 +43,6 @@ _SCRIPT_HOSTS = [
     "https://cdn.tailwindcss.com",
     "https://cdn.jsdelivr.net",    # Chart.js, Monaco, React Flow, Pyodide, Swagger UI
     "https://cdnjs.cloudflare.com",  # Ace
-    "https://unpkg.com",           # d3-graphviz (graph view)
-    "https://d3js.org",
 ]
 _STYLE_HOSTS = [
     "https://cdn.jsdelivr.net",
@@ -122,7 +120,7 @@ def build_policy(frame_ancestors: str = "'self'", allow_eval: bool = False,
 
     directives = [
         "default-src 'self'",
-        # 'wasm-unsafe-eval' lets Pyodide and the graph view compile WebAssembly;
+        # 'wasm-unsafe-eval' lets Pyodide compile WebAssembly;
         # it does not allow eval() of JavaScript.
         directive("script-src", script_keywords, _SCRIPT_HOSTS, extra),
         directive("style-src", ["'self'", "'unsafe-inline'"], _STYLE_HOSTS, extra),
