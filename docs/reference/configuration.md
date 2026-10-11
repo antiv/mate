@@ -26,8 +26,8 @@ Every environment variable the code reads: **134** in total. Descriptions come f
 | `ALLOWED_ORIGINS` | `http://localhost:8000,http://127.0.0.1:8000` | Comma-separated CORS allowlist. Dashboard and widget chat are same-origin; /widget/public-config stays open on its own. | `auth_server.py` |
 | `ARTIFACT_SERVICE` | `none` | local_folder, supabase or s3; unset or none keeps artifacts in memory, lost on restart | `shared/utils/settings.py` |
 | `AUDIT_RETENTION_DAYS` | `0` | Audit log retention (EU AI Act compliance). 0 = keep forever; N = delete entries older than N days | `shared/utils/audit_service.py` |
-| `AUTH_PASSWORD` | `mate` | — | `auth_server.py` |
-| `AUTH_USERNAME` | `admin` | Authentication (Basic Auth fallback — always available) | `auth_server.py`, `shared/utils/user_cleanup.py`, `shared/utils/user_service.py` |
+| `AUTH_PASSWORD` | `mate` | default mate, which MATE_ENV=production refuses; set your own | `shared/utils/settings.py` |
+| `AUTH_USERNAME` | `admin` | default admin | `shared/utils/settings.py` |
 | `BROWSER_ALLOW_PRIVATE_NETWORK` | `false` | Allow the browser to reach private-network hosts | `shared/utils/tools/browser_tools.py` |
 | `BROWSER_CDP_URL` | `http://localhost:9222` | Chrome DevTools endpoint, used only with BROWSER_MODE=cdp | `shared/utils/tools/browser_tools.py` |
 | `BROWSER_HEADLESS` | `true` | Run Chromium headless | `shared/utils/tools/browser_tools.py` |

@@ -66,6 +66,7 @@ from prometheus_fastapi_instrumentator import Instrumentator
 logger = logging.getLogger(__name__)
 
 # Configuration
+from shared.utils import settings
 from shared.utils.utils import get_adk_config, get_database_config
 from shared.utils.database_client import get_database_client
 
@@ -74,8 +75,8 @@ db_config = get_database_config()
 
 ADK_HOST = adk_config["adk_host"]
 ADK_PORT = adk_config["adk_port"]
-AUTH_USERNAME = os.getenv("AUTH_USERNAME", "admin")
-AUTH_PASSWORD = os.getenv("AUTH_PASSWORD", "mate")
+AUTH_USERNAME = settings.auth_username()
+AUTH_PASSWORD = settings.auth_password()
 SESSION_SERVICE_URI = adk_config["session_service_uri"]
 
 # In production, insecure defaults must fail loudly at startup rather than be
@@ -98,7 +99,7 @@ if not _SECRET_KEY:
         "Set SECRET_KEY in .env for persistent OAuth sessions."
     )
 
-if AUTH_PASSWORD == "mate":
+if AUTH_PASSWORD == settings.DEFAULT_AUTH_PASSWORD:
     if _ENFORCE_SECURE:
         raise RuntimeError(
             "AUTH_PASSWORD is still the default ('mate'). Set AUTH_PASSWORD, or set "

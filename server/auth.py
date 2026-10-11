@@ -32,7 +32,9 @@ AUTH_PASSWORD: str = ""
 
 
 def credentials_match(username: str, password: str) -> bool:
-    """Compare submitted credentials in constant time."""
+    """Compare submitted credentials in constant time. An empty password never matches."""
+    if not AUTH_PASSWORD or not password:
+        return False
     return (
         secrets.compare_digest(str(username or ""), AUTH_USERNAME) and
         secrets.compare_digest(str(password or ""), AUTH_PASSWORD)

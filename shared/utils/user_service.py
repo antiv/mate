@@ -8,10 +8,10 @@ This module handles:
 """
 
 import logging
-import os
 from typing import Optional, List
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
+from . import settings
 from .database_client import get_database_client
 from .models import User
 
@@ -50,7 +50,7 @@ class UserService:
             
             # The built-in account administers the dashboard, so it also holds the
             # 'admin' role that admin-only agents and memory block writes check.
-            is_builtin_admin = user_id == os.getenv("AUTH_USERNAME", "admin")
+            is_builtin_admin = user_id == settings.auth_username()
 
             if user:
                 logger.debug(f"Found existing user {user_id}")

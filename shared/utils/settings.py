@@ -91,3 +91,18 @@ def artifact_service() -> str:
 def supabase_bucket() -> str:
     """The bucket for both the Supabase artifact service and the Supabase tools."""
     return os.getenv("SUPABASE_BUCKET", "artifacts")
+
+
+# The built-in administrator. An empty value counts as unset: .env.example lists
+# both empty, and an empty password used to let anyone in with empty fields.
+DEFAULT_AUTH_USERNAME = "admin"
+DEFAULT_AUTH_PASSWORD = "mate"
+
+
+def auth_username() -> str:
+    return os.getenv("AUTH_USERNAME", "admin") or DEFAULT_AUTH_USERNAME
+
+
+def auth_password() -> str:
+    """AUTH_PASSWORD, else "mate", which production refuses at startup."""
+    return os.getenv("AUTH_PASSWORD", "mate") or DEFAULT_AUTH_PASSWORD

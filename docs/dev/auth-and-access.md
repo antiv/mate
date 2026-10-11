@@ -123,7 +123,10 @@ The check runs again for each sub-agent the conversation is transferred to.
 
 With `MATE_ENV=production`, the auth server refuses to start when `AUTH_PASSWORD` is
 still the default, when `SECRET_KEY` is missing, or when the database cannot be
-reached, and it forces the session cookie to be HTTPS-only.
+reached, and it forces the session cookie to be HTTPS-only. An empty
+`AUTH_USERNAME` or `AUTH_PASSWORD`, as a copied `.env.example` has, counts as
+unset (`admin` / `mate`), so the check catches it; `credentials_match` never
+accepts an empty password.
 `MATE_ALLOW_INSECURE_DEFAULTS=true` turns the first two back into warnings.
 
 ## Adding a route: which protection applies
