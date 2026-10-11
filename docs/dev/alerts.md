@@ -3,7 +3,6 @@ title: "Alerts: evaluation and payloads"
 summary: How alert rules are evaluated, what each condition reads, and the payload a webhook receives.
 audience: dev
 order: 130
-status: migrated
 covers:
   - shared/utils/alert_service.py
 ---
