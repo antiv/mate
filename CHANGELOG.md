@@ -26,6 +26,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A2A was off on the pinned a2a-sdk 1.2.1** (#223) - `adk_main.py` was written for a2a-sdk 0.3, whose `a2a.server.apps` no longer exists in 1.x. Starting with `--a2a`, which the dashboard always does, printed "A2A dependencies not available" and mounted no `/a2a/*` routes, so A2A calls failed, and so did agents exposed over MCP, which go through A2A.
+  - **The fix:** the routes are now built through ADK's `google.adk.a2a._compat` (`shared/utils/a2a_routes.py`), which works on 0.3 and 1.x.
+  - **Method names:** `/a2a/{agent}` accepts the 1.x methods (`SendMessage`, `GetTask`, ...) and the 0.3 ones (`message/send`, `tasks/get`, ...).
+  - **The card:** it is served in the 1.x form (`supportedInterfaces`). It now names the agent's own endpoint (`/a2a/{agent}`) instead of the server root. Its input and output modes are `text/plain`, since the agent reads and writes text. An `agents/<name>/agent.json` in the 0.3 form is still read and converted.
+  - **MCP replies:** the MCP bridge returns the agent's reply text, taken from the task's artifacts, instead of the whole task printed as a dictionary.
+  - **A test** now fails when a dependency bump breaks the routes; until now the only sign was a line at startup.
 - **MATE did not start on a new MySQL database** (#178) - the schema was never created on a new MySQL database, so the server ran without tables.
   - **The migrations stopped at V001.** MySQL takes a default on a `TEXT` column only as an expression (`DEFAULT ('x')`), and the `credentials` unique key was longer than MySQL's 3072 bytes. Twenty later migrations then failed on the missing tables or on `ADD COLUMN IF NOT EXISTS`, which MySQL does not have.
   - **The fix edits the released MySQL files**, which the guide otherwise rules out. Those statements never ran on any MySQL, and nothing re-runs a version that is already recorded.

@@ -3,7 +3,7 @@ MCP Protocol Handler for Agent Tools
 Handles JSON-RPC MCP protocol requests for agent execution
 """
 
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from fastapi import Request, HTTPException
 from fastapi.responses import StreamingResponse, Response
 import asyncio
@@ -13,6 +13,33 @@ import json
 import time
 from shared.utils.utils import get_adk_config
 
+
+
+def a2a_result_text(result: Any) -> Optional[str]:
+    """The text of an A2A message/send result: a message, or a task's artifacts.
+
+    ADK's executor answers with a task whose reply is in its artifacts; a failed
+    task carries its error in the status message instead.
+    """
+    if not isinstance(result, dict):
+        return None
+
+    def texts(parts: Any) -> List[str]:
+        return [p["text"] for p in parts or [] if isinstance(p, dict) and isinstance(p.get("text"), str)]
+
+    message = result.get("message") if isinstance(result.get("message"), dict) else None
+    if message is None and result.get("kind") == "message":
+        message = result
+    if message is not None:
+        found = texts(message.get("parts"))
+    else:
+        found = [t for artifact in result.get("artifacts") or [] if isinstance(artifact, dict)
+                 for t in texts(artifact.get("parts"))]
+        if not found:
+            status = result.get("status") if isinstance(result.get("status"), dict) else {}
+            status_message = status.get("message") if isinstance(status.get("message"), dict) else {}
+            found = texts(status_message.get("parts"))
+    return "\n".join(found) if found else None
 
 class AgentMCPProtocolHandler:
     """Handles MCP protocol requests for agent execution"""
@@ -186,17 +213,12 @@ class AgentMCPProtocolHandler:
                         # A2A response format
                         if "result" in result_data:
                             result = result_data["result"]
-                            if "message" in result and "parts" in result["message"]:
-                                # Extract text from parts
-                                text_parts = []
-                                for part in result["message"]["parts"]:
-                                    if part.get("kind") == "text" and "text" in part:
-                                        text_parts.append(part["text"])
-                                if text_parts:
-                                    content.append({
-                                        "type": "text",
-                                        "text": "\n".join(text_parts)
-                                    })
+                            text = a2a_result_text(result)
+                            if text:
+                                content.append({
+                                    "type": "text",
+                                    "text": text
+                                })
                             else:
                                 # Fallback: use result as text
                                 content.append({
