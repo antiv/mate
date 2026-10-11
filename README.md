@@ -2,7 +2,7 @@
 
 **Stop the redeploy-to-tweak loop.**
 
-[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-green.svg)](LICENSE)
 [![Google ADK](https://img.shields.io/badge/Google-ADK-orange.svg)](https://github.com/google/adk-python)
 [![LangGraph](https://img.shields.io/badge/LangGraph-supported-1C3C3C.svg)](https://github.com/langchain-ai/langgraph)
@@ -15,7 +15,7 @@ You built an agent. Now you need to tune the prompt. Swap the model. Restrict ac
 
 Without a control layer, every one of those is a code change, a commit, and a redeploy.
 
-**MATE is that control layer.** It adds everything production needs — live configuration, RBAC, cost tracking, regression testing, and an embeddable chat widget — without touching your agent code. Runs on **Google ADK** or **LangGraph**, switchable with one env var — same agents, same dashboard, same widget either way.
+**MATE is that control layer.** It adds everything production needs — live configuration, RBAC, cost in US dollars with budgets and alerts, regression testing, and an embeddable chat widget — without touching your agent code. Runs on **Google ADK** or **LangGraph**, switchable with one env var — same agents, same dashboard, same widget either way.
 
 ---
 
@@ -52,15 +52,17 @@ Every agent lives in the database. Every change is versioned. Roll back to any p
 
 ### 🏛️ The Control Room — Govern what runs in production
 
-RBAC per agent means the finance team's agent is never visible to basic users, without any custom middleware. Token tracking breaks down every request into four buckets — prompt, response, thoughts, and tool-use tokens — so you can see exactly where costs come from, per agent, per hour, per user.
+RBAC per agent means the finance team's agent is never visible to basic users, without any custom middleware. Every model call is priced in US dollars as it is logged — from OpenRouter's and LiteLLM's price lists, or a price you set — so the Usage page shows what each agent and project actually costs, next to the four token buckets (prompt, response, thoughts, tool use).
 
-Add guardrails (hallucination scoring, rate limits per user/project) from the dashboard. Audit logs capture every configuration change for compliance.
+Set budgets in tokens or dollars per user, agent or project that warn or block, and alert rules that post to a webhook, email, Slack or Discord when agents fail, a guardrail keeps firing, a fallback model takes over, or a budget runs low. Add guardrails (hallucination scoring, PII, prompt injection) from the dashboard. Audit logs capture every configuration change for compliance.
 
 ### 🧪 The Lab — Know before you ship
 
 The Eval Framework runs your agents against a test suite automatically. Write expected outputs; MATE invokes the live agent, scores the response (exact match, semantic similarity, or LLM-as-Judge), and tracks pass rates across versions as a chart.
 
 Set a regression threshold and MATE fires a webhook if a new version scores more than 5 points below the previous one. Catch prompt regressions before users do.
+
+The **Playground** answers "which model, which prompt?" before you change anything: run one prompt, or an agent's whole eval suite, on two or three variants of the agent — another model, other instructions, an older version — and compare score, reply time and cost in dollars side by side.
 
 ---
 
@@ -72,13 +74,14 @@ python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.lock
 
 cp .env.example .env
-# Set GOOGLE_API_KEY (or any supported provider key)
+# Set GOOGLE_API_KEY (or any supported provider key), AUTH_USERNAME and AUTH_PASSWORD
 
 python auth_server.py
-# Dashboard: http://localhost:8000  — login: admin / mate
+# Dashboard: http://localhost:8000  — log in with AUTH_USERNAME / AUTH_PASSWORD
+# (left empty, they are admin / mate; MATE_ENV=production refuses that default)
 ```
 
-Or with Docker:
+Or with Docker (it needs `AUTH_PASSWORD` set in `.env`):
 
 ```bash
 docker-compose up
@@ -121,7 +124,7 @@ Drag-and-drop canvas for building agent hierarchies. See tool and MCP nodes atta
 ### Work Room
 A built-in chat interface inside the dashboard. Pick any root agent from the card grid and start a conversation — no embed code, no browser tab switching. Sessions are auto-titled and persist across page reloads. The default landing page after login.
 
-When the agent responds with code, the canvas panel opens automatically to the right of the chat. Code never clutters the conversation — it goes straight into a full-featured editor. HTML, JavaScript, CSS, and SVG can be executed in a sandboxed iframe with one click. Python runs via Pyodide (WebAssembly) directly in the browser. Dart and Flutter applications are executed directly in the browser via a seamless, zero-install **DartPad** integration that bypasses the code view to show the interactive application immediately. The panel is resizable by dragging the divider. Any edits made in the canvas are automatically included in the next prompt, so you can ask the agent to modify its own output without copy-pasting.
+When the agent responds with code, the canvas panel opens automatically to the right of the chat. Code never clutters the conversation — it goes straight into a full-featured editor. HTML, JavaScript, CSS, SVG and Python run with one click in a sandboxed frame, apart from the dashboard — Python via Pyodide (WebAssembly), in the browser. Dart and Flutter applications are executed directly in the browser via a seamless, zero-install **DartPad** integration that bypasses the code view to show the interactive application immediately. The panel is resizable by dragging the divider. Any edits made in the canvas are automatically included in the next prompt, so you can ask the agent to modify its own output without copy-pasting.
 
 ![Work Room](documents/images/workroom.png)
 
@@ -167,8 +170,10 @@ Drill into individual request logs — prompt / response / thought / tool-use to
 | Change a prompt or model | Edit code, redeploy | Dashboard edit, instant |
 | Switch LLM providers | Code change per agent | Change `model_name` in config (`ollama_chat/llama3.2`, `lm_studio/qwen2.5`, `openai/gpt-4o`, …) |
 | Access control per agent | Build your own | Built-in RBAC, no code |
-| Token cost visibility | DIY | 4-type tracking + analytics |
+| Cost visibility | DIY | Cost in US dollars per agent, project and user, plus a 4-type token breakdown |
+| Spending limits | DIY | Token and dollar budgets that warn or block, with alerts |
 | Regression testing | Manual | Automated eval suite with LLM-as-Judge |
+| Compare models and prompts | Ad-hoc scripts | Playground: variants side by side with score, latency and cost |
 | Multi-team isolation | Manual | Project-scoped agent hierarchies |
 | Embed chat on a website | Not included | Single `<script>` tag |
 | Agents that modify agents | Not included | `create_agent` tool, RBAC-protected |
@@ -183,7 +188,7 @@ Drill into individual request logs — prompt / response / thought / tool-use to
 - Supports the same streaming SSE, tool-use indicators, and markdown rendering as the embeddable widget
 - The default landing page after login — useful for internal teams who live in the dashboard
 - **Canvas panel**: code blocks auto-open in a side panel with Ace Editor instead of rendering in chat
-- Execute HTML, JavaScript, CSS, and SVG in a sandboxed iframe; run Python via Pyodide (WebAssembly) in-browser; execute Dart and Flutter apps in-browser using a zero-setup **DartPad** integration that bypasses code view to show the live app directly
+- Execute HTML, JavaScript, CSS, SVG and Python (Pyodide, WebAssembly) in a sandbox, apart from the dashboard; execute Dart and Flutter apps in-browser using a zero-setup **DartPad** integration that bypasses code view to show the live app directly
 - Canvas edits are automatically attached to the next prompt — iterate on code without copy-pasting
 - Drag the chat/canvas divider to resize; canvas closes and resets when a new session starts
 
@@ -198,12 +203,15 @@ Drill into individual request logs — prompt / response / thought / tool-use to
 **The Control Room**
 - RBAC per agent: assign roles in the dashboard, no middleware to write
 - Google (OIDC) and GitHub OAuth 2.0 SSO with automatic user provisioning; Basic Auth always available
+- Cost in US dollars for every model call, from OpenRouter's and LiteLLM's price lists or prices you set; calls without a known price are shown as such, never as $0
 - Token tracking across four types: prompt, response, thoughts, tool-use — per agent, per session, per user
-- Rate limiting configurable per user/agent/project from the dashboard
+- Rate limits and budgets per user/agent/project: requests, tokens, and US dollars per day or month, with warn or block
+- Alert rules for agent errors, guardrail bursts, fallback-model use and budget thresholds, sent to a webhook, email, Slack or Discord
 - Hallucination guardrail: LLM-scored factual consistency check per response, configurable threshold
 - Function call and model-level guardrails
 - Append-only audit log of every configuration change, with configurable retention — evidence toward EU AI Act Art. 12 record-keeping
 - Art. 50 AI disclosure shown by default wherever an agent is public, and not removable without a recorded reason
+- Content-Security-Policy on every page, with per-request nonces; agent-written code in the Work Room runs on a sandboxed page
 - Prometheus metrics at `/metrics`
 - OpenTelemetry distributed tracing
 
@@ -212,6 +220,7 @@ Drill into individual request logs — prompt / response / thought / tool-use to
 - Auto-invocation — evals call the live agent; no copy-pasting responses
 - Score history chart across versions (Chart.js)
 - Regression webhooks: fires when a new version drops more than 5 points vs. the previous
+- Playground: one prompt or the eval suite on 2–3 variants (model, instructions, stored version), with score, reply time and cost side by side
 
 **Embeddable Widget**
 - Single `<script>` tag deploys a floating chat button on any website
@@ -228,10 +237,11 @@ Drill into individual request logs — prompt / response / thought / tool-use to
 - Integration with external coding engines, CLI tools, and IDE extensions (OpenCode, Continue, Cline/Roo Code)
 
 **Infrastructure**
-- SQLite (dev), PostgreSQL, MySQL — auto-migrations on startup
+- SQLite (dev), PostgreSQL, MySQL 8 — auto-migrations on startup, drivers included
 - Docker Compose with health checks
 - Artifact storage: local, S3, or Supabase
 - MCP: agents exposed as MCP servers (Claude Desktop, Cursor) + MCP tool consumption
+- A2A: every agent served at `/a2a/{agent}` with its agent card (A2A protocol 1.0, and 0.3 methods)
 
 ---
 
@@ -244,12 +254,13 @@ Drill into individual request logs — prompt / response / thought / tool-use to
 GOOGLE_API_KEY=your_key_here          # or any supported provider
 
 # Database (SQLite by default)
-DATABASE_URL=postgresql://user:pass@localhost:5432/mate
 # DB_TYPE=sqlite (default), postgresql, mysql
+# DB_HOST=localhost  DB_PORT=5432  DB_NAME=mate_agent  DB_USER=...  DB_PASSWORD=...
 
 # Authentication
 AUTH_USERNAME=admin
-AUTH_PASSWORD=mate
+AUTH_PASSWORD=change-me
+MATE_ENV=production                   # refuses insecure defaults at startup
 
 # SSO (optional)
 GOOGLE_CLIENT_ID=...
@@ -270,9 +281,10 @@ LOCALAI_BASE_URL=http://localhost:8080/v1
 LLAMAFILE_BASE_URL=http://localhost:8080/v1
 
 # Optional features
-ROOT_AGENT_NAME=my_root_agent         # override default root agent
 MCP_EXPOSED_AGENTS=agent1,agent2      # expose agents as MCP servers
-RATE_LIMIT_ENABLED=true
+RATE_LIMIT_ENABLED=true               # enforce rate limits and budgets
+ALERTS_ENABLED=true                   # evaluate alert rules
+CSP_MODE=enforce                      # report-only (default), enforce or off
 OTEL_TRACING_ENABLED=true
 AUDIT_RETENTION_DAYS=365
 ```
@@ -305,7 +317,7 @@ coverage run -m unittest discover -s shared/test -p "test_*.py"
 coverage report --include="shared/utils/*,server/*,auth_server.py"
 ```
 
-134+ tests covering agent management, RBAC, migrations, guardrails, tracing, token tracking, and more.
+1,400+ tests covering agent management, RBAC, migrations, guardrails, CSP, costs and budgets, A2A, tracing, and more.
 
 ---
 
@@ -381,8 +393,11 @@ Each exposed agent gets endpoints at `/agents/{name}/mcp/*`. Built-in MCP server
 | `/dashboard` | Overview — usage stats, system health |
 | `/dashboard/agents` | Agent hierarchy, configuration, Visual Builder |
 | `/dashboard/users` | User management and role assignment |
-| `/dashboard/usage` | Token analytics, cost breakdown |
-| `/dashboard/evals` | Test suites, score history, regression tracking |
+| `/dashboard/usage` | Cost in US dollars and token analytics, per agent, project and user |
+| `/dashboard/rate-limits` | Rate limits and budgets (requests, tokens, US dollars) |
+| `/dashboard/alerts` | Alert rules and where they are sent |
+| `/dashboard/settings` | Model prices, default image model |
+| `/dashboard/evals` | Test suites, score history, regression tracking, Playground |
 | `/dashboard/audit-logs` | Audit trail viewer |
 | `/dashboard/migrations` | Database migration management |
 | `/dashboard/docs` | Documentation: user and developer guides, generated reference, search, and the API explorer (Swagger + ReDoc) |
@@ -399,7 +414,11 @@ Each exposed agent gets endpoints at `/agents/{name}/mcp/*`. Built-in MCP server
 - **[docs/dev/sso-setup.md](docs/dev/sso-setup.md)** — Google and GitHub SSO setup, enterprise domain restrictions, session security
 - **[docs/dev/evals.md](docs/dev/evals.md)** — eval methods, regression alerts, LLM-as-Judge configuration, API reference
 - **[docs/dev/mcp-servers.md](docs/dev/mcp-servers.md)** — MCP server configuration, client setup (Claude Desktop, Cursor), protocol details
-- **[docs/user/rate-limits.md](docs/user/rate-limits.md)** — per-user/agent/project rate limiting
+- **[docs/user/rate-limits.md](docs/user/rate-limits.md)** — per-user/agent/project rate limits and budgets in tokens and US dollars
+- **[docs/user/usage-and-audit.md](docs/user/usage-and-audit.md)** — cost in US dollars, token analytics, audit log
+- **[docs/user/settings.md](docs/user/settings.md)** — model prices and where prices come from
+- **[docs/user/alerts.md](docs/user/alerts.md)** — alert rules and destinations
+- **[docs/dev/content-security-policy.md](docs/dev/content-security-policy.md)** — the Content-Security-Policy, nonces, and the sandboxed canvas
 - **[docs/dev/tracing.md](docs/dev/tracing.md)** — OpenTelemetry tracing setup
 - **[AGENTS.md](AGENTS.md)** — architecture patterns and guidelines for adding new agents or tools
 
