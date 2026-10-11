@@ -5,6 +5,9 @@ audience: dev
 order: 220
 covers:
   - shared/utils/tools/code_executor_tools.py
+  - shared/utils/tools/tool_factory.py
+  - templates/dashboard/modals/config_modals.html
+  - static/js/agent-tools.js
 ---
 
 # Code Executor Tool
@@ -19,7 +22,7 @@ When enabled, the agent receives two tools:
 
 ### `execute_python_code`
 
-Writes Python source code to a temporary file and executes it via subprocess.
+Writes Python source code to a temporary file (`script.py`) in a temporary directory (`mate_exec_*`) and executes it via subprocess.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
@@ -37,16 +40,24 @@ Writes Python source code to a temporary file and executes it via subprocess.
 }
 ```
 
+On validation failure or exceptions, it returns an error shape without `stdout`/`stderr`:
+```json
+{
+  "status": "error",
+  "error_message": "No code provided."
+}
+```
+
 ### `execute_shell_command`
 
-Runs an arbitrary shell command.
+Runs an arbitrary shell command in the server's working directory.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `command` | `str` | *required* | Shell command to execute |
 | `timeout_seconds` | `int` | 30 | Max execution time (capped at 120s) |
 
-**Returns:** Same structure as `execute_python_code`.
+**Returns:** Same structure as `execute_python_code`. On error (e.g. empty command or exception), returns `{"status": "error", "error_message": ...}`.
 
 ## Configuration
 
@@ -56,6 +67,8 @@ Runs an arbitrary shell command.
 2. Click **Tool Configuration**
 3. Check the **Code Executor** checkbox
 4. Click **Save**
+
+*Note:* Saving Tool Configuration in the dashboard writes `code_executor = true` (`static/js/agent-tools.js`), which resets any custom timeout configured via raw JSON back to the 30-second default.
 
 ### Enable via `tool_config` JSON
 
@@ -86,36 +99,28 @@ WHERE name = 'my_agent';
 ## Limits & Safety
 
 | Limit | Value |
-|-------|-------|
+|---|---|
 | Max timeout | 120 seconds |
 | Default timeout | 30 seconds |
 | Max output size | 50,000 characters (stdout/stderr each) |
-| Execution directory | Isolated temp directory per run (cleaned up after) |
-| Python binary | System `python` (same as the server process) |
+| Execution directory | Temp directory (`mate_exec_*`) for Python; server working directory for shell |
+| Python binary | `python` (the first `python` on `PATH`, not necessarily `sys.executable`) |
 
 Scripts have access to whatever packages are installed in the server's Python environment. They inherit the server's environment variables (minus any sandboxing you add at the infrastructure level).
 
 ### Never on a public agent
 
-This is not a sandbox. Enabling it on an agent grants code execution on the host to anyone who
-can prompt that agent, as the server user, with the server's environment and full filesystem and
-network access.
+This tool is not a sandbox. Enabling it on an agent grants host code execution to anyone who can prompt that agent, running as the server user with the server's environment and full filesystem and network access.
 
-MATE enforces one case of this: **an agent that has a widget API key does not receive the code
-executor tools.** A widget key makes the agent promptable by anonymous visitors on the embedding
-site, which would turn the executor into remote shell access for the public internet. The refusal
-is logged at load time, and the dashboard warns when you tick the box on such an agent.
+MATE enforces one strict protection against exposure: **an agent that has a widget API key does not receive the code executor tools.** A widget key makes the agent promptable by anonymous visitors on an embedding site, which would turn the executor into remote shell access for the public internet. The refusal is logged at load time, and the dashboard modal (`templates/dashboard/modals/config_modals.html` / `static/js/agent-tools.js`) warns when you tick the box on such an agent.
 
-A key counts whether or not it is currently active — reactivating one is a dashboard toggle that
-never touches the agent, so an inactive key is exposure waiting to happen rather than the absence
-of it. To use the executor on such an agent, delete the widget key.
+A key counts whether or not it is currently active. Reactivating an inactive key is a dashboard toggle that does not touch the agent configuration, so an inactive key represents exposure waiting to happen. To use the executor on such an agent, delete the widget key.
 
 | Variable | Effect |
-|----------|--------|
-| `MATE_ALLOW_CODE_EXECUTOR_ON_WIDGET` | `true` skips the check. Only set this if the widget key is not reachable by untrusted users. |
+|---|---|
+| `MATE_ALLOW_CODE_EXECUTOR_ON_WIDGET` | `1`, `true`, or `yes` skips the check. Only set this if the widget key is not reachable by untrusted users. |
 
-The check fails closed: if it cannot reach the database to determine exposure, the tools are
-refused rather than granted.
+The check fails closed: if it cannot reach the database to determine exposure, the tools are refused rather than granted.
 
 ## Example Agent Instruction
 
@@ -128,8 +133,9 @@ Always print your final results to stdout.
 
 ## Architecture Notes
 
-- Each execution creates a fresh temp directory, writes `script.py`, runs it, and cleans up.
-- The subprocess inherits `os.environ` with `PYTHONDONTWRITEBYTECODE=1`.
-- Timed-out processes are killed by Python's `subprocess.run(timeout=...)`.
-- No persistent state between executions — each call is independent.
-- For production deployments, consider running the executor in a restricted container or using a dedicated sandboxed runtime.
+- For Python executions, a temp directory (`mate_exec_*`) is created and `script.py` is written to it. Cleanup removes `script.py` and attempts `os.rmdir(tmp_dir)`. If the script wrote additional files into that directory, `rmdir` fails silently and the temporary folder remains on disk.
+- Shell commands run directly with `shell=True` in the server's working directory without a temporary folder.
+- Subprocesses inherit `os.environ` with `PYTHONDONTWRITEBYTECODE=1`.
+- Timed-out processes trigger a timeout error. For `execute_shell_command`, only the spawned `/bin/sh` shell process is killed; child processes it launched can continue running in the background.
+- For production deployments, consider running the executor in a restricted container or dedicated sandboxed runtime.
+
