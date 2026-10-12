@@ -42,7 +42,11 @@ matching `rate_limit_config` row for the same scope, so budgets stay configured 
 Dollar budgets: `budget_threshold` also accepts `{"unit": "usd", "threshold_pct": 90, "period": "day", "usd_limit": null}`.
 USD budget rules measure dollar cost from `token_usage_logs` via `_measure_usd_budget`. They support only `day` or `month`
 periods (not `hour`), and only `user`, `agent`, or `project` scopes. When `usd_limit` is null, it resolves from the
-matching `rate_limit_config` row (`usd_per_day` or `usd_per_month`).
+matching `rate_limit_config` row (`usd_per_day` or `usd_per_month`). The spend comes from
+`TokenUsageService.get_spend_since`, which also returns the number of successful calls with
+no `cost_usd`; that count goes into the payload's `detail.unpriced_calls` and, when non-zero,
+the message. The row's `include_sub_agents` is not applied to alerts. A database error
+(`get_spend_since` returns `None`) makes the measurement `None`, so the rule does not fire.
 
 RBAC denials are recorded as `ACCESS_DENIED`, not `ERROR`, so they never trip an error rule.
 

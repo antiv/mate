@@ -10,7 +10,7 @@ generated: true
 
 # Database reference
 
-**34** tables defined in `shared/utils/models.py`; migrations are at **V042**. Migrations apply automatically on startup and are the source of truth for the schema: the models describe it, the migrations create it.
+**34** tables defined in `shared/utils/models.py`; migrations are at **V043**. Migrations apply automatically on startup and are the source of truth for the schema: the models describe it, the migrations create it.
 
 ## Migrations
 
@@ -60,6 +60,7 @@ A ✗ means that dialect has no file for that version. All dialects are in step.
 | V040 | system settings | ✓ | ✓ | ✓ |
 | V041 | token costs | ✓ | ✓ | ✓ |
 | V042 | usd budgets | ✓ | ✓ | ✓ |
+| V043 | budget coverage | ✓ | ✓ | ✓ |
 
 ## `users`
 
@@ -483,6 +484,8 @@ Model `RateLimitConfig`. Model for rate limit and budget configuration per user,
 | `max_tokens_per_request` | `Integer` | — | — | — |
 | `usd_per_day` | `Float` | — | — | Spend in US dollars over the last 24 hours / 30 days, priced calls only |
 | `usd_per_month` | `Float` | — | — | — |
+| `block_unpriced` | `Boolean` | not null | `False` | Treat calls without a price in the period as over the dollar budget |
+| `include_sub_agents` | `Boolean` | not null | `False` | Agent scope: count what the agent's sub-agents use too |
 | `action_on_limit` | `String(20)` | not null | `'block'` | warn, throttle, block |
 | `alert_thresholds` | `Text` | — | — | JSON array e.g. [80, 90, 100] |
 | `alert_webhook_url` | `Text` | — | — | — |

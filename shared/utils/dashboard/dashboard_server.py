@@ -3768,6 +3768,7 @@ class DashboardServer:
             user_id: Optional[str] = None,
             agent_name: Optional[str] = None,
             project_id: Optional[int] = None,
+            include_sub_agents: bool = False,
         ):
             """Get current usage vs limits for user/agent/project."""
             from shared.utils.rate_limit_service import get_rate_limit_service
@@ -3776,6 +3777,7 @@ class DashboardServer:
                 user_id=user_id,
                 agent_name=agent_name,
                 project_id=project_id,
+                include_sub_agents=include_sub_agents,
             )
             return {
                 "requests_last_min": usage.requests_last_min,
@@ -3784,6 +3786,8 @@ class DashboardServer:
                 "tokens_last_month": usage.tokens_last_month,
                 "usd_last_day": usage.usd_last_day,
                 "usd_last_month": usage.usd_last_month,
+                "unpriced_calls_day": usage.unpriced_calls_day,
+                "unpriced_calls_month": usage.unpriced_calls_month,
             }
 
         @self.app.post("/dashboard/api/rate-limits", tags=["Dashboard - Rate Limits"])
@@ -3811,6 +3815,14 @@ class DashboardServer:
                     raise HTTPException(status_code=400, detail=f"{key} must be a number of dollars, 0 or more")
                 else:
                     budgets[key] = float(value)
+            switches = {}
+            for key in ("block_unpriced", "include_sub_agents"):
+                value = body.get(key, False)
+                if not isinstance(value, bool):
+                    raise HTTPException(status_code=400, detail=f"{key} must be true or false")
+                switches[key] = value
+            if scope != "agent":
+                switches["include_sub_agents"] = False
             svc = get_rate_limit_service()
             result = svc.upsert_config(
                 scope=scope,
@@ -3822,6 +3834,8 @@ class DashboardServer:
                 max_tokens_per_request=body.get("max_tokens_per_request"),
                 usd_per_day=budgets["usd_per_day"],
                 usd_per_month=budgets["usd_per_month"],
+                block_unpriced=switches["block_unpriced"],
+                include_sub_agents=switches["include_sub_agents"],
                 action_on_limit=body.get("action_on_limit", "block"),
                 alert_thresholds=body.get("alert_thresholds", [80, 90, 100]),
                 alert_webhook_url=body.get("alert_webhook_url"),

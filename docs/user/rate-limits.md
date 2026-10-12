@@ -41,10 +41,26 @@ of each call, at the model's list price.
 
 - Each dollar budget is measured in its own scope: a user's budget against what that
   user spent, an agent's against the agent's calls, a project's against all its agents.
-- **Calls whose model has no price do not count.** If an agent uses a model without
-  a price, set one under [Model prices](settings.md#model-prices), or its spend stays
-  invisible to the budget. The Usage page shows how much traffic has no price.
+- **Calls whose model has no price do not count**, unless you tick **Treat calls
+  without a price as over the dollar budget**. If an agent uses a model without a
+  price, set one under [Model prices](settings.md#model-prices), or its spend stays
+  invisible to the budget. With the box ticked, any successful call without a price
+  in the period counts as reaching the budget, so **Block** refuses further requests
+  until that call is more than 24 hours (or 30 days) old, or its model gets a price.
+  Use it where a model can lose its price, for example `openrouter/` models on a
+  server that cannot fetch OpenRouter's price list.
 - A budget of 0 refuses every priced call (with **Block**).
+- If the spend cannot be read from the database, a **Block** budget refuses the
+  request ("Budget check failed"); **Warn** and **Throttle** let it through and log it.
+
+### Including sub-agents
+
+An agent's budgets count only the calls logged under that agent's name. A sub-agent
+logs under its own name, so by default a root agent's budget leaves out what its
+sub-agents use. Tick **Include sub-agents** on an agent config to count the agent and
+every agent below it (following the parent agents set on each agent) in its daily
+token limit and its dollar budgets. The option does nothing for user and project
+configs; a project budget already counts every agent in the project.
 
 Limits apply to chat in the dashboard, to the website widget, and to the
 OpenAI-compatible API.
@@ -74,7 +90,10 @@ Saving a configuration for a scope and id that already has one replaces it.
 
 Select a configuration to see **Usage vs Limits**: how many requests and tokens the
 scope has used in the current minute, hour, day and month, and what it spent in
-dollars over the last day and 30 days, against its limits. To
+dollars over the last day and 30 days, against its limits. For an agent config with
+**Include sub-agents**, the spend and daily tokens include the sub-agents. When the
+scope had calls without a price, a warning under the spend gives their number and
+says whether this budget ignores them or treats them as over budget. To
 look up a scope that has no configuration, enter a user id, agent name or project id
 and click **Load**.
 

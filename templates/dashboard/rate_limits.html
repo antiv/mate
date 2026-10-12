@@ -88,8 +88,16 @@
                     <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">USD/month</label>
                     <input type="number" id="formUsdPerMonth" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 rounded px-2 py-1.5 text-sm" placeholder="100.00" min="0" step="0.01">
                 </div>
-                <p class="col-span-2 text-[11px] text-gray-500 dark:text-gray-400">Spend over the last 24 hours and 30 days, at list prices. Calls whose model has no price do not count; see <a href="/dashboard/settings#model-prices" class="text-blue-600 hover:underline">model prices</a>.</p>
+                <p class="col-span-2 text-[11px] text-gray-500 dark:text-gray-400">Spend over the last 24 hours and 30 days, at list prices. Calls whose model has no price do not count unless the box below is ticked; see <a href="/dashboard/settings#model-prices" class="text-blue-600 hover:underline">model prices</a>.</p>
+                <label class="col-span-2 flex items-start gap-2 text-xs text-gray-700 dark:text-gray-300">
+                    <input type="checkbox" id="formBlockUnpriced" class="mt-0.5">
+                    <span>Treat calls without a price as over the dollar budget</span>
+                </label>
             </div>
+            <label class="flex items-start gap-2 text-xs text-gray-700 dark:text-gray-300">
+                <input type="checkbox" id="formIncludeSubAgents" class="mt-0.5">
+                <span>Include sub-agents (agent scope): the agent's token and dollar budgets count what its sub-agents use too</span>
+            </label>
             <div>
                 <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Max tokens/request (agent)</label>
                 <input type="number" id="formMaxTokensPerRequest" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 rounded px-2 py-1.5 text-sm" placeholder="4096" min="0">
@@ -143,6 +151,8 @@
                         ${c.tokens_per_day ? '| ' + c.tokens_per_day + ' tokens/day' : ''}
                         ${c.usd_per_day != null ? '| $' + c.usd_per_day.toFixed(2) + '/day' : ''}
                         ${c.usd_per_month != null ? '| $' + c.usd_per_month.toFixed(2) + '/month' : ''}
+                        ${c.block_unpriced ? '| unpriced = over' : ''}
+                        ${c.include_sub_agents ? '| incl. sub-agents' : ''}
                         ${c.action_on_limit ? '| ' + c.action_on_limit : ''}
                     </span>
                 </div>
@@ -159,7 +169,11 @@
         editConfig(configsCache[i]);
     }
 
+    // The config whose usage is shown, for its sub-agent switch and dollar budget
+    let usageConfig = null;
+
     function loadUsageFor(scope, scopeId) {
+        usageConfig = configsCache.find(c => c.scope === scope && c.scope_id === scopeId) || null;
         if (scope === 'user') {
             document.getElementById('usageUserId').value = scopeId;
             document.getElementById('usageAgentName').value = '';
@@ -173,10 +187,11 @@
             document.getElementById('usageAgentName').value = '';
             document.getElementById('usageProjectId').value = scopeId;
         }
-        loadUsage();
+        loadUsage(true);
     }
 
-    async function loadUsage() {
+    async function loadUsage(fromConfig) {
+        if (fromConfig !== true) usageConfig = null;
         const userId = document.getElementById('usageUserId').value.trim() || null;
         const agentName = document.getElementById('usageAgentName').value.trim() || null;
         const projectId = document.getElementById('usageProjectId').value ? parseInt(document.getElementById('usageProjectId').value) : null;
@@ -188,14 +203,26 @@
         if (userId) params.set('user_id', userId);
         if (agentName) params.set('agent_name', agentName);
         if (projectId) params.set('project_id', projectId);
+        if (usageConfig && usageConfig.include_sub_agents) params.set('include_sub_agents', 'true');
         const res = await apiCall('/dashboard/api/rate-limits/usage?' + params.toString());
+        // Calls without a price add nothing to the spend, so a dollar budget can't see them
+        const unpriced = Math.max(res.unpriced_calls_day ?? 0, res.unpriced_calls_month ?? 0);
+        let unpricedNote = '';
+        if (unpriced > 0) {
+            const hasUsdBudget = usageConfig && (usageConfig.usd_per_day != null || usageConfig.usd_per_month != null);
+            const effect = !hasUsdBudget ? 'they are not in the spend above.'
+                : usageConfig.block_unpriced ? 'this budget treats them as over budget.'
+                : 'they do not count toward this dollar budget.';
+            unpricedNote = `<div class="text-xs text-amber-700 dark:text-amber-400"><i class="fas fa-exclamation-triangle mr-1"></i>${res.unpriced_calls_day ?? 0} calls in the last day and ${res.unpriced_calls_month ?? 0} in 30 days have no price; ${effect} Set a price under <a href="/dashboard/settings#model-prices" class="underline">model prices</a>.</div>`;
+        }
         document.getElementById('usagePanel').innerHTML = `
             <div class="space-y-1">
                 <div>Requests (last min): <strong>${res.requests_last_min ?? 0}</strong></div>
                 <div>Tokens (last hour): <strong>${(res.tokens_last_hour ?? 0).toLocaleString()}</strong></div>
                 <div>Tokens (last day): <strong>${(res.tokens_last_day ?? 0).toLocaleString()}</strong></div>
                 <div>Tokens (last 30 days): <strong>${(res.tokens_last_month ?? 0).toLocaleString()}</strong></div>
-                <div>Spent (last day / 30 days): <strong>$${(res.usd_last_day ?? 0).toFixed(2)}</strong> / <strong>$${(res.usd_last_month ?? 0).toFixed(2)}</strong></div>
+                <div>Spent (last day / 30 days): <strong>$${(res.usd_last_day ?? 0).toFixed(2)}</strong> / <strong>$${(res.usd_last_month ?? 0).toFixed(2)}</strong>${usageConfig && usageConfig.include_sub_agents ? ' (with sub-agents)' : ''}</div>
+                ${unpricedNote}
             </div>
         `;
     }
@@ -222,6 +249,8 @@
         // 0 is a real dollar budget (spend nothing), so only null leaves the field empty
         document.getElementById('formUsdPerDay').value = c.usd_per_day ?? '';
         document.getElementById('formUsdPerMonth').value = c.usd_per_month ?? '';
+        document.getElementById('formBlockUnpriced').checked = !!c.block_unpriced;
+        document.getElementById('formIncludeSubAgents').checked = !!c.include_sub_agents;
         document.getElementById('formActionOnLimit').value = c.action_on_limit || 'block';
         document.getElementById('formAlertWebhook').value = c.alert_webhook_url || '';
         document.getElementById('configModal').classList.remove('hidden');
@@ -245,6 +274,8 @@
             max_tokens_per_request: document.getElementById('formMaxTokensPerRequest').value ? parseInt(document.getElementById('formMaxTokensPerRequest').value) : null,
             usd_per_day: document.getElementById('formUsdPerDay').value !== '' ? parseFloat(document.getElementById('formUsdPerDay').value) : null,
             usd_per_month: document.getElementById('formUsdPerMonth').value !== '' ? parseFloat(document.getElementById('formUsdPerMonth').value) : null,
+            block_unpriced: document.getElementById('formBlockUnpriced').checked,
+            include_sub_agents: document.getElementById('formIncludeSubAgents').checked,
             action_on_limit: document.getElementById('formActionOnLimit').value,
             alert_webhook_url: document.getElementById('formAlertWebhook').value || null,
             alert_thresholds: [80, 90, 100],

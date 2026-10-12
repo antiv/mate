@@ -308,7 +308,11 @@ class AlertService:
 
     def _measure_usd_budget(self, session, rule: AlertRule, config: dict, period: str,
                             threshold_pct: int) -> Optional[Dict[str, Any]]:
-        """A budget in US dollars: what the scope spent in the period, priced calls only."""
+        """A budget in US dollars: what the scope spent in the period, priced calls only.
+
+        The calls without a price are counted too, so the alert can say the spend
+        leaves them out.
+        """
         from .token_usage_service import get_token_usage_service
 
         if period not in USD_PERIODS or rule.scope not in ('user', 'agent', 'project'):
@@ -324,9 +328,13 @@ class AlertService:
             # No limit anywhere, or 0, of which every cent would be "over 100%"
             return None
         since = datetime.now(timezone.utc) - _PERIOD_WINDOWS[period]
-        used = get_token_usage_service().get_cost_since(rule.scope, rule.scope_id, since)
+        spend = get_token_usage_service().get_spend_since(rule.scope, rule.scope_id, since)
+        if spend is None:
+            return None
+        used, unpriced = spend
         return {'value': int(100 * used / limit), 'threshold': threshold_pct,
-                'detail': {'period': period, 'unit': 'usd', 'used': round(used, 2), 'limit': limit}}
+                'detail': {'period': period, 'unit': 'usd', 'used': round(used, 2), 'limit': limit,
+                           'unpriced_calls': unpriced}}
 
     def _limit_from_rate_limit_config(self, session, rule: AlertRule,
                                       period: str, unit: str = 'tokens'):
@@ -402,6 +410,9 @@ class AlertService:
                 message = (f"{subject} has used {measurement['value']}% of its "
                            f"{detail.get('period')} budget "
                            f"(${detail.get('used'):.2f} of ${detail.get('limit'):.2f})")
+                if detail.get('unpriced_calls'):
+                    message += (f"; {detail['unpriced_calls']} calls without a price "
+                                f"are not counted")
             else:
                 message = (f"{subject} has used {measurement['value']}% of its "
                            f"{detail.get('period')} token budget "

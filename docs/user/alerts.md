@@ -31,7 +31,11 @@ in **Control Room → Alerts**.
 
 A dollar budget counts the [cost](usage-and-audit.md#cost) of priced calls only; calls
 whose model has no price add nothing. Its message reads, for example, "agent support
-has used 90% of its day budget ($9.00 of $10.00)".
+has used 90% of its day budget ($9.00 of $10.00)". When the period has calls without
+a price, the message says so: "...; 3 calls without a price are not counted". A
+dollar budget alert counts the scope's own calls, not its sub-agents', even when the
+Rate Limits budget it takes its limit from includes them. If the spend cannot be read,
+the rule does not fire that round.
 
 For a budget rule, leave the limit empty to use the budget already configured
 for the same scope on the [Rate Limits](rate-limits.md) page, so the number lives in

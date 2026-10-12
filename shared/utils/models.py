@@ -1046,6 +1046,10 @@ class RateLimitConfig(Base):
     # Spend in US dollars over the last 24 hours / 30 days, priced calls only
     usd_per_day = Column(Float, nullable=True)
     usd_per_month = Column(Float, nullable=True)
+    # Treat calls without a price in the period as over the dollar budget
+    block_unpriced = Column(Boolean, nullable=False, default=False)
+    # Agent scope: count what the agent's sub-agents use too
+    include_sub_agents = Column(Boolean, nullable=False, default=False)
     action_on_limit = Column(String(20), nullable=False, default='block')  # warn, throttle, block
     alert_thresholds = Column(Text, nullable=True)  # JSON array e.g. [80, 90, 100]
     alert_webhook_url = Column(Text, nullable=True)
@@ -1076,6 +1080,8 @@ class RateLimitConfig(Base):
             'max_tokens_per_request': self.max_tokens_per_request,
             'usd_per_day': self.usd_per_day,
             'usd_per_month': self.usd_per_month,
+            'block_unpriced': bool(self.block_unpriced),
+            'include_sub_agents': bool(self.include_sub_agents),
             'action_on_limit': self.action_on_limit,
             'alert_thresholds': self.get_alert_thresholds(),
             'alert_webhook_url': self.alert_webhook_url,

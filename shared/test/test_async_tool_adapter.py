@@ -185,6 +185,8 @@ class TestRateLimitOffload(unittest.IsolatedAsyncioTestCase):
             tokens_per_month=None,
             usd_per_day=None,
             usd_per_month=None,
+            block_unpriced=False,
+            include_sub_agents=False,
             action_on_limit="block",
         )
         svc, session = self._make_service(cfg, token_delay=0.1, tokens=150)
@@ -218,6 +220,8 @@ class TestRateLimitOffload(unittest.IsolatedAsyncioTestCase):
             tokens_per_month=None,
             usd_per_day=None,
             usd_per_month=None,
+            block_unpriced=False,
+            include_sub_agents=False,
             action_on_limit="warn",
         )
         svc, _ = self._make_service(cfg, token_delay=0.0, tokens=5)

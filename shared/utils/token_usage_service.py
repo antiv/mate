@@ -7,15 +7,31 @@ separated from the database connection logic.
 
 import logging
 import uuid
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Tuple
 from datetime import datetime, timedelta, timezone
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import case, func
 from sqlalchemy.exc import SQLAlchemyError
 from .database_client import get_database_client
 from .models import TokenUsageLog
 
 logger = logging.getLogger(__name__)
+
+
+def _agent_tree(session: Session, agent_name: str) -> List[str]:
+    """The agent and every agent below it, following agents_config.parent_agents."""
+    from .models import AgentConfig
+    children: Dict[str, List[str]] = {}
+    for config in session.query(AgentConfig).filter(AgentConfig.parent_agents.isnot(None)).all():
+        for parent in config.get_parent_agents():
+            children.setdefault(parent, []).append(config.name)
+    tree, todo = [agent_name], [agent_name]
+    while todo:
+        for child in children.get(todo.pop(), []):
+            if child not in tree:
+                tree.append(child)
+                todo.append(child)
+    return tree
 
 
 class TokenUsageService:
@@ -338,19 +354,21 @@ class TokenUsageService:
         finally:
             session.close()
 
-    def get_agent_tokens_since(self, agent_name: str, since: datetime) -> int:
-        """Total tokens for agent since given datetime."""
+    def get_agent_tokens_since(self, agent_name: str, since: datetime,
+                               include_sub_agents: bool = False) -> int:
+        """Total tokens for agent (and, if asked, its sub-agents) since given datetime."""
         session = self._get_session()
         if not session:
             return 0
         try:
+            names = _agent_tree(session, agent_name) if include_sub_agents else [agent_name]
             row = session.query(
                 func.coalesce(func.sum(
                     func.coalesce(TokenUsageLog.prompt_tokens, 0) +
                     func.coalesce(TokenUsageLog.response_tokens, 0)
                 ), 0)
             ).filter(
-                TokenUsageLog.agent_name == agent_name,
+                TokenUsageLog.agent_name.in_(names),
                 TokenUsageLog.timestamp >= since
             ).scalar()
             return int(row or 0)
@@ -390,38 +408,46 @@ class TokenUsageService:
         finally:
             session.close()
 
-    def get_cost_since(self, scope: str, scope_id: str, since: datetime) -> float:
-        """US dollars a user, agent or project spent since the given datetime.
+    def get_spend_since(self, scope: str, scope_id: str, since: datetime,
+                        include_sub_agents: bool = False) -> Optional[Tuple[float, int]]:
+        """(US dollars spent, calls without a price) for a scope since the given datetime.
 
-        Only calls whose model has a price have a cost; the rest add nothing.
+        None when the database could not be read, so a caller can tell an error
+        from no spend. include_sub_agents widens an agent scope to its sub-agents.
         """
         session = self._get_session()
         if not session:
-            return 0.0
+            return None
         try:
-            query = session.query(func.coalesce(func.sum(TokenUsageLog.cost_usd), 0.0)).filter(
-                TokenUsageLog.timestamp >= since)
+            query = session.query(
+                func.coalesce(func.sum(TokenUsageLog.cost_usd), 0.0),
+                func.coalesce(func.sum(case(
+                    ((TokenUsageLog.status == 'SUCCESS') & TokenUsageLog.cost_usd.is_(None), 1),
+                    else_=0)), 0),
+            ).filter(TokenUsageLog.timestamp >= since)
             if scope == "user":
                 query = query.filter(TokenUsageLog.user_id == scope_id)
             elif scope == "agent":
-                query = query.filter(TokenUsageLog.agent_name == scope_id)
+                names = _agent_tree(session, scope_id) if include_sub_agents else [scope_id]
+                query = query.filter(TokenUsageLog.agent_name.in_(names))
             elif scope == "project":
                 from .models import AgentConfig
                 try:
                     project_id = int(scope_id)
                 except (TypeError, ValueError):
-                    return 0.0
+                    return (0.0, 0)
                 agent_names = [r[0] for r in session.query(AgentConfig.name).filter(
                     AgentConfig.project_id == project_id).all()]
                 if not agent_names:
-                    return 0.0
+                    return (0.0, 0)
                 query = query.filter(TokenUsageLog.agent_name.in_(agent_names))
             else:
-                return 0.0
-            return float(query.scalar() or 0.0)
+                return (0.0, 0)
+            cost, unpriced = query.one()
+            return (float(cost or 0.0), int(unpriced or 0))
         except SQLAlchemyError as e:
-            logger.error("Failed to get cost since: %s", e)
-            return 0.0
+            logger.error("Failed to get spend since: %s", e)
+            return None
         finally:
             session.close()
 

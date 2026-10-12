@@ -4,8 +4,10 @@ Tests for budgets and budget alerts in US dollars.
 
 A dollar budget (Rate Limits) or a dollar budget alert compares a user's,
 agent's or project's spend, summed from token_usage_logs.cost_usd, against a
-limit. Calls whose model has no price (NULL cost) add nothing. Each budget is
-measured in its own scope: a user's budget against that user's spend only.
+limit. Calls whose model has no price (NULL cost) add nothing, unless the
+budget treats them as over budget. Each budget is measured in its own scope: a
+user's budget against that user's spend only; an agent's can include its
+sub-agents. A block budget whose spend cannot be read refuses the request.
 """
 
 import asyncio
@@ -54,19 +56,52 @@ class _Db(unittest.TestCase):
         session.close()
 
 
-class TestCostSince(_Db):
+class TestSpendSince(_Db):
 
     def test_spend_per_user_agent_and_project(self):
         self._spend(1.0, user="u1", agent="seller")
         self._spend(0.5, user="u2", agent="helper")
-        self._spend(None, user="u1", agent="seller")  # no price: adds nothing
+        self._spend(None, user="u1", agent="seller")  # no price: adds nothing, counted as unpriced
         self._spend(9.0, user="u1", agent="seller", hours_ago=48)
         since = datetime.now(timezone.utc) - timedelta(days=1)
-        self.assertAlmostEqual(self.tokens.get_cost_since("user", "u1", since), 1.0)
-        self.assertAlmostEqual(self.tokens.get_cost_since("agent", "helper", since), 0.5)
-        self.assertAlmostEqual(self.tokens.get_cost_since("project", "5", since), 1.5)
-        self.assertEqual(self.tokens.get_cost_since("project", "not-a-number", since), 0.0)
-        self.assertEqual(self.tokens.get_cost_since("global", None, since), 0.0)
+        self.assertEqual(self.tokens.get_spend_since("user", "u1", since), (1.0, 1))
+        self.assertEqual(self.tokens.get_spend_since("agent", "helper", since), (0.5, 0))
+        self.assertEqual(self.tokens.get_spend_since("project", "5", since), (1.5, 1))
+        self.assertEqual(self.tokens.get_spend_since("project", "not-a-number", since), (0.0, 0))
+        self.assertEqual(self.tokens.get_spend_since("global", None, since), (0.0, 0))
+
+    def test_failed_calls_are_not_unpriced(self):
+        session = self.Session()
+        session.add(TokenUsageLog(request_id="r", user_id="u1", agent_name="seller", status="ERROR",
+                                  timestamp=datetime.now(timezone.utc)))
+        session.commit()
+        session.close()
+        since = datetime.now(timezone.utc) - timedelta(days=1)
+        self.assertEqual(self.tokens.get_spend_since("agent", "seller", since), (0.0, 0))
+
+    def test_sub_agents_on_request(self):
+        session = self.Session()
+        session.query(AgentConfig).filter(AgentConfig.name == "helper").one().set_parent_agents(["seller"])
+        session.add(AgentConfig(name="deep", type="llm", parent_agents='["helper"]'))
+        session.commit()
+        session.close()
+        self._spend(1.0, agent="seller")
+        self._spend(0.5, agent="helper")
+        self._spend(None, agent="deep")
+        since = datetime.now(timezone.utc) - timedelta(days=1)
+        self.assertEqual(self.tokens.get_spend_since("agent", "seller", since), (1.0, 0))
+        self.assertEqual(self.tokens.get_spend_since("agent", "seller", since, include_sub_agents=True),
+                         (1.5, 1))
+        self.assertEqual(self.tokens.get_agent_tokens_since("seller", since, include_sub_agents=True), 60)
+
+    def test_a_database_error_is_none_not_zero(self):
+        from sqlalchemy.exc import OperationalError
+        broken = MagicMock()
+        broken.query.side_effect = OperationalError("SELECT", {}, Exception("gone"))
+        self.tokens._get_session = lambda: broken
+        with self.assertLogs("shared.utils.token_usage_service", "ERROR"):
+            self.assertIsNone(self.tokens.get_spend_since(
+                "user", "u1", datetime.now(timezone.utc) - timedelta(days=1)))
 
 
 class TestRateLimitBudget(_Db):
@@ -117,12 +152,66 @@ class TestRateLimitBudget(_Db):
             self._spend(None)
         self.assertTrue(self._check().allowed)
 
+    def test_unpriced_calls_can_count_as_over_budget(self):
+        self._config(scope="agent", scope_id="seller", usd_per_day=5.0, action_on_limit="block",
+                     block_unpriced=True)
+        self._spend(0.1)
+        self.assertTrue(self._check().allowed)
+        self._spend(None)
+        result = self._check()
+        self.assertFalse(result.allowed)
+        self.assertIn("1 calls without a price in the last 24 hours count as over the $5.00 budget",
+                      result.message)
+
+    def test_a_block_budget_fails_closed_when_spend_cannot_be_read(self):
+        self._config(scope="agent", scope_id="seller", usd_per_day=5.0, action_on_limit="block")
+        self.tokens.get_spend_since = MagicMock(return_value=None)
+        result = self._check()
+        self.assertFalse(result.allowed)
+        self.assertIn("could not be read", result.message)
+
+    def test_a_warn_budget_lets_the_request_through_when_spend_cannot_be_read(self):
+        self._config(scope="agent", scope_id="seller", usd_per_day=5.0, action_on_limit="warn")
+        self.tokens.get_spend_since = MagicMock(return_value=None)
+        with self.assertLogs("shared.utils.rate_limit_service", "WARNING"):
+            self.assertTrue(self._check().allowed)
+
+    def test_an_agent_budget_can_include_its_sub_agents(self):
+        session = self.Session()
+        session.query(AgentConfig).filter(AgentConfig.name == "helper").one().set_parent_agents(["seller"])
+        session.commit()
+        session.close()
+        self._config(scope="agent", scope_id="seller", usd_per_day=1.0, tokens_per_day=50,
+                     action_on_limit="block")
+        self._spend(2.0, user="u2", agent="helper")
+        self._spend(2.0, user="u2", agent="helper")
+        self._spend(2.0, user="u2", agent="helper")
+        self.assertTrue(self._check().allowed, "without the switch only the agent's own calls count")
+        session = self.Session()
+        session.query(RateLimitConfig).one().include_sub_agents = True
+        session.commit()
+        session.close()
+        result = self._check()
+        self.assertFalse(result.allowed)
+        self.assertIn("tokens today", result.message, "the token budget comes first and sees them too")
+        session = self.Session()
+        session.query(RateLimitConfig).one().tokens_per_day = None
+        session.commit()
+        session.close()
+        self.assertIn("$6.00 spent", self._check().message)
+
     def test_the_usage_panel_shows_the_spend(self):
         self._spend(0.25)
         self._spend(1.0, hours_ago=24 * 3)
         usage = self.service.get_usage_snapshot(agent_name="seller")
         self.assertAlmostEqual(usage.usd_last_day, 0.25)
         self.assertAlmostEqual(usage.usd_last_month, 1.25)
+
+    def test_the_usage_panel_counts_unpriced_calls(self):
+        self._spend(None)
+        self._spend(None, hours_ago=24 * 3)
+        usage = self.service.get_usage_snapshot(agent_name="seller")
+        self.assertEqual((usage.unpriced_calls_day, usage.unpriced_calls_month), (1, 2))
 
 
 class TestBudgetAlertInDollars(_AlertTestCase):
@@ -133,7 +222,7 @@ class TestBudgetAlertInDollars(_AlertTestCase):
         return fired, post
 
     def test_a_dollar_limit_on_the_rule(self):
-        self.token_service.get_cost_since.return_value = 9.5
+        self.token_service.get_spend_since.return_value = (9.5, 0)
         self._rule(condition_type="budget_threshold",
                    condition_config={"unit": "usd", "threshold_pct": 90, "period": "day", "usd_limit": 10})
         fired, post = self._fire()
@@ -142,14 +231,30 @@ class TestBudgetAlertInDollars(_AlertTestCase):
         self.assertEqual(payload["event"], "rate_limit_alert")
         self.assertEqual(payload["value"], 95)
         self.assertEqual(payload["message"], "agent a1 has used 95% of its day budget ($9.50 of $10.00)")
-        self.assertEqual(self.token_service.get_cost_since.call_args.args[:2], ("agent", "a1"))
+        self.assertEqual(self.token_service.get_spend_since.call_args.args[:2], ("agent", "a1"))
+
+    def test_the_message_says_how_many_calls_have_no_price(self):
+        self.token_service.get_spend_since.return_value = (9.5, 3)
+        self._rule(condition_type="budget_threshold",
+                   condition_config={"unit": "usd", "threshold_pct": 90, "period": "day", "usd_limit": 10})
+        fired, post = self._fire()
+        self.assertEqual(post.call_args.args[1]["message"],
+                         "agent a1 has used 95% of its day budget ($9.50 of $10.00); "
+                         "3 calls without a price are not counted")
+
+    def test_no_alert_when_the_spend_cannot_be_read(self):
+        self.token_service.get_spend_since.return_value = None
+        self._rule(condition_type="budget_threshold",
+                   condition_config={"unit": "usd", "threshold_pct": 0, "period": "day", "usd_limit": 10})
+        fired, post = self._fire()
+        self.assertEqual(fired, [])
 
     def test_the_limit_falls_back_to_the_rate_limits_dollar_budget(self):
         session = self.Session()
         session.add(RateLimitConfig(scope="agent", scope_id="a1", usd_per_month=20.0, tokens_per_day=5))
         session.commit()
         session.close()
-        self.token_service.get_cost_since.return_value = 19.0
+        self.token_service.get_spend_since.return_value = (19.0, 0)
         self._rule(condition_type="budget_threshold",
                    condition_config={"unit": "usd", "threshold_pct": 90, "period": "month"})
         fired, post = self._fire()
@@ -157,7 +262,7 @@ class TestBudgetAlertInDollars(_AlertTestCase):
         self.assertEqual(post.call_args.args[1]["limit"], 20.0)
 
     def test_without_a_dollar_limit_or_per_hour_it_is_inert(self):
-        self.token_service.get_cost_since.return_value = 1000.0
+        self.token_service.get_spend_since.return_value = (1000.0, 0)
         self._rule(condition_type="budget_threshold",
                    condition_config={"unit": "usd", "threshold_pct": 50, "period": "day"})
         self._rule(condition_type="budget_threshold",
@@ -175,7 +280,7 @@ class TestBudgetAlertInDollars(_AlertTestCase):
         self._rule(condition_type="budget_threshold", condition_config={"threshold_pct": 90, "period": "day"})
         fired, post = self._fire()
         self.assertEqual(post.call_args.args[1]["limit"], 1000)
-        self.token_service.get_cost_since.assert_not_called()
+        self.token_service.get_spend_since.assert_not_called()
 
 
 class TestApiValidation(_Db):
@@ -209,6 +314,22 @@ class TestApiValidation(_Db):
         self.assertEqual(r.status_code, 200, r.text)
         kwargs = svc.upsert_config.call_args.kwargs
         self.assertEqual((kwargs["usd_per_day"], kwargs["usd_per_month"]), (2.5, None))
+
+    def test_rate_limit_switches_are_booleans_and_sub_agents_only_for_agents(self):
+        svc = MagicMock()
+        svc.upsert_config.return_value = {"ok": True}
+        with patch("shared.utils.rate_limit_service.get_rate_limit_service", return_value=svc):
+            r = self.client.post("/dashboard/api/rate-limits",
+                                 json={"scope": "agent", "scope_id": "seller", "block_unpriced": "yes"})
+            self.assertEqual(r.status_code, 400)
+            r = self.client.post("/dashboard/api/rate-limits", json={
+                "scope": "agent", "scope_id": "seller", "block_unpriced": True, "include_sub_agents": True})
+            self.assertEqual(r.status_code, 200, r.text)
+            kwargs = svc.upsert_config.call_args.kwargs
+            self.assertEqual((kwargs["block_unpriced"], kwargs["include_sub_agents"]), (True, True))
+            self.client.post("/dashboard/api/rate-limits",
+                             json={"scope": "user", "scope_id": "u1", "include_sub_agents": True})
+            self.assertFalse(svc.upsert_config.call_args.kwargs["include_sub_agents"])
 
     def _rule(self, condition_config):
         return self.client.post("/dashboard/api/alert-rules", json={
