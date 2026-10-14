@@ -3,9 +3,10 @@ Google Drive MCP Server Implementation
 Handles Google Drive MCP endpoints and protocol requests
 """
 
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import Depends, FastAPI, Request, HTTPException
 from fastapi.responses import StreamingResponse, Response
 from ..tools.google_drive_mcp_protocol_handler import GoogleDriveMCPProtocolHandler
+from .mcp_auth import require_mcp_user
 
 
 class GoogleDriveMCPServer:
@@ -26,22 +27,22 @@ class GoogleDriveMCPServer:
             return self.mcp_handler.get_mcp_health()
 
         @self.app.post("/gdrive/mcp/initialize", tags=["MCP - Google Drive"])
-        async def gdrive_mcp_initialize(request: Request):
+        async def gdrive_mcp_initialize(request: Request, user: str = Depends(require_mcp_user)):
             """Google Drive MCP protocol initialize endpoint"""
             return self.mcp_handler.get_mcp_initialize()
 
         @self.app.get("/gdrive/mcp/sse", tags=["MCP - Google Drive"])
-        async def gdrive_mcp_sse(request: Request):
+        async def gdrive_mcp_sse(request: Request, user: str = Depends(require_mcp_user)):
             """Google Drive MCP Server-Sent Events endpoint for real-time communication"""
             return await self.mcp_handler.get_mcp_sse_stream()
 
         @self.app.post("/gdrive/mcp/tools/list", tags=["MCP - Google Drive"])
-        async def gdrive_mcp_list_tools(request: Request):
+        async def gdrive_mcp_list_tools(request: Request, user: str = Depends(require_mcp_user)):
             """Google Drive MCP protocol tools/list endpoint"""
             return self.mcp_handler.get_mcp_tools_list()
 
         @self.app.post("/gdrive/mcp/tools/call", tags=["MCP - Google Drive"])
-        async def gdrive_mcp_call_tool(request: Request):
+        async def gdrive_mcp_call_tool(request: Request, user: str = Depends(require_mcp_user)):
             """Google Drive MCP protocol tools/call endpoint"""
             try:
                 body = await request.json()
@@ -61,12 +62,12 @@ class GoogleDriveMCPServer:
                 }
 
         @self.app.get("/gdrive/mcp", tags=["MCP - Google Drive"])
-        async def gdrive_mcp_info():
+        async def gdrive_mcp_info(user: str = Depends(require_mcp_user)):
             """Google Drive MCP server info endpoint"""
             return self.mcp_handler.get_mcp_info()
 
         @self.app.post("/gdrive/mcp", tags=["MCP - Google Drive"])
-        async def gdrive_mcp_protocol_handler(request: Request):
+        async def gdrive_mcp_protocol_handler(request: Request, user: str = Depends(require_mcp_user)):
             """Handle Google Drive MCP protocol requests at the root /gdrive/mcp endpoint"""
             return await self.mcp_handler.handle_mcp_request(request)
 

@@ -10,7 +10,7 @@ generated: true
 
 # HTTP API reference
 
-Every HTTP route declared in the code: **264** routes. 36 have no docstring and so no summary here.
+Every HTTP route declared in the code: **265** routes. 36 have no docstring and so no summary here.
 
 This page lists what exists and where it is implemented. For request and response schemas, and to try a call, use the live Swagger UI under **Documentation → API** in the dashboard.
 
@@ -18,7 +18,7 @@ Requests to `/dashboard/api/*` require an admin, apart from the short allowlist 
 
 ## Auth server and dashboard
 
-Port 8000. Everything a browser or an external client talks to. 244 routes.
+Port 8000. Everything a browser or an external client talks to. 245 routes.
 
 ### Authentication
 
@@ -368,6 +368,12 @@ Example endpoints demonstrating authentication patterns.
 | Method | Path | Summary | Implemented in |
 |---|---|---|---|
 | `GET` | `/protected` | Example protected endpoint | server/proxy_routes.py · protected_endpoint |
+
+### MCP - Agents
+
+| Method | Path | Summary | Implemented in |
+|---|---|---|---|
+| `GET` | `/mcp` | List the exposed agent MCP servers the caller may use, with their URLs | shared/utils/mcp/agent_mcp_manager.py · list_agent_mcp_endpoints |
 
 ### MCP - Google Drive
 

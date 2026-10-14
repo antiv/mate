@@ -102,8 +102,11 @@ class AgentMCPProtocolHandler:
                 },
                 "serverInfo": {
                     "name": f"agent-mcp-server-{self.agent_name}",
+                    "title": self.agent_name,
+                    "description": self.agent_description,
                     "version": "1.0.0"
-                }
+                },
+                "instructions": self.agent_description
             }
         }
     

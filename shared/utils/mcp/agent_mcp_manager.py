@@ -6,8 +6,9 @@ Manages dynamic creation of MCP servers for agents from database configuration
 import os
 import logging
 from typing import Dict, List, Optional
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI, Request
 from .agent_mcp_server import AgentMCPServer
+from .mcp_auth import agent_allowed, require_mcp_user
 from ..database_client import get_database_client
 from ..models import AgentConfig
 
@@ -22,6 +23,25 @@ class AgentMCPManager:
         self.db_client = get_database_client()
         self.agent_mcp_servers: Dict[str, AgentMCPServer] = {}
         self.enabled_agents = self._get_enabled_agents_from_env()
+        self._register_list_route()
+
+    def _register_list_route(self) -> None:
+        """GET /mcp: the agent MCP servers the caller may use, with their URLs."""
+
+        @self.app.get("/mcp", tags=["MCP - Agents"])
+        async def list_agent_mcp_endpoints(request: Request,
+                                           user_id: str = Depends(require_mcp_user)) -> Dict:
+            """List the exposed agent MCP servers the caller may use, with their URLs"""
+            base_url = str(request.base_url).rstrip("/")
+            return {"agents": [
+                {
+                    "name": name,
+                    "description": server.agent_description,
+                    "url": f"{base_url}/agents/{name}/mcp",
+                }
+                for name, server in sorted(self.agent_mcp_servers.items())
+                if agent_allowed(user_id, name)
+            ]}
     
     def _get_enabled_agents_from_env(self) -> List[str]:
         """Get list of agent names to expose as MCPs from environment variable"""

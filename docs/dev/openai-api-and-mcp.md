@@ -85,10 +85,21 @@ Set `MCP_EXPOSED_AGENTS` to a list of agent names and each becomes an MCP server
 `tools/list`, `tools/call`, `sse`, and an unauthenticated `health`). An MCP client
 that connects sees the agent as a tool it can call.
 
+The callers are the same as for the OpenAI-compatible API: a personal access token
+(or Basic auth, the dashboard's login token or a dashboard session) of a user with a
+role in `ALLOWED_API_ROLES`. On top of that the user's roles must grant the agent
+itself (its `allowed_for_roles`; an agent with none is admin-only), checked by
+`shared/utils/mcp/mcp_auth.py`. The check sits on the route because the tool call
+reaches the agent over A2A without the caller's identity. Without credentials the
+routes answer 401, without access to the agent 403.
+
 ```bash
-curl -u admin:... -X POST \
-  https://your-mate.example.com/agents/support_root/mcp/tools/list
+curl -X POST https://your-mate.example.com/agents/support_root/mcp/tools/list \
+  -H "Authorization: Bearer mate_pat_..."
 ```
+
+`GET /mcp`, with the same credentials, lists the exposed agents the caller may use,
+each with its name, description and full MCP URL.
 
 Only agents named in the setting are exposed. `AgentMCPManager`
 (`shared/utils/mcp/agent_mcp_manager.py`) registers the routes at startup, so a
@@ -96,9 +107,11 @@ change to the setting needs a restart.
 
 Two more MCP servers are built in, serving MATE's own image generation and Google
 Drive tools to any MCP client: `/images/mcp` and `/gdrive/mcp`. Endpoints, tools and
-client configuration are in [Exposed MCP servers](mcp-servers.md). Apart from its
-health check, `/images/mcp` needs a signed-in caller, as it spends the server's
-provider keys.
+client configuration are in [Exposed MCP servers](mcp-servers.md). Apart from their
+health checks, both need a caller: `/gdrive/mcp` the same callers as the agent
+servers (it reads Drive with the server's service account), `/images/mcp` a
+signed-in dashboard user (it spends the server's provider keys; it does not take
+personal access tokens).
 
 ## Agent-to-agent (A2A)
 

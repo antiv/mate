@@ -379,7 +379,9 @@ MATE exposes agents and tools as MCP servers, compatible with Claude Desktop, Cu
 export MCP_EXPOSED_AGENTS=creative_agent,support_agent
 ```
 
-Each exposed agent gets endpoints at `/agents/{name}/mcp/*`. Built-in MCP servers: Image Generation (`/images/mcp`) and Google Drive (`/gdrive/mcp`).
+Each exposed agent gets endpoints at `/agents/{name}/mcp/*`, and `GET /mcp` lists the ones you may use with their URLs. Built-in MCP servers: Image Generation (`/images/mcp`) and Google Drive (`/gdrive/mcp`).
+
+Clients authenticate with a personal access token from the dashboard's account menu, sent as `Authorization: Bearer mate_pat_...`. The token's user needs a role in `ALLOWED_API_ROLES` (default `admin`, `developer`) and, for an agent, a role the agent allows.
 
 > Full documentation: [docs/dev/mcp-servers.md](docs/dev/mcp-servers.md)
 
