@@ -3312,14 +3312,12 @@ class DashboardServer:
             """Dashboard docs page"""
             if not self._get_is_admin(request):
                 return RedirectResponse(url="/dashboard/workroom", status_code=302)
-            # Extract hostname from request
-            host = request.headers.get("host", "localhost").split(":")[0]
+            # Agent Swagger/ReDoc iframes use same-origin /docs and /redoc
+            # (proxied to ADK_PORT); do not hard-code a dashboard or agent port.
             return self.templates.TemplateResponse(request, "dashboard/docs.html", {
                 "request": request,
                 "page_title": "Documentation",
                 "username": username,
-                "adk_host": host,
-                "adk_port": 8000,
                 "is_admin": True,
             })
 

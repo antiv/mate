@@ -172,7 +172,7 @@
                 <div class="flex items-center space-x-1.5">
                     <div class="text-xs text-gray-500">
                         <i class="fas fa-server mr-1"></i>
-                        <span id="serverInfo">{{ adk_host }}:{{ adk_port }}</span>
+                        <span id="serverInfo">Agent Server</span>
                     </div>
                     <a id="externalLink" href="#" target="_blank" class="text-gray-500 hover:text-gray-700">
                         <i class="fas fa-external-link-alt text-xs"></i>
@@ -249,19 +249,12 @@
     let currentApi = 'adk'; // 'admin' or 'adk'
     let currentFormat = 'swagger'; // 'swagger' or 'redoc'
     
-    // Get current hostname and port for ADK server
+    // Agent (/docs, /redoc) and admin docs are same-origin; the auth server
+    // proxies /docs and /redoc to ADK_PORT so the iframe works on any published port.
     const currentHost = window.location.hostname;
     const currentProtocol = window.location.protocol;
     const currentPort = window.location.port;
-    const adkPort = {{ adk_port }};
-    
-    // Only include port in ADK URL if current URL also has a port
-    const adkBaseUrl = currentPort ? 
-        `${currentProtocol}//${currentHost}:${adkPort}` : 
-        `${currentProtocol}//${currentHost}`;
-    
-    // Admin docs are on the same server
-    const adminBaseUrl = `${currentProtocol}//${currentHost}${currentPort ? ':' + currentPort : ''}`;
+    const sameOriginBase = `${currentProtocol}//${currentHost}${currentPort ? ':' + currentPort : ''}`;
     
     function hideDocsLoader() {
         document.getElementById('docsLoader').style.display = 'none';
@@ -297,22 +290,22 @@
         let url, linkUrl, serverText;
         if (currentApi === 'admin') {
             if (currentFormat === 'swagger') {
-                url = `${adminBaseUrl}/admin-docs`;
-                linkUrl = `${adminBaseUrl}/admin-docs`;
+                url = `${sameOriginBase}/admin-docs`;
+                linkUrl = `${sameOriginBase}/admin-docs`;
             } else {
-                url = `${adminBaseUrl}/admin-redoc`;
-                linkUrl = `${adminBaseUrl}/admin-redoc`;
+                url = `${sameOriginBase}/admin-redoc`;
+                linkUrl = `${sameOriginBase}/admin-redoc`;
             }
             serverText = 'Admin Server';
         } else {
             if (currentFormat === 'swagger') {
-                url = `${adkBaseUrl}/docs`;
-                linkUrl = `${adkBaseUrl}/docs`;
+                url = `${sameOriginBase}/docs`;
+                linkUrl = `${sameOriginBase}/docs`;
             } else {
-                url = `${adkBaseUrl}/redoc`;
-                linkUrl = `${adkBaseUrl}/redoc`;
+                url = `${sameOriginBase}/redoc`;
+                linkUrl = `${sameOriginBase}/redoc`;
             }
-            serverText = currentPort ? `${currentHost}:${adkPort}` : currentHost;
+            serverText = 'Agent Server';
         }
         
         // Update UI
@@ -402,10 +395,10 @@
     // its tab is first opened (docs-page.js calls this once).
     window.initApiExplorer = async function() {
         // Initialize error links
-        document.getElementById('swaggerErrorLink').href = `${adkBaseUrl}/docs`;
-        document.getElementById('redocErrorLink').href = `${adkBaseUrl}/redoc`;
-        document.getElementById('adminSwaggerErrorLink').href = `${adminBaseUrl}/admin-docs`;
-        document.getElementById('adminRedocErrorLink').href = `${adminBaseUrl}/admin-redoc`;
+        document.getElementById('swaggerErrorLink').href = `${sameOriginBase}/docs`;
+        document.getElementById('redocErrorLink').href = `${sameOriginBase}/redoc`;
+        document.getElementById('adminSwaggerErrorLink').href = `${sameOriginBase}/admin-docs`;
+        document.getElementById('adminRedocErrorLink').href = `${sameOriginBase}/admin-redoc`;
         
         // Load initial docs (ADK Swagger by default)
         loadCurrentDocs();
