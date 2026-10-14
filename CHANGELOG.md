@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Docker image on GitHub Container Registry** (#249) - every release tag now publishes `ghcr.io/antiv/mate` for `linux/amd64` and `linux/arm64`, tagged `1.5.0`, `1.5` and `latest`, so MATE runs with one `docker run` and no clone or local build. The workflow starts the image and checks `/health` before it pushes anything. See `docs/dev/deployment.md`
 - **Agent MCP servers offer a prompt and a resource** - next to its tool, each agent exposed over MCP now lists the prompt `ask_<agent>`, which asks the agent a question through its tool, and the resource `mate://agents/<agent>/about`, with the agent's name, description and how to call it (not its instruction). `initialize` announces both capabilities. See `docs/dev/mcp-servers.md`
 - **`GET /mcp` lists the agents exposed over MCP** (#231) - with a personal access token (or any other way the agent servers accept), it returns the agents in `MCP_EXPOSED_AGENTS` that the caller may use, each with its name, description and full MCP URL, so a client can be set up without knowing the names. See `docs/dev/mcp-servers.md`
 - **Agent MCP servers describe themselves** (#231) - the `initialize` response of `/agents/<name>/mcp` now carries the agent's description in `serverInfo` (`title`, `description`) and as `instructions`. MCP registries read it: without it the LobeHub market CLI (`lhm plugin init`) refused the server with "Could not infer a plugin description"

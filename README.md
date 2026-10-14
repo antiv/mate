@@ -81,11 +81,16 @@ python auth_server.py
 # (left empty, they are admin / mate; MATE_ENV=production refuses that default)
 ```
 
-Or with Docker (it needs `AUTH_PASSWORD` set in `.env`):
+Or with Docker, from the published image (no clone needed):
 
 ```bash
-docker-compose up
+docker run -d --name mate -p 8000:8000 \
+  -e AUTH_PASSWORD=change-me -e GOOGLE_API_KEY=your-key \
+  -e DB_PATH=data/my_agent_data.db -v mate-data:/app/data \
+  ghcr.io/antiv/mate:latest
 ```
+
+Or build it yourself with `docker-compose up` (it needs `AUTH_PASSWORD` set in `.env`).
 
 ### Dependencies
 

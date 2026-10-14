@@ -6,6 +6,7 @@ order: 70
 covers:
   - Dockerfile
   - docker-compose.yml
+  - .github/workflows/docker.yml
   - build_standalone_agent.py
   - standalone_server.py
   - server/csp.py
@@ -30,6 +31,35 @@ calling the virtual environment's interpreter by path (`.venv/bin/python auth_se
 works without activating it.
 
 ## Docker
+
+### Published image
+
+Every release tag publishes `ghcr.io/antiv/mate` for `linux/amd64` and `linux/arm64`,
+tagged with the version (`1.5.0`), the minor version (`1.5`) and `latest`
+(`.github/workflows/docker.yml`). The workflow first builds the image for the runner and
+starts it, and pushes nothing unless it answers `/health` within three minutes.
+
+```bash
+docker run -d --name mate -p 8000:8000 \
+  -e AUTH_PASSWORD=change-me -e GOOGLE_API_KEY=your-key \
+  -e DB_PATH=data/my_agent_data.db -v mate-data:/app/data \
+  ghcr.io/antiv/mate:latest
+```
+
+- Settings are environment variables: pass them with `-e`, or keep them in a file and
+  use `--env-file .env`.
+- `DB_PATH=data/my_agent_data.db` puts the SQLite database in `/app/data`, so it
+  survives on the `mate-data` volume. Without it the database is in `/app` and is lost
+  with the container. Mount `/app/artifacts` too if agents keep files there
+  (`ARTIFACT_SERVICE=local_folder`).
+- The image contains no hardcoded agents (`agents/` holds none in the repository);
+  agents come from the database, including the built-in `mate_help`.
+- To use the agents from an MCP client, add `-e MCP_EXPOSED_AGENTS=mate_help` (or your
+  agents), sign in, create a personal access token from the account menu, and connect to
+  `http://localhost:8000/agents/<agent>/mcp` with `Authorization: Bearer mate_pat_...`.
+  See [Exposed MCP servers](mcp-servers.md).
+
+### Docker Compose
 
 ```bash
 docker compose up --build
