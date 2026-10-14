@@ -83,7 +83,8 @@ Rules that follow from this:
 Set `MCP_EXPOSED_AGENTS` to a list of agent names and each becomes an MCP server at
 `/agents/<name>/mcp`, with the standard endpoints under it (`initialize`,
 `tools/list`, `tools/call`, `sse`, and an unauthenticated `health`). An MCP client
-that connects sees the agent as a tool it can call.
+that connects sees the agent as a tool it can call, plus a prompt that asks the agent
+a question through that tool and a resource describing the agent.
 
 The callers are the same as for the OpenAI-compatible API: a personal access token
 (or Basic auth, the dashboard's login token or a dashboard session) of a user with a

@@ -127,6 +127,15 @@ because the tool call reaches the agent over A2A without the caller's identity.
     - `session_id` (optional): Session ID for maintaining conversation context
   - **Returns:** Agent's response as text content
 
+**Prompt and resource (1 each per agent):**
+- Prompt `ask_{agent_name}` with a required `question` argument. `prompts/get`
+  returns one user message that tells the client's model to call
+  `call_{agent_name}_agent` with the question.
+- Resource `mate://agents/{agent_name}/about` (`text/markdown`): the agent's name,
+  description and the tool to call. It does not include the agent's instruction.
+- Both are served on the JSON-RPC endpoint (`POST /agents/{agent_name}/mcp`), which
+  `initialize` announces with the `prompts` and `resources` capabilities.
+
 **How It Works:**
 - Agent MCP servers are created dynamically at server startup
 - Reads agent configurations from the `agents_config` database table

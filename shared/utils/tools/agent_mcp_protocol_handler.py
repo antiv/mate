@@ -98,7 +98,9 @@ class AgentMCPProtocolHandler:
             "result": {
                 "protocolVersion": "2024-11-05",
                 "capabilities": {
-                    "tools": {}
+                    "tools": {},
+                    "prompts": {},
+                    "resources": {}
                 },
                 "serverInfo": {
                     "name": f"agent-mcp-server-{self.agent_name}",
@@ -123,6 +125,65 @@ class AgentMCPProtocolHandler:
             }
         }
     
+    @property
+    def _prompt_name(self) -> str:
+        return f"ask_{self.agent_name}"
+
+    @property
+    def _resource_uri(self) -> str:
+        return f"mate://agents/{self.agent_name}/about"
+
+    def _result(self, request_id: Any, result: Dict[str, Any]) -> Dict[str, Any]:
+        if not self.agent_available:
+            raise HTTPException(status_code=503, detail=f"Agent MCP server for {self.agent_name} not available")
+        return {"jsonrpc": "2.0", "id": request_id, "result": result}
+
+    def _error(self, request_id: Any, code: int, message: str) -> Dict[str, Any]:
+        return {"jsonrpc": "2.0", "id": request_id, "error": {"code": code, "message": message}}
+
+    def get_mcp_prompts_list(self, request_id: Any = 1) -> Dict[str, Any]:
+        """One prompt: ask the agent a question through its tool."""
+        return self._result(request_id, {"prompts": [{
+            "name": self._prompt_name,
+            "title": f"Ask {self.agent_name}",
+            "description": f"Ask the {self.agent_name} agent a question. {self.agent_description}",
+            "arguments": [{"name": "question", "description": "What to ask the agent",
+                           "required": True}],
+        }]})
+
+    def get_mcp_prompt(self, name: str, arguments: Dict[str, Any], request_id: Any = 1) -> Dict[str, Any]:
+        """The prompt's message: tells the client's model to call the agent's tool."""
+        if name != self._prompt_name:
+            return self._error(request_id, -32602, f"Prompt '{name}' not found. Expected '{self._prompt_name}'")
+        question = (arguments or {}).get("question")
+        if not question:
+            return self._error(request_id, -32602, "Missing required argument: question")
+        return self._result(request_id, {
+            "description": f"Ask the {self.agent_name} agent",
+            "messages": [{"role": "user", "content": {"type": "text", "text": (
+                f"Use the call_{self.agent_name}_agent tool to ask the {self.agent_name} agent "
+                f"the question below, then answer with what the agent says.\n\n{question}")}}],
+        })
+
+    def get_mcp_resources_list(self, request_id: Any = 1) -> Dict[str, Any]:
+        """One resource: what the agent is for and how to call it."""
+        return self._result(request_id, {"resources": [{
+            "uri": self._resource_uri,
+            "name": f"About {self.agent_name}",
+            "description": f"What the {self.agent_name} agent does and how to call it",
+            "mimeType": "text/markdown",
+        }]})
+
+    def read_mcp_resource(self, uri: str, request_id: Any = 1) -> Dict[str, Any]:
+        """The agent's name, description and tool. Not its instruction: that is its system prompt."""
+        if uri != self._resource_uri:
+            return self._error(request_id, -32002, f"Resource '{uri}' not found")
+        text = (f"# {self.agent_name}\n\n{self.agent_description}\n\n"
+                f"Call it with the `call_{self.agent_name}_agent` tool: pass the question as "
+                f"`message`.\n")
+        return self._result(request_id, {"contents": [
+            {"uri": uri, "mimeType": "text/markdown", "text": text}]})
+
     def _get_tools_schema(self) -> List[Dict[str, Any]]:
         """Get the schema for agent tool"""
         return [
@@ -302,6 +363,14 @@ class AgentMCPProtocolHandler:
                 tool_name = params.get("name")
                 arguments = params.get("arguments", {})
                 return await self.call_mcp_tool(tool_name, arguments, request_id)
+            elif method == "prompts/list":
+                return self.get_mcp_prompts_list(request_id)
+            elif method == "prompts/get":
+                return self.get_mcp_prompt(params.get("name"), params.get("arguments", {}), request_id)
+            elif method == "resources/list":
+                return self.get_mcp_resources_list(request_id)
+            elif method == "resources/read":
+                return self.read_mcp_resource(params.get("uri"), request_id)
             else:
                 return {
                     "jsonrpc": "2.0",
