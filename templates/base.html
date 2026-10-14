@@ -934,24 +934,26 @@
                             <div style="width: 38px; height: 38px; border-radius: 11px; background: ${chipBg}; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
                                 <i class="fas ${iconClass}" style="color: ${chipFg}; font-size: 15px;"></i>
                             </div>
-                            <h3 style="margin: 0; font-size: 15px; font-weight: 800; color: var(--text-primary);">${title}</h3>
+                            <h3 style="margin: 0; font-size: 15px; font-weight: 800; color: var(--text-primary);" id="confirmTitle"></h3>
                         </div>
-                        <div style="margin: 0; font-size: 13px; color: var(--text-secondary); line-height: 1.5; white-space: pre-line;">${message}</div>
+                        <div style="margin: 0; font-size: 13px; color: var(--text-secondary); line-height: 1.5; white-space: pre-line;" id="confirmMessage"></div>
                         <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px;">
-                            <button id="confirmCancelBtn" style="padding: 9px 16px; border-radius: 10px; border: 1px solid var(--border); background: transparent; color: var(--text-secondary); font-size: 12.5px; font-weight: 600; cursor: pointer;">
-                                ${cancelText}
-                            </button>
-                            <button id="confirmOkBtn" style="padding: 9px 16px; border-radius: 10px; border: none; background: ${okBg}; color: white; font-size: 12.5px; font-weight: 700; cursor: pointer;">
-                                ${confirmText}
-                            </button>
+                            <button id="confirmCancelBtn" style="padding: 9px 16px; border-radius: 10px; border: 1px solid var(--border); background: transparent; color: var(--text-secondary); font-size: 12.5px; font-weight: 600; cursor: pointer;"></button>
+                            <button id="confirmOkBtn" style="padding: 9px 16px; border-radius: 10px; border: none; background: ${okBg}; color: white; font-size: 12.5px; font-weight: 700; cursor: pointer;"></button>
                         </div>
                     </div>
                 `;
 
-                document.body.appendChild(modal);
-
+                // Callers put names into the message (a token, a template, a
+                // rate-limit scope), so all four strings go in as text, not markup
+                modal.querySelector('#confirmTitle').textContent = title;
+                modal.querySelector('#confirmMessage').textContent = message;
                 const cancelBtn = modal.querySelector('#confirmCancelBtn');
                 const okBtn = modal.querySelector('#confirmOkBtn');
+                cancelBtn.textContent = cancelText;
+                okBtn.textContent = confirmText;
+
+                document.body.appendChild(modal);
 
                 const cleanup = () => {
                     modal.style.opacity = '0';

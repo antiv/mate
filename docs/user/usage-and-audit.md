@@ -77,7 +77,10 @@ counts and status. Open a row for the details. This is where to look when one pe
 reports a problem, or when a cost spike needs explaining.
 
 People without the admin role see **My Usage** in the Work Room: the same figures for
-their own requests only.
+their own requests only. Satisfaction counts the ratings given in their own
+conversations, and cost covers their own calls. Their **Raw Data** view lists their own
+model calls from the last 24 hours; changing the period or page size there does not
+load more, since the API behind those controls is for admins.
 
 ## Audit Logs
 

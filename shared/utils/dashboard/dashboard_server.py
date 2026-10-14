@@ -184,10 +184,13 @@ class DashboardServer:
         return series
 
     def _get_usage_stats(self, days: int = 7,
-                         origins: Optional[tuple] = None) -> Dict[str, Any]:
+                         origins: Optional[tuple] = None,
+                         user_id: Optional[str] = None) -> Dict[str, Any]:
         """Get usage statistics from database.
 
         `origins` narrows the latency panel only; None keeps the interactive default.
+        `user_id` narrows every panel to that user's own traffic (what a non-admin
+        sees); None is everyone's.
         """
         if not self.db_client:
             return {
@@ -207,7 +210,7 @@ class DashboardServer:
             return {"error": "Database connection failed"}
         
         try:
-            from sqlalchemy import func
+            from sqlalchemy import and_, func
             from datetime import datetime, timedelta, timezone
 
             # Rows are written with datetime.now(timezone.utc) and stored naive, so the
@@ -228,6 +231,8 @@ class DashboardServer:
             # they must exclude the zero-token rows written for failures (status='ERROR')
             # and RBAC denials (status='ACCESS_DENIED'), which would inflate every count.
             succeeded = self.TokenUsageLog.status == 'SUCCESS'
+            if user_id is not None:
+                succeeded = and_(succeeded, self.TokenUsageLog.user_id == user_id)
 
             # Get token usage statistics
             stats = session.query(
@@ -284,7 +289,7 @@ class DashboardServer:
             # records per-LLM-call cost with no duration, and its rows are already
             # filtered to successes, so a success rate is not derivable from them.
             perf = self._get_agent_perf(
-                session, [a.agent_name for a in top_agents], start_date, end_date)
+                session, [a.agent_name for a in top_agents], start_date, end_date, user_id)
 
             result = {
                 'total_requests': stats.total_requests or 0,
@@ -297,9 +302,9 @@ class DashboardServer:
                 'hourly_usage': hourly_data,
                 'database_info': self._get_database_info()
             }
-            result.update(self._get_quality_stats(session, start_date, end_date, origins))
+            result.update(self._get_quality_stats(session, start_date, end_date, origins, user_id))
             try:
-                result['cost'] = self._get_cost_stats(session, start_date, end_date)
+                result['cost'] = self._get_cost_stats(session, start_date, end_date, user_id)
             except Exception as e:
                 # Like the quality panels: a failure here must not blank the page
                 logger.warning(f"Cost stats failed: {e}")
@@ -349,7 +354,8 @@ class DashboardServer:
         return f'{duration_ms / 1000:.1f}s'
 
     def _get_agent_perf(self, session, agent_names: List[str],
-                        start_date: datetime, end_date: datetime) -> Dict[str, dict]:
+                        start_date: datetime, end_date: datetime,
+                        user_id: Optional[str] = None) -> Dict[str, dict]:
         """Mean duration and success rate per agent, from agent_responses.
 
         Separate from the token panels for the same reason as _get_quality_stats:
@@ -368,6 +374,7 @@ class DashboardServer:
 
             from shared.utils.models import AgentResponse
 
+            mine = (AgentResponse.user_id == user_id,) if user_id is not None else ()
             rows = session.query(
                 AgentResponse.agent_name,
                 func.count(AgentResponse.id).label('invocations'),
@@ -380,6 +387,7 @@ class DashboardServer:
                 AgentResponse.started_at >= start_date,
                 AgentResponse.started_at <= end_date,
                 AgentResponse.agent_name.in_(names),
+                *mine,
             ).group_by(AgentResponse.agent_name).all()
 
             perf = {}
@@ -440,7 +448,8 @@ class DashboardServer:
         return cls.ORIGIN_FILTERS.get((origin or '').strip().lower(),
                                       cls.INTERACTIVE_ORIGINS)
 
-    def _get_cost_stats(self, session, start_date, end_date) -> Dict[str, Any]:
+    def _get_cost_stats(self, session, start_date, end_date,
+                        user_id: Optional[str] = None) -> Dict[str, Any]:
         """What the period's successful calls cost in US dollars, by agent and project.
 
         A call whose model has no known price has no cost (NULL), so totals cover
@@ -453,6 +462,8 @@ class DashboardServer:
         tokens = func.coalesce(log.prompt_tokens, 0) + func.coalesce(log.response_tokens, 0)
         unpriced = log.cost_usd.is_(None)
         in_period = (log.status == 'SUCCESS', log.timestamp >= start_date, log.timestamp <= end_date)
+        if user_id is not None:
+            in_period += (log.user_id == user_id,)
 
         totals = session.query(
             func.sum(log.cost_usd),
@@ -502,7 +513,8 @@ class DashboardServer:
         }
 
     def _get_quality_stats(self, session, start_date, end_date,
-                           origins: Optional[tuple] = None) -> Dict[str, Any]:
+                           origins: Optional[tuple] = None,
+                           user_id: Optional[str] = None) -> Dict[str, Any]:
         """Satisfaction, response latency and tokens per conversation.
 
         Kept apart from the token panels above: these read agent_responses and
@@ -514,7 +526,7 @@ class DashboardServer:
         ratings only ever come from the widget and the workroom — showing chat
         ratings over a trigger denominator would be a meaningless ratio.
         """
-        from sqlalchemy import func
+        from sqlalchemy import func, select
 
         empty = {
             'satisfaction': {'up': 0, 'down': 0, 'rated': 0, 'rate_pct': None,
@@ -530,6 +542,12 @@ class DashboardServer:
             return empty
 
         stats = {}
+        # A user's own traffic: agent_responses carries user_id, ratings only the
+        # session they were given in, so those are matched on the user's sessions.
+        mine = (AgentResponse.user_id == user_id,) if user_id is not None else ()
+        rated_mine = (ResponseFeedback.session_id.in_(
+            select(AgentResponse.session_id).where(*mine)),) if user_id is not None else ()
+        tokens_mine = (self.TokenUsageLog.user_id == user_id,) if user_id is not None else ()
 
         # --- Satisfaction -------------------------------------------------
         try:
@@ -540,6 +558,7 @@ class DashboardServer:
             ).filter(
                 ResponseFeedback.created_at >= start_date,
                 ResponseFeedback.created_at <= end_date,
+                *rated_mine,
             ).group_by(ResponseFeedback.agent_name, ResponseFeedback.rating).all()
 
             per_agent = {}
@@ -558,6 +577,7 @@ class DashboardServer:
                 AgentResponse.started_at >= start_date,
                 AgentResponse.started_at <= end_date,
                 AgentResponse.origin.in_(self.INTERACTIVE_ORIGINS),
+                *mine,
             ).scalar() or 0
 
             rated = total_up + total_down
@@ -590,6 +610,7 @@ class DashboardServer:
                     AgentResponse.started_at <= end_date,
                     AgentResponse.duration_ms.isnot(None),
                     AgentResponse.origin.in_(selected_origins),
+                    *mine,
                 ).all() if r[0] is not None
             ]
             durations.sort()
@@ -600,6 +621,7 @@ class DashboardServer:
                 AgentResponse.started_at <= end_date,
                 AgentResponse.duration_ms.is_(None),
                 AgentResponse.origin.in_(selected_origins),
+                *mine,
             ).scalar() or 0
 
             stats['latency'] = {
@@ -626,6 +648,7 @@ class DashboardServer:
                     self.TokenUsageLog.timestamp >= start_date,
                     self.TokenUsageLog.timestamp <= end_date,
                     self.TokenUsageLog.session_id.isnot(None),
+                    *tokens_mine,
                 ).group_by(self.TokenUsageLog.session_id).all()
             ]
             per_session.sort()
@@ -915,8 +938,9 @@ class DashboardServer:
         finally:
             session.close()
     
-    def _get_token_usage_logs(self, hours: int = 24, limit: int = 100, page: int = 1) -> Dict[str, Any]:
-        """Get paginated token usage logs."""
+    def _get_token_usage_logs(self, hours: int = 24, limit: int = 100, page: int = 1,
+                              user_id: Optional[str] = None) -> Dict[str, Any]:
+        """Get paginated token usage logs, only `user_id`'s when it is given."""
         if not self.db_client:
             return {"error": "Database connection failed"}
         
@@ -931,9 +955,13 @@ class DashboardServer:
             # Calculate time threshold
             time_threshold = datetime.now() - timedelta(hours=hours)
             
+            in_window = [self.TokenUsageLog.timestamp >= time_threshold]
+            if user_id is not None:
+                in_window.append(self.TokenUsageLog.user_id == user_id)
+
             # Get total count
             total_count = session.query(func.count(self.TokenUsageLog.id)).filter(
-                self.TokenUsageLog.timestamp >= time_threshold
+                *in_window
             ).scalar()
             
             # Calculate pagination
@@ -942,7 +970,7 @@ class DashboardServer:
             
             # Get paginated logs
             logs = session.query(self.TokenUsageLog).filter(
-                self.TokenUsageLog.timestamp >= time_threshold
+                *in_window
             ).order_by(
                 self.TokenUsageLog.timestamp.desc()
             ).offset(offset).limit(limit).all()
@@ -3236,10 +3264,12 @@ class DashboardServer:
         async def dashboard_usage(request: Request, days: int = 30, view: str = "analytics", origin: str = "interactive", username: str = Depends(self._get_auth_user_dependency)):
             """Dashboard usage page"""
             is_admin = self._get_is_admin(request)
-            stats = self._get_usage_stats(days, self.resolve_origins(origin))
-            logs = self._get_token_usage_logs(24, limit=1000) if view == "logs" else {"logs": []}
             # Non-admin users see only their own usage
             current_user_id = username
+            scope = None if is_admin else current_user_id
+            stats = self._get_usage_stats(days, self.resolve_origins(origin), user_id=scope)
+            logs = (self._get_token_usage_logs(24, limit=1000, user_id=scope)
+                    if view == "logs" else {"logs": []})
             return self.templates.TemplateResponse(request, "dashboard/usage.html", {
                 "request": request,
                 "page_title": "Usage Analytics",
