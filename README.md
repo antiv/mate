@@ -1,21 +1,42 @@
+<div align="center">
+
 # MATE — The Command Center for AI Agents
 
-**Stop the redeploy-to-tweak loop.**
+**Change the prompt, the model or who may use an agent from a dashboard — no code change, no redeploy.**<br>
+Self-hosted, on Google ADK or LangGraph, with any of 50+ LLM providers.
 
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![GitHub stars](https://img.shields.io/github/stars/antiv/mate?style=social)](https://github.com/antiv/mate/stargazers)
+[![Release](https://img.shields.io/github/v/release/antiv/mate)](https://github.com/antiv/mate/releases)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-green.svg)](LICENSE)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![Google ADK](https://img.shields.io/badge/Google-ADK-orange.svg)](https://github.com/google/adk-python)
 [![LangGraph](https://img.shields.io/badge/LangGraph-supported-1C3C3C.svg)](https://github.com/langchain-ai/langgraph)
 [![LiteLLM](https://img.shields.io/badge/LiteLLM-50%2B%20providers-purple.svg)](https://github.com/BerriAI/litellm)
 [![MCP](https://img.shields.io/badge/MCP-compatible-brightgreen.svg)](https://modelcontextprotocol.io/)
 
-Created by [Ivan Antonijević](https://antonijevic.rs)
+[**Live demo**](#try-it-without-installing-anything) · [**Quick Start**](#quick-start) · [**Docs**](docs/README.md) · [**Changelog**](CHANGELOG.md)
 
-You built an agent. Now you need to tune the prompt. Swap the model. Restrict access for specific users. Figure out what it's actually costing you. And make sure yesterday's behavior still works after today's changes.
+![The MATE Visual Builder: an agent hierarchy with its tools, edited on a canvas](documents/images/visual_builder.png)
 
-Without a control layer, every one of those is a code change, a commit, and a redeploy.
+</div>
 
-**MATE is that control layer.** It adds everything production needs — live configuration, RBAC, cost in US dollars with budgets and alerts, regression testing, and an embeddable chat widget — without touching your agent code. Runs on **Google ADK** or **LangGraph**, switchable with one env var — same agents, same dashboard, same widget either way.
+**Run it in one command:**
+
+```bash
+docker run -d -p 8000:8000 -e AUTH_PASSWORD=change-me -e GOOGLE_API_KEY=your-key ghcr.io/antiv/mate:latest
+# open http://localhost:8000 and log in as admin / change-me
+```
+
+(Add `-v mate-data:/app/data -e DB_PATH=data/my_agent_data.db` to keep your agents across restarts — see [Quick Start](#quick-start).)
+
+### What you get
+
+- 🎨 **Build without code** — draw agent hierarchies, attach tools and MCP servers, and edit prompts on a canvas. Every change is live, versioned and one click from a rollback.
+- 🏛️ **Govern production** — RBAC per agent, cost in US dollars per agent and project, budgets that warn or block, guardrails, alerts to Slack, Discord, email or a webhook, and audit logs.
+- 🧪 **Ship without regressions** — eval suites scored by exact match, similarity or an LLM judge, a regression webhook, and a Playground that compares models and prompts side by side.
+- 🔌 **Plug in anywhere** — an embeddable chat widget, an OpenAI-compatible API, A2A, and every agent served as an MCP server.
+
+Created by [Ivan Antonijević](https://antonijevic.rs). If MATE saves you a redeploy, **[give it a ⭐](https://github.com/antiv/mate/stargazers)** — it is how other people find it.
 
 ---
 
@@ -32,6 +53,10 @@ instance, which behaves the same way.
 ---
 
 ## The Problem with Agents in Production
+
+You built an agent. Now you need to tune the prompt. Swap the model. Restrict access for specific users. Figure out what it's actually costing you. And make sure yesterday's behavior still works after today's changes.
+
+Without a control layer, every one of those is a code change, a commit, and a redeploy. **MATE is that control layer** — it adds what production needs without touching your agent code.
 
 A single agent in a notebook is easy. A hierarchy of agents serving real users is not.
 
