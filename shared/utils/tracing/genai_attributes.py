@@ -18,3 +18,6 @@ MATE_USER_ID = "mate.user.id"
 MATE_TOOL_NAME = "mate.tool.name"
 MATE_RBAC_ALLOWED = "mate.rbac.allowed"
 MATE_MEMORY_OPERATION = "mate.memory.operation"
+# Set on a gen_ai.inference span answered by the agent's fallback model;
+# gen_ai.request.model is then the primary and gen_ai.response.model the fallback.
+MATE_MODEL_FALLBACK = "mate.model.fallback"

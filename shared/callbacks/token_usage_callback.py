@@ -256,6 +256,7 @@ def log_token_usage_callback(
                 GEN_AI_USAGE_INPUT_TOKENS,
                 GEN_AI_USAGE_OUTPUT_TOKENS,
                 GEN_AI_RESPONSE_MODEL,
+                MATE_MODEL_FALLBACK,
             )
             span = _inference_span_var.get()
             from_contextvar = span is not None
@@ -266,6 +267,8 @@ def log_token_usage_callback(
                 span.set_attribute(GEN_AI_USAGE_OUTPUT_TOKENS, usage.candidates_token_count or 0)
                 if model_name:
                     span.set_attribute(GEN_AI_RESPONSE_MODEL, model_name)
+                if is_fallback:
+                    span.set_attribute(MATE_MODEL_FALLBACK, True)
                 span.end()
                 logger.debug("trace: gen_ai.inference span ended (from_contextvar=%s)", from_contextvar)
                 _inference_span_var.set(None)

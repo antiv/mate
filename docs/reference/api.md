@@ -10,7 +10,7 @@ generated: true
 
 # HTTP API reference
 
-Every HTTP route declared in the code: **265** routes. 36 have no docstring and so no summary here.
+Every HTTP route declared in the code: **267** routes. 36 have no docstring and so no summary here.
 
 This page lists what exists and where it is implemented. For request and response schemas, and to try a call, use the live Swagger UI under **Documentation → API** in the dashboard.
 
@@ -18,7 +18,7 @@ Requests to `/dashboard/api/*` require an admin, apart from the short allowlist 
 
 ## Auth server and dashboard
 
-Port 8000. Everything a browser or an external client talks to. 245 routes.
+Port 8000. Everything a browser or an external client talks to. 247 routes.
 
 ### Authentication
 
@@ -283,6 +283,8 @@ Template library and one-click import API endpoints.
 | Method | Path | Summary | Implemented in |
 |---|---|---|---|
 | `GET` | `/dashboard/api/traces` | Get traces from trace_spans table for dashboard viewer | shared/utils/dashboard/dashboard_server.py · get_traces_api |
+| `GET` | `/dashboard/api/traces/replay` | One session's traced turns as replay timelines: agents, model calls, tools, fallbacks | shared/utils/dashboard/dashboard_server.py · get_session_replay_api |
+| `GET` | `/dashboard/api/traces/sessions` | Sessions with traced turns, for the Visual Builder's replay picker | shared/utils/dashboard/dashboard_server.py · get_replay_sessions_api |
 
 ### Dashboard - Triggers
 

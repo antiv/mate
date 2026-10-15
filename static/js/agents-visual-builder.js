@@ -527,6 +527,18 @@ mateActions.allow('applyConfigModal', 'closeConfigModal', 'hideEditAgentModal',
         if (data.isRoot) { border = '#34d399'; }
         if (selected) { border = '#22d3ee'; }
 
+        /* Trace Replay state (see trace-replay.js agentStateAt) */
+        var replay = data.replay || null;
+        var replayFmt = window.MateTraceReplay ? window.MateTraceReplay.formatMs : String;
+        var replayGlow = null;
+        if (replay && replay.state === 'active') {
+            border = '#f59e0b';
+            replayGlow = '0 0 0 4px rgba(245,158,11,0.45), 0 0 28px rgba(245,158,11,0.65)';
+        } else if (replay && replay.state === 'done') {
+            border = replay.error ? '#ef4444' : '#10b981';
+        }
+        var replayDimmed = !!(replay && (replay.state === 'pending' || replay.state === 'absent'));
+
         /* Main wrapper — large rounded rectangle like the mockup */
         return React.createElement(
             'div',
@@ -547,9 +559,10 @@ mateActions.allow('applyConfigModal', 'closeConfigModal', 'hideEditAgentModal',
                     fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
                     textAlign: 'center',
                     /* Depth */
-                    boxShadow: selected
+                    boxShadow: replayGlow || (selected
                         ? '0 0 0 3px rgba(34,211,238,0.25), 0 8px 24px rgba(0,0,0,0.4)'
-                        : '0 4px 16px ' + colors.glow + ', 0 2px 6px rgba(0,0,0,0.3)',
+                        : '0 4px 16px ' + colors.glow + ', 0 2px 6px rgba(0,0,0,0.3)'),
+                    opacity: replayDimmed ? 0.4 : 1,
                     transition: 'all 0.25s ease',
                     position: 'relative',
                     cursor: 'pointer',
@@ -650,6 +663,27 @@ mateActions.allow('applyConfigModal', 'closeConfigModal', 'hideEditAgentModal',
                     },
                 }, 'HC') : null,
             ),
+            /* ── Trace Replay: current step, time spent, fallback ── */
+            replay && (replay.state === 'active' || replay.state === 'done') ? React.createElement(
+                'div',
+                /* Above the node, so it does not grow and push into its attachments */
+                {
+                    style: {
+                        position: 'absolute', bottom: '100%', left: '50%', transform: 'translateX(-50%)',
+                        marginBottom: 12, display: 'flex', alignItems: 'center', gap: 4, fontSize: 11,
+                        whiteSpace: 'nowrap', pointerEvents: 'none',
+                    },
+                },
+                React.createElement('span', {
+                    style: { padding: '2px 8px', borderRadius: 20, backgroundColor: replay.state === 'active' ? '#b45309' : (replay.error ? '#b91c1c' : '#047857'), color: '#ffffff', fontWeight: 600, maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis' },
+                }, replay.state === 'active'
+                    ? '▶ ' + (replay.step || 'running') + ' · ' + replayFmt(replay.busyMs)
+                    : (replay.error ? '✗ ' : '✓ ') + replayFmt(replay.busyMs)),
+                replay.fallback ? React.createElement('span', {
+                    title: 'The primary model' + (replay.fallback.primary ? ' (' + replay.fallback.primary + ')' : '') + ' failed; the fallback answered',
+                    style: { padding: '2px 8px', borderRadius: 20, backgroundColor: '#78350f', color: '#fde68a', fontWeight: 600, maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis' },
+                }, 'fallback: ' + (replay.fallback.model || '')) : null,
+            ) : null,
             /* ── Source handle (bottom) ── */
             React.createElement(Handle, {
                 type: 'source',
@@ -1496,6 +1530,26 @@ mateActions.allow('applyConfigModal', 'closeConfigModal', 'hideEditAgentModal',
         const [saving, setSaving] = useState(false);
         const [loading, setLoading] = useState(false);
         const [activeTool, setActiveTool] = useState('select');
+
+        /* Trace Replay (trace-replay.js): plays a traced turn back on the agent nodes */
+        const Replay = window.MateTraceReplay || null;
+        const [replaySessionId] = useState(function () {
+            try { return new URLSearchParams(window.location.search).get('replay') || ''; } catch (e) { return ''; }
+        });
+        const [replayOpen, setReplayOpen] = useState(!!(Replay && replaySessionId));
+        const [replayFrame, setReplayFrame] = useState(null);
+        const onReplayFrame = useCallback(function (frame) { setReplayFrame(frame); }, []);
+        const canvasAgents = React.useMemo(function () {
+            return nodes.filter(function (n) { return !n.type || n.type === 'default'; }).map(function (n) { return n.id; });
+        }, [nodes]);
+        const displayNodes = React.useMemo(function () {
+            if (!Replay || !replayFrame) return nodes;
+            return nodes.map(function (n) {
+                if (n.type && n.type !== 'default') return n;
+                const state = Replay.agentStateAt(replayFrame.turn, n.id, replayFrame.t) || { state: 'absent' };
+                return Object.assign({}, n, { data: Object.assign({}, n.data, { replay: state }) });
+            });
+        }, [nodes, replayFrame, Replay]);
         const activeToolRef = useRef(activeTool);
         useEffect(() => {
             activeToolRef.current = activeTool;
@@ -2385,15 +2439,33 @@ mateActions.allow('applyConfigModal', 'closeConfigModal', 'hideEditAgentModal',
                             React.createElement('i', { className: 'fas fa-comments mr-1' }),
                             'Chat',
                         ),
+                        Replay ? React.createElement(
+                            'button',
+                            {
+                                type: 'button',
+                                className: 'ml-1 px-2 py-1 rounded text-white ' + (replayOpen ? 'bg-indigo-800' : 'bg-indigo-600 hover:bg-indigo-700'),
+                                'aria-pressed': replayOpen,
+                                title: 'Replay a traced session on the canvas',
+                                onClick: function () { setReplayOpen(!replayOpen); },
+                            },
+                            React.createElement('i', { className: 'fas fa-film mr-1' }),
+                            'Replay',
+                        ) : null,
                     ),
                 ),
+                replayOpen && Replay ? React.createElement(Replay.ReplayBar, {
+                    canvasAgents: canvasAgents,
+                    initialSessionId: replaySessionId,
+                    onFrame: onReplayFrame,
+                    onClose: function () { setReplayOpen(false); },
+                }) : null,
                 React.createElement(
                     'div',
                     { className: 'flex-1 relative cursor-tool-' + activeTool },
                     React.createElement(
                         ReactFlowComponent,
                         {
-                            nodes: nodes,
+                            nodes: displayNodes,
                             edges: edges,
                             nodeTypes: nodeTypes,
                             onNodesChange: onNodesChange,

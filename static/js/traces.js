@@ -103,8 +103,14 @@ async function showTraceDetail(traceId, hours) {
             return html;
         }
 
+        // A span recorded for a chat session can be replayed on the Visual Builder canvas
+        const withSession = trace.spans.find(s => s.attributes && s.attributes['gen_ai.conversation.id']);
+        const sessionId = withSession ? String(withSession.attributes['gen_ai.conversation.id']) : '';
+        const replayLink = sessionId
+            ? `<a class="ml-2 text-indigo-600 dark:text-indigo-400 hover:underline" href="/dashboard/agents/visual?replay=${encodeURIComponent(sessionId)}"><i class="fas fa-film mr-1"></i>Replay on canvas</a>`
+            : '';
         contentEl.innerHTML = `
-            <div class="mb-2 text-xs text-gray-500 dark:text-gray-400">Trace ID: ${escapeHtml(trace.trace_id)}</div>
+            <div class="mb-2 text-xs text-gray-500 dark:text-gray-400">Trace ID: ${escapeHtml(trace.trace_id)}${replayLink}</div>
             <div class="space-y-0">${buildTree('__root__', 0)}</div>
         `;
     } catch (e) {
