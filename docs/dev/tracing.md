@@ -80,7 +80,8 @@ Times are milliseconds from the start of the turn. Two admin-only routes serve i
 | `GET /dashboard/api/traces/replay?session_id=&hours=` | `{session_id, turns: [{trace_id, started_at, duration_ms, events, agents}]}`, oldest turn first. |
 
 A session id must match `[A-Za-z0-9._:-]{1,128}` or the route answers 400. The lookup
-narrows `trace_spans` with `attributes LIKE '%<id>%'` and then compares
+narrows `trace_spans` with `attributes LIKE '%<id>%'` (the column cast to text on
+PostgreSQL, where it is `JSONB`, and on MySQL, where it is `JSON`) and then compares
 `gen_ai.conversation.id` exactly, so it scans the attributes of every span in the
 time window (default 7 days); there is no index on the session.
 

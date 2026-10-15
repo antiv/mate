@@ -141,6 +141,26 @@ class TestSessionReplay(unittest.TestCase):
                 self.server._get_session_replay(bad)
             self.assertEqual(cm.exception.status_code, 400)
 
+    def test_attributes_cast_to_text_per_dialect(self):
+        # JSONB (PostgreSQL) and JSON (MySQL) columns take no LIKE without a cast
+        for dialect, expected in (("postgresql", "CAST(attributes AS TEXT)"),
+                                  ("mysql", "CAST(attributes AS CHAR)"), ("sqlite", "attributes")):
+            session = MagicMock()
+            session.get_bind.return_value.dialect.name = dialect
+            session.execute.return_value.fetchall.return_value = []
+            self.server._replay_spans(session, "{attributes_text} LIKE :pat", {"pat": "%x%"})
+            self.assertIn(f"WHERE {expected} LIKE :pat", str(session.execute.call_args[0][0]))
+
+    def test_attributes_already_parsed_by_the_driver(self):
+        # psycopg2 returns JSONB as a dict, not text
+        session = MagicMock()
+        session.get_bind.return_value.dialect.name = "postgresql"
+        session.execute.return_value.fetchall.return_value = [
+            ("t", "s", None, "invoke_agent root", "2026-10-15T10:00:00+00:00", None,
+             {"gen_ai.conversation.id": "sess-1"}, "OK", None)]
+        spans = self.server._replay_spans(session, "trace_id IN :tids", {"tids": ["t"]})
+        self.assertEqual(spans[0]["attributes"], {"gen_ai.conversation.id": "sess-1"})
+
     def test_turn_without_agent_spans_is_skipped(self):
         spans = [{"span_id": "1", "parent_span_id": None, "name": "mate.rbac_check",
                   "start_time": "2026-10-15T10:00:00+00:00", "end_time": "2026-10-15T10:00:01+00:00",

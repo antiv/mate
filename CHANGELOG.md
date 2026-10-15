@@ -32,6 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Traces showed no span attributes on PostgreSQL** - `trace_spans.attributes` is `JSONB` there, which the driver returns already parsed, and the Traces page only parsed text, so every span showed none. It now takes both
 - **A2A was off on the pinned a2a-sdk 1.2.1** (#223) - `adk_main.py` was written for a2a-sdk 0.3, whose `a2a.server.apps` no longer exists in 1.x. Starting with `--a2a`, which the dashboard always does, printed "A2A dependencies not available" and mounted no `/a2a/*` routes, so A2A calls failed, and so did agents exposed over MCP, which go through A2A.
   - **The fix:** the routes are now built through ADK's `google.adk.a2a._compat` (`shared/utils/a2a_routes.py`), which works on 0.3 and 1.x.
   - **Method names:** `/a2a/{agent}` accepts the 1.x methods (`SendMessage`, `GetTask`, ...) and the 0.3 ones (`message/send`, `tasks/get`, ...).

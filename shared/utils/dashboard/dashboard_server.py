@@ -1062,6 +1062,8 @@ class DashboardServer:
             def _parse_attrs(attrs):
                 if not attrs:
                     return {}
+                if isinstance(attrs, dict):  # PostgreSQL's driver returns JSONB already parsed
+                    return attrs
                 try:
                     return json.loads(attrs)
                 except (json.JSONDecodeError, TypeError):
@@ -1117,9 +1119,24 @@ class DashboardServer:
     # Session ids are generated (uuids); anything else is refused before it reaches LIKE.
     _REPLAY_SESSION_ID = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
 
+    @staticmethod
+    def _span_attributes_as_text(session) -> str:
+        """SQL for trace_spans.attributes as text: JSONB on PostgreSQL and JSON on MySQL take no LIKE."""
+        dialect = session.get_bind().dialect.name
+        if dialect == "postgresql":
+            return "CAST(attributes AS TEXT)"
+        if dialect == "mysql":
+            return "CAST(attributes AS CHAR)"
+        return "attributes"
+
     def _replay_spans(self, session, where: str, params: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """Spans matching `where`, as the dicts shared.utils.tracing.replay works on."""
+        """Spans matching `where`, as the dicts shared.utils.tracing.replay works on.
+
+        `where` is a fixed SQL fragment from this class; `{attributes_text}` in it is
+        replaced with the attributes column as text. Values only go in as bind params.
+        """
         from sqlalchemy import text, bindparam
+        where = where.format(attributes_text=self._span_attributes_as_text(session))
         query = text(
             "SELECT trace_id, span_id, parent_span_id, name, start_time, end_time, attributes, status, error_message "
             f"FROM trace_spans WHERE {where}"
@@ -1128,8 +1145,9 @@ class DashboardServer:
             query = query.bindparams(bindparam("tids", expanding=True))
         spans = []
         for tid, sid, pid, name, st, et, attrs, status, err in session.execute(query, params).fetchall():
+            # PostgreSQL's driver returns JSONB already parsed; SQLite returns text
             try:
-                parsed = json.loads(attrs) if attrs else {}
+                parsed = attrs if isinstance(attrs, dict) else (json.loads(attrs) if attrs else {})
             except (json.JSONDecodeError, TypeError):
                 parsed = {}
             spans.append({
@@ -1148,7 +1166,7 @@ class DashboardServer:
             return {"sessions": [], "error": "Database connection failed"}
         try:
             spans = self._replay_spans(
-                session, "start_time >= :threshold AND attributes LIKE :pat",
+                session, "start_time >= :threshold AND {attributes_text} LIKE :pat",
                 {"threshold": datetime.now() - timedelta(hours=hours), "pat": "%gen_ai.conversation.id%"},
             )
             found: Dict[str, Dict[str, Any]] = {}
@@ -1174,7 +1192,7 @@ class DashboardServer:
             } for e in ordered]}
         except Exception as e:
             logger.warning("Error listing replay sessions (trace_spans table may not exist): %s", e)
-            return {"sessions": [], "error": str(e)}
+            return {"sessions": [], "error": "Could not read traces; see the server log"}
         finally:
             session.close()
 
@@ -1190,7 +1208,7 @@ class DashboardServer:
         try:
             # LIKE narrows the scan; the exact match is checked on the parsed attributes.
             candidates = self._replay_spans(
-                session, "start_time >= :threshold AND attributes LIKE :pat",
+                session, "start_time >= :threshold AND {attributes_text} LIKE :pat",
                 {"threshold": datetime.now() - timedelta(hours=hours), "pat": f"%{session_id}%"},
             )
             trace_ids = sorted({s["trace_id"] for s in candidates if session_of(s) == session_id})
@@ -1202,7 +1220,7 @@ class DashboardServer:
             raise
         except Exception as e:
             logger.warning("Error building session replay: %s", e)
-            return {"session_id": session_id, "turns": [], "error": str(e)}
+            return {"session_id": session_id, "turns": [], "error": "Could not read traces; see the server log"}
         finally:
             session.close()
 
