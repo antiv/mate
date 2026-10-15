@@ -78,7 +78,7 @@ function syncToolConfigToJson(prefix = '') {
     if (memoryBlocks && memoryBlocks.checked) {
         config.memory_blocks = true;
     }
-    
+
     if (createAgent && createAgent.checked) {
         config.create_agent = true;
     }
@@ -119,7 +119,7 @@ function syncToolConfigToJson(prefix = '') {
 function handleImageToolsChange(prefix) {
     const imageTools = document.getElementById(prefix + 'ImageTools');
     const imageModelContainer = document.getElementById(prefix + 'ImageModelContainer');
-    
+
     if (imageTools && imageModelContainer) {
         if (imageTools.checked) {
             imageModelContainer.style.display = 'block';
@@ -127,7 +127,7 @@ function handleImageToolsChange(prefix) {
             imageModelContainer.style.display = 'none';
         }
     }
-    
+
     syncToolConfigToJson(prefix);
 }
 
@@ -214,7 +214,7 @@ function syncJsonToToolConfig(prefix = '') {
     const textarea = document.getElementById(prefix + 'ToolConfig');
     try {
         const config = JSON.parse(textarea.value || '{}');
-        
+
         // Update checkboxes based on config
         const googleDrive = document.getElementById(prefix + 'GoogleDrive');
         const googleCalendar = document.getElementById(prefix + 'GoogleCalendar');
@@ -268,16 +268,16 @@ function syncJsonToToolConfig(prefix = '') {
             memoryBlocks.checked = config.memory_blocks === true ||
                 (config.memory_blocks && typeof config.memory_blocks === 'object' && config.memory_blocks.enabled !== false);
         }
-        
+
         // Handle image tools
         if (imageTools) {
             imageTools.checked = !!config.image_tools;
-            
+
             // Show/hide image model container
             if (imageModelContainer) {
                 if (config.image_tools) {
                     imageModelContainer.style.display = 'block';
-                    
+
                     // Set the model if it's an object with model property
                     if (imageModel && typeof config.image_tools === 'object' && config.image_tools.model) {
                         imageModel.value = config.image_tools.model;
@@ -287,15 +287,15 @@ function syncJsonToToolConfig(prefix = '') {
                 }
             }
         }
-        
+
         // Handle image data extraction
         if (imageDataExtraction) {
             imageDataExtraction.checked = !!config.image_data_extraction;
-            
+
             if (imageDataExtractionModelContainer) {
                 if (config.image_data_extraction) {
                     imageDataExtractionModelContainer.style.display = 'block';
-                    
+
                     if (imageDataExtractionModel && typeof config.image_data_extraction === 'object' && config.image_data_extraction.model) {
                         imageDataExtractionModel.value = config.image_data_extraction.model;
                     }
@@ -304,7 +304,7 @@ function syncJsonToToolConfig(prefix = '') {
                 }
             }
         }
-        
+
     } catch (e) {
         // Invalid JSON, ignore
     }
@@ -317,8 +317,8 @@ function syncJsonToToolConfig(prefix = '') {
  * Setup event listeners for tool configuration
  */
 function setupToolListeners(prefix) {
-    console.log('setupToolListeners called with prefix:', prefix);
-    
+
+
     // Find the parent container that holds all tool checkboxes
     // Look for the first tool checkbox to find its parent container
     const firstCheckbox = document.getElementById(prefix + 'GoogleDrive');
@@ -326,7 +326,7 @@ function setupToolListeners(prefix) {
         console.warn('Parent container not found - checkboxes may not exist yet');
         return;
     }
-    
+
     // Find the parent container (should be the div with class "space-y-2")
     let parentContainer = firstCheckbox.closest('.space-y-2');
     if (!parentContainer) {
@@ -336,9 +336,9 @@ function setupToolListeners(prefix) {
             parentContainer = parentContainer.parentElement;
         }
     }
-    
+
     if (parentContainer) {
-        console.log('Using event delegation on parent container');
+
         // Use event delegation - listen for change events on the parent
         parentContainer.addEventListener('change', function(e) {
             const target = e.target;
@@ -417,14 +417,14 @@ function setupToolListeners(prefix) {
             }
         });
     }
-    
+
     const imageModelInput = document.getElementById(prefix + 'ImageModel');
     if (imageModelInput) {
         imageModelInput.addEventListener('input', function() {
             syncToolConfigToJson(prefix);
         });
     }
-    
+
     const ideModelInput = document.getElementById(prefix + 'ImageDataExtractionModel');
     if (ideModelInput) {
         ideModelInput.addEventListener('input', function() {
@@ -452,7 +452,7 @@ function setupToolListeners(prefix) {
 function handleImageDataExtractionChange(prefix) {
     const checkbox = document.getElementById(prefix + 'ImageDataExtraction');
     const modelContainer = document.getElementById(prefix + 'ImageDataExtractionModelContainer');
-    
+
     if (checkbox && modelContainer) {
         if (checkbox.checked) {
             modelContainer.style.display = 'block';
@@ -460,7 +460,7 @@ function handleImageDataExtractionChange(prefix) {
             modelContainer.style.display = 'none';
         }
     }
-    
+
     syncToolConfigToJson(prefix);
 }
 
