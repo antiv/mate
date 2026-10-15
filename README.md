@@ -75,6 +75,8 @@ A drag-and-drop canvas where you create agents, draw parent→child connections,
 
 Every agent lives in the database. Every change is versioned. Roll back to any previous configuration in one click.
 
+When a conversation goes somewhere you didn't expect, **Trace Replay** plays it back on the same canvas: agents light up in the order they ran, the hand-off to a sub-agent shows on the edge between them, and each agent shows the model or tool it is using, how long it took, and whether its fallback model had to answer.
+
 ### 🏛️ The Control Room — Govern what runs in production
 
 RBAC per agent means the finance team's agent is never visible to basic users, without any custom middleware. Every model call is priced in US dollars as it is logged — from OpenRouter's and LiteLLM's price lists, or a price you set — so the Usage page shows what each agent and project actually costs, next to the four token buckets (prompt, response, thoughts, tool use).
@@ -150,6 +152,11 @@ View and manage your full agent hierarchy — models, parent relationships, and 
 Drag-and-drop canvas for building agent hierarchies. See tool and MCP nodes attached to each agent, click to configure them inline, and create connections without touching JSON.
 
 ![Agent Visual Builder](documents/images/visual_builder.png)
+
+### Trace Replay
+Play a traced conversation back on the Visual Builder canvas: which agent ran when, the hand-off from the root agent to a sub-agent, the tools it called, and a fallback model answering when the primary failed. The whole session plays as one run, turn after turn. ([MP4](documents/images/trace_replay.mp4) · [guide](docs/user/trace-replay.md))
+
+![Trace Replay: a two-turn session played back on the Visual Builder canvas](documents/images/trace_replay.gif)
 
 ### Work Room
 A built-in chat interface inside the dashboard. Pick any root agent from the card grid and start a conversation — no embed code, no browser tab switching. Sessions are auto-titled and persist across page reloads. The default landing page after login.
