@@ -72,12 +72,15 @@ trace (one chat turn) into a timeline:
 - A span without an agent attribute belongs to its nearest ancestor's agent. Spans
   that are none of the above (RBAC checks, memory) are left out.
 
-Times are milliseconds from the start of the turn. Two admin-only routes serve it:
+Times are milliseconds from the start of the turn. `build_timeline()` then puts a
+session's turns back to back on one clock, replacing the time between turns (the
+person typing) with `TURN_GAP_MS` (800 ms) and tagging each event with its turn; the
+Visual Builder plays that timeline. Two admin-only routes serve it:
 
 | Route | Returns |
 |---|---|
-| `GET /dashboard/api/traces/sessions?hours=&limit=` | Sessions with traced turns (`gen_ai.conversation.id`), most recent first: id, number of turns, agents, last activity. |
-| `GET /dashboard/api/traces/replay?session_id=&hours=` | `{session_id, turns: [{trace_id, started_at, duration_ms, events, agents}]}`, oldest turn first. |
+| `GET /dashboard/api/traces/sessions?hours=&limit=&project_id=` | Sessions with traced turns (`gen_ai.conversation.id`), most recent first: id, number of turns, agents, last activity. With `project_id`, only sessions in which an agent of that project (`agents_config.project_id`) ran. |
+| `GET /dashboard/api/traces/replay?session_id=&hours=` | `{session_id, turns: [{trace_id, started_at, duration_ms, events, agents}], timeline: {duration_ms, events, agents, turns: [{index, trace_id, started_at, start_ms, end_ms}]}}`, oldest turn first. |
 
 A session id must match `[A-Za-z0-9._:-]{1,128}` or the route answers 400. The lookup
 narrows `trace_spans` with `attributes LIKE '%<id>%'` (the column cast to text on

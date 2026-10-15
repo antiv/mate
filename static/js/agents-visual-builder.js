@@ -1550,6 +1550,26 @@ mateActions.allow('applyConfigModal', 'closeConfigModal', 'hideEditAgentModal',
                 return Object.assign({}, n, { data: Object.assign({}, n.data, { replay: state }) });
             });
         }, [nodes, replayFrame, Replay]);
+        /* During a replay, the edge from a running agent into the sub-agent it is running carries the hand-off; the others fade */
+        const displayEdges = React.useMemo(function () {
+            if (!Replay || !replayFrame) return edges;
+            const agents = replayFrame.turn.agents || {};
+            return edges.map(function (e) {
+                if (!agents[e.target] && !agents[e.source]) {
+                    return Object.assign({}, e, { animated: false, style: Object.assign({}, e.style, { opacity: 0.25 }) });
+                }
+                const target = Replay.agentStateAt(replayFrame.turn, e.target, replayFrame.t);
+                const source = Replay.agentStateAt(replayFrame.turn, e.source, replayFrame.t);
+                if (target && target.state === 'active' && source && source.state === 'active') {
+                    return Object.assign({}, e, {
+                        animated: true,
+                        style: Object.assign({}, e.style, { stroke: '#f59e0b', strokeWidth: 4, opacity: 1 }),
+                        markerEnd: Object.assign({}, e.markerEnd, { color: '#f59e0b' }),
+                    });
+                }
+                return Object.assign({}, e, { animated: false, style: Object.assign({}, e.style, { opacity: 0.45 }) });
+            });
+        }, [edges, replayFrame, Replay]);
         const activeToolRef = useRef(activeTool);
         useEffect(() => {
             activeToolRef.current = activeTool;
@@ -2456,6 +2476,7 @@ mateActions.allow('applyConfigModal', 'closeConfigModal', 'hideEditAgentModal',
                 replayOpen && Replay ? React.createElement(Replay.ReplayBar, {
                     canvasAgents: canvasAgents,
                     initialSessionId: replaySessionId,
+                    projectId: props.projectId,
                     onFrame: onReplayFrame,
                     onClose: function () { setReplayOpen(false); },
                 }) : null,
@@ -2466,7 +2487,7 @@ mateActions.allow('applyConfigModal', 'closeConfigModal', 'hideEditAgentModal',
                         ReactFlowComponent,
                         {
                             nodes: displayNodes,
-                            edges: edges,
+                            edges: displayEdges,
                             nodeTypes: nodeTypes,
                             onNodesChange: onNodesChange,
                             onEdgesChange: onEdgesChange,

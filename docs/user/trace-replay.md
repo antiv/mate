@@ -28,10 +28,14 @@ runtime; an installation on the LangGraph runtime has nothing to replay.
 
 1. Open **Studio → Visual Builder** and choose the project the agents belong to.
 2. Click **Replay** in the canvas toolbar. A bar opens above the canvas.
-3. Pick a session. The list shows traced sessions from the last week, with the
-   agents that took part and the number of turns.
-4. If the session had several turns, pick one; the last turn is selected first.
-5. Press ▶. Change the speed (0.5× to 10×), or drag the slider to any moment.
+3. Pick a session. The list shows the traced sessions of the last week in which an
+   agent of this project took part, with those agents and the number of turns.
+4. Press ▶. Change the speed (0.5× to 10×), or drag the slider to any moment.
+
+The whole session plays as one run, turn after turn. The time a person spent typing
+between turns is cut to a short pause, and **Turn 2 / 8** next to the slider says
+where you are. When the root agent hands the conversation to a sub-agent, the replay
+follows it: the sub-agent lights up, in that turn and in the turns it answers after.
 
 From **Studio → Traces** you can also open a trace and click **Replay on canvas**,
 which opens the Visual Builder with that session already chosen.
@@ -41,16 +45,19 @@ which opens the Visual Builder with that session already chosen.
 | On the canvas | Meaning |
 |---|---|
 | Amber glow and **▶ model · time** | The agent is running. The label is the model it is calling or the tool it is using, and how long it has run so far. |
-| Green border and **✓ time** | The agent has finished; the time is how long it ran in this turn. |
+| Green border and **✓ time** | The agent is not running now; the time is how long it has run so far in the session. |
 | Red border and **✗ time** | One of the agent's steps ended in an error. |
 | **fallback: model** | The agent's own model failed and its [fallback model](fallback-model.md) answered. Hover it for the model that failed. |
-| Faded | The agent has not started yet, or did not take part in this turn. |
+| Faded | The agent has not started yet, or did not take part in the session. |
+| Amber edge | The agent at its start is running the agent at its end: a hand-off to a sub-agent while it happens. |
 
-Below the controls, the list of steps follows the replay: the steps running at that
-moment are highlighted. Click a step to jump to it.
+Below the controls, the list of steps follows the replay, grouped by turn: the steps
+running at that moment are highlighted and kept in view. Click a step or a turn to
+jump to it.
 
-If an agent from the trace is not on the canvas, the bar says so. That happens when it
-belongs to another project; choose that project to see it.
+If an agent from the session is not on the canvas, the bar says so. That happens when
+a session from **Replay on canvas** belongs to another project, or used an agent from
+another project; choose that project to see it.
 
 ## Good to know
 

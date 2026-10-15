@@ -1,7 +1,7 @@
 /**
  * Trace Replay for the Visual Builder canvas.
  *
- * Plays back one traced chat turn (GET /dashboard/api/traces/replay) on the
+ * Plays back a traced chat session (GET /dashboard/api/traces/replay) on the
  * agent graph: which agent ran when, which model answered (and whether it was
  * the fallback), which tools were called and how long each step took.
  *
@@ -29,8 +29,8 @@
     }
 
     /**
-     * What an agent is doing at `t` ms into the turn, or null if it does not
-     * appear in the turn. state: 'pending' (not started yet), 'active', 'done'.
+     * What an agent is doing at `t` ms into a timeline (a turn, or a session's
+     * turns back to back), or null if it does not appear in it. state: 'pending' (not started yet), 'active', 'done'.
      */
     function agentStateAt(turn, agentName, t) {
         if (!turn || !turn.agents || !turn.agents[agentName]) {
@@ -69,29 +69,43 @@
     const btn = 'px-2 py-1 rounded bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 disabled:opacity-50';
     const field = 'border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100 rounded px-1 py-0.5';
 
+    function currentTurn(timeline, t) {
+        let index = 0;
+        (timeline.turns || []).forEach(function (m) { if (m.start_ms <= t) index = m.index; });
+        return index;
+    }
+
     /**
-     * Props: canvasAgents (names on the canvas), initialSessionId, onFrame({turn, t} | null), onClose().
+     * Plays a whole session: its turns back to back on one clock (the server's
+     * `timeline`), so a hand-off from the root agent to a sub-agent in a later
+     * turn plays on as one run.
+     *
+     * Props: projectId (offer only that project's sessions), canvasAgents (names
+     * on the canvas), initialSessionId, onFrame({turn, t} | null), onClose().
      */
     function ReplayBar(props) {
         const [sessions, setSessions] = useState(null);
         const [sessionId, setSessionId] = useState(props.initialSessionId || '');
         const [replay, setReplay] = useState(null);
-        const [turnIdx, setTurnIdx] = useState(0);
         const [t, setT] = useState(0);
         const [playing, setPlaying] = useState(false);
         const [speed, setSpeed] = useState(1);
         const [error, setError] = useState(null);
         const onFrame = props.onFrame;
+        const projectId = props.projectId;
 
         useEffect(function () {
-            fetch('/dashboard/api/traces/sessions?hours=168', { credentials: 'same-origin' })
+            setSessions(null);
+            const query = { hours: 168 };
+            if (projectId != null && projectId !== '') query.project_id = projectId;
+            fetch('/dashboard/api/traces/sessions?' + new URLSearchParams(query), { credentials: 'same-origin' })
                 .then(function (r) { return r.json(); })
                 .then(function (d) {
                     setSessions(d.sessions || []);
                     if (d.error) setError(d.error);
                 })
                 .catch(function (e) { setError(String(e)); setSessions([]); });
-        }, []);
+        }, [projectId]);
 
         useEffect(function () {
             setReplay(null);
@@ -104,17 +118,17 @@
                     if (d.detail) { setError(d.detail); return; }
                     setError(d.error || null);
                     setReplay(d);
-                    setTurnIdx(Math.max(0, (d.turns || []).length - 1));
                 })
                 .catch(function (e) { setError(String(e)); });
         }, [sessionId]);
 
-        const turn = replay && replay.turns ? replay.turns[turnIdx] : null;
-        const duration = turn ? turn.duration_ms : 0;
+        const timeline = replay && replay.timeline && replay.timeline.events.length ? replay.timeline : null;
+        const duration = timeline ? timeline.duration_ms : 0;
+        const turnCount = timeline ? timeline.turns.length : 0;
 
         useEffect(function () {
-            onFrame(turn ? { turn: turn, t: t } : null);
-        }, [turn, t, onFrame]);
+            onFrame(timeline ? { turn: timeline, t: t } : null);
+        }, [timeline, t, onFrame]);
 
         useEffect(function () {
             return function () { onFrame(null); };
@@ -141,26 +155,39 @@
             if (playing && t >= duration) setPlaying(false);
         }, [playing, t, duration]);
 
+        // Keep the step being played in view in the list
+        const listRef = useRef(null);
+        useEffect(function () {
+            const list = listRef.current;
+            if (!list) return;
+            const current = list.querySelectorAll('[data-started="true"]');
+            const el = current.length ? current[current.length - 1] : null;
+            if (el && (el.offsetTop < list.scrollTop || el.offsetTop + el.offsetHeight > list.scrollTop + list.clientHeight)) {
+                list.scrollTop = el.offsetTop - list.clientHeight / 2;
+            }
+        }, [t, timeline]);
+
         const togglePlay = useCallback(function () {
-            if (!turn) return;
+            if (!timeline) return;
             if (!playing && t >= duration) setT(0);
             setPlaying(!playing);
-        }, [turn, playing, t, duration]);
+        }, [timeline, playing, t, duration]);
 
-        const missing = turn
-            ? Object.keys(turn.agents).filter(function (a) { return (props.canvasAgents || []).indexOf(a) === -1; })
+        const missing = timeline
+            ? Object.keys(timeline.agents).filter(function (a) { return (props.canvasAgents || []).indexOf(a) === -1; })
             : [];
 
         const controls = h('div', { className: 'flex flex-wrap items-center gap-2' },
             h('i', { className: 'fas fa-film text-indigo-500' }),
             h('span', { className: 'font-semibold' }, 'Trace Replay'),
             h('select', {
-                className: field + ' max-w-[16rem]',
+                className: field + ' max-w-[18rem]',
                 value: sessionId,
                 'aria-label': 'Session',
                 onChange: function (e) { setSessionId(e.target.value); },
             },
-                h('option', { value: '' }, sessions == null ? 'Loading sessions…' : (sessions.length ? 'Choose a session…' : 'No traced sessions')),
+                h('option', { value: '' }, sessions == null ? 'Loading sessions…'
+                    : (sessions.length ? 'Choose a session…' : 'No traced sessions in this project')),
                 (sessions || []).map(function (s) {
                     return h('option', { key: s.session_id, value: s.session_id },
                         s.session_id.slice(0, 8) + ' · ' + s.agents.join(', ') + ' · ' + s.turns + ' turn' + (s.turns === 1 ? '' : 's'));
@@ -168,17 +195,9 @@
                 sessionId && sessions && !sessions.some(function (s) { return s.session_id === sessionId; })
                     ? h('option', { value: sessionId }, sessionId) : null,
             ),
-            replay && replay.turns.length > 1 ? h('select', {
-                className: field,
-                value: turnIdx,
-                'aria-label': 'Turn',
-                onChange: function (e) { setTurnIdx(Number(e.target.value)); setT(0); setPlaying(false); },
-            }, replay.turns.map(function (tr, i) {
-                return h('option', { key: tr.trace_id, value: i }, 'Turn ' + (i + 1) + ' · ' + formatMs(tr.duration_ms));
-            })) : null,
-            h('button', { type: 'button', className: btn, disabled: !turn, onClick: togglePlay, 'aria-label': playing ? 'Pause' : 'Play' },
+            h('button', { type: 'button', className: btn, disabled: !timeline, onClick: togglePlay, 'aria-label': playing ? 'Pause' : 'Play' },
                 h('i', { className: 'fas ' + (playing ? 'fa-pause' : 'fa-play') })),
-            h('button', { type: 'button', className: btn, disabled: !turn, onClick: function () { setPlaying(false); setT(0); }, 'aria-label': 'Restart' },
+            h('button', { type: 'button', className: btn, disabled: !timeline, onClick: function () { setPlaying(false); setT(0); }, 'aria-label': 'Restart' },
                 h('i', { className: 'fas fa-undo' })),
             h('select', {
                 className: field,
@@ -188,14 +207,16 @@
             }, SPEEDS.map(function (s) { return h('option', { key: s, value: s }, s + '×'); })),
             h('input', {
                 type: 'range',
-                className: 'flex-1 min-w-[8rem]',
+                className: 'flex-1 min-w-[6rem]',
                 min: 0,
                 max: duration || 0,
                 value: Math.min(t, duration || 0),
-                disabled: !turn,
-                'aria-label': 'Position in the turn',
+                disabled: !timeline,
+                'aria-label': 'Position in the session',
                 onChange: function (e) { setPlaying(false); setT(Number(e.target.value)); },
             }),
+            turnCount > 1 ? h('span', { className: 'whitespace-nowrap' },
+                'Turn ' + (currentTurn(timeline, t) + 1) + ' / ' + turnCount) : null,
             h('span', { className: 'tabular-nums whitespace-nowrap' }, formatMs(t) + ' / ' + formatMs(duration)),
             h('button', { type: 'button', className: btn, onClick: props.onClose, 'aria-label': 'Close replay' },
                 h('i', { className: 'fas fa-times' })),
@@ -206,24 +227,34 @@
             body = h('div', { className: 'text-red-600 dark:text-red-400' }, error);
         } else if (sessions && !sessions.length && !sessionId) {
             body = h('div', { className: 'text-gray-500 dark:text-gray-400' },
-                'Replay needs traced sessions: set OTEL_TRACING_ENABLED=true (with OTEL_TRACES_DB_EXPORT left on) and chat with an agent on the ADK runtime.');
-        } else if (replay && !replay.turns.length) {
+                'No traced sessions with this project\'s agents. Replay needs OTEL_TRACING_ENABLED=true (with OTEL_TRACES_DB_EXPORT left on) on the ADK runtime, and a conversation held after it was turned on.');
+        } else if (replay && !timeline) {
             body = h('div', { className: 'text-gray-500 dark:text-gray-400' }, 'No traced turns for this session.');
-        } else if (turn) {
+        } else if (timeline) {
+            const items = [];
+            timeline.events.forEach(function (e, i) {
+                if (turnCount > 1 && (i === 0 || timeline.events[i - 1].turn !== e.turn)) {
+                    const marker = timeline.turns[e.turn];
+                    items.push(h('li', { key: 'turn-' + e.turn, className: 'mt-1 text-gray-500 dark:text-gray-400' },
+                        h('button', {
+                            type: 'button',
+                            className: 'hover:underline',
+                            onClick: function () { setPlaying(false); setT(marker.start_ms); },
+                        }, '— Turn ' + (e.turn + 1) + ' (' + new Date(marker.started_at).toLocaleTimeString() + ') —')));
+                }
+                const state = e.start_ms > t ? 'text-gray-400 dark:text-gray-500'
+                    : (e.end_ms > t ? 'text-indigo-600 dark:text-indigo-300 font-semibold' : 'text-gray-700 dark:text-gray-300');
+                items.push(h('li', { key: i, 'data-started': e.start_ms <= t ? 'true' : 'false' },
+                    h('button', {
+                        type: 'button',
+                        className: 'text-left hover:underline ' + state + (e.status === 'ERROR' ? ' text-red-600 dark:text-red-400' : ''),
+                        onClick: function () { setPlaying(false); setT(e.start_ms); },
+                    }, formatMs(e.start_ms).padStart(9) + '  ' + eventLabel(e) + '  (' + formatMs(e.end_ms - e.start_ms) + ')')));
+            });
             body = h('div', { className: 'flex flex-col gap-1' },
                 missing.length ? h('div', { className: 'text-amber-600 dark:text-amber-400' },
-                    'Not on this canvas: ' + missing.join(', ') + ' (choose their project to see them).') : null,
-                h('ol', { className: 'max-h-28 overflow-y-auto font-mono text-[11px] leading-5' },
-                    turn.events.map(function (e, i) {
-                        const state = e.start_ms > t ? 'text-gray-400 dark:text-gray-500'
-                            : (e.end_ms > t ? 'text-indigo-600 dark:text-indigo-300 font-semibold' : 'text-gray-700 dark:text-gray-300');
-                        return h('li', { key: i },
-                            h('button', {
-                                type: 'button',
-                                className: 'text-left hover:underline ' + state + (e.status === 'ERROR' ? ' text-red-600 dark:text-red-400' : ''),
-                                onClick: function () { setPlaying(false); setT(e.start_ms); },
-                            }, formatMs(e.start_ms).padStart(9) + '  ' + eventLabel(e) + '  (' + formatMs(e.end_ms - e.start_ms) + ')'));
-                    })),
+                    'Not on this canvas: ' + missing.join(', ') + '.') : null,
+                h('ol', { ref: listRef, className: 'relative max-h-32 overflow-y-auto font-mono text-[11px] leading-5' }, items),
             );
         }
 

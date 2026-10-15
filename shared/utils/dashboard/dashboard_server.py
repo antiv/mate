@@ -1157,14 +1157,24 @@ class DashboardServer:
             })
         return spans
 
-    def _list_replay_sessions(self, hours: int = 24, limit: int = 50) -> Dict[str, Any]:
-        """Sessions with traced turns in the last `hours`, most recent first."""
+    def _list_replay_sessions(self, hours: int = 24, limit: int = 50,
+                              project_id: Optional[int] = None) -> Dict[str, Any]:
+        """Sessions with traced turns in the last `hours`, most recent first.
+
+        With `project_id`, only sessions in which an agent of that project ran, so the
+        Visual Builder offers only what it can draw.
+        """
         from datetime import timedelta
         from shared.utils.tracing.replay import AGENT_ATTRS, session_of, to_datetime
         session = self.db_client.get_session() if self.db_client else None
         if not session:
             return {"sessions": [], "error": "Database connection failed"}
         try:
+            project_agents = None
+            if project_id is not None:
+                from sqlalchemy import text
+                project_agents = {row[0] for row in session.execute(
+                    text("SELECT name FROM agents_config WHERE project_id = :pid"), {"pid": project_id})}
             spans = self._replay_spans(
                 session, "start_time >= :threshold AND {attributes_text} LIKE :pat",
                 {"threshold": datetime.now() - timedelta(hours=hours), "pat": "%gen_ai.conversation.id%"},
@@ -1182,6 +1192,8 @@ class DashboardServer:
                 st = to_datetime(s["start_time"])
                 if st and (entry["last"] is None or st > entry["last"]):
                     entry["last"] = st
+            if project_agents is not None:
+                found = {sid: e for sid, e in found.items() if e["agents"] & project_agents}
             ordered = sorted(found.values(), key=lambda e: e["last"].timestamp() if e["last"] else 0,
                              reverse=True)[:limit]
             return {"sessions": [{
@@ -4015,9 +4027,10 @@ class DashboardServer:
             username: str = Depends(self._get_auth_user_dependency),
             hours: int = Query(24, ge=1, le=24 * 30),
             limit: int = Query(50, ge=1, le=200),
+            project_id: Optional[int] = None,
         ):
-            """Sessions with traced turns, for the Visual Builder's replay picker."""
-            return self._list_replay_sessions(hours, limit)
+            """Sessions with traced turns, for the Visual Builder's replay picker; a project's only with project_id."""
+            return self._list_replay_sessions(hours, limit, project_id)
 
         @self.app.get("/dashboard/api/traces/replay", tags=["Dashboard - Traces"])
         async def get_session_replay_api(

@@ -28,7 +28,7 @@ from sqlalchemy.pool import StaticPool
 
 from shared.utils.dashboard.dashboard_server import DashboardServer
 from shared.utils.tracing.db_span_exporter import DatabaseSpanExporter
-from shared.utils.tracing.replay import build_turn
+from shared.utils.tracing.replay import TURN_GAP_MS, build_turn
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 
@@ -67,6 +67,22 @@ def _record_turn(tracer, session_id, fallback=True):
                     mate_tool.set_attributes({"mate.tool.name": "search", "mate.agent.name": "researcher"})
 
 
+def _record_sub_agent_turn(tracer, session_id):
+    """A later turn that ADK routes straight to the sub-agent the root handed off to."""
+    with tracer.start_as_current_span("invoke_agent researcher") as sub:
+        sub.set_attributes({"gen_ai.operation.name": "invoke_agent", "gen_ai.agent.name": "researcher",
+                            "gen_ai.conversation.id": session_id})
+        with tracer.start_as_current_span("execute_tool search") as tool:
+            tool.set_attributes({"gen_ai.operation.name": "execute_tool", "gen_ai.tool.name": "search",
+                                 "gen_ai.agent.name": "researcher"})
+
+
+def _record_other_project_turn(tracer, session_id):
+    with tracer.start_as_current_span("invoke_agent other") as root:
+        root.set_attributes({"gen_ai.operation.name": "invoke_agent", "gen_ai.agent.name": "other",
+                             "gen_ai.conversation.id": session_id})
+
+
 class TestSessionReplay(unittest.TestCase):
 
     def setUp(self):
@@ -77,6 +93,9 @@ class TestSessionReplay(unittest.TestCase):
                 body = "\n".join(l for l in statement.splitlines() if not l.strip().startswith("--")).strip()
                 if body:
                     conn.exec_driver_sql(body)
+        with engine.begin() as conn:
+            conn.exec_driver_sql("CREATE TABLE agents_config (name VARCHAR(255), project_id INTEGER)")
+            conn.exec_driver_sql("INSERT INTO agents_config VALUES ('root', 1), ('researcher', 1), ('other', 2)")
         db = _Db(engine)
         exporter = DatabaseSpanExporter()
         exporter._db_client = db
@@ -130,6 +149,36 @@ class TestSessionReplay(unittest.TestCase):
         self.assertEqual(set(sessions), {"sess-1", "sess-2"})
         self.assertEqual(sessions["sess-1"]["turns"], 2)
         self.assertEqual(sessions["sess-1"]["agents"], ["researcher", "root"])
+
+    def test_session_plays_as_one_timeline(self):
+        # Turn 1 on the root agent, turn 2 handed off to the sub-agent: one clock for both
+        _record_turn(self.tracer, "sess-1")
+        _record_sub_agent_turn(self.tracer, "sess-1")
+        replay = self.server._get_session_replay("sess-1")
+        turns, timeline = replay["turns"], replay["timeline"]
+        self.assertEqual(len(turns), 2)
+        self.assertEqual([m["index"] for m in timeline["turns"]], [0, 1])
+        second = timeline["turns"][1]
+        # The person's think time between the turns is replaced by a short fixed gap
+        self.assertEqual(second["start_ms"], turns[0]["duration_ms"] + TURN_GAP_MS)
+        self.assertEqual(timeline["duration_ms"], second["end_ms"])
+        self.assertEqual({e["turn"] for e in timeline["events"]}, {0, 1})
+        starts = [e["start_ms"] for e in timeline["events"]]
+        self.assertEqual(starts, sorted(starts))
+        later = [e for e in timeline["events"] if e["turn"] == 1]
+        self.assertTrue(all(second["start_ms"] <= e["start_ms"] <= e["end_ms"] <= second["end_ms"] for e in later))
+        self.assertEqual({e["agent"] for e in later}, {"researcher"})
+        # Counts cover the whole session
+        self.assertEqual(timeline["agents"]["researcher"]["tool_calls"], 2)
+
+    def test_session_list_by_project(self):
+        _record_turn(self.tracer, "sess-1")
+        _record_other_project_turn(self.tracer, "sess-2")
+        mine = self.server._list_replay_sessions(project_id=1)["sessions"]
+        theirs = self.server._list_replay_sessions(project_id=2)["sessions"]
+        self.assertEqual([s["session_id"] for s in mine], ["sess-1"])
+        self.assertEqual([s["session_id"] for s in theirs], ["sess-2"])
+        self.assertEqual(len(self.server._list_replay_sessions()["sessions"]), 2)
 
     def test_unknown_session_has_no_turns(self):
         _record_turn(self.tracer, "sess-1")

@@ -5,7 +5,8 @@ One chat turn is one trace. For each turn this says when each agent ran
 (ADK's invoke_agent spans), which model calls it made and on which model
 (MATE's gen_ai.inference spans, marked when the fallback model answered), and
 which tools it called (ADK's execute_tool spans, or MATE's mate.tool spans when
-ADK's are missing). The Visual Builder plays this back on its canvas.
+ADK's are missing). build_timeline() puts a session's turns back to back on one
+clock, which is what the Visual Builder plays back on its canvas.
 
 Times are milliseconds from the start of the turn. Spans only exist when
 tracing and its database export are on, and only on the ADK runtime.
@@ -116,6 +117,17 @@ def build_turn(trace_id: str, spans: List[Dict[str, Any]]) -> Optional[Dict[str,
         return None
     events.sort(key=lambda e: (e["start_ms"], e["kind"] != "agent", e["end_ms"]))
 
+    return {
+        "trace_id": trace_id,
+        "started_at": start.isoformat(),
+        "duration_ms": round((end - start).total_seconds() * 1000),
+        "events": events,
+        "agents": summarize_agents(events),
+    }
+
+
+def summarize_agents(events: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+    """Per agent: when it first ran, time spent, model and tool calls, fallback, errors."""
     agents: Dict[str, Dict[str, Any]] = {}
     for e in events:
         a = agents.setdefault(e["agent"], {
@@ -134,14 +146,28 @@ def build_turn(trace_id: str, spans: List[Dict[str, Any]]) -> Optional[Dict[str,
             a["tool_calls"] += 1
         if e["status"] == "ERROR":
             a["error"] = True
+    return agents
 
-    return {
-        "trace_id": trace_id,
-        "started_at": start.isoformat(),
-        "duration_ms": round((end - start).total_seconds() * 1000),
-        "events": events,
-        "agents": agents,
-    }
+
+# The time between two turns is mostly the person typing; the session timeline
+# replaces it with this short pause so the turns play back as one run.
+TURN_GAP_MS = 800
+
+
+def build_timeline(turns: List[Dict[str, Any]], gap_ms: int = TURN_GAP_MS) -> Dict[str, Any]:
+    """All turns of a session back to back, on one clock, each event tagged with its turn."""
+    events: List[Dict[str, Any]] = []
+    markers = []
+    offset = 0
+    for index, turn in enumerate(turns):
+        if index:
+            offset += gap_ms
+        markers.append({"index": index, "trace_id": turn["trace_id"], "started_at": turn["started_at"],
+                        "start_ms": offset, "end_ms": offset + turn["duration_ms"]})
+        for e in turn["events"]:
+            events.append(dict(e, turn=index, start_ms=e["start_ms"] + offset, end_ms=e["end_ms"] + offset))
+        offset += turn["duration_ms"]
+    return {"duration_ms": offset, "events": events, "agents": summarize_agents(events), "turns": markers}
 
 
 def build_replay(session_id: str, spans: Iterable[Dict[str, Any]]) -> Dict[str, Any]:
@@ -151,7 +177,7 @@ def build_replay(session_id: str, spans: Iterable[Dict[str, Any]]) -> Dict[str, 
         by_trace.setdefault(s["trace_id"], []).append(s)
     turns = [t for t in (build_turn(tid, ss) for tid, ss in by_trace.items()) if t]
     turns.sort(key=lambda t: t["started_at"])
-    return {"session_id": session_id, "turns": turns}
+    return {"session_id": session_id, "turns": turns, "timeline": build_timeline(turns)}
 
 
 def session_of(span: Dict[str, Any]) -> Optional[str]:
