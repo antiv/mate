@@ -207,8 +207,10 @@ class TestRateLimitOffload(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.action, "block")
         self.assertEqual(usage.tokens_last_hour, 150)
         session.close.assert_called_once()
-        # Three 0.1s token queries run in a worker thread; the loop must keep ticking
-        self.assertGreaterEqual(ticks, 10)
+        # Three 0.1s token queries run in a worker thread; the loop must keep ticking.
+        # Run on the loop, they would leave the heartbeat no tick at all. The
+        # bound stays low because a busy CI runner has managed only 7 of ~30.
+        self.assertGreaterEqual(ticks, 3)
 
     async def test_returns_plain_values_not_orm_objects(self):
         from types import SimpleNamespace
