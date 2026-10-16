@@ -400,7 +400,7 @@
     <!-- Navigation -->
     <nav class="dashboard-nav">
         {% set cp = request.url.path %}
-        {% if cp.startswith('/dashboard/agents') or cp in ['/dashboard/triggers', '/dashboard/templates', '/dashboard/evals', '/dashboard/traces'] %}
+        {% if cp.startswith('/dashboard/agents') or cp in ['/dashboard/triggers', '/dashboard/templates', '/dashboard/evals', '/dashboard/traces', '/dashboard/integrations'] %}
           {% set active_space = 'studio' %}
         {% elif cp == '/dashboard/workroom' %}
           {% set active_space = 'workroom' %}
