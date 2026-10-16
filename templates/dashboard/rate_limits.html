@@ -111,10 +111,6 @@
                 </select>
                 <p class="text-[11px] text-gray-500 dark:text-gray-400 mt-1">Throttle delays requests over the per-minute limit; token limits are only logged.</p>
             </div>
-            <div>
-                <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Alert webhook URL</label>
-                <input type="url" id="formAlertWebhook" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 rounded px-2 py-1.5 text-sm" placeholder="https://...">
-            </div>
             <div class="flex justify-end gap-2 pt-2">
                 <button type="button" data-click="closeModal" class="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded text-sm text-gray-700 dark:text-gray-300">Cancel</button>
                 <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm">Save</button>
@@ -252,7 +248,6 @@
         document.getElementById('formBlockUnpriced').checked = !!c.block_unpriced;
         document.getElementById('formIncludeSubAgents').checked = !!c.include_sub_agents;
         document.getElementById('formActionOnLimit').value = c.action_on_limit || 'block';
-        document.getElementById('formAlertWebhook').value = c.alert_webhook_url || '';
         document.getElementById('configModal').classList.remove('hidden');
     }
 
@@ -277,7 +272,6 @@
             block_unpriced: document.getElementById('formBlockUnpriced').checked,
             include_sub_agents: document.getElementById('formIncludeSubAgents').checked,
             action_on_limit: document.getElementById('formActionOnLimit').value,
-            alert_webhook_url: document.getElementById('formAlertWebhook').value || null,
             alert_thresholds: [80, 90, 100],
         };
         await apiCall('/dashboard/api/rate-limits', 'POST', body);
