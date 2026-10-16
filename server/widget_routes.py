@@ -918,6 +918,12 @@ async def list_widget_files(wk: WidgetApiKey = Depends(verify_widget_admin_key))
     return {"success": True, "stores": result}
 
 
+def _widget_store_names(wk: WidgetApiKey) -> set:
+    """The file search stores this widget's admin may change: those of its agent."""
+    from shared.utils.file_search_service import FileSearchService
+    return {store["store_name"] for store in FileSearchService(get_database_client()).get_stores_for_agent(wk.agent_name)}
+
+
 @admin_api_router.post("/files/upload")
 async def upload_widget_file(
     wk: WidgetApiKey = Depends(verify_widget_admin_key),
@@ -928,6 +934,9 @@ async def upload_widget_file(
     """Upload a file to a file search store scoped to this widget."""
     from shared.utils.tools.file_search_tools import upload_file_to_store
     from shared.utils.file_search_service import FileSearchService
+
+    if store_name not in _widget_store_names(wk):
+        raise HTTPException(status_code=404, detail="Store not found")
 
     with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(file.filename)[1]) as tmp:
         content = await file.read()
@@ -969,8 +978,9 @@ async def delete_widget_file(file_id: int, wk: WidgetApiKey = Depends(verify_wid
         if not doc:
             return {"success": False, "error": "File not found"}
         store = session.query(FileSearchStore).filter_by(id=doc.store_id).first()
-        if not store:
-            return {"success": False, "error": "Store not found"}
+        # A file in another agent's store is answered as if it did not exist
+        if not store or store.store_name not in _widget_store_names(wk):
+            return {"success": False, "error": "File not found"}
         from shared.utils.file_search_service import FileSearchService
         service = FileSearchService(db)
         success = service.delete_document(store.store_name, doc.document_name)

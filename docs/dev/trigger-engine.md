@@ -115,7 +115,9 @@ The `/dashboard/api/system-jobs` routes pause and reschedule them in memory only
    in constant time against `fire_key_hash`, a SHA-256 of the raw key. A wrong key
    is `403`.
 2. **Dashboard auth**, only if no key was sent: `require_dashboard_auth` (bearer,
-   basic or session). Failure is `403`.
+   basic or session), and the caller must be an admin (`is_admin_user`). The
+   route is outside `/dashboard/api`, so the admin middleware doesn't cover it.
+   Either failure is `403`.
 3. **Signature**, only if the row has `require_signature`. Missing or invalid is
    `401`, and a valid fire key alone is then not enough.
 

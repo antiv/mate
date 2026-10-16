@@ -8070,6 +8070,12 @@ class DashboardServer:
                         status_code=403,
                         detail="Authentication required: provide X-MATE-Trigger-Key header or dashboard credentials",
                     )
+                # Without the trigger's key, firing it is an admin action like any
+                # other trigger change. The route sits outside /dashboard/api, so the
+                # admin middleware does not cover it.
+                from server.auth import is_admin_user
+                if not is_admin_user(request):
+                    raise HTTPException(status_code=403, detail="Firing a trigger without its key requires an admin")
 
             # 3. A bearer secret proves nothing about who composed the body, and
             # since the body reaches the prompt, that matters. When the trigger
