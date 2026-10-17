@@ -24,12 +24,25 @@ jobs:
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 0  # all tags, to tell whether this one is the newest
+
+      # A patch for an older minor (v1.5.1 from release/1.5 after v2.0.0) must not take
+      # "latest" from the newest release. Only final vX.Y.Z tags count.
+      - name: Is this the newest release?
+        id: newest
+        run: |
+          newest=$(git tag -l 'v*' | { grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' || true; } | sort -V | tail -n 1)
+          if [ "$GITHUB_REF_NAME" = "$newest" ]; then latest=true; else latest=false; fi
+          echo "latest=$latest" >> "$GITHUB_OUTPUT"
+          echo "$GITHUB_REF_NAME, newest release tag $newest: latest=$latest"
 
       - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1  # v4.4.0
 
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069  # v4.4.1
 
-      # v1.5.0 → 1.5.0, 1.5 and latest; a manual run on a branch → the branch name.
+      # v1.5.0 → 1.5.0, 1.5, and latest if it is the newest release; a manual run on a
+      # branch → the branch name.
       - name: Tags and labels
         id: meta
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302  # v6.2.0
@@ -39,6 +52,8 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=ref,event=branch
+          flavor: |
+            latest=${{ steps.newest.outputs.latest }}
 
       # Build for this runner only and start it before anything is pushed: the image
       # must come up and answer /health, which covers migrations and server start.

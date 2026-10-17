@@ -17,6 +17,18 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0  # all tags, to tell whether this one is the newest
+
+      # A patch for an older minor (v1.5.1 from release/1.5 after v2.0.0) must not take
+      # "latest" from the newest release. Only final vX.Y.Z tags count.
+      - name: Is this the newest release?
+        id: newest
+        run: |
+          newest=$(git tag -l 'v*' | { grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' || true; } | sort -V | tail -n 1)
+          if [ "$GITHUB_REF_NAME" = "$newest" ]; then latest=true; else latest=false; fi
+          echo "latest=$latest" >> "$GITHUB_OUTPUT"
+          echo "$GITHUB_REF_NAME, newest release tag $newest: latest=$latest"
 
       - name: Extract this version's CHANGELOG section
         run: |
@@ -39,7 +51,8 @@ jobs:
         run: |
           gh release create "$GITHUB_REF_NAME" \
             --title "$GITHUB_REF_NAME" \
-            --notes-file release_notes.md
+            --notes-file release_notes.md \
+            --latest="${{ steps.newest.outputs.latest }}"
 
           # Open an Announcements thread so a release has somewhere to be replied
           # to instead of being a one-way changelog post. Deliberately a separate,

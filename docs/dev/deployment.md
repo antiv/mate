@@ -35,8 +35,8 @@ works without activating it.
 ### Published image
 
 Every release tag publishes `ghcr.io/antiv/mate` for `linux/amd64` and `linux/arm64`,
-tagged with the version (`1.5.0`), the minor version (`1.5`) and `latest`
-(`.github/workflows/docker.yml`). The workflow first builds the image for the runner and
+tagged with the version (`1.5.0`), the minor version (`1.5`) and, for the newest
+release only, `latest` (`.github/workflows/docker.yml`; see [Releases](releases.md)). The workflow first builds the image for the runner and
 starts it, and pushes nothing unless it answers `/health` within three minutes.
 
 ```bash
