@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-10-17
+
+Every deployment should upgrade: the agent, Google Drive and image MCP servers
+answered without a login, an empty `AUTH_PASSWORD` let anyone sign in with empty
+fields, any signed-in user could fire a trigger, and a widget admin key could change
+another agent's files. The release brings **costs in US dollars** with dollar budgets,
+a **Playground** to compare models and instructions, **Trace Replay** on the Visual
+Builder canvas, an image tool for **any LiteLLM image model**, alerts on **fallback
+model** use and to **Slack and Discord**, and a **Docker image on GHCR**. MySQL works
+for the first time, and A2A works again on a2a-sdk 1.x.
+
+Before upgrading:
+- MCP clients of `/agents/<name>/mcp`, `/gdrive/mcp` and `/images/mcp` need
+  credentials, for example a personal access token.
+- `POST /triggers/{id}/fire` without the trigger's key needs an admin.
+- With `CSP_MODE=enforce`, inline scripts need the nonce; `report-only`, the default,
+  blocks nothing.
+- `SUPABASE_BUCKET` defaults to `artifacts` everywhere; set it if you relied on
+  `public-bucket`.
+
+Migrations V037 to V043 run on startup.
+
 ### Added
 
 - **Trace Replay on the Visual Builder canvas** - a traced chat session can be played back on the agent graph as one run, turn after turn (the time between turns cut to a short pause): agents light up in the order they ran, the edge into a sub-agent lights up while it is handed the conversation, each agent shows the model or tool it is using and how long it has run, finished agents show their time, and an agent whose model failed shows which fallback model answered. The session list only offers sessions of the project on the canvas. Open it with **Replay** in the Visual Builder toolbar, or **Replay on canvas** on a trace. It reads the `trace_spans` rows recorded with `OTEL_TRACING_ENABLED=true` (ADK runtime only), through two new admin routes, `GET /dashboard/api/traces/sessions` and `GET /dashboard/api/traces/replay`. The `gen_ai.inference` span now records `mate.model.fallback` and the fallback as `gen_ai.response.model` when the fallback answered. See `docs/user/trace-replay.md`
