@@ -44,6 +44,34 @@ class TestNonAdminRefusal(unittest.TestCase):
         self.assertIsNotNone(_non_admin_refusal("run_sse", "bob@corp.com", b"not json"))
         self.assertIsNotNone(_non_admin_refusal("run_sse", "bob@corp.com", None))
 
+    def test_the_camel_case_user_id_counts_too(self):
+        # ADK runs as userId when a body has both spellings, so a body showing the
+        # check its own user_id and ADK another userId ran as that other user
+        def refused(body):
+            return _non_admin_refusal("run_sse", "bob@corp.com", json.dumps(body).encode())
+
+        self.assertIsNotNone(refused({"app_name": "bot", "user_id": "bob@corp.com", "userId": "admin"}))
+        self.assertIsNotNone(refused({"app_name": "bot", "userId": "admin"}))
+        self.assertIsNone(refused({"appName": "bot", "userId": "bob@corp.com"}))
+        self.assertIsNone(refused({"app_name": "bot", "user_id": "bob@corp.com", "userId": "bob@corp.com"}))
+        self.assertIsNotNone(_non_admin_refusal("run_sse", "bob@corp.com", b'["bob@corp.com"]'))
+
+    def test_what_passes_is_what_adk_runs_as(self):
+        from google.adk.cli.adk_web_server import RunAgentRequest
+        message = {"role": "user", "parts": [{"text": "hi"}]}
+        bodies = [
+            {"app_name": "bot", "user_id": "bob@corp.com", "session_id": "s", "new_message": message},
+            {"appName": "bot", "userId": "bob@corp.com", "sessionId": "s", "newMessage": message},
+            {"app_name": "bot", "user_id": "bob@corp.com", "userId": "admin", "session_id": "s",
+             "new_message": message},
+            {"app_name": "bot", "user_id": "admin", "userId": "bob@corp.com", "session_id": "s",
+             "new_message": message},
+        ]
+        for body in bodies:
+            with self.subTest(body=body):
+                if _non_admin_refusal("run_sse", "bob@corp.com", json.dumps(body).encode()) is None:
+                    self.assertEqual(RunAgentRequest.model_validate(body).user_id, "bob@corp.com")
+
     def test_the_rest_of_the_agent_server_is_admin_only(self):
         self.assertIsNone(_non_admin_refusal("list-apps", "bob@corp.com", None))
         for path in ("debug/trace/e1", "apps/bot/eval_sets", "dev/build_graph/bot", "builder/save",
@@ -73,6 +101,12 @@ class TestProxyRoute(unittest.TestCase):
     def test_a_non_admin_cannot_run_as_someone_else(self):
         resp = self.client.post("/run_sse", json={"app_name": "bot", "user_id": "admin",
                                                   "session_id": "s", "new_message": {"parts": []}})
+        self.assertEqual(resp.status_code, 403)
+
+    def test_a_non_admin_cannot_run_as_someone_else_with_the_camel_case_id(self):
+        resp = self.client.post("/run_sse", json={"app_name": "bot", "user_id": "bob@corp.com",
+                                                  "userId": "admin", "session_id": "s",
+                                                  "new_message": {"parts": []}})
         self.assertEqual(resp.status_code, 403)
 
     def test_a_non_admin_cannot_open_the_dev_ui(self):
