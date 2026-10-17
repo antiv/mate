@@ -426,7 +426,7 @@ mateActions.allow('sessionsApp.closeSessionInspector', 'sessionsApp.copySessionI
     }
 
     async function deleteSession(runtime, appName, userId, sessionId) {
-        if (!confirm(`Are you sure you want to delete session "${sessionId}"?\nThis action cannot be undone.`)) {
+        if (!await showConfirm(`Are you sure you want to delete session "${sessionId}"?\nThis action cannot be undone.`, 'Delete session', 'Delete', 'Cancel', 'danger')) {
             return;
         }
 

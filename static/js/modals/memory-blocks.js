@@ -352,7 +352,7 @@ async function deleteMemoryBlock() {
     const blockId = document.getElementById('editBlockId').value;
     const agentName = document.getElementById('editBlockAgentName').value;
     
-    if (!confirm('Are you sure you want to delete this memory block?')) {
+    if (!await showConfirm('Are you sure you want to delete this memory block?', 'Delete memory block', 'Delete', 'Cancel', 'danger')) {
         return;
     }
     
@@ -533,7 +533,7 @@ async function showDeletedMemoryBlocks() {
 }
 
 async function restoreMemoryBlockVersion(versionId, label, versionNumber) {
-    if (!confirm(`Restore "${label}" to version ${versionNumber}?`)) {
+    if (!await showConfirm(`Restore "${label}" to version ${versionNumber}?`, 'Restore version', 'Restore', 'Cancel', 'warning')) {
         return;
     }
     try {

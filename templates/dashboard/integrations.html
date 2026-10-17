@@ -321,7 +321,7 @@ const IntegrationsPage = {
     },
 
     async deleteIntegration(id) {
-        if (!confirm('Delete this integration? Slack messages will no longer reach the agent.')) return;
+        if (!await showConfirm('Delete this integration? Slack messages will no longer reach the agent.', 'Delete integration', 'Delete', 'Cancel', 'danger')) return;
         try {
             const resp = await fetch(`/dashboard/api/channel-integrations/${id}`, {
                 method: 'DELETE', credentials: 'same-origin',

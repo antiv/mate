@@ -159,8 +159,8 @@ function savePartnerMeta() {
         .catch(e => showMsg(e.message, true));
 }
 
-function deletePartner() {
-    if (!SCOPE || !confirm("Delete partner '" + SCOPE + "'? Its prices are removed (leads are kept).")) return;
+async function deletePartner() {
+    if (!SCOPE || !await showConfirm("Delete partner '" + SCOPE + "'? Its prices are removed (leads are kept).", "Delete partner", "Delete", "Cancel", "danger")) return;
     fetch("/dashboard/api/wizard/partners/" + encodeURIComponent(SCOPE), { method: "DELETE" })
         .then(r => r.json()).then(() => loadPartners("")).catch(e => showMsg(String(e), true));
 }
