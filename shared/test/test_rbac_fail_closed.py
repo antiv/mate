@@ -126,6 +126,36 @@ class TestMissingContextDenies(_Db):
                                   agent_name="gone_bot")
         self.assertDenied(self._call(context, self._manager(row=None)))
 
+    def test_skipped_agents_still_run_without_a_config(self):
+        # Refusing on a missing config must not catch what the check skips
+        from shared.utils import eval_agent_runner
+        system = SimpleNamespace(_invocation_context=SimpleNamespace(user_id="u"),
+                                 agent_name="mate_fallback_agent")
+        self.assertIsNone(self._call(system, self._manager(row=None)))
+        token = eval_agent_runner._EVAL_RUN.set(True)
+        try:
+            evaluated = SimpleNamespace(_invocation_context=SimpleNamespace(user_id="eval_runner"),
+                                        agent_name="snapshot_bot")
+            self.assertIsNone(self._call(evaluated, self._manager(row=None)))
+        finally:
+            eval_agent_runner._EVAL_RUN.reset(token)
+
+
+class TestCallbackChain(unittest.TestCase):
+
+    def test_a_check_that_fails_to_run_denies(self):
+        from shared.callbacks import user_profile_callback
+        context = SimpleNamespace(agent_name="some_bot")
+        with patch("shared.callbacks.token_usage_callback.capture_model_name_callback"), \
+                patch.object(user_profile_callback, "user_profile_context_callback"), \
+                patch("shared.callbacks.rbac_callback.rbac_before_model_callback",
+                      side_effect=RuntimeError("broken")), \
+                patch("shared.callbacks.guardrail_callback.guardrail_before_model_callback",
+                      return_value=None):
+            response = user_profile_callback.combined_user_profile_and_rbac_callback(context, MagicMock())
+        self.assertIsNotNone(response)
+        self.assertEqual(response.error_code, "RBAC_ACCESS_DENIED")
+
 
 class TestLangGraphHook(unittest.TestCase):
 

@@ -188,7 +188,12 @@ def combined_user_profile_and_rbac_callback(
         if rbac_response:
             return rbac_response  # Access denied
     except Exception as e:
-        logger.warning(f"Error in RBAC callback: {e}")
+        # A check that could not run has not granted access
+        logger.error(f"Error in RBAC callback: {e}")
+        from .rbac_callback import _create_access_denied_response
+        return _create_access_denied_response(
+            "Access could not be verified. Please try again.", "unknown",
+            getattr(callback_context, "agent_name", None) or "unknown")
 
     # Finally run input guardrails (PII, prompt injection, content policy, etc.)
     try:

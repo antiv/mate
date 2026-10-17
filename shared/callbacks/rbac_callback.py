@@ -136,8 +136,7 @@ def rbac_before_model_callback(callback_context: CallbackContext, llm_request: L
         except Exception as e:
             logger.error(f"Error getting agent config for {agent_name}: {e}")
         
-        # Not found, disabled, or the lookup failed: none of these grants access.
-        # Agents built in code get no MATE callbacks, so they never reach here.
+        # Not found, disabled, or the lookup failed: none of these grants access
         if not agent_config:
             _end_span(span, False)
             logger.error(f"RBAC: no enabled config for agent '{agent_name}', refusing user {user_id}")
