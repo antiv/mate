@@ -58,6 +58,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Notifications ignored their duration** (#242) - `showNotification` always closed after 5 seconds, so the Triggers page's test-fire result, meant to stay 8 seconds, went as fast as the rest. It now takes the duration, 5 seconds by default. Thanks to @kocaemre
 - **The Visual Builder's Add MCP Server and new agent dialogs were always dark** (#245) - they used fixed dark colors and now use the dashboard's theme colors, so they follow the light theme. Thanks to @CRYPTONIKAV
 - **Icon-only buttons on every page had no name for screen readers** (#246) - the agent server's Start, Stop and Restart, the sidebar toggle, and the close buttons of the tokens dialog and of notifications now have an `aria-label`. Thanks to @CRYPTONIKAV
+- **The Integrations page showed the Control Room sidebar** (#237) - `/dashboard/integrations` was missing from the Studio pages in `base.html`, so it opened with the Control Room menu and its own item was nowhere to be seen. Thanks to @sammist2
+- **Rate Limits had an Alert webhook URL field that did nothing** (#241) - budget alerts moved to the Alerts page in V026, which copied the old URLs into alert rules, but the form still offered the field. It is gone; the column stays, and saving a config through the dashboard now clears it. Thanks to @cestercian
 
 ### Security
 

@@ -1,8 +1,8 @@
 import unittest
+from pathlib import Path
 
 from fastapi import Request
 from fastapi.templating import Jinja2Templates
-from pathlib import Path
 
 
 class TestDashboardSidebarActiveSpace(unittest.TestCase):
@@ -34,8 +34,8 @@ class TestDashboardSidebarActiveSpace(unittest.TestCase):
         # The studio sidebar only renders when active_space == 'studio'; before the
         # fix /dashboard/integrations fell through to the control room, so the
         # Integrations item was absent entirely.
-        self.assertIn('href="/dashboard/integrations"', html)
-        self.assertIn("sidebar-active", html)
+        # "sidebar-active" alone is in base.html's <style>, so check the link's own class
+        self.assertRegex(html, r'href="/dashboard/integrations" class="[^"]*sidebar-active')
 
     def test_a_control_room_path_does_not_render_the_integrations_item(self):
         html = self._render("/dashboard/overview")
