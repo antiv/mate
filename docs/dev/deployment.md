@@ -10,6 +10,9 @@ covers:
   - build_standalone_agent.py
   - standalone_server.py
   - server/csp.py
+  - server/widget_routes.py::*origin*
+  - server/widget_routes.py::widget_chat
+  - shared/migrate.py
 ---
 
 # Deployment
@@ -133,6 +136,67 @@ requests: a webhook trigger answers only when its agent has finished.
 The built-in account (`AUTH_USERNAME`) gets the `admin` role on its first chat, so
 agents with an empty Allowed Roles list admit it; see
 [Authentication and access control](auth-and-access.md#layer-3-the-agent).
+
+## Check a deployment
+
+`/health` answers before anything else is known. These three checks show that the
+database is migrated, an agent answers through the widget, and the widget's origin
+allowlist is enforced. They need an agent the widget can use (see
+[Website widget](../user/widget.md#before-you-start)) and a widget key whose
+**Allowed Origins** lists one site, for example `https://allowed.example`.
+
+### Migrations applied
+
+Run this where the server runs, so it reads the same database settings:
+
+```bash
+python shared/migrate.py status
+# in Docker: docker compose exec mate python shared/migrate.py status
+```
+
+Applied and available are the same number, and pending is 0. The start log does not
+list migrations, so this is the place to look.
+
+### A streamed reply from an allowed origin
+
+```bash
+curl -N "$MATE_URL/widget/api/chat" \
+  -H "X-Widget-Key: $WIDGET_KEY" \
+  -H "Origin: https://allowed.example" \
+  -H "Content-Type: application/json" \
+  -d '{"message": "Say hello"}'
+```
+
+The response is `text/event-stream`. MATE sends the first event,
+`{"session_id": ..., "debug_mode": ...}`, before the model is called, so it proves
+nothing on its own. After it come events with `"partial": true`, each carrying a piece
+of the answer in `content.parts[].text`, and a last one with `"partial": false` and
+`"finishReason": "STOP"`. An event with `errorCode` means the model call failed, even
+though the status is 200.
+
+### 403 from a disallowed origin
+
+With `WIDGET_ORIGIN_STRICT=true`, the same request from a site that is not on the
+list:
+
+```bash
+curl -i "$MATE_URL/widget/api/chat" \
+  -H "X-Widget-Key: $WIDGET_KEY" \
+  -H "Origin: https://not-allowed.example" \
+  -H "Content-Type: application/json" \
+  -d '{"message": "Say hello"}'
+```
+
+returns `403` with `{"detail":"Origin not allowed for this widget key"}`. If it is
+answered instead, and the log shows `allowed because WIDGET_ORIGIN_STRICT is off`, the
+setting has not reached the server.
+
+The check only proves something when:
+
+- The request sends an `Origin` header. A request with neither `Origin` nor `Referer`
+  is not checked, and is answered in strict mode too.
+- The key has Allowed Origins. A key without them accepts every origin.
+- The disallowed origin is not MATE's own address. Requests from it always pass.
 
 ## Standalone build
 
