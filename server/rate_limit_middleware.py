@@ -16,16 +16,20 @@ from shared.utils.rate_limit_service import get_rate_limit_service, RateLimitRes
 logger = logging.getLogger(__name__)
 
 
-async def _extract_user_agent_from_body(body: bytes) -> tuple[Optional[str], Optional[str], Optional[int]]:
-    """Parse run_sse JSON body for user_id, app_name (agent), project_id. Supports camelCase and snake_case."""
+async def _extract_user_agent_from_body(body: bytes) -> tuple[Optional[str], Optional[str]]:
+    """Parse run_sse JSON body for user_id and app_name (agent). Supports camelCase and snake_case.
+
+    Not the project: a caller could name any project and have its request counted
+    against that project's budget instead of the agent's own. The rate limit
+    service looks the project up from the agent.
+    """
     try:
         data = json.loads(body.decode("utf-8"))
         user_id = data.get("user_id") or data.get("userId")
         agent_name = data.get("app_name") or data.get("appName")
-        project_id = data.get("project_id") or data.get("projectId")
-        return (user_id, agent_name, project_id)
+        return (user_id, agent_name)
     except Exception:
-        return (None, None, None)
+        return (None, None)
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
@@ -49,7 +53,6 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
         user_id = "anonymous"
         agent_name = None
-        project_id = None
         auth_username = None
 
         # Get auth user for fallback
@@ -64,7 +67,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
         if path == "/run_sse" and request.method == "POST":
             body = await request.body()
-            user_id, agent_name, project_id = await _extract_user_agent_from_body(body)
+            user_id, agent_name = await _extract_user_agent_from_body(body)
             user_id = user_id or auth_username or "anonymous"
             # Re-create request with body for downstream
             async def receive():
@@ -87,7 +90,6 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         result, usage = await svc.check_request_limit(
             user_id=user_id,
             agent_name=agent_name,
-            project_id=project_id,
             auth_username=auth_username,
         )
 
