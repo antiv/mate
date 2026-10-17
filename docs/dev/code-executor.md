@@ -40,13 +40,15 @@ Writes Python source code to a temporary file (`script.py`) in a temporary direc
 }
 ```
 
-On validation failure or exceptions, it returns an error shape without `stdout`/`stderr`:
+Empty code returns only `status` and `error_message`:
 ```json
 {
   "status": "error",
   "error_message": "No code provided."
 }
 ```
+
+An exception adds `"exit_code": -1, "timed_out": false` to that. A timeout returns `"status": "error"` with `stdout` empty, the timeout message in `stderr`, `"exit_code": -1` and `"timed_out": true`.
 
 ### `execute_shell_command`
 
@@ -57,7 +59,7 @@ Runs an arbitrary shell command in the server's working directory.
 | `command` | `str` | *required* | Shell command to execute |
 | `timeout_seconds` | `int` | 30 | Max execution time (capped at 120s) |
 
-**Returns:** Same structure as `execute_python_code`. On error (e.g. empty command or exception), returns `{"status": "error", "error_message": ...}`.
+**Returns:** The same shapes as `execute_python_code`, including on an empty command, an exception or a timeout.
 
 ## Configuration
 
@@ -106,7 +108,7 @@ WHERE name = 'my_agent';
 | Execution directory | Temp directory (`mate_exec_*`) for Python; server working directory for shell |
 | Python binary | `python` (the first `python` on `PATH`, not necessarily `sys.executable`) |
 
-Scripts have access to whatever packages are installed in the server's Python environment. They inherit the server's environment variables (minus any sandboxing you add at the infrastructure level).
+Scripts get the packages of that `python`, which is the server's own environment only if its `python` comes first on `PATH`. Both tools inherit the server's environment variables (minus any sandboxing you add at the infrastructure level).
 
 ### Never on a public agent
 
@@ -135,7 +137,7 @@ Always print your final results to stdout.
 
 - For Python executions, a temp directory (`mate_exec_*`) is created and `script.py` is written to it. Cleanup removes `script.py` and attempts `os.rmdir(tmp_dir)`. If the script wrote additional files into that directory, `rmdir` fails silently and the temporary folder remains on disk.
 - Shell commands run directly with `shell=True` in the server's working directory without a temporary folder.
-- Subprocesses inherit `os.environ` with `PYTHONDONTWRITEBYTECODE=1`.
+- `execute_python_code` runs with `os.environ` plus `PYTHONDONTWRITEBYTECODE=1`; `execute_shell_command` passes no `env`, so the shell gets `os.environ` unchanged.
 - Timed-out processes trigger a timeout error. For `execute_shell_command`, only the spawned `/bin/sh` shell process is killed; child processes it launched can continue running in the background.
 - For production deployments, consider running the executor in a restricted container or dedicated sandboxed runtime.
 
