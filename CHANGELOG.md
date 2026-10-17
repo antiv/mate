@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 
 - **The role check let a model call through when it couldn't decide** - before each model call the RBAC callback compares the caller's roles with the agent's `allowed_for_roles`, but it allowed the call, with a warning, when there was no user id in the context, no agent name, or no enabled config for the agent, which also happens when the config lookup fails on a database error. It now refuses in all three cases, as it already did when the check raised, and so does the callback chain if the check itself fails to run; the LangGraph runtime's hook refuses an agent without a config the same way. Eval and Playground runs and the system agents still skip the check. With `MATE_PLUGINS_ENABLED=true` the check runs for every LLM agent in the app, so an agent built in code needs an `agents_config` row now. See `docs/dev/auth-and-access.md` (#276)
+- **A file search store could be assigned to an agent of another project** - `assign_store_to_agent`, behind `POST /dashboard/api/agents/{name}/file-search/stores/assign`, checked that the agent and the store existed, not that they belonged to the same project, so an agent could be given another project's documents. It now refuses a store of another project. The dashboard already offered only the project's own stores; **Clone to Project** with file search still shares the source's stores on purpose (#276)
 
 ## [1.5.0] - 2026-10-17
 

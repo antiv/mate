@@ -52,6 +52,12 @@ class FileSearchService:
             if not store:
                 logger.error(f"Store {store_name} not found. Create it first using create_store()")
                 return False
+
+            # A store belongs to one project; its files are not another project's to use
+            if store.project_id != agent.project_id:
+                logger.error(f"Store {store_name} belongs to project {store.project_id}, "
+                             f"agent {agent_name} to project {agent.project_id}: not assigned")
+                return False
             
             # Check if already assigned
             existing = session.query(AgentFileSearchStore).filter_by(

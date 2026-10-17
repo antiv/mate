@@ -52,7 +52,8 @@ The `query_file_search` tool:
 1. Go to the agent list in the dashboard
 2. Click **"Edit"** on your agent
 3. Click **"Manage Files"** in the File Search section
-4. Create a new store or assign an existing store
+4. Create a new store or assign an existing store of the agent's project (a store
+   belongs to one project, and assigning another project's store is refused)
 5. Upload files to the store
 
 ### 2. Reinitialize Agent
