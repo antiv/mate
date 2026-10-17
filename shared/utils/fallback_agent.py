@@ -1,10 +1,23 @@
 """
 Shared fallback agent factory for creating database initialization fallback agents.
 """
+import weakref
+from typing import Any, List
+
 from google.adk.agents import Agent
 from shared.utils import create_model
 from shared.callbacks.token_usage_callback import capture_model_name_callback
 from shared.callbacks.function_call_guardrail import combined_after_model_callback
+
+
+# The agents built here, which the role check skips. Matched by object, not by name:
+# an agent from agents_config can be given any name, this one's included.
+_fallback_agents: List[weakref.ref] = []
+
+
+def is_fallback_agent(agent: Any) -> bool:
+    """True when agent is one that create_fallback_agent built."""
+    return agent is not None and any(ref() is agent for ref in _fallback_agents)
 
 
 def create_fallback_agent(agent_context_name: str = "MATE", error_message: str = None) -> Agent:
@@ -42,7 +55,7 @@ def create_fallback_agent(agent_context_name: str = "MATE", error_message: str =
         "Thank you for your patience while we resolve this configuration issue."
     )
 
-    return Agent(
+    agent = Agent(
         name="mate_fallback_agent",
         model=create_model(
             model_name="openrouter/google/gemini-2.5-flash-lite",
@@ -54,4 +67,6 @@ def create_fallback_agent(agent_context_name: str = "MATE", error_message: str =
         before_model_callback=capture_model_name_callback,
         after_model_callback=combined_after_model_callback,        
     )
+    _fallback_agents.append(weakref.ref(agent))
+    return agent
 

@@ -80,7 +80,7 @@ def rbac_before_model_callback(callback_context: CallbackContext, llm_request: L
                 "The agent could not be identified.", user_id, "unknown")
 
         # Skip RBAC check for certain system agents or if no restrictions
-        if _should_skip_rbac_check(agent_name):
+        if _should_skip_rbac_check(callback_context):
             if span:
                 try:
                     span.set_attribute("mate.rbac.allowed", True)
@@ -323,23 +323,22 @@ def _get_user_id(callback_context: CallbackContext) -> Optional[str]:
     return None
 
 
-def _should_skip_rbac_check(agent_name: str) -> bool:
+def _should_skip_rbac_check(callback_context: CallbackContext) -> bool:
     """
-    Determine if RBAC check should be skipped for this agent.
-    
+    Determine if RBAC check should be skipped for the agent in this context.
+
     Args:
-        agent_name: Name of the agent
-        
+        callback_context: The callback context
+
     Returns:
         True if RBAC check should be skipped, False otherwise
     """
-    # Skip RBAC for fallback agents or system agents
-    skip_agents = [
-        'mate_fallback_agent',
-        'system_agent',
-        'health_check_agent'
-    ]
-    if agent_name in skip_agents:
+    # The fallback agent that tells the user the configuration could not load. It
+    # is matched by object: a list of names let any agents_config row given one of
+    # them skip the check.
+    from shared.utils.fallback_agent import is_fallback_agent
+    invocation = getattr(callback_context, '_invocation_context', None)
+    if is_fallback_agent(getattr(invocation, 'agent', None)):
         return True
 
     # An eval run builds the agent in this process for an admin who started it
