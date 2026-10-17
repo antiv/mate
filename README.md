@@ -29,6 +29,11 @@ docker run -d -p 8000:8000 -e AUTH_PASSWORD=change-me -e GOOGLE_API_KEY=your-key
 
 (Add `-v mate-data:/app/data -e DB_PATH=data/my_agent_data.db` to keep your agents across restarts — see [Quick Start](#quick-start).)
 
+### Used in production
+
+- **Goal Navigator** runs on MATE in production — [case study](https://mvp-soft.com/client-stories/goal-navigator).
+- **MVP-Soft, LLC**, a US software consultancy, builds with MATE — [MATE at MVP-Soft](https://mvp-soft.com/mate).
+
 ### What you get
 
 - 🎨 **Build without code** — draw agent hierarchies, attach tools and MCP servers, and edit prompts on a canvas. Every change is live, versioned and one click from a rollback.
