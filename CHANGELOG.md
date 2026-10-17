@@ -10,11 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **Deleting a project left its integrations, budgets and test cases behind** - `_delete_project` removed the project's agents, stores, memory blocks, widget keys, triggers and alert rules, but not:
-  - its Slack and other channel integrations, which stayed active for an agent that no longer existed;
+  - its Slack and other channel integrations, and integrations of other projects pointing at its agents, which stayed active for an agent that no longer existed;
   - the rate-limit configs of the project and its agents;
   - its agents' eval test cases and their results.
 
-  A new agent with a deleted one's name inherited its budget and its test cases. They are deleted with the project now (#276)
+  A new agent with a deleted one's name inherited its budget and its test cases. They are deleted with the project now; deleting a single agent still leaves them (#276)
 - **The Edit Memory Block dialog had controls that did nothing** (#243) - its minimize and restore buttons and its drag handle are gone, and so are six debug `console.log` calls in the agent form scripts. Thanks to @sourabh65mehta
 
 ### Security

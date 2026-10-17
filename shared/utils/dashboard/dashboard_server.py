@@ -844,6 +844,11 @@ class DashboardServer:
             session.query(ChannelIntegration).filter(
                 ChannelIntegration.project_id == project_id
             ).delete(synchronize_session=False)
+            if agent_names:
+                # An integration is not checked to point at an agent of its own project
+                session.query(ChannelIntegration).filter(
+                    ChannelIntegration.agent_name.in_(agent_names)
+                ).delete(synchronize_session=False)
             session.query(RateLimitConfig).filter(
                 RateLimitConfig.scope == 'project',
                 RateLimitConfig.scope_id == str(project_id)

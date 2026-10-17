@@ -17,13 +17,12 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from shared.utils.models import (
     Base, Project, AgentConfig, AgentConfigVersion, FileSearchStore,
     AgentFileSearchStore, FileSearchDocument, MemoryBlock, WidgetApiKey,
-    AgentTrigger, WizardSession
+    AgentTrigger, WizardSession, ChannelIntegration, EvalResult, RateLimitConfig, TestCase
 )
 from shared.utils.dashboard.dashboard_server import DashboardServer
-from shared.utils.models import ChannelIntegration, EvalResult, RateLimitConfig, TestCase
 
 
-class TestProjectDeleteCascade(unittest.TestCase):
+class _ProjectDeleteCase(unittest.TestCase):
 
     def setUp(self):
         """Set up in-memory SQLite database and test fixtures."""
@@ -57,6 +56,10 @@ class TestProjectDeleteCascade(unittest.TestCase):
     def tearDown(self):
         """Stop patches and clean up."""
         self.patcher.stop()
+
+
+
+class TestProjectDeleteCascade(_ProjectDeleteCase):
 
     def test_delete_project_cascade(self):
         """Test that deleting a project cascades correctly to all related models."""
@@ -147,7 +150,7 @@ class TestProjectDeleteCascade(unittest.TestCase):
         session.close()
 
 
-class TestProjectDeleteLeavesNothing(TestProjectDeleteCascade):
+class TestProjectDeleteLeavesNothing(_ProjectDeleteCase):
     """Integrations, budgets and eval test cases of a deleted project used to stay."""
 
     def test_project_rows_by_id_and_by_agent_name_go(self):
@@ -162,6 +165,7 @@ class TestProjectDeleteLeavesNothing(TestProjectDeleteCascade):
         session.add_all([
             ChannelIntegration(project_id=1, agent_name="gone_bot"),
             ChannelIntegration(project_id=2, agent_name="kept_bot"),
+            ChannelIntegration(project_id=2, agent_name="gone_bot"),  # another project's, same agent
             RateLimitConfig(scope="project", scope_id="1"),
             RateLimitConfig(scope="agent", scope_id="gone_bot"),
             RateLimitConfig(scope="project", scope_id="2"),
