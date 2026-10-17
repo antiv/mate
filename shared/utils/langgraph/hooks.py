@@ -42,8 +42,9 @@ def check_rbac(user_id: str, agent_name: str, session_id: Optional[str] = None) 
 
         agent_config = _load_agent_config_row(agent_name)
         if not agent_config:
-            logger.warning(f"Agent config not found for {agent_name}, allowing access")
-            return None
+            # Not found, disabled, or no database: none of these grants access
+            logger.error(f"RBAC: no enabled config for agent '{agent_name}', refusing user {user_id}")
+            return _access_denied_event("This agent is not available.", user_id, agent_name)
 
         config_dict = {"name": agent_config["name"], "allowed_for_roles": []}
         if agent_config.get("allowed_for_roles"):

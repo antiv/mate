@@ -119,6 +119,14 @@ same way, as it already is by `server/auth.py` and `server/pat_auth.py`.
 
 The check runs again for each sub-agent the conversation is transferred to.
 
+It refuses when it can't do its job: no user id in the context, no agent name, or no
+enabled `agents_config` row for the agent. The last also covers a disabled agent and
+a lookup that failed. An error during the check refuses too. The LangGraph hook
+(`shared/utils/langgraph/hooks.py::check_rbac`) does the same. Eval and Playground
+runs skip the check (`is_eval_run`), since an admin started them, as do the system
+agents in `_should_skip_rbac_check`. Agents built in code get no MATE callbacks, so
+the check never runs for them.
+
 ## Production checks
 
 With `MATE_ENV=production`, the auth server refuses to start when `AUTH_PASSWORD` is

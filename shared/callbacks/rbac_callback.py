@@ -63,15 +63,10 @@ def rbac_before_model_callback(callback_context: CallbackContext, llm_request: L
         # Extract user information
         user_id = _get_user_id(callback_context)
         if not user_id:
-            if span:
-                try:
-                    span.set_attribute("mate.rbac.allowed", True)
-                    logger.debug("trace: mate.rbac_check span ended allowed=True")
-                    span.end()
-                except Exception:
-                    pass
-            logger.warning("No user ID found, allowing access (fallback behavior)")
-            return None
+            _end_span(span, False)
+            logger.error("RBAC: no user ID in the context, refusing")
+            return _create_access_denied_response(
+                "No user identity for this request.", "unknown", agent_name or "unknown")
 
         # Get agent information from context
         agent_name = getattr(callback_context, 'agent_name', None)
@@ -79,15 +74,10 @@ def rbac_before_model_callback(callback_context: CallbackContext, llm_request: L
             agent_name = getattr(callback_context.agent, 'name', None)
         
         if not agent_name:
-            if span:
-                try:
-                    span.set_attribute("mate.rbac.allowed", True)
-                    logger.debug("trace: mate.rbac_check span ended allowed=True")
-                    span.end()
-                except Exception:
-                    pass
-            logger.warning("No agent name found in context, allowing access")
-            return None
+            _end_span(span, False)
+            logger.error(f"RBAC: no agent name in the context for user {user_id}, refusing")
+            return _create_access_denied_response(
+                "The agent could not be identified.", user_id, "unknown")
 
         # Skip RBAC check for certain system agents or if no restrictions
         if _should_skip_rbac_check(agent_name):
@@ -146,16 +136,13 @@ def rbac_before_model_callback(callback_context: CallbackContext, llm_request: L
         except Exception as e:
             logger.error(f"Error getting agent config for {agent_name}: {e}")
         
+        # Not found, disabled, or the lookup failed: none of these grants access.
+        # Agents built in code get no MATE callbacks, so they never reach here.
         if not agent_config:
-            if span:
-                try:
-                    span.set_attribute("mate.rbac.allowed", True)
-                    logger.debug("trace: mate.rbac_check span ended allowed=True")
-                    span.end()
-                except Exception:
-                    pass
-            logger.warning(f"Agent config not found for {agent_name}, allowing access")
-            return None
+            _end_span(span, False)
+            logger.error(f"RBAC: no enabled config for agent '{agent_name}', refusing user {user_id}")
+            return _create_access_denied_response(
+                "This agent is not available.", user_id, agent_name)
         
         # Check RBAC permissions
         config_dict = {
@@ -216,19 +203,24 @@ def rbac_before_model_callback(callback_context: CallbackContext, llm_request: L
         return None  # Continue with normal processing
 
     except Exception as e:
-        if span:
-            try:
-                span.set_attribute("mate.rbac.allowed", True)
-                logger.debug("trace: mate.rbac_check span ended allowed=True (exception path)")
-                span.end()
-            except Exception:
-                pass
+        _end_span(span, False)
         logger.error(f"Error in RBAC callback: {e}")
         # Fail closed: an access check that could not complete has not granted
         # access. Failing open let a denial through whenever logging it raised.
         return _create_access_denied_response(
             "Access could not be verified. Please try again.",
             user_id or "unknown", agent_name or "unknown")
+
+
+def _end_span(span, allowed: bool) -> None:
+    """End the mate.rbac_check span, if tracing started one, with the outcome."""
+    if not span:
+        return
+    try:
+        span.set_attribute("mate.rbac.allowed", allowed)
+        span.end()
+    except Exception:
+        pass
 
 
 def _log_access_denied_event(callback_context: CallbackContext, user_id: str, agent_name: str, 

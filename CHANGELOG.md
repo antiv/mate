@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **The Edit Memory Block dialog had controls that did nothing** (#243) - its minimize and restore buttons and its drag handle are gone, and so are six debug `console.log` calls in the agent form scripts. Thanks to @sourabh65mehta
+
+### Security
+
+- **The role check let a model call through when it couldn't decide** - before each model call the RBAC callback compares the caller's roles with the agent's `allowed_for_roles`, but it allowed the call, with a warning, when there was no user id in the context, no agent name, or no enabled config for the agent, which also happens when the config lookup fails on a database error. It now refuses in all three cases, as it already did when the check raised; the LangGraph runtime's hook refuses an agent without a config the same way. Eval and Playground runs and the system agents still skip the check. See `docs/dev/auth-and-access.md` (#276)
+
 ## [1.5.0] - 2026-10-17
 
 Every deployment should upgrade: the agent, Google Drive and image MCP servers
