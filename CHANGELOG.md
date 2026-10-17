@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.1] - 2026-10-17
+
+Every deployment should upgrade, and soon: a signed-in user who is not an admin
+could chat as another user, the admin included, by sending a second spelling of the
+user id (`userId`) that the proxy did not check. The release also makes the role
+check refuse when it cannot decide instead of letting the call through, stops
+agents named like a system agent from skipping it, ties file search stores and
+budgets to the agent's own project, and deletes a project's integrations, budgets
+and test cases with it.
+
+Before upgrading:
+- A request to `/run` or `/run_sse` whose body gives `user_id` and `userId` (or
+  `app_name` and `appName`) with different values is refused. MATE's own clients
+  send one spelling.
+- With `MATE_PLUGINS_ENABLED=true`, an agent built in code needs an `agents_config`
+  row, or the role check refuses it.
+
+No migrations.
+
 ### Fixed
 
 - **Deleting a project left its integrations, budgets and test cases behind** - `_delete_project` removed the project's agents, stores, memory blocks, widget keys, triggers and alert rules, but not:
