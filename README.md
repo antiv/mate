@@ -5,7 +5,7 @@
 **Change the prompt, the model or who may use an agent from a dashboard — no code change, no redeploy.**<br>
 Self-hosted, on Google ADK or LangGraph, with any of 50+ LLM providers.
 
-[![GitHub stars](https://img.shields.io/github/stars/antiv/mate?style=social)](https://github.com/antiv/mate/stargazers)
+[![GitHub stars](https://badgen.net/github/stars/antiv/mate?icon=github)](https://github.com/antiv/mate/stargazers)
 [![Release](https://img.shields.io/github/v/release/antiv/mate)](https://github.com/antiv/mate/releases)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-green.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
