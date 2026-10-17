@@ -148,7 +148,7 @@ def _fallback_agent():
         return fallback_agent.create_fallback_agent()
 
 
-class TestSkipIsByObject(_Db):
+class TestSkipIsByClass(_Db):
     """The check skipped any agent named mate_fallback_agent, system_agent or
     health_check_agent, so an agents_config row given one of those names (the
     dashboard and the create_agent tool accept any name) ran with no role check.
@@ -180,6 +180,55 @@ class TestSkipIsByObject(_Db):
     def test_the_fallback_agent_is_skipped(self):
         fallback = _fallback_agent()
         self.assertIsNone(self._run(fallback, fallback.name, None))
+        # ADK runs a copy of the root agent, not the object create_fallback_agent returned
+        copy = fallback.clone()
+        self.assertIsNot(copy, fallback)
+        self.assertIsNone(self._run(copy, copy.name, None))
+
+
+class TestFallbackUnderARunner(unittest.TestCase):
+    """What the check sees when ADK actually runs the fallback agent: the agent in
+    the invocation context of a plugin's before_model_callback, as with
+    MATE_PLUGINS_ENABLED=true."""
+
+    def test_the_running_fallback_agent_is_recognised(self):
+        import asyncio
+        from typing import AsyncGenerator
+        from google.adk.apps import App
+        from google.adk.models.base_llm import BaseLlm
+        from google.adk.models.llm_request import LlmRequest
+        from google.adk.models.llm_response import LlmResponse
+        from google.adk.plugins.base_plugin import BasePlugin
+        from google.adk.runners import InMemoryRunner
+        from google.genai import types
+        from shared.utils import fallback_agent
+
+        class Reply(BaseLlm):
+            model: str = "reply"
+
+            async def generate_content_async(self, llm_request: LlmRequest,
+                                             stream: bool = False) -> AsyncGenerator[LlmResponse, None]:
+                yield LlmResponse(content=types.Content(role="model", parts=[types.Part(text="ok")]))
+
+        seen = []
+
+        class Watch(BasePlugin):
+            async def before_model_callback(self, *, callback_context, llm_request):
+                seen.append(fallback_agent.is_fallback_agent(callback_context._invocation_context.agent))
+                return None
+
+        with patch.object(fallback_agent, "create_model", return_value=Reply()):
+            agent = fallback_agent.create_fallback_agent()
+        runner = InMemoryRunner(app=App(name="fallback_app", root_agent=agent, plugins=[Watch(name="watch")]))
+
+        async def run():
+            session = await runner.session_service.create_session(app_name="fallback_app", user_id="u")
+            message = types.Content(role="user", parts=[types.Part(text="hi")])
+            async for _ in runner.run_async(user_id="u", session_id=session.id, new_message=message):
+                pass
+
+        asyncio.run(run())
+        self.assertEqual(seen, [True])
 
 
 class TestCallbackChain(unittest.TestCase):

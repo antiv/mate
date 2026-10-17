@@ -334,7 +334,7 @@ def _should_skip_rbac_check(callback_context: CallbackContext) -> bool:
         True if RBAC check should be skipped, False otherwise
     """
     # The fallback agent that tells the user the configuration could not load. It
-    # is matched by object: a list of names let any agents_config row given one of
+    # is matched by class: a list of names let any agents_config row given one of
     # them skip the check.
     from shared.utils.fallback_agent import is_fallback_agent
     invocation = getattr(callback_context, '_invocation_context', None)
