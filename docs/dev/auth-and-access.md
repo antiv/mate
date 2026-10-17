@@ -95,7 +95,11 @@ a non-admin, `_non_admin_refusal` allows only:
 
 - `list-apps`
 - paths under `apps/<app>/users/<id>/` where `<id>` is the caller's own
-- `run` and `run_sse` when the `user_id` in the body is the caller's own
+- `run` and `run_sse` when the user id in the body is the caller's own. ADK reads a
+  body field in snake_case or camelCase and prefers `userId` when both are present,
+  so both spellings are checked, and a body where they differ is refused
+  (`server/run_body.py`). The rate-limit middleware reads `appName` and `userId` the
+  same way and answers `400` to a body whose spellings disagree.
 
 Everything else the agent server offers is admin-only. The `/run_live` WebSocket
 applies the same rule.

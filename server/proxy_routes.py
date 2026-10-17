@@ -25,6 +25,7 @@ from fastapi.openapi.docs import get_swagger_ui_html, get_redoc_html
 
 from shared.utils.auth_utils import verify_token
 from server.auth import get_auth_user
+from server.run_body import ConflictingFieldError, run_field
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +67,14 @@ def _non_admin_refusal(path: str, identity: str, body: Optional[bytes]) -> Optio
             payload = json.loads(body or b"{}")
         except (json.JSONDecodeError, UnicodeDecodeError):
             return "malformed request"
-        return None if payload.get("user_id") == identity else "not your user id"
+        if not isinstance(payload, dict):
+            return "malformed request"
+        # Both spellings: ADK runs as userId when a body has both
+        try:
+            user_id = run_field(payload, "user_id")
+        except ConflictingFieldError:
+            return "conflicting user ids"
+        return None if user_id == identity else "not your user id"
     return "admin only"
 
 project_root = Path(__file__).parent.parent
