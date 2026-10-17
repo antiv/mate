@@ -25,7 +25,7 @@ from server import rate_limit_middleware
 from shared.utils.rate_limit_service import RateLimitResult
 
 
-class TestProjectFromAgent(unittest.TestCase):
+class _MiddlewareCase(unittest.TestCase):
 
     def setUp(self):
         self.service = MagicMock()
@@ -49,6 +49,10 @@ class TestProjectFromAgent(unittest.TestCase):
         return self.client.post("/run_sse", content=json.dumps(body),
                                 headers={"Content-Type": "application/json"})
 
+
+
+class TestProjectFromAgent(_MiddlewareCase):
+
     def test_a_project_in_the_body_is_ignored(self):
         resp = self._post({"app_name": "seller", "user_id": "u1", "project_id": 99})
         self.assertEqual(resp.status_code, 200)
@@ -60,6 +64,25 @@ class TestProjectFromAgent(unittest.TestCase):
     def test_the_camel_case_spelling_is_ignored_too(self):
         self._post({"appName": "seller", "userId": "u1", "projectId": 99})
         self.assertIsNone(self.service.check_request_limit.call_args.kwargs.get("project_id"))
+
+
+class TestBothSpellings(_MiddlewareCase):
+    """ADK takes appName and userId over app_name and user_id. The middleware read
+    the snake_case ones first, so a body could have its limits checked for one agent
+    or user while the runtime ran another."""
+
+    def test_the_camel_case_values_are_the_ones_checked(self):
+        self._post({"appName": "seller", "userId": "u1"})
+        kwargs = self.service.check_request_limit.call_args.kwargs
+        self.assertEqual((kwargs["agent_name"], kwargs["user_id"]), ("seller", "u1"))
+
+    def test_conflicting_spellings_are_refused(self):
+        for body in ({"app_name": "cheap", "appName": "seller", "user_id": "u1"},
+                     {"app_name": "seller", "user_id": "u1", "userId": "someone_else"}):
+            with self.subTest(body=body):
+                resp = self._post(body)
+                self.assertEqual(resp.status_code, 400)
+        self.service.check_request_limit.assert_not_called()
 
 
 if __name__ == "__main__":
