@@ -760,7 +760,8 @@ class DashboardServer:
             session.close()
     
     def _delete_project(self, project_id: int) -> Dict[str, Any]:
-        """Delete a project and associated agents, stores, triggers, memory blocks, and keys."""
+        """Delete a project and associated agents, stores, triggers, memory blocks, keys,
+        integrations, rate limits and eval test cases."""
         if not self.db_client:
             raise HTTPException(status_code=500, detail="Database connection failed")
 
@@ -833,6 +834,35 @@ class DashboardServer:
                     self.AlertRule.scope == 'agent',
                     self.AlertRule.scope_id.in_(agent_names)
                 ).delete(synchronize_session=False)
+
+            # 5c. Rows tied to the project or its agents by id or name, which would
+            # otherwise be left behind: an integration still active for an agent that
+            # is gone, budgets and test cases that a new agent of the same name would
+            # inherit. (The ORM's foreign key on channel_integrations, which migrated
+            # databases don't have, also refused the delete.)
+            from shared.utils.models import ChannelIntegration, RateLimitConfig
+            session.query(ChannelIntegration).filter(
+                ChannelIntegration.project_id == project_id
+            ).delete(synchronize_session=False)
+            session.query(RateLimitConfig).filter(
+                RateLimitConfig.scope == 'project',
+                RateLimitConfig.scope_id == str(project_id)
+            ).delete(synchronize_session=False)
+            if agent_names:
+                session.query(RateLimitConfig).filter(
+                    RateLimitConfig.scope == 'agent',
+                    RateLimitConfig.scope_id.in_(agent_names)
+                ).delete(synchronize_session=False)
+                test_case_ids = [t.id for t in session.query(self.TestCase.id).filter(
+                    self.TestCase.agent_name.in_(agent_names)
+                ).all()]
+                if test_case_ids:
+                    session.query(self.EvalResult).filter(
+                        self.EvalResult.test_case_id.in_(test_case_ids)
+                    ).delete(synchronize_session=False)
+                    session.query(self.TestCase).filter(
+                        self.TestCase.id.in_(test_case_ids)
+                    ).delete(synchronize_session=False)
 
             # 6. Disassociate public wizard sessions (set trial_project_id to NULL)
             session.query(self.WizardSession).filter(
