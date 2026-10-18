@@ -116,8 +116,8 @@ personal access tokens).
 
 ## Agent-to-agent (A2A)
 
-The agent server is started with A2A client support enabled.
-[A2A (agent-to-agent)](a2a.md) describes calling and exposing agents over that
+The agent server is started with A2A enabled, and the agent MCP servers above answer
+through it. [A2A (agent-to-agent)](a2a.md) describes how agents are exposed over that
 protocol.
 
 ## Choosing between them
