@@ -95,7 +95,11 @@ a non-admin, `_non_admin_refusal` allows only:
 
 - `list-apps`
 - paths under `apps/<app>/users/<id>/` where `<id>` is the caller's own
-- `run` and `run_sse` when the `user_id` in the body is the caller's own
+- `run` and `run_sse` when the user id in the body is the caller's own. ADK reads a
+  body field in snake_case or camelCase and prefers `userId` when both are present,
+  so both spellings are checked, and a body where they differ is refused
+  (`server/run_body.py`). The rate-limit middleware reads `appName` and `userId` the
+  same way and answers `400` to a body whose spellings disagree.
 
 Everything else the agent server offers is admin-only. The `/run_live` WebSocket
 applies the same rule.
@@ -119,11 +123,29 @@ same way, as it already is by `server/auth.py` and `server/pat_auth.py`.
 
 The check runs again for each sub-agent the conversation is transferred to.
 
+It refuses when it can't do its job: no user id in the context, no agent name, or no
+enabled `agents_config` row for the agent. The last also covers a disabled agent and
+a lookup that failed. An error during the check refuses too.
+
+- The LangGraph hook (`shared/utils/langgraph/hooks.py::check_rbac`) refuses an agent
+  without a config the same way. Its `/run_sse` already rejects a request without a
+  user id or app name.
+- Eval and Playground runs skip the check (`is_eval_run`), since an admin started
+  them. So does the fallback agent that reports a configuration that could not load
+  (`shared/utils/fallback_agent.py`). It is recognised by its own class, which the
+  copy ADK runs keeps, not by its name, which any `agents_config` row can take.
+- Agents built in code, outside `agents_config`, get the per-agent callbacks only if
+  they attach them. With `MATE_PLUGINS_ENABLED=true` the check runs for every LLM
+  agent in the app, so such an agent needs an `agents_config` row, or it is refused.
+
 ## Production checks
 
 With `MATE_ENV=production`, the auth server refuses to start when `AUTH_PASSWORD` is
 still the default, when `SECRET_KEY` is missing, or when the database cannot be
-reached, and it forces the session cookie to be HTTPS-only.
+reached, and it forces the session cookie to be HTTPS-only. An empty
+`AUTH_USERNAME` or `AUTH_PASSWORD`, as a copied `.env.example` has, counts as
+unset (`admin` / `mate`), so the check catches it; `credentials_match` never
+accepts an empty password.
 `MATE_ALLOW_INSECURE_DEFAULTS=true` turns the first two back into warnings.
 
 ## Adding a route: which protection applies

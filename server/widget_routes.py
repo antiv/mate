@@ -35,6 +35,10 @@ logger = logging.getLogger(__name__)
 ORIGIN_STRICT = os.getenv("WIDGET_ORIGIN_STRICT", "false").lower() in ("true", "1", "yes")
 # Transitional: let the public api_key still authorise the /widget/api admin routes.
 LEGACY_ADMIN_KEY = os.getenv("WIDGET_LEGACY_ADMIN_KEY", "false").lower() in ("true", "1", "yes")
+# Agent server response headers that describe its body or connection, not the
+# body the chat route sends: that one gains the session event and httpx has
+# already decoded any content-encoding.
+_UPSTREAM_ONLY_HEADERS = {"content-length", "content-encoding", "transfer-encoding", "connection", "keep-alive"}
 
 router = APIRouter(prefix="/widget", tags=["Widget"])
 admin_api_router = APIRouter(prefix="/widget/api", tags=["Widget - Admin API"])
@@ -162,6 +166,17 @@ def _lookup_widget_admin_key(admin_key: str) -> Optional[WidgetApiKey]:
         session.close()
 
 
+def _lookup_widget_feedback_key(feedback_key: str) -> Optional[WidgetApiKey]:
+    db = get_database_client()
+    session = db.get_session()
+    if not session:
+        return None
+    try:
+        return session.query(WidgetApiKey).filter_by(feedback_key=feedback_key, is_active=True).first()
+    finally:
+        session.close()
+
+
 def _extract_api_key(request: Request) -> str:
     key = request.headers.get("X-Widget-Key") or request.query_params.get("key")
     if not key:
@@ -247,6 +262,22 @@ def verify_widget_key(request: Request) -> WidgetApiKey:
     return wk
 
 
+def verify_feedback_sender(request: Request) -> tuple:
+    """FastAPI dependency for /api/feedback: (widget key, sent by a standalone build).
+
+    A standalone build authenticates with the key's feedback_key in
+    X-Widget-Feedback-Key; it is the only sender trusted with the rated question
+    and answer. Everyone else uses the public key, as for any widget call.
+    """
+    feedback_key = request.headers.get("X-Widget-Feedback-Key")
+    if feedback_key:
+        wk = _lookup_widget_feedback_key(feedback_key)
+        if wk is None:
+            raise HTTPException(status_code=401, detail="Invalid or inactive widget feedback key")
+        return wk, True
+    return verify_widget_key(request), False
+
+
 def verify_widget_admin_key(request: Request) -> WidgetApiKey:
     """FastAPI dependency for widget management routes.
 
@@ -325,7 +356,8 @@ async def widget_chat_page(request: Request, key: str = Query(...)):
     })
     # Customer sites frame this page, so it cannot take the dashboard's
     # frame-ancestors 'self'. It allows the sites _check_origin lets through.
-    return set_csp_header(response, widget_frame_ancestors(wk.get_allowed_origins(), ORIGIN_STRICT))
+    return set_csp_header(response, widget_frame_ancestors(wk.get_allowed_origins(), ORIGIN_STRICT),
+                          request)
 
 
 @router.get("/public-config", include_in_schema=False)
@@ -378,20 +410,29 @@ async def widget_admin_page(request: Request, key: str = Query(...)):
 # ---------------------------------------------------------------------------
 
 @router.post("/api/feedback")
-async def widget_feedback(request: Request, wk: WidgetApiKey = Depends(verify_widget_key)):
+async def widget_feedback(request: Request, sender: tuple = Depends(verify_feedback_sender)):
     """Record a visitor's thumbs up/down on one agent response.
 
     Rating is a visitor action, so it is scoped by the widget's public key. The agent
     and project come from the key rather than the body — a visitor must not be able to
     attribute a rating to someone else's agent.
+
+    A standalone build forwarding its ratings also sends `question` and `answer`,
+    since this server cannot read its sessions. They are taken only from a sender
+    holding the key's feedback_key: the public key is in every page that embeds the
+    widget, and the text reaches Suggest a fix.
     """
     from shared.utils.feedback_service import get_feedback_service
+
+    wk, from_build = sender
 
     body = await request.json()
     session_id = (body.get("session_id") or "").strip()
     message_id = (body.get("message_id") or "").strip()
     rating = (body.get("rating") or "").strip()
     comment = body.get("comment")
+    question = body.get("question") if from_build else None
+    answer = body.get("answer") if from_build else None
 
     if not session_id or not message_id:
         raise HTTPException(status_code=400, detail="session_id and message_id are required")
@@ -402,6 +443,8 @@ async def widget_feedback(request: Request, wk: WidgetApiKey = Depends(verify_wi
         session_id=session_id, message_id=message_id, rating=rating,
         agent_name=wk.agent_name, project_id=wk.project_id,
         comment=comment if isinstance(comment, str) else None,
+        question=question if isinstance(question, str) else None,
+        answer=answer if isinstance(answer, str) else None,
     )
     if not result:
         raise HTTPException(status_code=500, detail="Failed to record feedback")
@@ -550,13 +593,16 @@ async def widget_chat(request: Request, wk: WidgetApiKey = Depends(verify_widget
             req = client.build_request("POST", target_url, json=adk_payload, headers=headers)
             r = await client.send(req, stream=True)
 
-        # Prepend a JSON event with the session_id so the client can persist it
+        # Prepend a JSON event with the session_id so the client can persist it.
+        # An error reply is passed through as it is.
+        is_stream = r.is_success
         async def streamer():
             try:
-                # Emit session_id and debug_mode as first SSE event so the client stores them
-                import json as _json
-                init_event = _json.dumps({"session_id": session_id, "debug_mode": debug_mode})
-                yield f"data: {init_event}\n\n".encode()
+                if is_stream:
+                    # Emit session_id and debug_mode as first SSE event so the client stores them
+                    import json as _json
+                    init_event = _json.dumps({"session_id": session_id, "debug_mode": debug_mode})
+                    yield f"data: {init_event}\n\n".encode()
                 async for chunk in r.aiter_bytes():
                     yield chunk
             finally:
@@ -566,7 +612,7 @@ async def widget_chat(request: Request, wk: WidgetApiKey = Depends(verify_widget
         return StreamingResponse(
             streamer(),
             status_code=r.status_code,
-            headers=dict(r.headers),
+            headers={k: v for k, v in r.headers.items() if k.lower() not in _UPSTREAM_ONLY_HEADERS},
             media_type=r.headers.get("content-type", "text/event-stream"),
         )
     except httpx.RequestError as e:
@@ -872,6 +918,12 @@ async def list_widget_files(wk: WidgetApiKey = Depends(verify_widget_admin_key))
     return {"success": True, "stores": result}
 
 
+def _widget_store_names(wk: WidgetApiKey) -> set:
+    """The file search stores this widget's admin may change: those of its agent."""
+    from shared.utils.file_search_service import FileSearchService
+    return {store["store_name"] for store in FileSearchService(get_database_client()).get_stores_for_agent(wk.agent_name)}
+
+
 @admin_api_router.post("/files/upload")
 async def upload_widget_file(
     wk: WidgetApiKey = Depends(verify_widget_admin_key),
@@ -882,6 +934,9 @@ async def upload_widget_file(
     """Upload a file to a file search store scoped to this widget."""
     from shared.utils.tools.file_search_tools import upload_file_to_store
     from shared.utils.file_search_service import FileSearchService
+
+    if store_name not in _widget_store_names(wk):
+        raise HTTPException(status_code=404, detail="Store not found")
 
     with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(file.filename)[1]) as tmp:
         content = await file.read()
@@ -923,8 +978,9 @@ async def delete_widget_file(file_id: int, wk: WidgetApiKey = Depends(verify_wid
         if not doc:
             return {"success": False, "error": "File not found"}
         store = session.query(FileSearchStore).filter_by(id=doc.store_id).first()
-        if not store:
-            return {"success": False, "error": "Store not found"}
+        # A file in another agent's store is answered as if it did not exist
+        if not store or store.store_name not in _widget_store_names(wk):
+            return {"success": False, "error": "File not found"}
         from shared.utils.file_search_service import FileSearchService
         service = FileSearchService(db)
         success = service.delete_document(store.store_name, doc.document_name)
@@ -983,6 +1039,7 @@ async def create_widget_key(
 
     api_key = f"wk_{secrets.token_urlsafe(32)}"
     admin_key = f"wak_{secrets.token_urlsafe(32)}"
+    feedback_key = f"wfk_{secrets.token_urlsafe(32)}"
 
     db = get_database_client()
     session = db.get_session()
@@ -992,6 +1049,7 @@ async def create_widget_key(
         wk = WidgetApiKey(
             api_key=api_key,
             admin_key=admin_key,
+            feedback_key=feedback_key,
             project_id=project_id,
             agent_name=agent_name,
             label=label,
@@ -1117,6 +1175,7 @@ async def get_embed_code(
             "embed_code": embed_code,
             "api_key": wk.api_key,
             "admin_key": wk.admin_key,
+            "feedback_key": wk.feedback_key,
         }
     finally:
         session.close()

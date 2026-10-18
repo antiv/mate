@@ -67,6 +67,8 @@ def capture_model_name_callback(
     if not hasattr(callback_context, 'state'):
         callback_context.state = {}
     
+    # Set by the fallback callback when the fallback model answers this call
+    callback_context.state['current_model_is_fallback'] = False
     if model_name:
         callback_context.state['current_model_name'] = model_name
         logger.debug(f"Captured model name: {model_name}")
@@ -150,8 +152,10 @@ def log_token_usage_callback(
         
         # Get model name from session state (captured by capture_model_name_callback)
         model_name = None
+        is_fallback = False
         if hasattr(callback_context, 'state') and callback_context.state:
             model_name = callback_context.state.get('current_model_name')
+            is_fallback = bool(callback_context.state.get('current_model_is_fallback'))
         
         # Fallback: try to get model name from response if not captured
         if not model_name:
@@ -182,7 +186,8 @@ def log_token_usage_callback(
             "prompt_tokens": usage.prompt_token_count or 0,
             "response_tokens": usage.candidates_token_count or 0,
             "thoughts_tokens": usage.thoughts_token_count or 0,
-            "tool_use_tokens": usage.tool_use_prompt_token_count or 0
+            "tool_use_tokens": usage.tool_use_prompt_token_count or 0,
+            "is_fallback": is_fallback,
         }
         
         # Save to database
@@ -251,6 +256,7 @@ def log_token_usage_callback(
                 GEN_AI_USAGE_INPUT_TOKENS,
                 GEN_AI_USAGE_OUTPUT_TOKENS,
                 GEN_AI_RESPONSE_MODEL,
+                MATE_MODEL_FALLBACK,
             )
             span = _inference_span_var.get()
             from_contextvar = span is not None
@@ -261,6 +267,8 @@ def log_token_usage_callback(
                 span.set_attribute(GEN_AI_USAGE_OUTPUT_TOKENS, usage.candidates_token_count or 0)
                 if model_name:
                     span.set_attribute(GEN_AI_RESPONSE_MODEL, model_name)
+                if is_fallback:
+                    span.set_attribute(MATE_MODEL_FALLBACK, True)
                 span.end()
                 logger.debug("trace: gen_ai.inference span ended (from_contextvar=%s)", from_contextvar)
                 _inference_span_var.set(None)

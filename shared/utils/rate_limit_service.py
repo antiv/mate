@@ -4,6 +4,11 @@ Rate limit and budget service.
 Enforces per-user, per-agent, per-project limits:
 - requests/min (in-memory)
 - tokens/hour, tokens/day, tokens/month (from DB)
+- US dollars per day and per month (from DB), each measured in its own scope:
+  a user's budget against that user's spend, and so on. Calls without a price
+  add nothing, unless the budget treats them as over budget (block_unpriced);
+  when the spend cannot be read, a block budget refuses the request
+- an agent's budgets can include its sub-agents (include_sub_agents)
 - max_tokens_per_request (agent only, enforced at callback)
 
 Actions: warn (log), throttle (delay), block (429).
@@ -60,6 +65,10 @@ class UsageSnapshot:
     tokens_last_day: int
     tokens_last_month: int
     tokens_this_request: Optional[int]
+    usd_last_day: float = 0.0
+    usd_last_month: float = 0.0
+    unpriced_calls_day: int = 0
+    unpriced_calls_month: int = 0
 
 
 def _cleanup_old_timestamps(timestamps: deque, window_seconds: int):
@@ -207,6 +216,7 @@ class RateLimitService:
         agent_name: Optional[str] = None,
         project_id: Optional[int] = None,
         tokens_this_request: Optional[int] = None,
+        include_sub_agents: bool = False,
     ) -> UsageSnapshot:
         """Get current usage for user/agent/project."""
         now = datetime.now(timezone.utc)
@@ -230,7 +240,7 @@ class RateLimitService:
             tokens_last_day = max(
                 tokens_last_day,
                 self.token_service.get_agent_tokens_since(
-                    agent_name, now - timedelta(days=1)
+                    agent_name, now - timedelta(days=1), include_sub_agents=include_sub_agents
                 ),
             )
 
@@ -242,12 +252,29 @@ class RateLimitService:
                 ),
             )
 
+        # Spend of the most specific scope asked for
+        scope = (("project", str(project_id)) if project_id else
+                 ("agent", agent_name) if agent_name else ("user", user_id) if user_id else None)
+        spend_day = spend_month = None
+        if scope:
+            sub_agents = include_sub_agents and scope[0] == "agent"
+            spend_day = self.token_service.get_spend_since(
+                *scope, now - timedelta(days=1), include_sub_agents=sub_agents)
+            spend_month = self.token_service.get_spend_since(
+                *scope, now - timedelta(days=30), include_sub_agents=sub_agents)
+        usd_last_day, unpriced_day = spend_day or (0.0, 0)
+        usd_last_month, unpriced_month = spend_month or (0.0, 0)
+
         return UsageSnapshot(
             requests_last_min=requests_last_min,
             tokens_last_hour=tokens_last_hour,
             tokens_last_day=tokens_last_day,
             tokens_last_month=tokens_last_month,
             tokens_this_request=tokens_this_request,
+            usd_last_day=usd_last_day,
+            usd_last_month=usd_last_month,
+            unpriced_calls_day=unpriced_day,
+            unpriced_calls_month=unpriced_month,
         )
 
     def _collect_limit_data_sync(
@@ -270,12 +297,32 @@ class RateLimitService:
             # Collect configs for user, agent, project
             configs: List[Tuple[str, str, SimpleNamespace]] = []
 
+            now = datetime.now(timezone.utc)
+
             def _plain(cfg: RateLimitConfig) -> SimpleNamespace:
+                # A dollar budget is measured in its own scope, so its spend is
+                # read here, only when the config has one: (dollars, unpriced
+                # calls), or None when it could not be read
+                sub_agents = bool(cfg.include_sub_agents) and cfg.scope == "agent"
+                spent_day = spent_month = None
+                if cfg.usd_per_day is not None:
+                    spent_day = self.token_service.get_spend_since(
+                        cfg.scope, cfg.scope_id, now - timedelta(days=1),
+                        include_sub_agents=sub_agents)
+                if cfg.usd_per_month is not None:
+                    spent_month = self.token_service.get_spend_since(
+                        cfg.scope, cfg.scope_id, now - timedelta(days=30),
+                        include_sub_agents=sub_agents)
                 return SimpleNamespace(
                     requests_per_minute=cfg.requests_per_minute,
                     tokens_per_hour=cfg.tokens_per_hour,
                     tokens_per_day=cfg.tokens_per_day,
                     tokens_per_month=cfg.tokens_per_month,
+                    usd_per_day=cfg.usd_per_day,
+                    usd_per_month=cfg.usd_per_month,
+                    usd_spent_day=spent_day,
+                    usd_spent_month=spent_month,
+                    block_unpriced=bool(cfg.block_unpriced),
                     action_on_limit=cfg.action_on_limit,
                 )
 
@@ -283,10 +330,12 @@ class RateLimitService:
             if user_cfg:
                 configs.append(("user", user_id, _plain(user_cfg)))
 
+            agent_sub_agents = False
             if agent_name:
                 agent_cfg = _get_config(session, "agent", agent_name)
                 if agent_cfg:
                     configs.append(("agent", agent_name, _plain(agent_cfg)))
+                    agent_sub_agents = bool(agent_cfg.include_sub_agents)
 
             if project_id is None and agent_name:
                 project_id = _get_agent_project_id(session, agent_name)
@@ -304,7 +353,6 @@ class RateLimitService:
             if not configs:
                 return ([], (0, 0, 0))
 
-            now = datetime.now(timezone.utc)
             tokens_last_hour = self.token_service.get_user_tokens_since(
                 user_id, now - timedelta(hours=1)
             ) if user_id else 0
@@ -319,7 +367,7 @@ class RateLimitService:
                 tokens_last_day = max(
                     tokens_last_day,
                     self.token_service.get_agent_tokens_since(
-                        agent_name, now - timedelta(days=1)
+                        agent_name, now - timedelta(days=1), include_sub_agents=agent_sub_agents
                     ),
                 )
             if project_id:
@@ -454,6 +502,48 @@ class RateLimitService:
                         "[RATE_LIMIT] project %s: tokens/month %s/%s (action=warn)",
                         sid, usage.tokens_last_month, cfg.tokens_per_month,
                     )
+
+            # US dollars per day and per month, in this config's own scope
+            for limit, spent, period in ((cfg.usd_per_day, cfg.usd_spent_day, "in the last 24 hours"),
+                                         (cfg.usd_per_month, cfg.usd_spent_month, "in the last 30 days")):
+                if limit is None:
+                    continue
+                if spent is None:
+                    # The spend could not be read: a block budget fails closed
+                    if action == "block":
+                        return (
+                            RateLimitResult(
+                                allowed=False,
+                                action="block",
+                                message=f"Budget check failed: spend {period} could not be read",
+                                retry_after_seconds=60.0,
+                            ),
+                            usage,
+                        )
+                    logger.warning(
+                        "[RATE_LIMIT] %s %s: spend %s could not be read (action=%s)",
+                        scope, sid, period, action,
+                    )
+                    continue
+                usd, unpriced = spent
+                if usd >= limit:
+                    message = f"Budget exceeded: ${usd:.2f} spent {period} (limit: ${limit:.2f})"
+                elif unpriced and cfg.block_unpriced:
+                    message = (f"Budget exceeded: {unpriced} calls without a price {period} "
+                               f"count as over the ${limit:.2f} budget")
+                else:
+                    continue
+                if action == "block":
+                    return (
+                        RateLimitResult(
+                            allowed=False,
+                            action="block",
+                            message=message,
+                            retry_after_seconds=3600.0,
+                        ),
+                        usage,
+                    )
+                logger.warning("[RATE_LIMIT] %s %s: %s (action=warn)", scope, sid, message)
 
         return (
             RateLimitResult(allowed=True, action="warn", message="OK"),

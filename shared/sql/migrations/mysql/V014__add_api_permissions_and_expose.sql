@@ -2,7 +2,7 @@
 -- Version: V014
 -- Database: MySQL
 
-ALTER TABLE agents_config ADD COLUMN IF NOT EXISTS expose_as_model BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE agents_config ADD COLUMN expose_as_model BOOLEAN NOT NULL DEFAULT FALSE;
 
 CREATE TABLE IF NOT EXISTS personal_access_tokens (
     id INT AUTO_INCREMENT PRIMARY KEY,

@@ -10,6 +10,7 @@ covers:
   - shared/utils/audit_service.py
   - shared/utils/token_usage_service.py
   - shared/utils/response_metrics.py
+  - shared/utils/model_pricing.py
   - shared/utils/dashboard/dashboard_server.py::*usage*
   - shared/utils/dashboard/dashboard_server.py::*audit*
 ---
@@ -37,9 +38,25 @@ Choose a period at the top. The **Analytics** view shows:
 | **Response Latency** | How long answers took: p50 is the typical answer, p95 the slow ones. |
 | **Tokens per Conversation** | The median size of a conversation. |
 
-Below are a daily trend, the split between prompt and response tokens, the busiest
-agents, activity by hour, satisfaction per agent, and a per-agent table with average
-response time and success rate.
+Below are what the period cost (see [Cost](#cost)), a daily trend, the split between
+prompt and response tokens, the busiest agents, activity by hour, satisfaction per
+agent, and a per-agent table with average response time and success rate.
+
+### Cost
+
+Every successful model call is priced in US dollars when it is logged, at the list
+price of its model (see [Model prices](settings.md#model-prices) for where prices come
+from and how to set one).
+
+| Figure | Meaning |
+|---|---|
+| **Cost (USD)** | What the period's calls cost. Calls without a price are not in it. |
+| **Fallback Model Cost** | The part of it answered by agents' [fallback models](fallback-model.md) after their own model failed. |
+| **Without a Price** | The share of tokens whose model has no known price. When it is high, the cost leaves much out; admins can follow **set prices** to fix that. |
+| **Cost by Agent**, **Cost by Project** | The same cost per agent and per project, with the calls that have no price. An agent row also shows its fallback cost. |
+
+Agents that are not configured in the dashboard, such as deleted ones, are counted
+under **No project**. Failed calls and refusals are never priced.
 
 ### Which traffic you are looking at
 
@@ -60,7 +77,10 @@ counts and status. Open a row for the details. This is where to look when one pe
 reports a problem, or when a cost spike needs explaining.
 
 People without the admin role see **My Usage** in the Work Room: the same figures for
-their own requests only.
+their own requests only. Satisfaction counts the ratings given in their own
+conversations, and cost covers their own calls. Their **Raw Data** view lists their own
+model calls from the last 24 hours; changing the period or page size there does not
+load more, since the API behind those controls is for admins.
 
 ## Audit Logs
 

@@ -17,12 +17,12 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from shared.utils.models import (
     Base, Project, AgentConfig, AgentConfigVersion, FileSearchStore,
     AgentFileSearchStore, FileSearchDocument, MemoryBlock, WidgetApiKey,
-    AgentTrigger, WizardSession
+    AgentTrigger, WizardSession, ChannelIntegration, EvalResult, RateLimitConfig, TestCase
 )
 from shared.utils.dashboard.dashboard_server import DashboardServer
 
 
-class TestProjectDeleteCascade(unittest.TestCase):
+class _ProjectDeleteCase(unittest.TestCase):
 
     def setUp(self):
         """Set up in-memory SQLite database and test fixtures."""
@@ -56,6 +56,10 @@ class TestProjectDeleteCascade(unittest.TestCase):
     def tearDown(self):
         """Stop patches and clean up."""
         self.patcher.stop()
+
+
+
+class TestProjectDeleteCascade(_ProjectDeleteCase):
 
     def test_delete_project_cascade(self):
         """Test that deleting a project cascades correctly to all related models."""
@@ -143,6 +147,48 @@ class TestProjectDeleteCascade(unittest.TestCase):
         self.assertEqual(session.query(WizardSession).count(), 1)
         db_wizard = session.query(WizardSession).first()
         self.assertIsNone(db_wizard.trial_project_id)
+        session.close()
+
+
+class TestProjectDeleteLeavesNothing(_ProjectDeleteCase):
+    """Integrations, budgets and eval test cases of a deleted project used to stay."""
+
+    def test_project_rows_by_id_and_by_agent_name_go(self):
+        session = self.Session()
+        session.add_all([Project(id=1, name="gone"), Project(id=2, name="kept")])
+        session.add_all([AgentConfig(name="gone_bot", type="llm", project_id=1),
+                         AgentConfig(name="kept_bot", type="llm", project_id=2)])
+        session.flush()
+        version = AgentConfigVersion(agent_config_id=session.query(AgentConfig).filter_by(
+            name="gone_bot").one().id, version_number=1, config_snapshot="{}")
+        session.add(version)
+        session.add_all([
+            ChannelIntegration(project_id=1, agent_name="gone_bot"),
+            ChannelIntegration(project_id=2, agent_name="kept_bot"),
+            ChannelIntegration(project_id=2, agent_name="gone_bot"),  # another project's, same agent
+            RateLimitConfig(scope="project", scope_id="1"),
+            RateLimitConfig(scope="agent", scope_id="gone_bot"),
+            RateLimitConfig(scope="project", scope_id="2"),
+            RateLimitConfig(scope="agent", scope_id="kept_bot"),
+            RateLimitConfig(scope="user", scope_id="gone_bot"),  # a user, not the agent
+        ])
+        session.flush()
+        gone_case = TestCase(agent_name="gone_bot", input="q", expected_output="a")
+        kept_case = TestCase(agent_name="kept_bot", input="q", expected_output="a")
+        session.add_all([gone_case, kept_case])
+        session.flush()
+        session.add(EvalResult(test_case_id=gone_case.id, version_id=version.id, eval_method="exact_match"))
+        session.commit()
+        session.close()
+
+        self.assertTrue(self.server._delete_project(1).get("success"))
+
+        session = self.Session()
+        self.assertEqual([i.agent_name for i in session.query(ChannelIntegration)], ["kept_bot"])
+        self.assertEqual(sorted((c.scope, c.scope_id) for c in session.query(RateLimitConfig)),
+                         [("agent", "kept_bot"), ("project", "2"), ("user", "gone_bot")])
+        self.assertEqual([t.agent_name for t in session.query(TestCase)], ["kept_bot"])
+        self.assertEqual(session.query(EvalResult).count(), 0)
         session.close()
 
 

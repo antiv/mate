@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS projects (
 CREATE TABLE IF NOT EXISTS users (
     id INT AUTO_INCREMENT PRIMARY KEY,
     user_id VARCHAR(255) NOT NULL UNIQUE,
-    roles TEXT NOT NULL DEFAULT '["user"]',
+    roles TEXT NOT NULL DEFAULT ('["user"]'),
     profile_data TEXT,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
@@ -122,7 +122,9 @@ CREATE TABLE IF NOT EXISTS credentials (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
-CREATE UNIQUE INDEX idx_credentials_unique ON credentials(app_name, user_id, credential_key);
+-- MySQL caps an index key at 3072 bytes (utf8mb4: 4 bytes a character), so only
+-- the first 255 characters of credential_key are in the unique key.
+CREATE UNIQUE INDEX idx_credentials_unique ON credentials(app_name, user_id, credential_key(255));
 CREATE INDEX idx_credentials_app_user ON credentials(app_name, user_id);
 CREATE INDEX idx_credentials_key ON credentials(credential_key);
 

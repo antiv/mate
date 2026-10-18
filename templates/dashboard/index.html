@@ -10,7 +10,7 @@
             <h2 style="margin: 0; font-size: 22px; font-weight: 800; color: var(--text-primary);">Platform Overview</h2>
             <p style="margin: 4px 0 0; font-size: 13px; color: var(--text-secondary);">MATE Multi-Agent Engine</p>
         </div>
-        <button onclick="refreshOverview()" class="flex items-center gap-1.5" style="padding: 8px 14px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg-surface); color: var(--text-secondary); font-size: 12.5px; font-weight: 600; cursor: pointer;">
+        <button data-click="refreshOverview" class="flex items-center gap-1.5" style="padding: 8px 14px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg-surface); color: var(--text-secondary); font-size: 12.5px; font-weight: 600; cursor: pointer;">
             <i class="fas fa-sync-alt" id="overviewRefreshIcon"></i> Refresh
         </button>
     </div>
@@ -137,7 +137,9 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
+    mateActions.allow('refreshOverview');
+
     let dailyChart, agentsChart;
 
     function initCharts() {

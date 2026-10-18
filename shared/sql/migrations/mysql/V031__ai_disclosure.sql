@@ -6,5 +6,5 @@
 -- ai_disclosure NULL means the default text is shown; setting ai_disclosure_waiver
 -- turns the disclosure off and records why, so it cannot be disabled silently.
 
-ALTER TABLE agents_config ADD COLUMN IF NOT EXISTS ai_disclosure TEXT NULL;
-ALTER TABLE agents_config ADD COLUMN IF NOT EXISTS ai_disclosure_waiver TEXT NULL;
+ALTER TABLE agents_config ADD COLUMN ai_disclosure TEXT NULL;
+ALTER TABLE agents_config ADD COLUMN ai_disclosure_waiver TEXT NULL;

@@ -7,6 +7,7 @@ import os
 from datetime import datetime, timezone, timedelta
 from typing import Dict, Any
 
+from shared.utils import settings
 from shared.utils.database_client import get_database_client
 from shared.utils.models import User, MemorySession, MemoryEvent, Credential, PersonalAccessToken
 
@@ -40,7 +41,7 @@ def cleanup_inactive_users(ttl_days: int = None) -> Dict[str, Any]:
         return {"error": "Failed to get database session", "removed_users": 0}
 
     cutoff = datetime.now(timezone.utc) - timedelta(days=ttl_days)
-    auth_username = os.getenv("AUTH_USERNAME", "admin")
+    auth_username = settings.auth_username()
 
     try:
         # Get user_ids that have Personal Access Tokens

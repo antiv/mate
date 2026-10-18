@@ -14,6 +14,7 @@ from shared.utils.db_memory_service import DBMemoryService
 from google.adk.sessions.database_session_service import DatabaseSessionService
 from google.adk.sessions.in_memory_session_service import InMemorySessionService
 from shared.utils.utils import adk_dev_ui_enabled, fix_session_events_compaction
+from shared.utils import settings
 import uvicorn
 import argparse
 from shared.utils.db_credential_service import DBCredentialService
@@ -115,7 +116,7 @@ def register_custom_services():
         return SupabaseArtifactService(
             url=kwargs_copy.pop("url", os.getenv("SUPABASE_URL")),
             key=kwargs_copy.pop("key", os.getenv("SUPABASE_KEY")),
-            bucket_name=kwargs_copy.pop("bucket_name", os.getenv("SUPABASE_BUCKET", "artifacts")),
+            bucket_name=kwargs_copy.pop("bucket_name", settings.supabase_bucket()),
             **kwargs_copy
         )
     
@@ -185,19 +186,21 @@ agent_loader = AgentLoader(AGENT_DIR)
 adk_web_server = None
 
 # Initialize services using service registry
-ARTIFACT_SERVICE_TYPE = os.getenv("ARTIFACT_SERVICE", "none").lower()
+ARTIFACT_SERVICE_TYPE = settings.artifact_service()
 MEMORY_SERVICE_TYPE = os.getenv("MEMORY_SERVICE", "database").lower()
 CREDENTIAL_SERVICE_TYPE = os.getenv("CREDENTIAL_SERVICE", "database").lower()
 
-print(f"ARTIFACT_SERVICE environment variable: {os.getenv('ARTIFACT_SERVICE', 'not set')}")
-print(f"MEMORY_SERVICE environment variable: {os.getenv('MEMORY_SERVICE', 'not set')}")
-print(f"CREDENTIAL_SERVICE environment variable: {os.getenv('CREDENTIAL_SERVICE', 'not set')}")
 print(f"Using artifact service type: {ARTIFACT_SERVICE_TYPE}")
 print(f"Using memory service type: {MEMORY_SERVICE_TYPE}")
 print(f"Using credential service type: {CREDENTIAL_SERVICE_TYPE}")
 
 # Get service registry
 registry = get_service_registry()
+
+# The application's MySQL URL names the sync driver (mysql+pymysql://); the
+# "mysql" factory switches it to the async one
+if SESSION_DB_URL.startswith("mysql+pymysql://"):
+    SESSION_DB_URL = "mysql://" + SESSION_DB_URL[len("mysql+pymysql://"):]
 
 # Initialize session service using registry
 if SESSION_DB_URL.startswith("sqlite://"):
@@ -207,8 +210,9 @@ elif SESSION_DB_URL.startswith("postgresql://"):
 elif SESSION_DB_URL.startswith("mysql://"):
     session_service = registry.create_session_service(SESSION_DB_URL)
 else:
-    # Default to in-memory for unsupported URLs
-    session_service = registry.create_session_service("in_memory://")
+    # Default to in-memory for unsupported URLs. Not through the registry:
+    # "in_memory" is not a valid URL scheme, so it would return None.
+    session_service = InMemorySessionService()
 
 # Initialize artifact service using registry
 if ARTIFACT_SERVICE_TYPE == "local_folder":
@@ -230,7 +234,7 @@ elif ARTIFACT_SERVICE_TYPE == "supabase":
         "supabase://test-project",
         url=os.getenv("SUPABASE_URL"),
         key=os.getenv("SUPABASE_KEY"),
-        bucket_name=os.getenv("SUPABASE_BUCKET", "artifacts")
+        bucket_name=settings.supabase_bucket()
     )
 else:
     # Default to InMemoryArtifactService if "none" or not set
@@ -497,24 +501,16 @@ try:
     if ENABLE_A2A:
         print(f"🚀 Setting up A2A (Agent-to-Agent) support...")
         try:
-            from a2a.server.apps import A2AStarletteApplication
-            from a2a.server.request_handlers import DefaultRequestHandler
-            from a2a.server.tasks import InMemoryTaskStore
-            from a2a.types import AgentCard
-            from a2a.utils.constants import AGENT_CARD_WELL_KNOWN_PATH
+            # Built through google.adk.a2a._compat, which works on a2a-sdk 0.3.x and 1.x
             from google.adk.a2a.executor.a2a_agent_executor import A2aAgentExecutor
-            import json
-            
-            # Enable A2A for all existing agents in the system
-            a2a_task_store = InMemoryTaskStore()
-            a2a_agents_count = 0
-            
+            from shared.utils.a2a_routes import register_a2a_routes
+
             def create_a2a_runner_loader(captured_app_name: str):
                 """Factory function to create A2A runner with proper closure."""
                 async def _get_a2a_runner_async():
                     return await adk_web_server.get_runner_async(captured_app_name)
                 return _get_a2a_runner_async
-            
+
             # Get all agents that are available in the ADK system
             try:
                 # Get all agent names from both file-based and database-configured agents
@@ -566,89 +562,21 @@ try:
                 
                 print(f"🔍 Total found {len(available_agents)} agents: {available_agents}")
                 
-                for app_name in available_agents:
-                    print(f"🔧 Setting up A2A for agent: {app_name}")
-                    
-                    try:
-                        # Create a default agent card for agents without agent.json
-                        agent_card_data = {
-                            "name": app_name,
-                            "description": f"A2A-enabled {app_name} agent",
-                            "version": "1.0.0",
-                            "url": "http://localhost:8000",
-                            "capabilities": {
-                                "streaming": True,
-                                "pushNotifications": False,
-                                "stateTransitionHistory": True
-                            },
-                            "defaultInputModes": ["application/json"],
-                            "defaultOutputModes": ["application/json"],
-                            "skills": [
-                                {
-                                    "id": "general",
-                                    "name": "general",
-                                    "description": f"General capabilities of {app_name}",
-                                    "inputMimeTypes": ["application/json"],
-                                    "outputMimeTypes": ["application/json"],
-                                    "tags": ["general", "a2a"]
-                                }
-                            ],
-                            "metadata": {
-                                "author": "MATE (Multi-Agent Tree Engine)",
-                                "created": "2025-01-27",
-                                "tags": ["a2a", "auto-generated"]
-                            }
-                        }
-                        
-                        # Check if agent has custom agent.json
-                        agent_json_path = base_path / app_name / "agent.json"
-                        if agent_json_path.exists():
-                            try:
-                                with agent_json_path.open("r", encoding="utf-8") as f:
-                                    custom_data = json.load(f)
-                                    agent_card_data.update(custom_data)
-                                    print(f"📄 Using custom agent.json for {app_name}")
-                            except Exception as e:
-                                print(f"⚠️  Failed to load custom agent.json for {app_name}: {e}")
-                        
-                        agent_card = AgentCard(**agent_card_data)
-                        
-                        agent_executor = A2aAgentExecutor(
-                            runner=create_a2a_runner_loader(app_name),
-                        )
-                        
-                        request_handler = DefaultRequestHandler(
-                            agent_executor=agent_executor, 
-                            task_store=a2a_task_store
-                        )
-                        
-                        a2a_app = A2AStarletteApplication(
-                            agent_card=agent_card,
-                            http_handler=request_handler,
-                        )
-                        
-                        routes = a2a_app.routes(
-                            rpc_url=f"/a2a/{app_name}",
-                            agent_card_url=f"/a2a/{app_name}{AGENT_CARD_WELL_KNOWN_PATH}",
-                        )
-                        
-                        for new_route in routes:
-                            app.router.routes.append(new_route)
-                        
-                        a2a_agents_count += 1
-                        print(f"✅ Successfully configured A2A for agent: {app_name}")
-                        
-                    except Exception as e:
-                        print(f"❌ Failed to setup A2A for agent {app_name}: {e}")
-                        # Continue with other agents even if one fails
-                
-                print(f"✅ A2A support enabled for {a2a_agents_count} agents")
-                
+                a2a_agents_count = register_a2a_routes(
+                    app,
+                    available_agents,
+                    lambda name: A2aAgentExecutor(runner=create_a2a_runner_loader(name)),
+                    agents_dir=base_path,
+                )
+                print(f"✅ A2A support enabled for {a2a_agents_count} of {len(available_agents)} agents")
+
+            except ImportError:
+                raise
             except Exception as e:
                 print(f"❌ Error discovering agents: {e}")
                 import traceback
                 traceback.print_exc()
-                
+
         except ImportError as e:
             import sys
             if sys.version_info < (3, 10):

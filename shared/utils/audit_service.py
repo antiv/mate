@@ -63,6 +63,9 @@ ACTION_MEMORY_BLOCK_CREATE = "memory_block.create"
 ACTION_MEMORY_BLOCK_UPDATE = "memory_block.update"
 ACTION_MEMORY_BLOCK_DELETE = "memory_block.delete"
 ACTION_MEMORY_BLOCK_RESTORE = "memory_block.restore"
+# A Playground run makes real model calls, with the agent's tools, as the eval
+# user; this entry names the admin who started it and what was compared.
+ACTION_PLAYGROUND_RUN = "evals.playground_run"
 
 RESOURCE_AGENT = "agent"
 RESOURCE_USER = "user"

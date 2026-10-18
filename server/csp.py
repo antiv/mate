@@ -2,14 +2,17 @@
 Content-Security-Policy for the pages this server sends.
 
 A CSP limits what an injected script can do: load code from another host, send
-data to one, or frame the dashboard. This is the first step of #124. The
-policy restricts *where* scripts, styles and connections come from, but keeps
-'unsafe-inline': the templates still have inline <script> blocks and hundreds
-of onclick= handlers.
+data to one, or frame the dashboard (#124). MATE's pages get the *strict*
+policy: inline <script> blocks run only with this response's nonce, and inline
+on*= handlers not at all. That is what stops an injected script.
 
-It is sent as Content-Security-Policy-Report-Only by default (CSP_MODE), so
-nothing breaks while violations are collected. Browsers post them to
+CSP_MODE=report-only (the default) sends it as
+Content-Security-Policy-Report-Only, so nothing is blocked while violations are
+collected. CSP_MODE=enforce enforces it. Browsers post violations to
 /csp-report, which logs each distinct one once.
+
+The *legacy* policy, with 'unsafe-inline' for scripts, is left only for ADK's
+dev UI, whose markup is not ours (see _needs_eval).
 
 The dashboard may only be framed by itself. The widget chat page is framed by
 customer sites, so its frame-ancestors come from the widget key's origin
@@ -20,8 +23,9 @@ import json
 import logging
 import os
 import re
+import secrets
 import time
-from typing import Iterable, List, Optional
+from typing import Dict, Iterable, List, Optional
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, Request, Response
@@ -35,12 +39,22 @@ REPORT_PATH = "/csp-report"
 # The CDNs the templates load from. Keep in step with the templates: a host
 # missing here shows up as a violation report, a host left here after its last
 # use is an unneeded opening.
+#
+# Scripts are allowed by path, not by host: jsdelivr and cdnjs serve any npm
+# package or GitHub repository, so a whole host would let anyone who can inject
+# a tag load their own script. A path ending in "/" is a prefix; any other path
+# must match exactly. Pyodide is not here: it runs only on the canvas page.
 _SCRIPT_HOSTS = [
-    "https://cdn.tailwindcss.com",
-    "https://cdn.jsdelivr.net",    # Chart.js, Monaco, React Flow, Pyodide, Swagger UI
-    "https://cdnjs.cloudflare.com",  # Ace
-    "https://unpkg.com",           # d3-graphviz (graph view)
-    "https://d3js.org",
+    "https://cdn.tailwindcss.com",  # serves only Tailwind
+    "https://cdn.jsdelivr.net/npm/chart.js",
+    "https://cdn.jsdelivr.net/npm/monaco-editor@0.44.0/",
+    "https://cdn.jsdelivr.net/npm/react@18/umd/react.production.min.js",
+    "https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.production.min.js",
+    "https://cdn.jsdelivr.net/npm/reactflow@11.11.4/",
+    "https://cdn.jsdelivr.net/npm/markdown-it@15.0.2/",
+    "https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/",  # FastAPI's /admin-docs and /docs
+    "https://cdn.jsdelivr.net/npm/redoc@2/",  # FastAPI's /redoc
+    "https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.6/",
 ]
 _STYLE_HOSTS = [
     "https://cdn.jsdelivr.net",
@@ -52,7 +66,7 @@ _FONT_HOSTS = [
     "https://cdnjs.cloudflare.com",
     "https://fonts.gstatic.com",
 ]
-# Pyodide fetches its wasm and packages; Monaco and Ace fetch their own modules.
+# Monaco and Ace fetch their own modules.
 _CONNECT_HOSTS = ["https://cdn.jsdelivr.net", "https://cdnjs.cloudflare.com"]
 _FRAME_HOSTS = ["https://dartpad.dev"]  # Work Room's Dart runner
 
@@ -88,9 +102,23 @@ def extra_sources() -> List[str]:
     return sources
 
 
-def build_policy(frame_ancestors: str = "'self'", allow_eval: bool = False) -> str:
+def new_nonce() -> str:
+    """A fresh nonce for one response's inline <script> blocks."""
+    return secrets.token_urlsafe(18)
+
+
+def build_policy(frame_ancestors: str = "'self'", allow_eval: bool = False,
+                 nonce: Optional[str] = None) -> str:
+    """The strict policy with a nonce, or without one the legacy policy ('unsafe-inline').
+
+    A nonce and 'unsafe-inline' cannot be combined: browsers ignore
+    'unsafe-inline' once a nonce is present. Only ADK's dev UI gets the legacy one.
+    """
     extra = extra_sources()
-    script_keywords = ["'self'", "'unsafe-inline'", "'wasm-unsafe-eval'"]
+    if nonce is None:
+        script_keywords = ["'self'", "'unsafe-inline'"]
+    else:
+        script_keywords = ["'self'", f"'nonce-{nonce}'"]
     if allow_eval:
         script_keywords.append("'unsafe-eval'")
 
@@ -104,8 +132,6 @@ def build_policy(frame_ancestors: str = "'self'", allow_eval: bool = False) -> s
 
     directives = [
         "default-src 'self'",
-        # 'wasm-unsafe-eval' lets Pyodide and the graph view compile WebAssembly;
-        # it does not allow eval() of JavaScript.
         directive("script-src", script_keywords, _SCRIPT_HOSTS, extra),
         directive("style-src", ["'self'", "'unsafe-inline'"], _STYLE_HOSTS, extra),
         directive("font-src", ["'self'", "data:"], _FONT_HOSTS, extra),
@@ -114,7 +140,7 @@ def build_policy(frame_ancestors: str = "'self'", allow_eval: bool = False) -> s
         "img-src 'self' data: blob: https:",
         "media-src 'self' data: blob:",
         directive("connect-src", ["'self'"], _CONNECT_HOSTS, extra),
-        # Monaco, Ace and Pyodide start their workers from blob: URLs
+        # Monaco and Ace start their workers from blob: URLs
         "worker-src 'self' blob:",
         directive("frame-src", ["'self'"], _FRAME_HOSTS, extra),
         "object-src 'none'",
@@ -123,6 +149,32 @@ def build_policy(frame_ancestors: str = "'self'", allow_eval: bool = False) -> s
         f"report-uri {REPORT_PATH}",
     ]
     return "; ".join(directives)
+
+
+CANVAS_PATH = "/dashboard/workroom/canvas"
+
+
+def canvas_policy() -> str:
+    """The policy of the Work Room canvas page, which runs code an agent wrote.
+
+    Agent code uses inline scripts, onclick= and CDNs no list could name, so this
+    page allows them. What makes that safe is the sandbox directive: the browser
+    gives the page an opaque origin whoever opens it, framed or in a tab of its
+    own, so the code cannot reach the dashboard's cookies, storage or DOM. Only
+    MATE may frame it. Unlike the dashboard's policy it is always enforced,
+    whatever CSP_MODE says, since without the sandbox the page must not run.
+    """
+    return "; ".join([
+        "sandbox allow-scripts allow-modals",
+        "default-src 'self' https: data: blob:",
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval' https: blob:",
+        "style-src 'self' 'unsafe-inline' https:",
+        "img-src 'self' https: data: blob:",
+        "font-src 'self' https: data:",
+        "worker-src 'self' https: blob:",
+        "object-src 'none'",
+        "frame-ancestors 'self'",
+    ])
 
 
 def widget_frame_ancestors(allowed_origins: Optional[List[str]], strict: bool) -> str:
@@ -143,6 +195,30 @@ def widget_frame_ancestors(allowed_origins: Optional[List[str]], strict: bool) -
             if source not in sources:
                 sources.append(source)
     return " ".join(sources)
+
+
+def wizard_frame_ancestors(allowed_origins: Optional[List[str]]) -> str:
+    """frame-ancestors for the agent wizard page, matching _partner_origin_ok.
+
+    A partner without an allowlist may be embedded anywhere. The wizard's check
+    compares exact origins, so a wildcard entry, which it never matches, is left
+    out here too rather than widened into a CSP wildcard.
+    """
+    if not allowed_origins:
+        return "*"
+    if not isinstance(allowed_origins, list):
+        return "'self'"
+    plain = [o for o in allowed_origins if isinstance(o, str) and "*" not in o]
+    return widget_frame_ancestors(plain, strict=True)
+
+
+def nonce_inline_scripts(html: str, nonce: str) -> str:
+    """Give the bare <script> tags of HTML we do not write ourselves the response's nonce.
+
+    For pages a library renders, such as FastAPI's Swagger UI, whose one inline
+    script starts the viewer.
+    """
+    return html.replace("<script>", f'<script nonce="{nonce}">')
 
 
 def _origin_to_sources(entry: str) -> List[str]:
@@ -184,17 +260,35 @@ def _is_hostname(value: str) -> bool:
     return re.fullmatch(r"[a-z0-9-]+(?:\.[a-z0-9-]+)*", value) is not None
 
 
-async def add_csp_header(request: Request, call_next):
-    """Middleware: the dashboard policy on every HTML response that has none of its own."""
-    response = await call_next(request)
+def policy_headers(nonce: str, frame_ancestors: str = "'self'",
+                   allow_eval: bool = False) -> Dict[str, str]:
+    """The CSP header for one HTML response, by CSP_MODE."""
     name = header_name()
     if name is None:
-        return response
+        return {}
+    return {name: build_policy(frame_ancestors, allow_eval, nonce=nonce)}
+
+
+async def add_csp_header(request: Request, call_next):
+    """Middleware: the dashboard policy on every HTML response that has none of its own.
+
+    The nonce is made before the page renders, so templates can put it on their
+    inline scripts as {{ request.state.csp_nonce }}.
+    """
+    request.state.csp_nonce = new_nonce()
+    response = await call_next(request)
     if CSP_HEADER in response.headers or CSP_REPORT_ONLY_HEADER in response.headers:
         return response
     if not response.headers.get("content-type", "").startswith("text/html"):
         return response
-    response.headers[name] = build_policy(allow_eval=_needs_eval(request.url.path))
+    if _needs_eval(request.url.path):
+        # ADK's dev UI is not our markup: it gets the legacy policy only
+        name = header_name()
+        if name is not None:
+            response.headers[name] = build_policy(allow_eval=True)
+        return response
+    for name, policy in policy_headers(request.state.csp_nonce).items():
+        response.headers[name] = policy
     return response
 
 
@@ -210,11 +304,16 @@ def _needs_eval(path: str) -> bool:
     return (path == "/dev-ui" or path.startswith("/dev-ui/")) and adk_dev_ui_enabled()
 
 
-def set_csp_header(response: Response, frame_ancestors: str) -> Response:
-    """Give a response its own policy, e.g. the widget page with its frame-ancestors."""
-    name = header_name()
-    if name is not None:
-        response.headers[name] = build_policy(frame_ancestors)
+def set_csp_header(response: Response, frame_ancestors: str,
+                   request: Optional[Request] = None) -> Response:
+    """Give a response its own policy, e.g. the widget page with its frame-ancestors.
+
+    Pass the request when the response is a template with inline scripts, so the
+    policy carries the nonce they were rendered with.
+    """
+    nonce = getattr(request.state, "csp_nonce", None) if request is not None else None
+    for name, policy in policy_headers(nonce or new_nonce(), frame_ancestors).items():
+        response.headers[name] = policy
     return response
 
 

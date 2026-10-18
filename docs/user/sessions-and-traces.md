@@ -50,7 +50,8 @@ slow" rather than "why was this wrong".
 
 **Studio → Traces** lists recent traces with their total duration and number of
 steps. Open one to see the steps nested inside each other; the long bar is your
-answer.
+answer. A trace recorded for a chat session also has **Replay on canvas**, which plays
+it back on the agent graph: see [Trace Replay](trace-replay.md).
 
 > Traces are recorded only when your administrator has set
 > `OTEL_TRACING_ENABLED=true` on the server. Without it the page stays empty.
@@ -65,6 +66,7 @@ installation running the LangGraph runtime traces to LangSmith instead.
 |---|---|
 | What did the agent see and do in this conversation? | Session Tracking |
 | Why did this request take so long? | Traces |
+| Which agent ran when, and did a fallback model answer? | [Trace Replay](trace-replay.md) |
 | How many requests and tokens, and how satisfied are people? | [Usage Analytics](usage-and-audit.md) |
 | Was a message blocked or altered? | [Guardrail Logs](guardrails.md#see-what-fired) |
 | Who changed this agent? | [Audit Logs](usage-and-audit.md#audit-logs) |

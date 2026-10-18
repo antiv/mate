@@ -2,7 +2,8 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    # release/* are maintenance branches for patch releases; see docs/dev/releases.md
+    branches: [main, "release/**"]
   pull_request:
 
 jobs:
@@ -11,10 +12,10 @@ jobs:
     timeout-minutes: 20
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.11"
           cache: pip
@@ -40,12 +41,12 @@ jobs:
     timeout-minutes: 5
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0  # the drift check compares against the merge base
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.11"
 

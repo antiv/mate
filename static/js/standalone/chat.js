@@ -15,8 +15,9 @@
   var BASE = window.location.origin;
   var STORAGE_PREFIX = "mate_standalone_" + AGENT_NAME;
   var IMAGE_EXTENSIONS = [".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".bmp"];
-  // Off in standalone builds, which have no feedback route and no dashboard to read ratings in
+  // Off in a standalone build unless it forwards ratings to a central MATE
   var RATINGS_ENABLED = window.STANDALONE_RATINGS !== false;
+  var FEEDBACK_ENDPOINT = window.MATE_FEEDBACK_ENDPOINT || "/dashboard/api/feedback";
 
   // --- State -----------------------------------------------------------
   var sessionId = localStorage.getItem(STORAGE_PREFIX + "_sid") || "";
@@ -1139,7 +1140,7 @@
         + '<div class="mate-code-header">'
         + '<span class="mate-code-lang">' + l + '</span>'
         + '<span class="mate-canvas-indicator">open in canvas</span>'
-        + '<button class="mate-canvas-btn" onclick="if(window.mateOpenCanvas)window.mateOpenCanvas(this.closest(\'.mate-code-block\'))">Open in Canvas</button>'
+        + '<button class="mate-canvas-btn">Open in Canvas</button>'
         + '</div>'
         + '<pre><code>' + escaped + '</code></pre>'
         + '</div>');
@@ -1319,10 +1320,12 @@
       message_id: invocationId,
       rating: rating,
       agent_name: AGENT_NAME,
+      // The standalone server reads the rated exchange from this user's session
+      user_id: userId,
     };
     // Sent as a second request on the same rating, which the server updates in place
     if (comment) payload.comment = comment;
-    fetch("/dashboard/api/feedback", {
+    fetch(FEEDBACK_ENDPOINT, {
       method: "POST",
       credentials: "same-origin",
       headers: { "Content-Type": "application/json" },
@@ -1418,6 +1421,17 @@
     return messageEl._rawMarkdown || messageEl.innerText || "";
   }
 
+
+  // "Open in Canvas" on a code block. A listener rather than an onclick=, which
+  // the Content-Security-Policy blocks. The Work Room loads this file again for
+  // each session, so the listener is added only once.
+  if (!window._mateCanvasBtnListener) {
+    window._mateCanvasBtnListener = true;
+    document.addEventListener("click", function (e) {
+      var btn = e.target instanceof Element ? e.target.closest(".mate-canvas-btn") : null;
+      if (btn && window.mateOpenCanvas) window.mateOpenCanvas(btn.closest(".mate-code-block"));
+    });
+  }
 
   // --- Boot ------------------------------------------------------------
   if (document.readyState === "loading") {

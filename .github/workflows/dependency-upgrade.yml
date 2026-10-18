@@ -1,0 +1,159 @@
+name: Dependency upgrade
+
+# Once a month, recompile requirements.lock with the newest releases that
+# requirements.txt allows, run the test suite on it, and open a pull request
+# when anything moved. Exact pins in requirements.txt (google-adk, SQLAlchemy
+# below 2.1) stay where they are: moving those is a decision made by hand,
+# after reading their changelogs. If the tests fail, no pull request is opened
+# and the run is marked failed, which GitHub reports to the workflow's owner.
+#
+# Two jobs, because installing new releases runs their code: the job that does
+# it holds a read-only token and no stored credentials, and only takes releases
+# at least a week old, so a hijacked release has time to be pulled first. The
+# job that opens the pull request installs nothing. Actions are pinned by commit.
+on:
+  schedule:
+    - cron: "17 6 1 * *"  # 06:17 UTC on the 1st
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compile-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    outputs:
+      changed: ${{ steps.diff.outputs.changed }}
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: "3.11"
+
+      # The week-old cutoff also applies to what the lock already has, so a
+      # package main took in the last week would move back. The second pass
+      # keeps such a package at its current version.
+      - name: Recompile the lock with the newest releases at least a week old
+        run: |
+          python -m pip install --upgrade pip uv packaging
+          cp requirements.lock /tmp/old.lock
+          cutoff="$(date -u -d '7 days ago' +%Y-%m-%dT%H:%M:%SZ)"
+          compile() {
+            uv pip compile requirements.txt -o requirements.lock --universal \
+              --python-version 3.11 --generate-hashes --upgrade \
+              --exclude-newer "$cutoff" "$@"
+          }
+          compile
+          python - <<'PY' > /tmp/keep.txt
+          import re
+          from packaging.version import Version
+          def pins(path):
+              return dict(re.findall(r"^([A-Za-z0-9_.\-]+)==([^\s;\\]+)", open(path).read(), re.M))
+          old, new = pins("/tmp/old.lock"), pins("requirements.lock")
+          for name, version in new.items():
+              if name in old and Version(version) < Version(old[name]):
+                  print(f"{name}=={old[name]}")
+          PY
+          if [ -s /tmp/keep.txt ]; then
+            echo "Kept at their current version:"; cat /tmp/keep.txt
+            now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            exempt=()
+            while IFS='=' read -r name _; do exempt+=(--exclude-newer-package "$name=$now"); done < /tmp/keep.txt
+            compile -c /tmp/keep.txt "${exempt[@]}"
+          fi
+
+      # Comments are left out: the header records the cutoff date, which
+      # changes on every run.
+      - name: Anything changed?
+        id: diff
+        run: |
+          if diff -q <(grep -v '^ *#' /tmp/old.lock) <(grep -v '^ *#' requirements.lock) > /dev/null; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install the new lock and run the tests
+        if: steps.diff.outputs.changed == 'true'
+        run: |
+          pip install --require-hashes -r requirements.lock
+          python -m unittest discover -s shared/test -p "test_*.py"
+          python -m pytest shared/test/test_sessions_api.py
+
+      - name: List what moved
+        if: steps.diff.outputs.changed == 'true'
+        run: |
+          git show HEAD:requirements.lock > /tmp/old.lock
+          python - <<'PY' > body.md
+          import re
+          def pins(text):
+              return dict(re.findall(r"^([A-Za-z0-9_.\-\[\]]+)==([^\s;\\]+)", text, re.M))
+          old = pins(open("/tmp/old.lock").read())
+          new = pins(open("requirements.lock").read())
+          rows = [(k, old.get(k, "new"), new.get(k, "removed"))
+                  for k in sorted(set(old) | set(new)) if old.get(k) != new.get(k)]
+          print("Monthly `uv pip compile --upgrade` of `requirements.lock`, taking releases at "
+                "least a week old. The unit tests passed on it before this pull request was opened.\n")
+          print("Before merging, read the changelogs of the large libraries that moved "
+                "(google-genai, litellm, langgraph, langchain-*, fastapi, starlette, mcp, a2a-sdk) "
+                "and run both runtimes (`AGENT_FRAMEWORK=adk` and `langgraph`), on PostgreSQL if you can.\n")
+          print("| Package | From | To |\n|---|---|---|")
+          for name, a, b in rows:
+              print(f"| {name} | {a} | {b} |")
+          PY
+
+      - name: Hand the lock to the next job
+        if: steps.diff.outputs.changed == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: upgraded-lock
+          path: |
+            requirements.lock
+            body.md
+          retention-days: 7
+
+  open-pull-request:
+    needs: compile-and-test
+    if: needs.compile-and-test.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
+        with:
+          name: upgraded-lock
+          path: /tmp/upgraded
+
+      # Only the lock is taken from the first job; nothing is installed or run here.
+      - name: Take the new lock
+        run: cp /tmp/upgraded/requirements.lock requirements.lock
+
+      # A pull request opened with the default token does not start CI on itself.
+      # Set a DEPENDENCY_PR_TOKEN secret (a fine-grained token or GitHub App token
+      # with contents and pull-requests write) to get the usual checks on it.
+      - name: Open the pull request
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1  # v8.1.1
+        with:
+          token: ${{ secrets.DEPENDENCY_PR_TOKEN || github.token }}
+          branch: deps/monthly-upgrade
+          delete-branch: true
+          commit-message: "Monthly dependency upgrade"
+          title: "Monthly dependency upgrade"
+          body-path: /tmp/upgraded/body.md
+          add-paths: requirements.lock
+          labels: dependencies

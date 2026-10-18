@@ -9,14 +9,20 @@ Optional tool_config to enable via ToolFactory:
   {"supabase_storage": true}
 
 Each tool accepts a ToolContext for consistency with other tools, but it is optional.
+
+Paths under public/ are refused: the Supabase artifact service keeps every user's
+chat artifacts there, in the same bucket.
 """
 
 import base64
 import logging
 import os
+import posixpath
 from typing import Any, Dict, List, Optional
 
 from google.adk.tools.tool_context import ToolContext
+
+from .. import settings
 
 
 logger = logging.getLogger(__name__)
@@ -43,6 +49,25 @@ def _get_supabase_client():
     return create_client(url, key)
 
 
+# The Supabase artifact service keeps every user's artifacts under public/ in the
+# same bucket (settings.supabase_bucket()), at predictable paths. An agent steered
+# by a chat message must not read, overwrite or delete them through these tools.
+ARTIFACT_PREFIX = "public"
+
+
+def _tool_path(path: str) -> str:
+    """The storage key for a tool call, or ValueError if it leaves the tools' area."""
+    if not isinstance(path, str) or not path.strip():
+        raise ValueError("path is required")
+    normalized = posixpath.normpath(path.strip().lstrip("/"))
+    parts = normalized.split("/")
+    if normalized in (".", "") or ".." in parts:
+        raise ValueError(f"Invalid path: {path}")
+    if parts[0] == ARTIFACT_PREFIX:
+        raise ValueError(f"Paths under {ARTIFACT_PREFIX}/ hold chat artifacts and are not available to this tool")
+    return normalized
+
+
 def supabase_upload_file(
         path: str,
         file_bytes_b64: str,
@@ -63,8 +88,9 @@ def supabase_upload_file(
         Dict with status and metadata.
     """
     try:
+        path = _tool_path(path)
         client = _get_supabase_client()
-        bucket = os.getenv("SUPABASE_BUCKET", "public-bucket")
+        bucket = settings.supabase_bucket()
         storage = client.storage.from_(bucket)
 
         file_bytes = base64.b64decode(file_bytes_b64)
@@ -125,8 +151,9 @@ def supabase_get_file(
         Dict with status and file data. If as_base64 is True, returns 'file_bytes_b64'.
     """
     try:
+        path = _tool_path(path)
         client = _get_supabase_client()
-        bucket = os.getenv("SUPABASE_BUCKET", "public-bucket")
+        bucket = settings.supabase_bucket()
         storage = client.storage.from_(bucket)
         file_bytes: bytes = storage.download(path)
 
@@ -167,8 +194,9 @@ def supabase_delete_file(
         Dict with status and deletion result.
     """
     try:
+        path = _tool_path(path)
         client = _get_supabase_client()
-        bucket = os.getenv("SUPABASE_BUCKET", "public-bucket")
+        bucket = settings.supabase_bucket()
         storage = client.storage.from_(bucket)
         storage.remove([path])
         return {"status": "success", "bucket": bucket, "path": path}

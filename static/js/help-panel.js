@@ -51,13 +51,23 @@
     return /^(\/(?![\/\\])|https?:\/\/|#)/i.test(u) ? u : "";
   }
 
+  // Help agents often invent https://dashboard/... from a relative /dashboard/docs link.
+  // Fold those fake hosts back to a same-origin path before safeHref classifies them (#234).
+  function normalizeDocsHref(url) {
+    var u = String(url).trim();
+    var m = u.match(/^(?:https?:)?\/\/(dashboard\/docs(?:[?#].*)?)$/i);
+    if (m) return "/" + m[1];
+    if (/^dashboard\/docs(?:[?#]|$)/i.test(u)) return "/" + u;
+    return u;
+  }
+
   function inline(s) {
     return s
       .replace(/`([^`]+)`/g, "<code>$1</code>")
       .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
       .replace(/(^|[^*\w])\*([^*\n]+?)\*(?!\w)/g, "$1<em>$2</em>")
       .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, function (match, label, href) {
-        var safe = safeHref(href.replace(/&amp;/g, "&"));
+        var safe = safeHref(normalizeDocsHref(href.replace(/&amp;/g, "&")));
         if (!safe) return match;
         var external = /^https?:/i.test(safe);
         return '<a href="' + esc(safe) + '"' + (external ? ' target="_blank" rel="noopener"' : "") + ">" + label + "</a>";

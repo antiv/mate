@@ -47,7 +47,7 @@ function populateEditModalToolConfiguration(row) {
     const imageModelContainer = document.getElementById('editAgentImageModelContainer');
     if (toolConfig.image_tools) {
         imageModelContainer.classList.remove('hidden');
-        document.getElementById('editAgentImageModel').value = toolConfig.image_tools.model || 'openrouter/google/gemini-2.5-flash-image';
+        document.getElementById('editAgentImageModel').value = toolConfig.image_tools.model || '';
     } else {
         imageModelContainer.classList.add('hidden');
     }

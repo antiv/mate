@@ -128,7 +128,7 @@
     <!-- API explorer (Swagger / ReDoc) -->
     <div id="docsApi" class="hidden space-y-4">
         <div class="flex justify-end">
-            <button onclick="refreshDocs()" class="bg-gray-600 hover:bg-gray-700 text-white px-3 py-1.5 text-xs rounded-lg flex items-center">
+            <button data-click="refreshDocs" class="bg-gray-600 hover:bg-gray-700 text-white px-3 py-1.5 text-xs rounded-lg flex items-center">
                 <i class="fas fa-sync-alt mr-1.5"></i>
                 Refresh
             </button>
@@ -152,19 +152,19 @@
             <div class="flex items-center space-x-2">
                 <!-- API Source Switcher -->
                 <div class="flex bg-gray-100 dark:bg-gray-700 rounded-lg p-0.5">
-                    <button id="adminApiBtn" onclick="switchToAdminApi()" class="px-2 py-1 text-xs rounded-md text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200">
+                    <button id="adminApiBtn" data-click="switchToAdminApi" class="px-2 py-1 text-xs rounded-md text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200">
                         Admin API
                     </button>
-                    <button id="adkApiBtn" onclick="switchToAdkApi()" class="px-2 py-1 text-xs rounded-md bg-blue-600 text-white">
+                    <button id="adkApiBtn" data-click="switchToAdkApi" class="px-2 py-1 text-xs rounded-md bg-blue-600 text-white">
                         ADK API
                     </button>
                 </div>
                 <!-- Documentation Format Switcher -->
                 <div class="flex bg-gray-100 dark:bg-gray-700 rounded-lg p-0.5">
-                    <button id="swaggerBtn" onclick="switchToSwagger()" class="px-2 py-1 text-xs rounded-md bg-blue-600 text-white">
+                    <button id="swaggerBtn" data-click="switchToSwagger" class="px-2 py-1 text-xs rounded-md bg-blue-600 text-white">
                         Swagger UI
                     </button>
-                    <button id="redocBtn" onclick="switchToRedoc()" class="px-2 py-1 text-xs rounded-md text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200">
+                    <button id="redocBtn" data-click="switchToRedoc" class="px-2 py-1 text-xs rounded-md text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200">
                         ReDoc
                     </button>
                 </div>
@@ -172,7 +172,7 @@
                 <div class="flex items-center space-x-1.5">
                     <div class="text-xs text-gray-500">
                         <i class="fas fa-server mr-1"></i>
-                        <span id="serverInfo">{{ adk_host }}:{{ adk_port }}</span>
+                        <span id="serverInfo">Agent Server</span>
                     </div>
                     <a id="externalLink" href="#" target="_blank" class="text-gray-500 hover:text-gray-700">
                         <i class="fas fa-external-link-alt text-xs"></i>
@@ -191,8 +191,6 @@
                 id="docsIframe"
                 src=""
                 class="w-full h-[calc(100vh-200px)] border-0"
-                onload="if (this.getAttribute('src')) hideDocsLoader()"
-                onerror="showDocsError()"
                 sandbox="allow-same-origin allow-scripts allow-forms allow-popups">
             </iframe>
         </div>
@@ -214,7 +212,7 @@
             <li>CORS or security restrictions</li>
         </ul>
         <div class="flex flex-wrap gap-2">
-            <button onclick="checkServerAndRetry()" class="bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 text-xs rounded-lg inline-flex items-center">
+            <button data-click="checkServerAndRetry" class="bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 text-xs rounded-lg inline-flex items-center">
                 <i class="fas fa-redo mr-1.5"></i>
                 Retry Loading
             </button>
@@ -242,24 +240,21 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
+    // Handlers this page's markup calls through data-click (csp-actions.js)
+    mateActions.allow('checkServerAndRetry', 'refreshDocs', 'switchToAdkApi', 'switchToAdminApi',
+                      'switchToRedoc', 'switchToSwagger');
+
     let docsLoaded = false;
     let currentApi = 'adk'; // 'admin' or 'adk'
     let currentFormat = 'swagger'; // 'swagger' or 'redoc'
     
-    // Get current hostname and port for ADK server
+    // Agent (/docs, /redoc) and admin docs are same-origin; the auth server
+    // proxies /docs and /redoc to ADK_PORT so the iframe works on any published port.
     const currentHost = window.location.hostname;
     const currentProtocol = window.location.protocol;
     const currentPort = window.location.port;
-    const adkPort = {{ adk_port }};
-    
-    // Only include port in ADK URL if current URL also has a port
-    const adkBaseUrl = currentPort ? 
-        `${currentProtocol}//${currentHost}:${adkPort}` : 
-        `${currentProtocol}//${currentHost}`;
-    
-    // Admin docs are on the same server
-    const adminBaseUrl = `${currentProtocol}//${currentHost}${currentPort ? ':' + currentPort : ''}`;
+    const sameOriginBase = `${currentProtocol}//${currentHost}${currentPort ? ':' + currentPort : ''}`;
     
     function hideDocsLoader() {
         document.getElementById('docsLoader').style.display = 'none';
@@ -271,6 +266,13 @@
         document.getElementById('docsError').classList.remove('hidden');
     }
     
+    // The iframe starts with an empty src, which fires load too
+    const docsIframe = document.getElementById('docsIframe');
+    docsIframe.addEventListener('load', () => {
+        if (docsIframe.getAttribute('src')) hideDocsLoader();
+    });
+    docsIframe.addEventListener('error', showDocsError);
+
     function loadCurrentDocs() {
         const iframe = document.getElementById('docsIframe');
         const loader = document.getElementById('docsLoader');
@@ -288,22 +290,22 @@
         let url, linkUrl, serverText;
         if (currentApi === 'admin') {
             if (currentFormat === 'swagger') {
-                url = `${adminBaseUrl}/admin-docs`;
-                linkUrl = `${adminBaseUrl}/admin-docs`;
+                url = `${sameOriginBase}/admin-docs`;
+                linkUrl = `${sameOriginBase}/admin-docs`;
             } else {
-                url = `${adminBaseUrl}/admin-redoc`;
-                linkUrl = `${adminBaseUrl}/admin-redoc`;
+                url = `${sameOriginBase}/admin-redoc`;
+                linkUrl = `${sameOriginBase}/admin-redoc`;
             }
             serverText = 'Admin Server';
         } else {
             if (currentFormat === 'swagger') {
-                url = `${adkBaseUrl}/docs`;
-                linkUrl = `${adkBaseUrl}/docs`;
+                url = `${sameOriginBase}/docs`;
+                linkUrl = `${sameOriginBase}/docs`;
             } else {
-                url = `${adkBaseUrl}/redoc`;
-                linkUrl = `${adkBaseUrl}/redoc`;
+                url = `${sameOriginBase}/redoc`;
+                linkUrl = `${sameOriginBase}/redoc`;
             }
-            serverText = currentPort ? `${currentHost}:${adkPort}` : currentHost;
+            serverText = 'Agent Server';
         }
         
         // Update UI
@@ -393,10 +395,10 @@
     // its tab is first opened (docs-page.js calls this once).
     window.initApiExplorer = async function() {
         // Initialize error links
-        document.getElementById('swaggerErrorLink').href = `${adkBaseUrl}/docs`;
-        document.getElementById('redocErrorLink').href = `${adkBaseUrl}/redoc`;
-        document.getElementById('adminSwaggerErrorLink').href = `${adminBaseUrl}/admin-docs`;
-        document.getElementById('adminRedocErrorLink').href = `${adminBaseUrl}/admin-redoc`;
+        document.getElementById('swaggerErrorLink').href = `${sameOriginBase}/docs`;
+        document.getElementById('redocErrorLink').href = `${sameOriginBase}/redoc`;
+        document.getElementById('adminSwaggerErrorLink').href = `${sameOriginBase}/admin-docs`;
+        document.getElementById('adminRedocErrorLink').href = `${sameOriginBase}/admin-redoc`;
         
         // Load initial docs (ADK Swagger by default)
         loadCurrentDocs();

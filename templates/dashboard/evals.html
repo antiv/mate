@@ -11,11 +11,18 @@
             <h2 class="text-xl font-bold text-gray-900 dark:text-white">Eval Framework</h2>
             <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">Test suites and score history for agent quality measurement</p>
         </div>
-        <button onclick="showAddModal()" class="px-3 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center space-x-1">
+        <button data-click="showAddModal" class="px-3 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center space-x-1">
             <i class="fas fa-plus mr-1"></i>Add Test Case
         </button>
     </div>
 
+    <!-- Tabs: the suites, and the Playground (static/js/evals-playground.js) -->
+    <div class="flex gap-1 border-b border-gray-200 dark:border-gray-700" role="tablist">
+        <button type="button" class="evals-tab px-3 py-2 text-sm font-medium border-b-2 border-blue-600 text-blue-600 dark:text-blue-400" data-tab="suites" role="tab" aria-selected="true">Suites</button>
+        <button type="button" class="evals-tab px-3 py-2 text-sm font-medium border-b-2 border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200" data-tab="playground" role="tab" aria-selected="false"><i class="fas fa-flask mr-1"></i>Playground</button>
+    </div>
+
+    <div id="suitesView" class="space-y-4">
     <!-- Two-column layout: suites + test cases -->
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
 
@@ -51,7 +58,7 @@
                 <h3 class="text-sm font-semibold text-gray-900 dark:text-white">
                     Test Cases <span id="tcAgentLabel" class="text-gray-400 dark:text-gray-500 font-normal"></span>
                 </h3>
-                <button id="runSuiteBtn" onclick="runSuite()" class="hidden px-2 py-1 text-xs bg-green-600 hover:bg-green-700 text-white rounded flex items-center">
+                <button id="runSuiteBtn" data-click="runSuite" class="hidden px-2 py-1 text-xs bg-green-600 hover:bg-green-700 text-white rounded flex items-center">
                     <i class="fas fa-play mr-1"></i>Run Suite
                 </button>
             </div>
@@ -102,7 +109,7 @@
                 </h3>
                 <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Responses users gave a thumbs-down. Turn one into a test case so the same answer is caught next time.</p>
             </div>
-            <select id="rdAgentFilter" onchange="loadRatedDown()"
+            <select id="rdAgentFilter" data-change="loadRatedDown"
                 class="px-3 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500">
                 <option value="">All agents</option>
             </select>
@@ -129,6 +136,54 @@
             </table>
         </div>
     </div>
+    </div>
+
+    <!-- Playground: the same prompt or eval suite on 2-3 variants of an agent -->
+    <div id="playgroundView" class="hidden space-y-4">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 space-y-3">
+            <p class="text-xs text-gray-500 dark:text-gray-400">
+                Run one prompt, or the agent's active test cases, on two or three variants of an agent: another model,
+                other instructions, or a stored version. Replies, scores, latency and cost appear side by side.
+                Nothing is saved or deployed; the runs are real model calls and show on the Usage page.
+            </p>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                    <label for="pgAgent" class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Agent</label>
+                    <select id="pgAgent" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-sm"></select>
+                </div>
+                <div>
+                    <label for="pgMode" class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Run</label>
+                    <select id="pgMode" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-sm">
+                        <option value="prompt">One prompt</option>
+                        <option value="suite">The agent's eval suite</option>
+                    </select>
+                </div>
+                <div id="pgSuiteInfo" class="hidden text-xs text-gray-500 dark:text-gray-400 self-end pb-2"></div>
+            </div>
+            <div id="pgPromptFields" class="space-y-2">
+                <textarea id="pgPrompt" rows="3" placeholder="The prompt to send to every variant"
+                          class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-sm"></textarea>
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <input id="pgExpected" type="text" placeholder="Expected answer (optional, to score the replies)"
+                           class="sm:col-span-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-sm">
+                    <select id="pgMethod" class="border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-sm" aria-label="Scoring method">
+                        <option value="semantic">Semantic similarity</option>
+                        <option value="exact_match">Exact match</option>
+                        <option value="llm_judge">LLM judge</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <div id="pgVariants" class="grid grid-cols-1 lg:grid-cols-3 gap-3"></div>
+        <div class="flex items-center gap-2">
+            <button type="button" id="pgAddVariant" class="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 dark:text-gray-200 rounded-lg"><i class="fas fa-plus mr-1"></i>Add a variant</button>
+            <button type="button" id="pgRun" class="px-3 py-1.5 text-sm bg-green-600 hover:bg-green-700 text-white rounded-lg"><i class="fas fa-play mr-1"></i>Run</button>
+            <span id="pgStatus" class="text-xs text-gray-500 dark:text-gray-400"></span>
+        </div>
+
+        <div id="pgResults" class="space-y-3"></div>
+    </div>
 </div>
 
 <!-- Add / Edit Test Case Modal -->
@@ -136,7 +191,7 @@
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-lg mx-4">
         <div class="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700">
             <h3 id="modalTitle" class="text-sm font-semibold text-gray-900 dark:text-white">Add Test Case</h3>
-            <button onclick="closeAddModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
+            <button data-click="closeAddModal" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
                 <i class="fas fa-times"></i>
             </button>
         </div>
@@ -185,8 +240,8 @@
             </div>
         </div>
         <div class="px-4 py-3 border-t border-gray-200 dark:border-gray-700 flex justify-end space-x-2">
-            <button onclick="closeAddModal()" class="px-3 py-1.5 text-xs text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700">Cancel</button>
-            <button onclick="saveTestCase()" class="px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded">Save</button>
+            <button data-click="closeAddModal" class="px-3 py-1.5 text-xs text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700">Cancel</button>
+            <button data-click="saveTestCase" class="px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded">Save</button>
         </div>
     </div>
 </div>
@@ -198,12 +253,12 @@
             <h3 class="text-sm font-semibold text-gray-900 dark:text-white">
                 <i class="fas fa-wand-magic-sparkles mr-1 text-purple-500"></i>Suggest a fix <span id="imAgent" class="text-gray-400 font-normal"></span>
             </h3>
-            <button onclick="closeImprove()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"><i class="fas fa-times"></i></button>
+            <button data-click="closeImprove" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"><i class="fas fa-times"></i></button>
         </div>
         <div class="p-4 space-y-3 overflow-y-auto">
             <div id="imLoading" class="text-sm text-gray-500 dark:text-gray-400"><i class="fas fa-spinner fa-spin mr-1"></i>Asking the model for a suggestion…</div>
             <div id="imBody" class="hidden space-y-3">
-                <div class="text-xs text-gray-600 dark:text-gray-300"><span class="font-medium">Question:</span> <span id="imQuestion"></span></div>
+                <div class="text-xs text-gray-600 dark:text-gray-300"><span class="font-medium">Question:</span> <span id="imQuestion"></span> <span id="imReported" class="hidden text-gray-400 italic" title="This server cannot read the build's session">(sent by a standalone build)</span></div>
                 <div class="text-xs p-2 rounded bg-purple-50 dark:bg-purple-900/20 text-gray-700 dark:text-gray-200"><span class="font-medium">Why:</span> <span id="imReason"></span></div>
                 <p class="text-xs text-gray-500 dark:text-gray-400">Only the instruction and the memory blocks you tick below can change. Edit the suggestion if you like, check it against the suite, then apply. Each change becomes a new version you can roll back.</p>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -213,14 +268,14 @@
                     </div>
                     <div>
                         <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Suggested instruction</label>
-                        <textarea id="imProposed" rows="14" oninput="improveEdited()" class="w-full px-3 py-2 text-xs font-mono border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white resize-y focus:outline-none focus:ring-1 focus:ring-purple-500"></textarea>
+                        <textarea id="imProposed" rows="14" data-input="improveEdited" class="w-full px-3 py-2 text-xs font-mono border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white resize-y focus:outline-none focus:ring-1 focus:ring-purple-500"></textarea>
                     </div>
                 </div>
                 <div id="imBlocks" class="hidden space-y-2 border-t border-gray-200 dark:border-gray-700 pt-3">
                     <div class="text-xs font-medium text-gray-700 dark:text-gray-300">Memory blocks the agent read</div>
                     <div class="flex flex-wrap items-center gap-3 text-xs text-gray-700 dark:text-gray-300">
                         <div id="imCandidates" class="flex flex-wrap gap-3"></div>
-                        <button onclick="resuggestImprove()" class="px-2 py-1 text-xs text-purple-600 border border-purple-300 dark:border-purple-700 rounded hover:bg-purple-50 dark:hover:bg-purple-900/20"><i class="fas fa-rotate mr-1"></i>Suggest again with these</button>
+                        <button data-click="resuggestImprove" class="px-2 py-1 text-xs text-purple-600 border border-purple-300 dark:border-purple-700 rounded hover:bg-purple-50 dark:hover:bg-purple-900/20"><i class="fas fa-rotate mr-1"></i>Suggest again with these</button>
                     </div>
                     <p id="imShared" class="hidden text-xs text-amber-700 dark:text-amber-400"><i class="fas fa-exclamation-triangle mr-1"></i><span></span></p>
                     <div id="imBlockEditors" class="space-y-3"></div>
@@ -229,9 +284,9 @@
             </div>
         </div>
         <div class="px-4 py-3 border-t border-gray-200 dark:border-gray-700 flex justify-end space-x-2">
-            <button onclick="closeImprove()" class="px-3 py-1.5 text-xs text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700">Cancel</button>
-            <button id="imCheckBtn" onclick="checkImprove()" disabled class="px-3 py-1.5 text-xs bg-gray-700 hover:bg-gray-800 text-white rounded disabled:opacity-50"><i class="fas fa-vial mr-1"></i>Check against suite</button>
-            <button id="imApplyBtn" onclick="applyImprove()" disabled title="Check the suggestion against the suite first" class="px-3 py-1.5 text-xs bg-purple-600 hover:bg-purple-700 text-white rounded disabled:opacity-50"><i class="fas fa-check mr-1"></i>Apply</button>
+            <button data-click="closeImprove" class="px-3 py-1.5 text-xs text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700">Cancel</button>
+            <button id="imCheckBtn" data-click="checkImprove" disabled class="px-3 py-1.5 text-xs bg-gray-700 hover:bg-gray-800 text-white rounded disabled:opacity-50"><i class="fas fa-vial mr-1"></i>Check against suite</button>
+            <button id="imApplyBtn" data-click="applyImprove" disabled title="Check the suggestion against the suite first" class="px-3 py-1.5 text-xs bg-purple-600 hover:bg-purple-700 text-white rounded disabled:opacity-50"><i class="fas fa-check mr-1"></i>Apply</button>
         </div>
     </div>
 </div>
@@ -241,7 +296,7 @@
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-lg mx-4">
         <div class="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700">
             <h3 class="text-sm font-semibold text-gray-900 dark:text-white">Run Eval</h3>
-            <button onclick="closeRunModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"><i class="fas fa-times"></i></button>
+            <button data-click="closeRunModal" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"><i class="fas fa-times"></i></button>
         </div>
         <div class="p-4 space-y-3">
             <input type="hidden" id="runTcId" value="">
@@ -257,8 +312,8 @@
             <div id="runResultArea" class="hidden p-3 rounded bg-gray-50 dark:bg-gray-700 text-xs space-y-1"></div>
         </div>
         <div class="px-4 py-3 border-t border-gray-200 dark:border-gray-700 flex justify-end space-x-2">
-            <button onclick="closeRunModal()" class="px-3 py-1.5 text-xs text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700">Cancel</button>
-            <button onclick="submitRunEval()" id="runSingleSubmitBtn" class="px-3 py-1.5 text-xs bg-green-600 hover:bg-green-700 text-white rounded flex items-center gap-1">
+            <button data-click="closeRunModal" class="px-3 py-1.5 text-xs text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700">Cancel</button>
+            <button data-click="submitRunEval" id="runSingleSubmitBtn" class="px-3 py-1.5 text-xs bg-green-600 hover:bg-green-700 text-white rounded flex items-center gap-1">
                 <i class="fas fa-play"></i>Run
             </button>
         </div>
@@ -270,7 +325,7 @@
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-lg mx-4">
         <div class="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700">
             <h3 class="text-sm font-semibold text-gray-900 dark:text-white">Run Suite — <span id="rsSuiteAgent"></span></h3>
-            <button onclick="closeRunSuiteModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"><i class="fas fa-times"></i></button>
+            <button data-click="closeRunSuiteModal" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"><i class="fas fa-times"></i></button>
         </div>
         <div class="p-4 space-y-3">
             <p class="text-xs text-gray-500 dark:text-gray-400">Each test case will be sent to the agent automatically. Results are scored and saved.</p>
@@ -284,8 +339,8 @@
             <div id="rsSuiteResultBar" class="hidden p-2 rounded bg-gray-50 dark:bg-gray-700 text-xs"></div>
         </div>
         <div class="px-4 py-3 border-t border-gray-200 dark:border-gray-700 flex justify-end space-x-2">
-            <button onclick="closeRunSuiteModal()" class="px-3 py-1.5 text-xs text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700">Cancel</button>
-            <button onclick="submitRunSuite()" id="rsSuiteSubmitBtn" class="px-3 py-1.5 text-xs bg-green-600 hover:bg-green-700 text-white rounded flex items-center gap-1">
+            <button data-click="closeRunSuiteModal" class="px-3 py-1.5 text-xs text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700">Cancel</button>
+            <button data-click="submitRunSuite" id="rsSuiteSubmitBtn" class="px-3 py-1.5 text-xs bg-green-600 hover:bg-green-700 text-white rounded flex items-center gap-1">
                 <i class="fas fa-play"></i>Run All
             </button>
         </div>
@@ -295,7 +350,15 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script src="/static/js/evals-playground.js?v=1"></script>
+<script nonce="{{ request.state.csp_nonce }}">
+// Handlers this page's markup calls through data-click and friends (csp-actions.js)
+mateActions.allow('addRatedToEvals', 'applyImprove', 'checkImprove', 'closeAddModal', 'closeImprove',
+                  'closeRunModal', 'closeRunSuiteModal', 'deleteTestCase', 'editTestCase',
+                  'improveEdited', 'loadRatedDown', 'openImprove', 'openRunModal',
+                  'resuggestImprove', 'runSuite', 'saveTestCase', 'selectAgent', 'showAddModal',
+                  'submitRunEval', 'submitRunSuite');
+
 let _selectedAgent = null;
 let _scoreChart = null;
 let _testCases = [];
@@ -337,9 +400,9 @@ async function loadSuites() {
             return;
         }
         tbody.innerHTML = suites.map(s => `
-            <tr onclick="selectAgent(${escAttr(JSON.stringify(s.agent_name || ''))})"
+            <tr data-click="selectAgent" data-args="${mateActions.attr([s.agent_name || ''])}"
                 class="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 border-b border-gray-100 dark:border-gray-700 transition-colors ${_selectedAgent === s.agent_name ? 'bg-blue-50 dark:bg-blue-900/20' : ''}">
-                <td class="px-4 py-2 font-medium text-gray-900 dark:text-white">${s.agent_name}</td>
+                <td class="px-4 py-2 font-medium text-gray-900 dark:text-white">${escHtml(s.agent_name)}</td>
                 <td class="px-4 py-2 text-center text-gray-600 dark:text-gray-400">${s.test_case_count}</td>
                 <td class="px-4 py-2 text-center">${scoreBadge(s.avg_score)}</td>
                 <td class="px-4 py-2 text-gray-500 dark:text-gray-400">${s.last_run ? new Date(s.last_run).toLocaleDateString() : '—'}</td>
@@ -389,10 +452,10 @@ function renderTestCases() {
                 <td class="px-3 py-2 text-center">${methodBadge(tc.eval_method)}</td>
                 <td class="px-3 py-2 text-center">${lr ? scoreBadge(lr.score) : '<span class="text-gray-400">—</span>'}</td>
                 <td class="px-3 py-2 text-center whitespace-nowrap">
-                    <button onclick="editTestCase(${tc.id})" class="px-1.5 py-0.5 text-xs text-blue-600 hover:underline" title="Edit"><i class="fas fa-edit"></i></button>
-                    <button onclick="openRunModal(${tc.id})" class="px-1.5 py-0.5 text-xs text-green-600 hover:underline" title="Run"><i class="fas fa-play"></i></button>
-                    <button onclick="openImprove({test_case_id: ${tc.id}})" class="px-1.5 py-0.5 text-xs text-purple-600 hover:underline" title="Suggest a fix"><i class="fas fa-wand-magic-sparkles"></i></button>
-                    <button onclick="deleteTestCase(${tc.id})" class="px-1.5 py-0.5 text-xs text-red-500 hover:underline" title="Delete"><i class="fas fa-trash"></i></button>
+                    <button data-click="editTestCase" data-args="[${tc.id}]" class="px-1.5 py-0.5 text-xs text-blue-600 hover:underline" title="Edit"><i class="fas fa-edit"></i></button>
+                    <button data-click="openRunModal" data-args="[${tc.id}]" class="px-1.5 py-0.5 text-xs text-green-600 hover:underline" title="Run"><i class="fas fa-play"></i></button>
+                    <button data-click="openImprove" data-args="${mateActions.attr([{test_case_id: tc.id}])}" class="px-1.5 py-0.5 text-xs text-purple-600 hover:underline" title="Suggest a fix"><i class="fas fa-wand-magic-sparkles"></i></button>
+                    <button data-click="deleteTestCase" data-args="[${tc.id}]" class="px-1.5 py-0.5 text-xs text-red-500 hover:underline" title="Delete"><i class="fas fa-trash"></i></button>
                 </td>
             </tr>
         `;
@@ -740,18 +803,20 @@ function renderRatedDown() {
     }
     const unavailable = '<span class="text-gray-400 italic">session no longer available</span>';
     tbody.innerHTML = _ratedDown.map((r, i) => {
-        const question = r.question ? escHtml(truncate(r.question, 80)) : (r.session_available ? '—' : unavailable);
+        // From a standalone build: its session is not on this server, so the text is what the build sent
+        const reported = r.reported ? '<div class="text-gray-400 italic" title="This server cannot read the build\'s session">sent by a standalone build</div>' : '';
+        const question = (r.question ? escHtml(truncate(r.question, 80)) : (r.session_available ? '—' : unavailable)) + reported;
         const answer = r.answer ? escHtml(truncate(r.answer, 80)) : (r.session_available ? '—' : unavailable);
         let action;
         if (r.test_case_id) {
-            action = `<button onclick="selectAgent(${escAttr(JSON.stringify(r.agent_name || ''))})" class="text-green-600 hover:underline" title="Open the agent's suite"><i class="fas fa-check mr-1"></i>Test case #${r.test_case_id}</button>`;
+            action = `<button data-click="selectAgent" data-args="${mateActions.attr([r.agent_name || ''])}" class="text-green-600 hover:underline" title="Open the agent's suite"><i class="fas fa-check mr-1"></i>Test case #${r.test_case_id}</button>`;
         } else if (r.question && r.agent_name) {
-            action = `<button onclick="addRatedToEvals(${i})" class="px-2 py-1 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded whitespace-nowrap"><i class="fas fa-plus mr-1"></i>Add to evals</button>`;
+            action = `<button data-click="addRatedToEvals" data-args="[${i}]" class="px-2 py-1 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded whitespace-nowrap"><i class="fas fa-plus mr-1"></i>Add to evals</button>`;
         } else {
             action = '<span class="text-gray-400">—</span>';
         }
         if (r.question && r.agent_name) {
-            action += ` <button onclick="openImprove({feedback_id: ${r.id}})" class="px-2 py-1 mt-1 text-xs text-purple-600 hover:underline whitespace-nowrap" title="Suggest a fix"><i class="fas fa-wand-magic-sparkles mr-1"></i>Suggest fix</button>`;
+            action += ` <button data-click="openImprove" data-args="${mateActions.attr([{feedback_id: r.id}])}" class="px-2 py-1 mt-1 text-xs text-purple-600 hover:underline whitespace-nowrap" title="Suggest a fix"><i class="fas fa-wand-magic-sparkles mr-1"></i>Suggest fix</button>`;
         }
         return `
             <tr class="border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 align-top">
@@ -812,6 +877,7 @@ async function openImprove(source, blockLabels) {
         _renderImproveBlocks(data.blocks || {}, data.shared_with || []);
         document.getElementById('imAgent').textContent = '— ' + data.agent_name;
         document.getElementById('imQuestion').textContent = data.question || '';
+        document.getElementById('imReported').classList.toggle('hidden', !data.reported);
         document.getElementById('imReason').textContent = data.reason || '—';
         document.getElementById('imCurrent').value = data.current_instruction || '';
         document.getElementById('imProposed').value = data.instruction || '';

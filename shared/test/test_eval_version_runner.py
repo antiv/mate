@@ -14,6 +14,7 @@ import os
 import sys
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from typing import AsyncGenerator
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -176,7 +177,7 @@ class TestSnapshotAgent(unittest.TestCase):
 
     def test_rbac_is_skipped_only_inside_an_eval_run(self):
         from shared.callbacks.rbac_callback import _should_skip_rbac_check
-        self.assertFalse(_should_skip_rbac_check("support_bot"))
+        self.assertFalse(_should_skip_rbac_check(SimpleNamespace(agent_name="support_bot")))
 
     def test_the_runtime_picks_the_implementation(self):
         self.assertIsInstance(SnapshotAgent(_snapshot("x")), AdkSnapshotAgent)

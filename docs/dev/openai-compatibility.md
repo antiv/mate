@@ -3,7 +3,6 @@ title: "OpenAI-compatible API: clients and details"
 summary: Configure coding assistants against MATE, with personal access tokens and tool calling in detail.
 audience: dev
 order: 51
-status: migrated
 covers:
   - server/openai_routes.py
   - server/openai_translate.py
@@ -49,9 +48,17 @@ Details worth knowing:
 
 ### Conversation identity
 
-MATE maps each conversation onto a persistent agent session, keyed on the agent and the first user message — so two conversations sharing a system prompt, which every coding agent has, stay separate. A client that tracks its own conversations can pin the session explicitly with the `X-MATE-Conversation-Id` header. Each request sends only what the runtime has not seen yet; the client's history is not replayed.
+MATE maps each conversation onto a persistent agent session, keyed by default on the agent and the first user message: deliberately not from the system prompt, because clients like Cline and Roo rewrite it when toggling modes (such as Plan and Act), and changing it would hand the agent a blank session mid-task.
 
-The client's system prompt is passed as context with the opening message. It does not replace the agent's configured instruction, which remains the operator's, and it is not part of the session id — see [Conversation identity across mode switches](#conversation-identity-across-mode-switches).
+A client that tracks its own conversations can pin the session explicitly with the `X-MATE-Conversation-Id` header; when present, it alone decides the session. Each request sends only what the runtime has not seen yet; the client's history is not replayed.
+
+The client's system prompt is passed as context with the opening message without replacing the agent's configured instruction.
+
+Three consequences worth knowing:
+
+* Two conversations with the same agent that open with an identical first message share a session. Send `X-MATE-Conversation-Id` if that matters.
+* If a client compacts history by replacing the opening message, MATE sees a new conversation. The agent keeps its old session while you start a fresh one, keeping behavior predictable rather than silently interleaving.
+* When the runtime holds nothing for a conversation that already has history (e.g. switching models to MATE mid-conversation, or an expired session), the history is replayed once as text with the first turn so the agent joins with context. A tool result for a call never made in the agent's session is likewise passed as text rather than as a function response.
 
 ---
 
@@ -61,7 +68,7 @@ All requests to the `/v1` endpoints are authenticated and authorized using:
 1. **Personal Access Tokens (PATs)**: Individual users generate PATs in the MATE dashboard. The PAT is sent as a bearer token (`Authorization: Bearer mate_pat_...`). MATE stores only the SHA-256 hash of the token for security.
 2. **Role Restrictions**: Access to the OpenAI compatible endpoints is restricted by user roles. By default, only users with the `admin` or `developer` roles are authorized to verify a PAT and call the API.
    * *Note: Permitted roles can be custom configured in the MATE `.env` file via `ALLOWED_API_ROLES=admin,developer`.*
-3. **Rate limits and token budgets**: with `RATE_LIMIT_ENABLED=true`, the per-user, per-agent and per-project limits from [RATE_LIMITS.md](../user/rate-limits.md) apply to `/v1/chat/completions` too. A blocked request gets `429` with a `Retry-After` header.
+3. **Rate limits and token budgets**: with `RATE_LIMIT_ENABLED=true`, the per-user, per-agent and per-project limits from [Rate limits](../user/rate-limits.md) apply to `/v1/chat/completions` too. A blocked request gets `429` with a `Retry-After` header.
 
 ---
 
@@ -69,7 +76,7 @@ All requests to the `/v1` endpoints are authenticated and authorized using:
 
 ### 1. Enable Model Exposure
 An agent must be a **root agent** (it cannot have parent agents) to be exposed.
-* **Via Dashboard UI**: Toggle the `Expose as Model` switch in the agent's configuration panel.
+* **Via Dashboard UI**: Check the `Expose as Model` checkbox in the agent's configuration panel.
 * **Via API**: Send a `PUT` request to `/dashboard/api/agents/{config_id}/expose` with a JSON payload of `{"expose": true}`.
 
 ### 2. Generate a Personal Access Token
@@ -187,33 +194,21 @@ The bridge implements chat completions only. That is enough for an agent convers
 * **No embeddings or reranking.** `/v1/embeddings` does not exist, so codebase indexing has to use another provider.
 * **No `/v1/responses`.** Anything configured against the newer OpenAI Responses API will not find it.
 
-### Conversation identity across mode switches
-
-MATE maps a conversation onto a persistent agent session. By default the session id is derived from the agent and the first user message — deliberately **not** from the system prompt, because Cline and Roo rewrite it when you toggle Plan and Act, and a client that changes it on upgrade would otherwise hand the agent a blank session in the middle of a task.
-
-A client that tracks its own conversations can be explicit instead by sending the `X-MATE-Conversation-Id` header; when present it alone decides the session, and nothing the client does to the transcript can break it.
-
-Two consequences worth knowing:
-
-* Two conversations with the same agent that open with an identical first message share a session. Send the header if that matters.
-* If a client compacts history by replacing the opening message, MATE sees a new conversation. The agent keeps its old session but you start a fresh one — predictable, rather than the two silently interleaving.
-* When the runtime holds nothing for a conversation that already has history — you switched the model to a MATE agent mid-conversation, or the session is gone — the history is replayed once, as text, with that first turn, so the agent joins with context instead of a blank slate. A tool result for a call the agent's session never made is likewise passed as text rather than as a function response, which the runtime would reject.
-
 ---
 
 ## Example: Coding Agent Template (`coding-agent`)
 
-MATE includes a pre-configured multi-agent template specifically optimized for software development. This template uses the state-of-the-art code generation model `openrouter/qwen/qwen3-coder-next` (Qwen 2.5 Coder) and connects three specialized agents:
+MATE includes a pre-configured multi-agent template specifically optimized for software development. This template uses the code generation model `openrouter/qwen/qwen3-coder-next` (Qwen3 Coder Next) and connects three specialized agents:
 
 1. **`coding_root`**: The Lead Coder (exposed as an OpenAI compatible model). It receives instructions, coordinates subagents, and generates core structures.
-2. **`coding_tester`**: The Test Engineer subagent. It writes unit/integration tests and executes them inside isolated sandboxes using MATE's `code_executor` tool.
+2. **`coding_tester`**: The Test Engineer subagent. It writes unit/integration tests and executes them using MATE's `code_executor` tool.
 3. **`coding_security`**: The Security Auditor subagent. It scans code for OWASP Top 10 vulnerabilities, insecure dependency patterns, and secret leaks.
 
 ### Using the Coding Agent in External Tools
 
-When you import the `Coding Agent` template in the MATE dashboard, the root agent `coding_root` is automatically created with `expose_as_model` enabled.
+When you import the `Coding Agent` template in the MATE dashboard, the root agent is created with `expose_as_model` enabled, named `<project_slug>_root` (the template's prefix `coding_` is replaced with your project slug).
 
-To use it in your external tools (like **OpenCode** or **Continue**), reference the name generated by MATE during project creation (e.g., `your_project_coding_root`):
+To use it in your external tools (like **OpenCode** or **Continue**), reference the generated model name (e.g., `<project_slug>_root`):
 
 #### OpenCode Example Config
 ```json
@@ -227,7 +222,7 @@ To use it in your external tools (like **OpenCode** or **Continue**), reference 
         "apiKey": "mate_pat_your_generated_token"
       },
       "models": {
-        "your_project_coding_root": {
+        "<project_slug>_root": {
           "name": "MATE Coding Team (Qwen Coder)",
           "tool_call": true
         }
@@ -244,7 +239,7 @@ To use it in your external tools (like **OpenCode** or **Continue**), reference 
     {
       "title": "MATE Coding Team (Qwen Coder)",
       "provider": "openai",
-      "model": "your_project_coding_root",
+      "model": "<project_slug>_root",
       "apiBase": "http://localhost:8000/v1",
       "apiKey": "mate_pat_your_generated_token"
     }

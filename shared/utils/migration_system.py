@@ -56,41 +56,15 @@ class MigrationSystem:
         if self.database_client:
             return self.database_client._engine
         else:
-            # Create engine directly if no client provided
-            import os
+            # Create engine directly if no client provided, from the same settings
+            # the client uses, so migrations cannot target a different database
             from sqlalchemy import create_engine
-            
-            db_type = os.getenv("DB_TYPE", "postgresql").lower()
-            
-            if db_type == "postgresql":
-                host = os.getenv("DB_HOST", "localhost")
-                port = os.getenv("DB_PORT", "5432")
-                database = os.getenv("DB_NAME")
-                user = os.getenv("DB_USER")
-                password = os.getenv("DB_PASSWORD")
-                
-                if not all([database, user, password]):
-                    return None
-                
-                database_url = f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{database}"
-            elif db_type == "sqlite":
-                database_path = os.getenv("DB_PATH", "mate_agent.db")
-                database_url = f"sqlite:///{database_path}"
-            elif db_type == "mysql":
-                host = os.getenv("DB_HOST", "localhost")
-                port = os.getenv("DB_PORT", "3306")
-                database = os.getenv("DB_NAME")
-                user = os.getenv("DB_USER")
-                password = os.getenv("DB_PASSWORD")
-                
-                if not all([database, user, password]):
-                    return None
-                
-                database_url = f"mysql+pymysql://{user}:{password}@{host}:{port}/{database}"
-            else:
+            from . import settings
+
+            try:
+                return create_engine(settings.database_url())
+            except ValueError:
                 return None
-            
-            return create_engine(database_url)
     
     def _get_database_type(self):
         """Get database type from engine URL."""
@@ -364,8 +338,12 @@ class MigrationSystem:
                                 # Log the error but continue with other statements
                                 # This allows migrations to be more resilient to schema changes
                                 logger.warning(f"Statement failed (may be expected): {statement[:100]}... Error: {e}")
-                                # For certain expected errors (like duplicate columns), continue
-                                if "duplicate column name" in str(e).lower() or "already exists" in str(e).lower():
+                                # For certain expected errors (like duplicate columns), continue.
+                                # MySQL has no ADD COLUMN / CREATE INDEX IF NOT EXISTS: a re-run
+                                # reports "Duplicate column name" / "Duplicate key name" instead.
+                                error = str(e).lower()
+                                if ("duplicate column name" in error or "duplicate key name" in error
+                                        or "already exists" in error):
                                     logger.info(f"Skipping statement due to expected error: {e}")
                                     continue
                                 else:

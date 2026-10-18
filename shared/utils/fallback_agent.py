@@ -1,10 +1,26 @@
 """
 Shared fallback agent factory for creating database initialization fallback agents.
 """
+from typing import Any
+
 from google.adk.agents import Agent
 from shared.utils import create_model
 from shared.callbacks.token_usage_callback import capture_model_name_callback
 from shared.callbacks.function_call_guardrail import combined_after_model_callback
+
+
+class _FallbackAgent(Agent):
+    """The fallback agent's own class, which the role check skips.
+
+    Recognised by class, not by name: an agent from agents_config can be given any
+    name, this one's included. Not by object either, since ADK runs a copy of the
+    root agent; a copy keeps its class, and nothing else builds this one.
+    """
+
+
+def is_fallback_agent(agent: Any) -> bool:
+    """True when agent is one that create_fallback_agent built, or a copy of one."""
+    return isinstance(agent, _FallbackAgent)
 
 
 def create_fallback_agent(agent_context_name: str = "MATE", error_message: str = None) -> Agent:
@@ -42,7 +58,7 @@ def create_fallback_agent(agent_context_name: str = "MATE", error_message: str =
         "Thank you for your patience while we resolve this configuration issue."
     )
 
-    return Agent(
+    return _FallbackAgent(
         name="mate_fallback_agent",
         model=create_model(
             model_name="openrouter/google/gemini-2.5-flash-lite",

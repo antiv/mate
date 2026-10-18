@@ -3,9 +3,9 @@ title: "Template format"
 summary: The JSON format of an agent template, name substitution on import, and remote template sources.
 audience: dev
 order: 110
-status: migrated
 covers:
   - shared/utils/template_service.py
+  - shared/utils/dashboard/dashboard_server.py
 ---
 
 # Template Library
@@ -70,17 +70,22 @@ Templates are stored as JSON files in `templates/agent_templates/`. The dashboar
 
 On import, agent names are made unique by replacing `agent_prefix` with the slugified project name:
 
-- `agent_prefix: "support"` → `support_root` becomes `customer_support_root` when project is "Customer Support"
-- `agent_prefix: "chess_"` → `chess_mate_root` becomes `my_chess_mate_root` when project is "My Chess"
+- `agent_prefix: "support"` -> `support_root` becomes `customer_support_root` when project is "Customer Support"
+- `agent_prefix: "chess_"` -> `chess_mate_root` becomes `my_chess_mate_root` when project is "My Chess"
 
-Substitution is applied to: agent names, `parent_agents`, memory block labels, and memory block values.
+Substitution is applied to: agent names, `parent_agents`, agent instructions, memory block labels, and memory block values.
+
+Import also records template provenance (`template_id`, `template_version`, `template_prefix`) on the created project record in the database for later sync and upgrades.
 
 ## API Endpoints
 
-- `GET /dashboard/api/templates?category=&search=` - List templates
-- `GET /dashboard/api/templates/{id}` - Get full template JSON
+- `GET /dashboard/api/templates?category=&search=` - List templates (supports `category` and `search` filters)
+- `GET /dashboard/api/templates/{id}` - Get full template JSON by template ID
+- `DELETE /dashboard/api/templates/{id}` - Delete a template JSON file from `templates/agent_templates/`
 - `POST /dashboard/api/templates/import` - One-click import. Body: `{"template_id": "...", "project_name?": "..."}`
-- `POST /dashboard/api/templates/create-from-agents` - Create template from existing agents. Body: `{"project_id", "root_agent", "template_id", "template_name?", "description?", "category?"}`
+- `POST /dashboard/api/templates/create-from-agents` - Create template from existing agents. Body: `{"project_id": 1, "root_agent": "...", "template_id": "...", "template_name?": "...", "description?": "...", "category?": "..."}`
+- `GET /dashboard/api/templates/sync-status/{project_id}` - Check differences between a project and its source template (returns agents to add, agents to update, memory blocks to add, and memory blocks to update)
+- `POST /dashboard/api/templates/sync` - Sync project with its source template. Body: `{"project_id": 1}`
 
 ## Creating a Template from Existing Agents
 
@@ -98,5 +103,4 @@ Set `TEMPLATES_REMOTE_URL` to a URL that returns a JSON array of template object
 
 ## Built-in templates
 
-The Template Library page lists what is installed. The files are in
-`templates/agent_templates/`.
+The Template Library page lists what is installed. The files are in `templates/agent_templates/`.

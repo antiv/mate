@@ -3,7 +3,7 @@
     role="dialog" aria-modal="true">
     <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
         <div id="templateSyncBackdrop" class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"
-            aria-hidden="true" onclick="hideTemplateSyncModal()"></div>
+            aria-hidden="true" data-click="hideTemplateSyncModal"></div>
 
         <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
 
@@ -82,18 +82,18 @@
             </div>
             <div class="bg-gray-50 dark:bg-gray-700 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse"
                 id="templateSyncActions" style="display: none;">
-                <button type="button" id="templateSyncConfirmBtn" onclick="performTemplateSync()"
+                <button type="button" id="templateSyncConfirmBtn" data-click="performTemplateSync"
                     class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:ml-3 sm:w-auto sm:text-sm">
                     Apply Updates
                 </button>
-                <button type="button" onclick="hideTemplateSyncModal()"
+                <button type="button" data-click="hideTemplateSyncModal"
                     class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:mt-0 sm:w-auto sm:text-sm dark:bg-gray-800 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700">
                     Cancel
                 </button>
             </div>
             <div class="bg-gray-50 dark:bg-gray-700 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse"
                 id="templateSyncCloseActions" style="display: none;">
-                <button type="button" onclick="hideTemplateSyncModal()"
+                <button type="button" data-click="hideTemplateSyncModal"
                     class="w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:mt-0 sm:w-auto sm:text-sm dark:bg-gray-800 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700">
                     Close
                 </button>

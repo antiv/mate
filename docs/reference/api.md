@@ -10,7 +10,7 @@ generated: true
 
 # HTTP API reference
 
-Every HTTP route declared in the code: **252** routes. 35 have no docstring and so no summary here.
+Every HTTP route declared in the code: **267** routes. 36 have no docstring and so no summary here.
 
 This page lists what exists and where it is implemented. For request and response schemas, and to try a call, use the live Swagger UI under **Documentation → API** in the dashboard.
 
@@ -18,7 +18,7 @@ Requests to `/dashboard/api/*` require an admin, apart from the short allowlist 
 
 ## Auth server and dashboard
 
-Port 8000. Everything a browser or an external client talks to. 233 routes.
+Port 8000. Everything a browser or an external client talks to. 247 routes.
 
 ### Authentication
 
@@ -120,6 +120,9 @@ Documentation pages and search, served from the docs/ folder.
 | `POST` | `/dashboard/api/evals/improve/apply` | Replace the agent's instruction and block values with the reviewed ones: a new config version and a version per block, an audit entry naming what prompted it and every block ver | shared/utils/dashboard/dashboard_server.py · apply_improvement |
 | `POST` | `/dashboard/api/evals/improve/check` | Run the agent's active eval suite with its current config and with the proposed instruction and block values, both in memory, and return the results side by side | shared/utils/dashboard/dashboard_server.py · check_improvement |
 | `POST` | `/dashboard/api/evals/improve/propose` | Suggest a revised instruction for the agent behind a failing test case or a thumbs-down, and revised values for the memory blocks it read while answering that the admin picked ( | shared/utils/dashboard/dashboard_server.py · propose_improvement |
+| `GET` | `/dashboard/api/evals/playground/agent/{agent_name}` | An agent's current model and instructions, and its stored versions, to start variants from | shared/utils/dashboard/dashboard_server.py · playground_agent |
+| `GET` | `/dashboard/api/evals/playground/agents` | Agents the Playground can run, with their model and how many active test cases they have | shared/utils/dashboard/dashboard_server.py · playground_agents |
+| `POST` | `/dashboard/api/evals/playground/run` | Run one prompt, or the agent's active eval suite, on 2-3 variants of the agent and return replies, scores, latency and cost side by side | shared/utils/dashboard/dashboard_server.py · playground_run |
 | `POST` | `/dashboard/api/evals/version/{version_id}/run` | Run the eval suite for all active test cases linked to the agent of this version | shared/utils/dashboard/dashboard_server.py · run_version_eval_suite |
 | `DELETE` | `/dashboard/api/evals/{test_case_id}` | Soft-delete a test case (sets is_active=False) | shared/utils/dashboard/dashboard_server.py · delete_test_case |
 | `PUT` | `/dashboard/api/evals/{test_case_id}` | Update a test case's fields | shared/utils/dashboard/dashboard_server.py · update_test_case |
@@ -198,6 +201,7 @@ Web interface pages for system management.
 | `GET` | `/dashboard/overview` | Platform Overview — Control Room landing page | shared/utils/dashboard/dashboard_server.py · dashboard_overview |
 | `GET` | `/dashboard/rate-limits` | Dashboard rate limits and budgets page | shared/utils/dashboard/dashboard_server.py · dashboard_rate_limits |
 | `GET` | `/dashboard/sessions` | Dashboard session tracking page (ADK & LangGraph) | shared/utils/dashboard/dashboard_server.py · dashboard_sessions |
+| `GET` | `/dashboard/settings` | — | shared/utils/dashboard/dashboard_server.py · dashboard_settings |
 | `GET` | `/dashboard/shop-orders` | Dashboard page listing orders placed through the e-commerce MCP, grouped by partner | shared/utils/dashboard/dashboard_server.py · dashboard_shop_orders |
 | `GET` | `/dashboard/templates` | Dashboard templates gallery page | shared/utils/dashboard/dashboard_server.py · dashboard_templates |
 | `GET` | `/dashboard/traces` | Dashboard traces page - OpenTelemetry distributed tracing viewer | shared/utils/dashboard/dashboard_server.py · dashboard_traces |
@@ -207,6 +211,7 @@ Web interface pages for system management.
 | `GET` | `/dashboard/wizard-leads` | Dashboard page listing leads captured by the public Agent Builder Wizard | shared/utils/dashboard/dashboard_server.py · dashboard_wizard_leads |
 | `GET` | `/dashboard/wizard-pricing` | Dashboard page to edit Agent Builder Wizard tier prices and currencies | shared/utils/dashboard/dashboard_server.py · dashboard_wizard_pricing |
 | `GET` | `/dashboard/workroom` | — | shared/utils/dashboard/dashboard_server.py · dashboard_workroom |
+| `GET` | `/dashboard/workroom/canvas` | An empty page that runs the code shown in the Work Room canvas | shared/utils/dashboard/dashboard_server.py · dashboard_workroom_canvas |
 | `GET` | `/login` | Login page for dashboard (no auth required) | server/auth_routes.py · login_page |
 
 ### Dashboard - Projects
@@ -248,6 +253,17 @@ ADK server control API endpoints (start, stop, restart).
 | `GET` | `/dashboard/api/sessions` | Get paginated session list across ADK and LangGraph runtimes | shared/utils/dashboard/dashboard_server.py · get_sessions_api |
 | `GET` | `/dashboard/api/sessions/detail` | Get complete history of prompts, responses, thoughts, tool calls, and state for a session | shared/utils/dashboard/dashboard_server.py · get_session_detail_api |
 
+### Dashboard - Settings
+
+| Method | Path | Summary | Implemented in |
+|---|---|---|---|
+| `GET` | `/dashboard/api/settings/image-model` | The default image model for agents that name none, where it comes from, and whether its key is set | shared/utils/dashboard/dashboard_server.py · get_image_model_setting |
+| `PUT` | `/dashboard/api/settings/image-model` | Set the default image model; an empty model falls back to IMAGE_MODEL, then dall-e-3 | shared/utils/dashboard/dashboard_server.py · put_image_model_setting |
+| `DELETE` | `/dashboard/api/settings/model-prices` | Remove a manual price: the model's calls are priced from the published lists again, or have no cost | shared/utils/dashboard/dashboard_server.py · delete_model_price |
+| `GET` | `/dashboard/api/settings/model-prices` | Every model used or priced by hand: its price per million tokens, where it comes from, and calls without a cost | shared/utils/dashboard/dashboard_server.py · get_model_prices |
+| `PUT` | `/dashboard/api/settings/model-prices` | Set a model's price by hand, in US dollars per million tokens, and price all its calls with it | shared/utils/dashboard/dashboard_server.py · put_model_price |
+| `POST` | `/dashboard/api/settings/model-prices/fill-missing` | Price the calls logged without a cost whose model has a price now | shared/utils/dashboard/dashboard_server.py · fill_missing_costs |
+
 ### Dashboard - Templates
 
 Template library and one-click import API endpoints.
@@ -267,6 +283,8 @@ Template library and one-click import API endpoints.
 | Method | Path | Summary | Implemented in |
 |---|---|---|---|
 | `GET` | `/dashboard/api/traces` | Get traces from trace_spans table for dashboard viewer | shared/utils/dashboard/dashboard_server.py · get_traces_api |
+| `GET` | `/dashboard/api/traces/replay` | One session's traced turns as replay timelines: agents, model calls, tools, fallbacks | shared/utils/dashboard/dashboard_server.py · get_session_replay_api |
+| `GET` | `/dashboard/api/traces/sessions` | Sessions with traced turns, for the Visual Builder's replay picker; a project's only with project_id | shared/utils/dashboard/dashboard_server.py · get_replay_sessions_api |
 
 ### Dashboard - Triggers
 
@@ -353,6 +371,12 @@ Example endpoints demonstrating authentication patterns.
 |---|---|---|---|
 | `GET` | `/protected` | Example protected endpoint | server/proxy_routes.py · protected_endpoint |
 
+### MCP - Agents
+
+| Method | Path | Summary | Implemented in |
+|---|---|---|---|
+| `GET` | `/mcp` | List the exposed agent MCP servers the caller may use, with their URLs | shared/utils/mcp/agent_mcp_manager.py · list_agent_mcp_endpoints |
+
 ### MCP - Google Drive
 
 Google Drive MCP server endpoints for file operations.
@@ -375,7 +399,7 @@ Image generation MCP server endpoints (DALL-E, Stable Diffusion, etc.).
 |---|---|---|---|
 | `GET` | `/images/mcp` | Image MCP server info endpoint | shared/utils/mcp/image_mcp_server.py · image_mcp_info |
 | `POST` | `/images/mcp` | Handle Image MCP protocol requests at the root /images/mcp endpoint | shared/utils/mcp/image_mcp_server.py · image_mcp_protocol_handler |
-| `GET` | `/images/mcp/health` | Image MCP server health check (no auth required) | shared/utils/mcp/image_mcp_server.py · image_mcp_health_check |
+| `GET` | `/images/mcp/health` | Image MCP server health check (no auth required, so no setup details) | shared/utils/mcp/image_mcp_server.py · image_mcp_health_check |
 | `POST` | `/images/mcp/initialize` | Image MCP protocol initialize endpoint | shared/utils/mcp/image_mcp_server.py · image_mcp_initialize |
 | `GET` | `/images/mcp/sse` | Image MCP Server-Sent Events endpoint for real-time communication | shared/utils/mcp/image_mcp_server.py · image_mcp_sse |
 | `POST` | `/images/mcp/tools/call` | Image MCP protocol tools/call endpoint | shared/utils/mcp/image_mcp_server.py · image_mcp_call_tool |
@@ -530,11 +554,12 @@ Used instead of the ADK runtime when `AGENT_FRAMEWORK=langgraph`; emulates the s
 
 ## Standalone server
 
-The single-agent binary built by `build_standalone_agent.py`. 2 routes.
+The single-agent binary built by `build_standalone_agent.py`. 3 routes.
 
 ### Other
 
 | Method | Path | Summary | Implemented in |
 |---|---|---|---|
 | `GET` | `/` | Serve the standalone chat UI | standalone_server.py · chat_page |
+| `POST` | `/feedback` | Send a 👍/👎 to the central MATE named by MATE_FEEDBACK_URL | standalone_server.py · feedback |
 | `GET` | `/health` | — | standalone_server.py · health |

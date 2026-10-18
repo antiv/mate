@@ -2,6 +2,11 @@
 // Parent Agents Selection Modal Functions
 // ============================================================================
 
+// Handlers this file's markup calls through data-click and friends (csp-actions.js)
+mateActions.allow('applyParentAgentsSelection', 'clearParentAgentsSearch',
+                  'closeParentAgentsModal', 'filterParentAgentsList',
+                  'openParentAgentsModal');
+
 let currentParentAgentsPrefix = null;
 let currentParentAgentsList = [];
 

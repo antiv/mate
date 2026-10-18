@@ -3,6 +3,15 @@
  * Handles visualization and editing of memory blocks for agents with memory tools
  */
 
+// Handlers this file's markup calls through data-click and friends (csp-actions.js)
+mateActions.allow('addFilterCondition', 'copyToClipboard', 'createMemoryBlock',
+                  'deleteMemoryBlock', 'editMemoryBlock', 'hideCreateMemoryBlockModal',
+                  'hideEditMemoryBlockModal', 'hideMemoryBlockHistory',
+                  'hideMemoryBlocksModal', 'removeFilterCondition',
+                  'restoreMemoryBlockVersion', 'searchMemoryBlocks',
+                  'showCreateMemoryBlockModal', 'showDeletedMemoryBlocks',
+                  'showMemoryBlockHistory', 'updateFilterCondition', 'updateMemoryBlock');
+
 let currentAgentName = null;
 let currentBlocks = [];
 let filterConditions = [];
@@ -27,17 +36,17 @@ function showMemoryBlocksModal(agentName) {
     const conditionEl = document.createElement('div');
     conditionEl.className = 'flex items-center space-x-2';
     conditionEl.innerHTML = `
-        <select onchange="updateFilterCondition(0, 'field', this.value)" class="px-2 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white">
+        <select data-change="updateFilterCondition" data-args="${mateActions.attr([0, 'field', '$value'])}" class="px-2 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white">
             <option value="Block Name" selected>Block Name</option>
             <option value="Content">Content</option>
         </select>
-        <select onchange="updateFilterCondition(0, 'operator', this.value)" class="px-2 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white">
+        <select data-change="updateFilterCondition" data-args="${mateActions.attr([0, 'operator', '$value'])}" class="px-2 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white">
             <option value="contains" selected>contains</option>
             <option value="equals">equals</option>
             <option value="starts with">starts with</option>
         </select>
-        <input type="text" value="system_instruction_" onchange="updateFilterCondition(0, 'value', this.value)" placeholder="Search..." class="px-2 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white w-32" />
-        <button onclick="removeFilterCondition(0)" class="text-red-500 hover:text-red-700">
+        <input type="text" value="system_instruction_" data-change="updateFilterCondition" data-args="${mateActions.attr([0, 'value', '$value'])}" placeholder="Search..." class="px-2 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white w-32" />
+        <button data-click="removeFilterCondition" data-args="${mateActions.attr([0])}" class="text-red-500 hover:text-red-700">
             <i class="fas fa-times"></i>
         </button>
     `;
@@ -140,15 +149,15 @@ function renderMemoryBlocks(blocks) {
                         <i class="fas fa-database text-gray-400"></i>
                         <span class="font-medium text-gray-900 dark:text-white">${escapeHtml(label)}</span>
                         <span class="text-xs text-gray-500 dark:text-gray-400">block...${shortId.substring(Math.max(0, shortId.length - 12))}</span>
-                        <button onclick="copyToClipboard(${jsArg(identifier)})" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300" title="Copy block ID">
+                        <button data-click="copyToClipboard" data-args="${mateActions.attr([identifier])}" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300" title="Copy block ID">
                             <i class="fas fa-copy text-xs"></i>
                         </button>
                     </div>
                     <div class="flex items-center">
-                        <button onclick="showMemoryBlockHistory(${jsArg(identifier)}, ${jsArg(label)}, false)" class="px-3 py-1 text-xs font-medium text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200">
+                        <button data-click="showMemoryBlockHistory" data-args="${mateActions.attr([identifier, label, false])}" class="px-3 py-1 text-xs font-medium text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200">
                             History
                         </button>
-                        <button onclick="editMemoryBlock(${jsArg(identifier)}, ${jsArg(label)})" class="px-3 py-1 text-xs font-medium text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300">
+                        <button data-click="editMemoryBlock" data-args="${mateActions.attr([identifier, label])}" class="px-3 py-1 text-xs font-medium text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300">
                             Edit
                         </button>
                     </div>
@@ -178,17 +187,17 @@ function addFilterCondition() {
     const conditionEl = document.createElement('div');
     conditionEl.className = 'flex items-center space-x-2';
     conditionEl.innerHTML = `
-        <select onchange="updateFilterCondition(${conditionIndex}, 'field', this.value)" class="px-2 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white">
+        <select data-change="updateFilterCondition" data-args="${mateActions.attr([conditionIndex, 'field', '$value'])}" class="px-2 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white">
             <option value="Block Name" selected>Block Name</option>
             <option value="Content">Content</option>
         </select>
-        <select onchange="updateFilterCondition(${conditionIndex}, 'operator', this.value)" class="px-2 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white">
+        <select data-change="updateFilterCondition" data-args="${mateActions.attr([conditionIndex, 'operator', '$value'])}" class="px-2 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white">
             <option value="contains" selected>contains</option>
             <option value="equals">equals</option>
             <option value="starts with">starts with</option>
         </select>
-        <input type="text" onchange="updateFilterCondition(${conditionIndex}, 'value', this.value)" placeholder="Search..." class="px-2 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white w-32" />
-        <button onclick="removeFilterCondition(${conditionIndex})" class="text-red-500 hover:text-red-700">
+        <input type="text" data-change="updateFilterCondition" data-args="${mateActions.attr([conditionIndex, 'value', '$value'])}" placeholder="Search..." class="px-2 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white w-32" />
+        <button data-click="removeFilterCondition" data-args="${mateActions.attr([conditionIndex])}" class="text-red-500 hover:text-red-700">
             <i class="fas fa-times"></i>
         </button>
     `;
@@ -212,17 +221,17 @@ function removeFilterCondition(index) {
         const conditionEl = document.createElement('div');
         conditionEl.className = 'flex items-center space-x-2';
         conditionEl.innerHTML = `
-            <select onchange="updateFilterCondition(${idx}, 'field', this.value)" class="px-2 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white">
+            <select data-change="updateFilterCondition" data-args="${mateActions.attr([idx, 'field', '$value'])}" class="px-2 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white">
                 <option value="Block Name" ${condition.field === 'Block Name' ? 'selected' : ''}>Block Name</option>
                 <option value="Content" ${condition.field === 'Content' ? 'selected' : ''}>Content</option>
             </select>
-            <select onchange="updateFilterCondition(${idx}, 'operator', this.value)" class="px-2 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white">
+            <select data-change="updateFilterCondition" data-args="${mateActions.attr([idx, 'operator', '$value'])}" class="px-2 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white">
                 <option value="contains" ${condition.operator === 'contains' ? 'selected' : ''}>contains</option>
                 <option value="equals" ${condition.operator === 'equals' ? 'selected' : ''}>equals</option>
                 <option value="starts with" ${condition.operator === 'starts with' ? 'selected' : ''}>starts with</option>
             </select>
-            <input type="text" value="${escapeHtml(condition.value)}" onchange="updateFilterCondition(${idx}, 'value', this.value)" placeholder="Search..." class="px-2 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white w-32" />
-            <button onclick="removeFilterCondition(${idx})" class="text-red-500 hover:text-red-700">
+            <input type="text" value="${escapeHtml(condition.value)}" data-change="updateFilterCondition" data-args="${mateActions.attr([idx, 'value', '$value'])}" placeholder="Search..." class="px-2 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white w-32" />
+            <button data-click="removeFilterCondition" data-args="${mateActions.attr([idx])}" class="text-red-500 hover:text-red-700">
                 <i class="fas fa-times"></i>
             </button>
         `;
@@ -468,7 +477,7 @@ function _versionCard(v, actions) {
 }
 
 function _restoreButton(v) {
-    return `<button onclick="restoreMemoryBlockVersion(${v.id}, ${jsArg(v.label)}, ${v.version_number})" class="px-3 py-1 text-xs font-medium text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300">Restore</button>`;
+    return `<button data-click="restoreMemoryBlockVersion" data-args="${mateActions.attr([v.id, v.label, v.version_number])}" class="px-3 py-1 text-xs font-medium text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300">Restore</button>`;
 }
 
 // History of one block. `deleted` is true when the block no longer exists, in
@@ -515,7 +524,7 @@ async function showDeletedMemoryBlocks() {
             return;
         }
         listEl.innerHTML = data.blocks.map(v => _versionCard(v,
-            `<button onclick="showMemoryBlockHistory(${jsArg(v.block_id)}, ${jsArg(v.label)}, true)" class="px-3 py-1 text-xs font-medium text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200">History</button>` + _restoreButton(v)
+            `<button data-click="showMemoryBlockHistory" data-args="${mateActions.attr([v.block_id, v.label, true])}" class="px-3 py-1 text-xs font-medium text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200">History</button>` + _restoreButton(v)
         )).join('');
     } catch (error) {
         console.error('Error loading deleted blocks:', error);

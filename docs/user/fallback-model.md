@@ -63,6 +63,9 @@ fallback were set.
 - **Usage logs:** the `model_name` of each `token_usage_logs` row is the model
   that answered, so the fallback's calls show up under its name on the
   dashboard. On ADK, the primary's failure also leaves an `ERROR` row.
+- **Cost:** those calls are also marked as answered by the fallback, so the
+  [Usage page](usage-and-audit.md#cost) shows what the fallback cost apart from
+  the rest.
 - **Audit log:** each fallback writes an `agent.model_fallback` entry with the
   primary and fallback model, and on ADK the primary's error.
 - **Server log:** a warning names the agent, both models and the error.
@@ -71,5 +74,6 @@ A fallback can send a request that was meant for the agent's own endpoint (for
 example a private, self-hosted model) to a third-party provider. Leave the
 field empty on agents whose data must not leave that endpoint.
 
-If the fallback fires often, fix or replace the primary. The fallback is meant
+To be told when it fires, add an [alert rule](alerts.md) on **Fallback model
+used**. If the fallback fires often, fix or replace the primary. The fallback is meant
 to cover outages, not to be the normal path.

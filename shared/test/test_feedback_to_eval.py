@@ -207,6 +207,26 @@ class TestDashboardEndpoints(_DbTestCase):
         self.assertIsNone(row["question"])
         self.assertFalse(row["session_available"])
 
+    def test_a_standalone_builds_rating_lists_the_exchange_it_sent(self):
+        self._add(ResponseFeedback(session_id="remote", message_id="inv", rating="down",
+                                   agent_name="a", question="2+2?", answer="5"))
+        row = self.client.get("/dashboard/api/evals/feedback").json()["responses"][0]
+        self.assertEqual((row["question"], row["answer"]), ("2+2?", "5"))
+        self.assertTrue(row["reported"])
+        self.assertNotIn("reported_question", row)
+
+    def test_the_session_wins_over_a_reported_exchange(self):
+        # Anyone with the public widget key can send an exchange; the session is the record
+        self._add(ResponseFeedback(session_id="s1", message_id="inv", rating="down",
+                                   agent_name="a", question="made up", answer="made up"))
+        self.sessions["s1"] = [
+            {"invocation_id": "inv", "author": "user", "content": _text("user", "2+2?")},
+            {"invocation_id": "inv", "author": "a", "content": _text("model", "5")},
+        ]
+        row = self.client.get("/dashboard/api/evals/feedback").json()["responses"][0]
+        self.assertEqual((row["question"], row["answer"]), ("2+2?", "5"))
+        self.assertFalse(row["reported"])
+
     def test_non_admin_cannot_read_visitor_conversations(self):
         self.is_admin = False
         self.assertEqual(self.client.get("/dashboard/api/evals/feedback").status_code, 403)

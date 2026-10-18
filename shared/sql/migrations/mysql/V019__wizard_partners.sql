@@ -15,5 +15,5 @@ CREATE TABLE IF NOT EXISTS wizard_partners (
     updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
 ) ENGINE=InnoDB;
 
-ALTER TABLE wizard_sessions ADD COLUMN IF NOT EXISTS partner_key VARCHAR(100);
-ALTER TABLE wizard_leads ADD COLUMN IF NOT EXISTS partner_key VARCHAR(100);
+ALTER TABLE wizard_sessions ADD COLUMN partner_key VARCHAR(100);
+ALTER TABLE wizard_leads ADD COLUMN partner_key VARCHAR(100);

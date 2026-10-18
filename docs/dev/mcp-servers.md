@@ -20,7 +20,7 @@ MATE exposes:
 ### 1. Image Generation MCP Server (`/images/mcp`)
 
 **Endpoints:**
-- `GET /images/mcp/health` - Health check (no auth required)
+- `GET /images/mcp/health` - Health check (no auth required; status only)
 - `GET /images/mcp` - Server info endpoint
 - `POST /images/mcp/initialize` - MCP protocol initialization
 - `POST /images/mcp/tools/list` - List available tools
@@ -37,8 +37,10 @@ MATE exposes:
   - Quality: standard, hd
   - Single image only
 - `generate_image_nano_banana` - Generate images using Nano Banana (Gemini 2.5 Flash Image via OpenRouter) model
-  - Supports asset naming for version tracking
-  - Custom model configuration
+  - `asset_name` is accepted and ignored; `model_config` is no longer taken from callers
+  - All three go through the agents' image tool path; see [Image generation](image-generation.md)
+
+Every route except the health check needs a signed-in caller.
 
 **Requirements:** Image generation API keys configured (OpenAI, Google, etc.)
 
@@ -65,6 +67,10 @@ MATE exposes:
 - `get_file_sharing_permissions` - Get detailed sharing permissions for a file, including email addresses
 - `find_by_name` - Find files by name (returns single match with content, or list for multiple matches)
 
+Every route except the health check needs a caller, the same callers as the agent
+MCP servers (see [Who may call](#who-may-call)): the tools read Drive with the
+server's service account.
+
 **Requirements:** `GOOGLE_SERVICE_ACCOUNT_INFO` environment variable must be set
 
 ---
@@ -81,7 +87,7 @@ MCP_EXPOSED_AGENTS=creative_agent,main_entity,jira_agent
 ```
 
 **Endpoints (for each agent):**
-- `GET /agents/{agent_name}/mcp/health` - Health check (no auth required)
+- `GET /agents/{agent_name}/mcp/health` - Health check (no auth required; shows the agent's name and description)
 - `GET /agents/{agent_name}/mcp` - Server info endpoint
 - `POST /agents/{agent_name}/mcp/initialize` - MCP protocol initialization
 - `POST /agents/{agent_name}/mcp/tools/list` - List available tools
@@ -89,12 +95,46 @@ MCP_EXPOSED_AGENTS=creative_agent,main_entity,jira_agent
 - `GET /agents/{agent_name}/mcp/sse` - Server-Sent Events stream for real-time communication
 - `OPTIONS /agents/{agent_name}/mcp` & `/agents/{agent_name}/mcp/sse` - CORS preflight handlers
 
+`GET /mcp` lists the exposed agents the caller may use:
+
+```json
+{"agents": [{"name": "creative_agent", "description": "...",
+             "url": "http://localhost:8000/agents/creative_agent/mcp"}]}
+```
+
+#### Who may call
+
+Every route except health and CORS preflight, and `GET /mcp`, needs a caller:
+
+- **Credentials:** a personal access token (`Authorization: Bearer mate_pat_...`),
+  Basic auth, the dashboard's login token or a dashboard session. Without one the
+  route answers 401.
+- **API role:** the user is an admin or holds a role in `ALLOWED_API_ROLES`
+  (default `admin`, `developer`), as for the OpenAI-compatible API. Otherwise 403.
+- **The agent's roles:** the user's roles must grant the agent (`allowed_for_roles`;
+  an agent with none is admin-only). Otherwise 403, and `GET /mcp` leaves the agent
+  out.
+
+`shared/utils/mcp/mcp_auth.py` does the check, using `get_pat_user` from
+`server/pat_auth.py` and `RBACMiddleware.check_agent_access`. It sits on the route
+because the tool call reaches the agent over A2A without the caller's identity.
+`/gdrive/mcp` applies the first two checks.
+
 **Available Tools (1 per agent):**
 - `call_{agent_name}_agent` - Call the agent with a message
   - **Parameters:**
     - `message` (required): The message to send to the agent
     - `session_id` (optional): Session ID for maintaining conversation context
   - **Returns:** Agent's response as text content
+
+**Prompt and resource (1 each per agent):**
+- Prompt `ask_{agent_name}` with a required `question` argument. `prompts/get`
+  returns one user message that tells the client's model to call
+  `call_{agent_name}_agent` with the question.
+- Resource `mate://agents/{agent_name}/about` (`text/markdown`): the agent's name,
+  description and the tool to call. It does not include the agent's instruction.
+- Both are served on the JSON-RPC endpoint (`POST /agents/{agent_name}/mcp`), which
+  `initialize` announces with the `prompts` and `resources` capabilities.
 
 **How It Works:**
 - Agent MCP servers are created dynamically at server startup
@@ -254,7 +294,7 @@ External MCP servers are created via `create_mcp_tools_from_config()`, which dis
 - **MCP Version:** `2024-11-05`
 - **SSE Support:** Server-Sent Events for real-time communication
 - **CORS:** Enabled for web-based MCP clients
-- **Authentication:** All endpoints require authentication (Basic Auth or Bearer token), except health endpoints
+- **Authentication:** Every endpoint except health and CORS preflight requires a caller. Agent servers, `GET /mcp` and `/gdrive/mcp` take a personal access token, Basic auth, the dashboard's login token or a session ([Who may call](#who-may-call)); `/images/mcp` takes a signed-in dashboard user and no personal access tokens
 - **Availability:** Both servers check availability at startup and return 503 if dependencies aren't configured
 
 ---
@@ -372,7 +412,12 @@ For clients that support HTTP-based MCP servers:
 
 ### Using Bearer Token Authentication
 
-If you prefer using Bearer tokens:
+For the agent servers and `/gdrive/mcp`, use a personal access token from the
+account menu in the dashboard: `"Authorization": "Bearer mate_pat_..."`. It lasts
+until it expires or is revoked.
+
+A login token works for every server, including `/images/mcp`, but expires after
+`TOKEN_TTL_HOURS` (default 24):
 
 1. **Get a token:**
    ```bash

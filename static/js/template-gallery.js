@@ -2,6 +2,9 @@
 // Template Gallery - Load, display, and import agent templates
 // ============================================================================
 
+// Handlers this file's markup calls through data-click and friends (csp-actions.js)
+mateActions.allow('deleteTemplate', 'importTemplate', 'loadTemplates');
+
 let allTemplates = [];
 
 async function loadTemplates() {
@@ -69,10 +72,10 @@ function renderTemplates(templates) {
                 ${t.version ? `<p class="text-xs text-gray-500 dark:text-gray-500 mt-2">v${escapeHtml(t.version)}</p>` : ''}
             </div>
             <div class="mt-4 flex gap-2">
-                <button onclick="importTemplate(${jsArg(t.id)})" class="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg flex items-center justify-center">
+                <button data-click="importTemplate" data-args="${mateActions.attr([t.id])}" class="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg flex items-center justify-center">
                     <i class="fas fa-download mr-1"></i>Import
                 </button>
-                <button onclick="deleteTemplate(${jsArg(t.id)}, ${jsArg(t.name || t.id)})" class="px-3 py-2 bg-red-100 hover:bg-red-200 text-red-700 dark:bg-red-900/30 dark:hover:bg-red-900/50 dark:text-red-400 text-sm rounded-lg flex items-center justify-center" title="Delete Template">
+                <button data-click="deleteTemplate" data-args="${mateActions.attr([t.id, t.name || t.id])}" class="px-3 py-2 bg-red-100 hover:bg-red-200 text-red-700 dark:bg-red-900/30 dark:hover:bg-red-900/50 dark:text-red-400 text-sm rounded-lg flex items-center justify-center" title="Delete Template">
                     <i class="fas fa-trash-alt"></i>
                 </button>
             </div>
@@ -81,11 +84,6 @@ function renderTemplates(templates) {
     });
 }
 
-
-function jsArg(value) {
-    return JSON.stringify(value == null ? '' : String(value))
-        .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
 
 function escapeHtml(text) {
     if (!text) return '';

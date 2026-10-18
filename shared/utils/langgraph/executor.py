@@ -99,12 +99,14 @@ def _log_token_usage(event: Dict[str, Any], app_name: str, user_id: str,
     author = event.get("author") or app_name
     model_name = model_names.get(author) or model_names.get(app_name)
     fallback = (fallback_models or {}).get(author)
+    is_fallback = False
     if fallback:
         from shared.utils.langgraph.model_factory import litellm_model_name
         if event.get("modelVersion") == litellm_model_name(fallback):
             from shared.callbacks.model_fallback_callback import record_model_fallback
             record_model_fallback(author, user_id, model_name, fallback, None)
             model_name = fallback
+            is_fallback = True
     usage = event.get("usageMetadata")
     if not usage:
         return
@@ -118,6 +120,7 @@ def _log_token_usage(event: Dict[str, Any], app_name: str, user_id: str,
             model_name=model_name,
             prompt_tokens=usage.get("prompt_token_count"),
             response_tokens=usage.get("candidates_token_count"),
+            is_fallback=is_fallback,
         )
     except Exception as e:
         logger.warning(f"Token usage logging failed: {e}")

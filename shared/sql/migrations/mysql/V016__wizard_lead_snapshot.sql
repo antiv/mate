@@ -2,4 +2,4 @@
 -- Version: V016
 -- Database: MySQL
 
-ALTER TABLE wizard_leads ADD COLUMN IF NOT EXISTS agent_snapshot TEXT;
+ALTER TABLE wizard_leads ADD COLUMN agent_snapshot TEXT;

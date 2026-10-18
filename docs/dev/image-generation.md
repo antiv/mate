@@ -1,218 +1,120 @@
 ---
-title: "Image generation setup"
-summary: Configure image generation models and where generated images are stored.
+title: "Image generation"
+summary: How the image tool picks a model, which keys it needs, and where generated images are stored.
 audience: dev
 order: 230
-status: migrated
 covers:
   - shared/utils/tools/image_tools.py
   - shared/utils/mcp/image_mcp_server.py
 ---
 
-# Image Generation Setup Guide
+# Image generation
 
-## Overview
+The image tool generates through LiteLLM's `aimage_generation`, so it can use any
+image model LiteLLM supports. Examples are OpenAI (GPT Image, DALL-E), Azure, OpenRouter, Gemini
+(Imagen and Gemini Flash Image), Vertex AI, Bedrock, Black Forest Labs (FLUX),
+fal.ai, Recraft, Stability, xAI and Dashscope. The model is named the way agent models are,
+`provider/model`.
 
-The Image MCP server provides image generation capabilities using DALL-E models. You need to configure API keys to use these features.
+OpenRouter models (`openrouter/...`) are the exception. OpenRouter serves image
+models through chat completions and returns an image only when the request asks
+for one with `modalities: ["image", "text"]`. LiteLLM's `aimage_generation` for
+OpenRouter leaves `modalities` out, so the model answers in text and no image
+comes back. The tool therefore calls `litellm.acompletion` with `modalities` for
+these models (`_openrouter_image`) and takes the image from the message's
+`images`. `size` and `quality` become OpenRouter's `image_config`
+(`aspect_ratio`, `image_size`) as LiteLLM maps them, and `aspect_ratio` passes
+through. If the model still answers without an image, for example because it
+refused the prompt, the error includes the start of what it said.
 
-## Required API Keys
+## Turning it on for an agent
 
-You need **one** of the following API keys:
+In the agent form, tick **Image Tools** and type a model in **Image Model**. The field
+suggests common ones. This is stored in `tool_config`:
 
-### Option 1: OpenAI API Key (Recommended)
-- **Variable**: `OPENAI_API_KEY`
-- **Source**: [OpenAI Platform](https://platform.openai.com/api-keys)
-- **Cost**: Pay-per-use for DALL-E 3
-- **Models**: `dall-e-3`, `gpt-image-1`
-
-### Option 2: OpenRouter API Key (Alternative)
-- **Variable**: `OPENROUTER_API_KEY` 
-- **Source**: [OpenRouter](https://openrouter.ai/)
-- **Cost**: Often cheaper than OpenAI direct
-- **Models**: Various DALL-E models available
-
-## Setup Instructions
-
-### 1. Create .env File
-
-Create a `.env` file in your project root:
-
-```bash
-# Choose ONE of these options:
-
-# Option 1: OpenAI API Key
-OPENAI_API_KEY=sk-your-openai-api-key-here
-
-# Option 2: OpenRouter API Key  
-OPENROUTER_API_KEY=sk-or-your-openrouter-api-key-here
-
-# Optional: Backup key
-OPENAI_API_KEY_BACKUP=sk-backup-key-here
-```
-
-### 2. Set Environment Variables
-
-#### Linux/macOS:
-```bash
-export OPENAI_API_KEY="sk-your-openai-api-key-here"
-# OR
-export OPENROUTER_API_KEY="sk-or-your-openrouter-api-key-here"
-```
-
-#### Windows:
-```cmd
-set OPENAI_API_KEY=sk-your-openai-api-key-here
-# OR
-set OPENROUTER_API_KEY=sk-or-your-openrouter-api-key-here
-```
-
-### 3. Verify Setup
-
-Test your setup:
-
-```bash
-# Test with curl
-curl -X POST http://localhost:8000/images/mcp/tools/call \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Basic YWRtaW46dHJpYmU=" \
-  -d '{
-    "jsonrpc": "2.0",
-    "id": 1,
-    "method": "tools/call",
-    "params": {
-      "name": "generate_image_dall_e_3",
-      "arguments": {
-        "prompt": "A simple test image",
-        "size": "1024x1024"
-      }
-    }
-  }'
-```
-
-## API Key Sources
-
-### OpenAI API Keys
-1. Go to [OpenAI Platform](https://platform.openai.com/api-keys)
-2. Sign in or create account
-3. Click "Create new secret key"
-4. Copy the key (starts with `sk-`)
-5. Set billing information
-
-### OpenRouter API Keys
-1. Go to [OpenRouter](https://openrouter.ai/)
-2. Sign up for account
-3. Go to API Keys section
-4. Create new key
-5. Add credits to account
-
-## Troubleshooting
-
-### Common Issues:
-
-#### 1. "API key not configured"
 ```json
-{
-  "error": "OpenAI API key not configured. Please set one of: OPENAI_API_KEY, OPENROUTER_API_KEY environment variables."
-}
+{"image_tools": true}
+{"image_tools": {"model": "black_forest_labs/flux-pro-1.1"}}
+{"image_tools": {"model": "gpt-image-1", "size": "1536x1024", "quality": "high"}}
 ```
 
-**Solution**: Set one of the required environment variables.
+- `true`, or an empty model, uses the server default: the model set on the dashboard's
+  [Settings](../user/settings.md) page (`system_settings` row `image_model`), else
+  `IMAGE_MODEL`, else `dall-e-3`. It is read on every generation, so a change applies
+  without a restart; `default_image_model()` returns it with its source.
+- Only these other keys are passed on, as request parameters: `size`, `quality`, `n`,
+  `style`, `response_format`, `aspect_ratio`, `seed`, `negative_prompt`,
+  `output_format`, `background`, `output_compression`, `moderation`
+  (`_ALLOWED_PARAMS`). LiteLLM drops the ones a provider does not take
+  (`drop_params`). Anything else is ignored with a warning in the log.
+- That is an allowlist because LiteLLM takes hundreds of keyword arguments that
+  change where a call goes or what it runs: `api_base`, `mock_response` (a URL it
+  returns as the image), logging callbacks and their hosts, cloud endpoints,
+  `ssl_verify`. An agent can write `tool_config` through `update_agent` when a chat
+  steers it, so where the request goes and with which key is set only by the
+  server's environment (`AZURE_API_BASE`, `OPENAI_API_BASE`, ...).
+- A bare name (`dall-e-3`, `gpt-image-1`) is an OpenAI model, with `size: 1024x1024`
+  and `n: 1` as defaults (plus `quality: standard` for DALL-E 3), as before.
+- `nano-banana`, the value older agent forms saved, means
+  `openrouter/google/gemini-2.5-flash-image`.
 
-#### 2. "Invalid API key"
-```json
-{
-  "error": "Incorrect API key provided"
-}
-```
+The agent sees one tool. It is `generate_image` for the default model, and
+otherwise `generate_image_<model>`, with every run of other characters replaced by
+`_` (for example `generate_image_gpt_image_1`). Gemini 2.5 Flash Image through
+OpenRouter keeps its old name, `generate_image_nano_banana`, so instructions that
+name it still work. The tool takes only the prompt.
 
-**Solution**: Verify your API key is correct and has sufficient credits.
+## Keys
 
-#### 3. "Rate limit exceeded"
-```json
-{
-  "error": "Rate limit reached for requests"
-}
-```
+Each provider reads its usual environment variable, as for agents:
+`OPENAI_API_KEY`, `OPENROUTER_API_KEY`, `BFL_API_KEY`, `STABILITY_API_KEY`,
+`XAI_API_KEY`, the AWS and Vertex credentials, and so on. Two cases differ:
 
-**Solution**: Wait or upgrade your API plan.
+- **Gemini models** (`gemini/...`) take `GEMINI_API_KEY`, else `GOOGLE_API_KEY`.
+  LiteLLM's image call reads only the first, and MATE's agents use the second.
+- **Bare OpenAI names without `OPENAI_API_KEY`** fall back to
+  `OPENAI_API_KEY_BACKUP`. Failing that, they use OpenRouter's endpoint with
+  `OPENROUTER_API_KEY`, as the tool did before LiteLLM.
 
-#### 4. "Model not found"
-```json
-{
-  "error": "The model 'dall-e-3' does not exist"
-}
-```
+`validate_image_generation_setup()` reports whether the default model has a key,
+without making a request; the Settings page shows it. A wrong
+key, or a model the provider does not have, shows up on the first generation as an
+`error_type` of `authentication_error` or `model_not_found_error`.
 
-**Solution**: Check if your API key supports the requested model.
+## What happens to the image
 
-### Debug Steps:
+1. The provider returns base64 or a URL. A URL is downloaded only over http(s),
+   without following redirects, at most 25 MB, and not from a private, loopback or
+   link-local address (cloud metadata, the ADK server on 127.0.0.1) unless
+   `IMAGE_ALLOW_PRIVATE_NETWORK=true`, which a local image model returning
+   `localhost` URLs needs. A refused URL fails the generation.
+2. A PNG is marked as AI-generated (EU AI Act Art. 50(2), see
+   [EU AI Act](../user/eu-ai-act.md)). Other formats are saved unmarked, with a
+   warning.
+3. It is saved as a session artifact named `generated_image_<timestamp>.<ext>`, with
+   the MIME type and extension read from the image's first bytes (PNG, JPEG, GIF,
+   WebP).
+4. The tool returns the artifact's name, version and path, and a public URL when the
+   artifact service has one (S3 or Supabase). The image bytes never go back to the
+   model, because they would fill its context.
 
-1. **Check environment variables**:
-   ```bash
-   echo $OPENAI_API_KEY
-   echo $OPENROUTER_API_KEY
-   ```
+## MCP server
 
-2. **Test API key directly**:
-   ```bash
-   curl -H "Authorization: Bearer $OPENAI_API_KEY" \
-        https://api.openai.com/v1/models
-   ```
+`/images/mcp` exposes three fixed tools for MCP clients:
+- `generate_image_gpt_image_1`
+- `generate_image_dall_e_3`
+- `generate_image_nano_banana`
 
-3. **Check server logs**:
-   ```bash
-   python auth_server.py
-   # Look for image generation logs
-   ```
+All three use the same path as the agent tool. Every route but
+`/images/mcp/health` needs a signed-in caller (dashboard session, bearer token,
+personal access token or basic auth), since the tools spend the server's provider
+keys. Callers choose the prompt and a few image parameters, never the model or
+other request parameters: the `model_config` argument the Nano Banana tool used to
+take is ignored. The health check answers without login and says only whether the
+server is up, not which model or keys are set.
 
-## Cost Information
+## Not covered yet
 
-### OpenAI DALL-E 3 Pricing:
-- **1024x1024**: $0.040 per image
-- **1024x1792**: $0.080 per image  
-- **1792x1024**: $0.080 per image
-
-### OpenRouter Pricing:
-- Varies by model and provider
-- Often 20-50% cheaper than OpenAI direct
-- Check [OpenRouter pricing](https://openrouter.ai/models) for current rates
-
-## Testing Without API Keys
-
-If you don't want to set up image generation right now, you can:
-
-1. **Test other MCP features**: LinkedIn MCP doesn't require external API keys
-2. **Use mock responses**: The system will return helpful error messages
-3. **Skip image tests**: Focus on LinkedIn MCP functionality
-
-## Example Usage
-
-Once configured, you can generate images:
-
-```bash
-# Generate a simple image
-curl -X POST http://localhost:8000/images/mcp/tools/call \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Basic YWRtaW46dHJpYmU=" \
-  -d '{
-    "jsonrpc": "2.0",
-    "id": 1,
-    "method": "tools/call",
-    "params": {
-      "name": "generate_image_dall_e_3",
-      "arguments": {
-        "prompt": "A futuristic robot reading a book in a library",
-        "size": "1024x1024",
-        "quality": "standard"
-      }
-    }
-  }'
-```
-
-## Security Notes
-
-- **Never commit API keys** to version control
-- **Use .env files** and add them to .gitignore
-- **Rotate keys regularly** for security
-- **Monitor usage** to avoid unexpected charges
-- **Use environment-specific keys** for different deployments
+- Image editing (`litellm.aimage_edit`).
+- The vision tool, `image_data_extraction`, still has its own provider routing at
+  the end of `image_tools.py`.

@@ -7,7 +7,7 @@ container_class='', projects_list=None, current_project_id=None) %}
 <div id="{{ modal_id }}" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden z-[70] dashboard-modal"
     data-cancel-fn="{{ cancel_fn }}">
     <div class="{% if container_class == 'modal-side-panel' %}flex justify-end items-stretch min-h-screen p-0{% else %}flex items-center justify-center min-h-screen p-1{% endif %} {{ container_class }}"
-        onclick="event.stopPropagation()">
+        data-click="stop">
         <div
             class="bg-white dark:bg-gray-800 {% if container_class == 'modal-side-panel' %}rounded-none shadow-xl w-[800px] max-w-full h-screen flex flex-col min-w-0{% else %}rounded-lg shadow-xl max-w-2xl w-full max-h-[95vh] overflow-y-auto{% endif %}">
             <!-- Sticky Header -->
@@ -17,7 +17,7 @@ container_class='', projects_list=None, current_project_id=None) %}
                 <div class="flex flex-wrap items-center justify-end gap-2 min-w-0">
                     {% if show_id_field %}
                     <button type="button" id="{{ id_prefix }}VersionHistoryBtn"
-                        onclick="showVersionHistoryModal(document.getElementById('{{ id_prefix }}Id').value, document.getElementById('{{ id_prefix }}Name').value)"
+                        data-click="showVersionHistoryForForm" data-args='[{{ id_prefix|string|tojson }}]'
                         class="px-3 py-1.5 text-xs bg-gray-600 hover:bg-gray-700 text-white rounded flex items-center"
                         title="Version History">
                         <i class="fas fa-history mr-1"></i>
@@ -29,7 +29,7 @@ container_class='', projects_list=None, current_project_id=None) %}
                         <i id="{{ submit_loader_id }}" class="fas fa-spinner fa-spin mr-1 hidden"></i>
                         <span id="{{ submit_text_id }}">{{ submit_text }}</span>
                     </button>
-                    <button type="button" onclick="{{ cancel_fn }}"
+                    <button type="button" data-click="{{ cancel_fn }}"
                         class="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 p-1"
                         title="Close">
                         <i class="fas fa-times text-lg"></i>
@@ -91,13 +91,13 @@ container_class='', projects_list=None, current_project_id=None) %}
                                     class="block text-xs font-medium text-gray-700 dark:text-gray-300">Parent Agents
                                     (JSON array)</label>
                                 <button type="button"
-                                    onclick="toggleJsonEditor('{{ id_prefix }}Parents', '{{ id_prefix }}ParentsEditor')"
+                                    data-click="toggleJsonEditor" data-args='[{{ (id_prefix ~ "Parents")|tojson }}, {{ (id_prefix ~ "ParentsEditor")|tojson }}]'
                                     class="text-xs bg-blue-500 hover:bg-blue-600 text-white px-1.5 py-0.5 rounded">
                                     <i class="fas fa-code mr-0.5"></i>JSON
                                 </button>
                             </div>
                             <input type="text" id="{{ id_prefix }}Parents" name="{{ id_prefix }}Parents"
-                                placeholder='["parent1", "parent2"]' onclick="openParentAgentsModal('{{ id_prefix }}')"
+                                placeholder='["parent1", "parent2"]' data-click="openParentAgentsModal" data-args='[{{ id_prefix|string|tojson }}]'
                                 class="mt-0.5 block w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500 text-xs font-mono cursor-pointer">
                             <div id="{{ id_prefix }}ParentsEditor"
                                 style="display: none; height: 100px; border: 1px solid #d1d5db; border-radius: 0.25rem;"
@@ -183,7 +183,7 @@ container_class='', projects_list=None, current_project_id=None) %}
                         <label for="{{ id_prefix }}Instruction"
                             class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-0.5">Instruction <span class="text-red-500">*</span></label>
                         <textarea id="{{ id_prefix }}Instruction" name="{{ id_prefix }}Instruction" rows="2" readonly required
-                            onclick="openInstructionModal('{{ id_prefix }}Instruction')"
+                            data-click="openInstructionModal" data-args='[{{ (id_prefix ~ "Instruction")|tojson }}]'
                             placeholder="Click to edit instructions in Markdown editor..."
                             class="block w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500 text-xs cursor-pointer hover:border-blue-400 dark:hover:border-blue-500"></textarea>
                     </div>
@@ -193,7 +193,7 @@ container_class='', projects_list=None, current_project_id=None) %}
                                 class="block text-xs font-medium text-gray-700 dark:text-gray-300">Allowed Roles (JSON
                                 format)</label>
                             <button type="button"
-                                onclick="toggleJsonEditor('{{ id_prefix }}Roles', '{{ id_prefix }}RolesEditor')"
+                                data-click="toggleJsonEditor" data-args='[{{ (id_prefix ~ "Roles")|tojson }}, {{ (id_prefix ~ "RolesEditor")|tojson }}]'
                                 class="text-xs bg-blue-500 hover:bg-blue-600 text-white px-1.5 py-0.5 rounded">
                                 <i class="fas fa-code mr-0.5"></i>JSON
                             </button>
@@ -216,7 +216,7 @@ container_class='', projects_list=None, current_project_id=None) %}
                             <div class="flex items-center space-x-1">
                                 <button type="button"
                                     class="px-2 py-1 text-xs bg-indigo-600 hover:bg-indigo-700 text-white rounded flex items-center"
-                                    onclick="openMemoryBlocksFromEditModal('{{ id_prefix }}')">
+                                    data-click="openMemoryBlocksFromEditModal" data-args='[{{ id_prefix|string|tojson }}]'>
                                     <i class="fas fa-database text-[11px] mr-1"></i>
                                     Manage Blocks
                                 </button>
@@ -234,13 +234,13 @@ container_class='', projects_list=None, current_project_id=None) %}
                             <div class="flex items-center space-x-1">
                                 <button type="button"
                                     class="px-2 py-1 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded flex items-center"
-                                    onclick="openConfigModal('{{ id_prefix }}', 'ToolConfig')">
+                                    data-click="openConfigModal" data-args='[{{ id_prefix|string|tojson }}, "ToolConfig"]'>
                                     <i class="fas fa-sliders-h text-[11px] mr-1"></i>
                                     Configure
                                 </button>
                                 <button type="button"
                                     class="px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 rounded hover:border-gray-400 dark:hover:border-gray-500 flex items-center"
-                                    onclick="resetToolConfig('{{ id_prefix }}')">
+                                    data-click="resetToolConfig" data-args='[{{ id_prefix|string|tojson }}]'>
                                     <i class="fas fa-undo text-[11px] mr-1"></i>
                                     Clear
                                 </button>
@@ -261,7 +261,7 @@ container_class='', projects_list=None, current_project_id=None) %}
                             <div class="flex items-center space-x-1">
                                 <button type="button"
                                     class="px-2 py-1 text-xs bg-green-600 hover:bg-green-700 text-white rounded flex items-center"
-                                    onclick="openFileSearchModal('{{ id_prefix }}')">
+                                    data-click="openFileSearchModal" data-args='[{{ id_prefix|string|tojson }}]'>
                                     <i class="fas fa-file-search text-[11px] mr-1"></i>
                                     Manage
                                 </button>
@@ -283,13 +283,13 @@ container_class='', projects_list=None, current_project_id=None) %}
                             <div class="flex items-center space-x-1">
                                 <button type="button"
                                     class="px-2 py-1 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded flex items-center"
-                                    onclick="openConfigModal('{{ id_prefix }}', 'McpServersConfig')">
+                                    data-click="openConfigModal" data-args='[{{ id_prefix|string|tojson }}, "McpServersConfig"]'>
                                     <i class="fas fa-terminal text-[11px] mr-1"></i>
                                     Configure
                                 </button>
                                 <button type="button"
                                     class="px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 rounded hover:border-gray-400 dark:hover:border-gray-500 flex items-center"
-                                    onclick="clearJsonField('{{ id_prefix }}', 'McpServersConfig')">
+                                    data-click="clearJsonField" data-args='[{{ id_prefix|string|tojson }}, "McpServersConfig"]'>
                                     <i class="fas fa-undo text-[11px] mr-1"></i>
                                     Clear
                                 </button>
@@ -310,13 +310,13 @@ container_class='', projects_list=None, current_project_id=None) %}
                             <div class="flex items-center space-x-1">
                                 <button type="button"
                                     class="px-2 py-1 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded flex items-center"
-                                    onclick="openConfigModal('{{ id_prefix }}', 'PlannerConfig')">
+                                    data-click="openConfigModal" data-args='[{{ id_prefix|string|tojson }}, "PlannerConfig"]'>
                                     <i class="fas fa-cogs text-[11px] mr-1"></i>
                                     Configure
                                 </button>
                                 <button type="button"
                                     class="px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 rounded hover:border-gray-400 dark:hover:border-gray-500 flex items-center"
-                                    onclick="resetPlannerConfig('{{ id_prefix }}')">
+                                    data-click="resetPlannerConfig" data-args='[{{ id_prefix|string|tojson }}]'>
                                     <i class="fas fa-undo text-[11px] mr-1"></i>
                                     Clear
                                 </button>
@@ -338,13 +338,13 @@ container_class='', projects_list=None, current_project_id=None) %}
                             <div class="flex items-center space-x-1">
                                 <button type="button"
                                     class="px-2 py-1 text-xs bg-orange-600 hover:bg-orange-700 text-white rounded flex items-center"
-                                    onclick="openConfigModal('{{ id_prefix }}', 'GuardrailConfig')">
+                                    data-click="openConfigModal" data-args='[{{ id_prefix|string|tojson }}, "GuardrailConfig"]'>
                                     <i class="fas fa-shield-alt text-[11px] mr-1"></i>
                                     Configure
                                 </button>
                                 <button type="button"
                                     class="px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 rounded hover:border-gray-400 dark:hover:border-gray-500 flex items-center"
-                                    onclick="clearJsonField('{{ id_prefix }}', 'GuardrailConfig')">
+                                    data-click="clearJsonField" data-args='[{{ id_prefix|string|tojson }}, "GuardrailConfig"]'>
                                     <i class="fas fa-undo text-[11px] mr-1"></i>
                                     Clear
                                 </button>
@@ -369,13 +369,13 @@ container_class='', projects_list=None, current_project_id=None) %}
                             <div class="flex items-center space-x-1">
                                 <button type="button"
                                     class="px-2 py-1 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded flex items-center"
-                                    onclick="openConfigModal('{{ id_prefix }}', 'GenerateContentConfig')">
+                                    data-click="openConfigModal" data-args='[{{ id_prefix|string|tojson }}, "GenerateContentConfig"]'>
                                     <i class="fas fa-sliders-h text-[11px] mr-1"></i>
                                     Configure
                                 </button>
                                 <button type="button"
                                     class="px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 rounded hover:border-gray-400 dark:hover:border-gray-500 flex items-center"
-                                    onclick="resetContentConfig('{{ id_prefix }}')">
+                                    data-click="resetContentConfig" data-args='[{{ id_prefix|string|tojson }}]'>
                                     <i class="fas fa-undo text-[11px] mr-1"></i>
                                     Clear
                                 </button>
@@ -401,13 +401,13 @@ container_class='', projects_list=None, current_project_id=None) %}
                                 <div class="flex items-center space-x-1">
                                     <button type="button"
                                         class="px-2 py-1 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded flex items-center"
-                                        onclick="openConfigModal('{{ id_prefix }}', 'InputSchema')">
+                                        data-click="openConfigModal" data-args='[{{ id_prefix|string|tojson }}, "InputSchema"]'>
                                         <i class="fas fa-code text-[11px] mr-1"></i>
                                         Edit
                                     </button>
                                     <button type="button"
                                         class="px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 rounded hover:border-gray-400 dark:hover:border-gray-500 flex items-center"
-                                        onclick="clearJsonField('{{ id_prefix }}', 'InputSchema')">
+                                        data-click="clearJsonField" data-args='[{{ id_prefix|string|tojson }}, "InputSchema"]'>
                                         <i class="fas fa-undo text-[11px] mr-1"></i>
                                         Clear
                                     </button>
@@ -428,13 +428,13 @@ container_class='', projects_list=None, current_project_id=None) %}
                                 <div class="flex items-center space-x-1">
                                     <button type="button"
                                         class="px-2 py-1 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded flex items-center"
-                                        onclick="openConfigModal('{{ id_prefix }}', 'OutputSchema')">
+                                        data-click="openConfigModal" data-args='[{{ id_prefix|string|tojson }}, "OutputSchema"]'>
                                         <i class="fas fa-code text-[11px] mr-1"></i>
                                         Edit
                                     </button>
                                     <button type="button"
                                         class="px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 rounded hover:border-gray-400 dark:hover:border-gray-500 flex items-center"
-                                        onclick="clearJsonField('{{ id_prefix }}', 'OutputSchema')">
+                                        data-click="clearJsonField" data-args='[{{ id_prefix|string|tojson }}, "OutputSchema"]'>
                                         <i class="fas fa-undo text-[11px] mr-1"></i>
                                         Clear
                                     </button>

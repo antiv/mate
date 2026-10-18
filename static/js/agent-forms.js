@@ -13,6 +13,11 @@
 /**
  * Show a notification toast (replaces alert)
  */
+// Handlers this file's markup calls through data-click and friends (csp-actions.js)
+mateActions.allow('applyConfigModal', 'clearJsonField', 'closeConfigModal', 'exportAgents',
+                  'openConfigModal', 'openMemoryBlocksFromEditModal', 'resetContentConfig',
+                  'resetPlannerConfig', 'resetToolConfig');
+
 function showAlert(message, type = 'info') {
     if (typeof showNotification === 'function') {
         showNotification(message, type);
@@ -308,13 +313,15 @@ function syncJsonToGuardrailConfig(prefix) {
     const parsed = safeJsonParse(textarea.value);
     const guardrails = (parsed && parsed.guardrails && Array.isArray(parsed.guardrails)) ? parsed.guardrails : [];
     const _set = (id, val) => { const el = document.getElementById(id); if (el) el.checked = !!val; };
-    const _setVal = (id, val) => { const el = document.getElementById(id); if (el) el.value = val || ''; };
+    const _setVal = (id, val) => { const el = document.getElementById(id); if (el) el.value = (val !== undefined && val !== null) ? val : ''; };
     if (guardrails.length === 0) {
         _set(prefix + 'GrPii', false);
         _set(prefix + 'GrInjection', false);
         _set(prefix + 'GrContentPolicy', false);
         _set(prefix + 'GrOutputLength', false);
         _set(prefix + 'GrHallucination', false);
+        _setVal(prefix + 'GrHallucinationModel', '');
+        _setVal(prefix + 'GrHallucinationThreshold', 0.7);
     }
     for (const g of guardrails) {
         switch (g.type) {
@@ -340,6 +347,8 @@ function syncJsonToGuardrailConfig(prefix) {
             case 'hallucination_check':
                 _set(prefix + 'GrHallucination', g.enabled);
                 _setVal(prefix + 'GrHallucinationAction', g.action);
+                _setVal(prefix + 'GrHallucinationModel', (g.config || {}).model || '');
+                _setVal(prefix + 'GrHallucinationThreshold', (g.config && g.config.threshold !== undefined) ? g.config.threshold : 0.7);
                 break;
         }
     }
@@ -372,10 +381,18 @@ function buildGuardrailConfigFromPresets(prefix) {
         action: _val(prefix + 'GrOutputLengthAction') || 'warn',
         config: { max_characters: maxChars, max_words: maxWords }
     });
+    const hallucinationModel = _val(prefix + 'GrHallucinationModel').trim();
+    const parsedThreshold = parseFloat(_val(prefix + 'GrHallucinationThreshold'));
+    const hallucinationThreshold = isNaN(parsedThreshold) ? 0.7 : parsedThreshold;
+    const hallucinationConfig = {};
+    if (hallucinationModel) {
+        hallucinationConfig.model = hallucinationModel;
+    }
+    hallucinationConfig.threshold = hallucinationThreshold;
     guardrails.push({
         type: 'hallucination_check', enabled: _checked(prefix + 'GrHallucination'),
         action: _val(prefix + 'GrHallucinationAction') || 'warn',
-        config: {}
+        config: hallucinationConfig
     });
     return { guardrails: guardrails };
 }
@@ -601,10 +618,8 @@ function initializeConfigSummaryHandling(prefixes) {
  * Edit agent by ID
  */
 function editAgentById(id) {
-    console.log('editAgentById called with ID:', id, 'Type:', typeof id);
     const config = findConfigById(id);
     if (config) {
-        console.log('Found config:', { id: config.id, name: config.name, idType: typeof config.id });
         editAgent(config);
     } else {
         const availableIds = typeof configs !== 'undefined' 
@@ -696,7 +711,6 @@ function editAgent(config) {
     
     // Populate basic fields - use parsed ID to ensure it's normalized
     document.getElementById('editAgentId').value = parsedId;
-    console.log('Setting editAgentId to:', parsedId, 'from raw:', rawId, 'type:', typeof rawId);
     document.getElementById('editAgentName').value = config.name;
     document.getElementById('editAgentType').value = config.type;
     document.getElementById('editAgentModel').value = config.model_name || '';
@@ -1017,7 +1031,6 @@ function handleImportFile() {
     reader.onload = function(e) {
         try {
             const agents = JSON.parse(e.target.result);
-            console.log('Parsed agents:', agents);
             // The actual import will be handled by form submission
         } catch (error) {
             showAlert('Invalid JSON file', 'error');

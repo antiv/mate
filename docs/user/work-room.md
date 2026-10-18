@@ -47,7 +47,9 @@ There you can:
 - **Copy** or **Download** the code
 - open it in a **New Tab**
 - **Run** it, for languages that can run in the browser. Python runs inside your
-  browser, not on the server; Dart and Flutter code opens in DartPad.
+  browser, not on the server; Dart and Flutter code opens in DartPad. HTML,
+  JavaScript and Python run in a sandbox, apart from the dashboard: code an agent
+  wrote cannot act as you in MATE, read your session, or change the page.
 
 Running code in the panel is separate from the agent's own Code Executor tool, which
 runs on the server.

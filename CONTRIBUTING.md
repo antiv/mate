@@ -66,6 +66,8 @@ Open an issue with the `enhancement` label. Include:
 
 ### Submitting Changes
 
+For anything larger than a bug fix (a new feature, an API or schema change, a refactor across several files), open an issue first so the approach can be agreed before you write the code.
+
 1. Fork the repository
 2. Create a feature branch: `git checkout -b feature/your-feature-name`
 3. Make your changes following the code style below
@@ -73,7 +75,9 @@ Open an issue with the `enhancement` label. Include:
 5. Run the test suite to make sure everything passes
 6. Commit with clear messages: `git commit -m "Add support for X"`
 7. Push to your fork: `git push origin feature/your-feature-name`
-8. Open a Pull Request against `main`
+8. Open a Pull Request against `main` and fill in the template's checklist
+
+Pull requests are reviewed against [REVIEW.md](REVIEW.md). A first-pass review may arrive as an automated comment; the maintainer reviews and merges.
 
 ## Code Style
 

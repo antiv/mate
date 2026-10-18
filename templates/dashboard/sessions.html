@@ -13,7 +13,7 @@
             </p>
         </div>
         <div class="flex flex-wrap gap-2 items-center flex-shrink-0">
-            <button type="button" onclick="window.sessionsApp.loadSessions(1)" class="px-3.5 py-2 text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center shadow-sm min-h-[44px] touch-target transition-all">
+            <button type="button" data-click="sessionsApp.loadSessions" data-args="[1]" class="px-3.5 py-2 text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center shadow-sm min-h-[44px] touch-target transition-all">
                 <i class="fas fa-sync-alt mr-1.5"></i>Refresh Sessions
             </button>
         </div>
@@ -25,7 +25,7 @@
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             <div>
                 <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Runtime</label>
-                <select id="filterRuntime" onchange="window.sessionsApp.loadSessions(1)" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-md px-2.5 py-1.5 text-xs focus:ring-2 focus:ring-blue-500">
+                <select id="filterRuntime" data-change="sessionsApp.loadSessions" data-args="[1]" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-md px-2.5 py-1.5 text-xs focus:ring-2 focus:ring-blue-500">
                     <option value="all">All Runtimes (ADK &amp; LangGraph)</option>
                     <option value="adk">ADK Only</option>
                     <option value="langgraph">LangGraph Only</option>
@@ -33,22 +33,22 @@
             </div>
             <div>
                 <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">App / Agent Name</label>
-                <input type="text" id="filterAppName" placeholder="e.g. chess_mate" onkeyup="if(event.key==='Enter') window.sessionsApp.loadSessions(1)" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-md px-2.5 py-1.5 text-xs focus:ring-2 focus:ring-blue-500">
+                <input type="text" id="filterAppName" placeholder="e.g. chess_mate" data-keyup="sessionsApp.loadOnEnter" data-args='["$event"]' class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-md px-2.5 py-1.5 text-xs focus:ring-2 focus:ring-blue-500">
             </div>
             <div>
                 <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">User ID</label>
-                <input type="text" id="filterUserId" placeholder="e.g. admin" onkeyup="if(event.key==='Enter') window.sessionsApp.loadSessions(1)" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-md px-2.5 py-1.5 text-xs focus:ring-2 focus:ring-blue-500">
+                <input type="text" id="filterUserId" placeholder="e.g. admin" data-keyup="sessionsApp.loadOnEnter" data-args='["$event"]' class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-md px-2.5 py-1.5 text-xs focus:ring-2 focus:ring-blue-500">
             </div>
             <div>
                 <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Search Keywords / Session ID</label>
-                <input type="text" id="filterSearch" placeholder="Search prompt text or ID..." onkeyup="if(event.key==='Enter') window.sessionsApp.loadSessions(1)" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-md px-2.5 py-1.5 text-xs focus:ring-2 focus:ring-blue-500">
+                <input type="text" id="filterSearch" placeholder="Search prompt text or ID..." data-keyup="sessionsApp.loadOnEnter" data-args='["$event"]' class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-md px-2.5 py-1.5 text-xs focus:ring-2 focus:ring-blue-500">
             </div>
         </div>
         <div class="mt-3 flex justify-end space-x-2">
-            <button type="button" onclick="document.getElementById('filterAppName').value=''; document.getElementById('filterUserId').value=''; document.getElementById('filterSearch').value=''; document.getElementById('filterRuntime').value='all'; window.sessionsApp.loadSessions(1)" class="px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-md">
+            <button type="button" data-click="sessionsApp.resetFilters" class="px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-md">
                 Reset
             </button>
-            <button type="button" onclick="window.sessionsApp.loadSessions(1)" class="px-3 py-1.5 text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white rounded-md shadow-sm">
+            <button type="button" data-click="sessionsApp.loadSessions" data-args="[1]" class="px-3 py-1.5 text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white rounded-md shadow-sm">
                 Apply Filters
             </button>
         </div>
@@ -91,15 +91,15 @@
 </div>
 
 <!-- Session Inspector Modal -->
-<div id="sessionInspectorModal" class="fixed inset-0 bg-gray-900/60 backdrop-blur-sm hidden z-50 overflow-y-auto" onclick="if (event.target === this) window.sessionsApp.closeSessionInspector()">
-    <div class="relative top-4 md:top-10 mx-auto p-4 md:p-6 w-full max-w-5xl bg-white dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 flex flex-col max-h-[90vh]" onclick="event.stopPropagation()">
+<div id="sessionInspectorModal" class="fixed inset-0 bg-gray-900/60 backdrop-blur-sm hidden z-50 overflow-y-auto">
+    <div class="relative top-4 md:top-10 mx-auto p-4 md:p-6 w-full max-w-5xl bg-white dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 flex flex-col max-h-[90vh]">
         <!-- Modal Header -->
         <div class="flex justify-between items-center pb-3 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
             <div class="flex items-center space-x-2">
                 <i class="fas fa-search-location text-blue-600 text-lg"></i>
                 <h3 class="text-lg font-bold text-gray-900 dark:text-white">Session Inspector</h3>
             </div>
-            <button type="button" onclick="window.sessionsApp.closeSessionInspector()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 p-1 rounded-md text-lg">
+            <button type="button" data-click="sessionsApp.closeSessionInspector" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 p-1 rounded-md text-lg">
                 <i class="fas fa-times"></i>
             </button>
         </div>
@@ -113,5 +113,5 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="/static/js/sessions.js?v=2"></script>
+<script src="/static/js/sessions.js?v=3"></script>
 {% endblock %}

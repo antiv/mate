@@ -18,15 +18,25 @@ import os
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
+from sqlalchemy import func
+
 from .database_client import get_database_client
-from .models import AgentConfig, AlertRule, RateLimitConfig
+from .models import AgentConfig, AlertRule, AuditLog, RateLimitConfig
 from .notify import post_json, send_email
 
 logger = logging.getLogger(__name__)
 
-CONDITION_TYPES = ('agent_error_count', 'budget_threshold', 'guardrail_count')
-DESTINATION_TYPES = ('http', 'email')
+CONDITION_TYPES = ('agent_error_count', 'budget_threshold', 'guardrail_count',
+                   'model_fallback_count')
+DESTINATION_TYPES = ('http', 'email', 'slack', 'discord')
 SCOPES = ('user', 'agent', 'project', 'global')
+
+# Chat incoming webhooks take a fixed body, not MATE's payload: Slack rejects a
+# post without `text` and Discord one without `content`.
+_CHAT_MESSAGE_KEYS = {'slack': 'text', 'discord': 'content'}
+
+# Periods a budget in US dollars can have: those Rate Limits sets dollar budgets for
+USD_PERIODS = ('day', 'month')
 
 # Budget periods and the granularity at which "already alerted" resets.
 _PERIOD_WINDOWS = {
@@ -193,6 +203,8 @@ class AlertService:
             return self._measure_guardrail_count(session, rule, config)
         if rule.condition_type == 'budget_threshold':
             return self._measure_budget(session, rule, config)
+        if rule.condition_type == 'model_fallback_count':
+            return self._measure_fallback_count(session, rule, config)
         logger.warning("Unknown condition_type '%s' on rule %s", rule.condition_type, rule.id)
         return None
 
@@ -232,6 +244,34 @@ class AlertService:
         return {'value': value, 'threshold': threshold,
                 'detail': {'window_minutes': window_minutes}}
 
+    def _measure_fallback_count(self, session, rule: AlertRule,
+                                config: dict) -> Optional[Dict[str, Any]]:
+        """Count requests answered by an agent's fallback model.
+
+        agent_error_count cannot tell these apart: on ADK the primary's failure is
+        an ERROR row like any failed request, and on LangGraph the fallback leaves
+        none. Each fallback writes one agent.model_fallback audit entry, with the
+        agent in resource_id and the chatting user as actor.
+        """
+        from .audit_service import ACTION_MODEL_FALLBACK
+
+        window_minutes = int(config.get('window_minutes', 15))
+        threshold = int(config.get('threshold', 5))
+        since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+        query = session.query(func.count(AuditLog.id)).filter(
+            AuditLog.action == ACTION_MODEL_FALLBACK, AuditLog.timestamp >= since)
+        if rule.scope == 'user':
+            query = query.filter(AuditLog.actor == rule.scope_id)
+        else:
+            agent_names = self._agent_names_for_scope(session, rule)
+            if agent_names is not None:
+                if not agent_names:
+                    return {'value': 0, 'threshold': threshold,
+                            'detail': {'window_minutes': window_minutes}}
+                query = query.filter(AuditLog.resource_id.in_(agent_names))
+        return {'value': int(query.scalar() or 0), 'threshold': threshold,
+                'detail': {'window_minutes': window_minutes}}
+
     def _measure_budget(self, session, rule: AlertRule, config: dict) -> Optional[Dict[str, Any]]:
         from .token_usage_service import get_token_usage_service
 
@@ -239,6 +279,8 @@ class AlertService:
         if period not in _PERIOD_WINDOWS:
             return None
         threshold_pct = int(config.get('threshold_pct', 90))
+        if config.get('unit') == 'usd':
+            return self._measure_usd_budget(session, rule, config, period, threshold_pct)
         limit = config.get('token_limit')
         if not limit:
             limit = self._limit_from_rate_limit_config(session, rule, period)
@@ -264,12 +306,46 @@ class AlertService:
         return {'value': pct, 'threshold': threshold_pct,
                 'detail': {'period': period, 'used': used, 'limit': limit}}
 
+    def _measure_usd_budget(self, session, rule: AlertRule, config: dict, period: str,
+                            threshold_pct: int) -> Optional[Dict[str, Any]]:
+        """A budget in US dollars: what the scope spent in the period, priced calls only.
+
+        The calls without a price are counted too, so the alert can say the spend
+        leaves them out.
+        """
+        from .token_usage_service import get_token_usage_service
+
+        if period not in USD_PERIODS or rule.scope not in ('user', 'agent', 'project'):
+            return None
+        limit = config.get('usd_limit')
+        if limit is None:
+            limit = self._limit_from_rate_limit_config(session, rule, period, unit='usd')
+        try:
+            limit = float(limit) if limit is not None else None
+        except (TypeError, ValueError):
+            return None
+        if not limit:
+            # No limit anywhere, or 0, of which every cent would be "over 100%"
+            return None
+        since = datetime.now(timezone.utc) - _PERIOD_WINDOWS[period]
+        spend = get_token_usage_service().get_spend_since(rule.scope, rule.scope_id, since)
+        if spend is None:
+            return None
+        used, unpriced = spend
+        return {'value': int(100 * used / limit), 'threshold': threshold_pct,
+                'detail': {'period': period, 'unit': 'usd', 'used': round(used, 2), 'limit': limit,
+                           'unpriced_calls': unpriced}}
+
     def _limit_from_rate_limit_config(self, session, rule: AlertRule,
-                                      period: str) -> Optional[int]:
+                                      period: str, unit: str = 'tokens'):
         """Fall back to the budget already configured under Rate Limits."""
-        column = {'hour': RateLimitConfig.tokens_per_hour,
-                  'day': RateLimitConfig.tokens_per_day,
-                  'month': RateLimitConfig.tokens_per_month}.get(period)
+        if unit == 'usd':
+            column = {'day': RateLimitConfig.usd_per_day,
+                      'month': RateLimitConfig.usd_per_month}.get(period)
+        else:
+            column = {'hour': RateLimitConfig.tokens_per_hour,
+                      'day': RateLimitConfig.tokens_per_day,
+                      'month': RateLimitConfig.tokens_per_month}.get(period)
         if column is None:
             return None
         try:
@@ -277,7 +353,9 @@ class AlertService:
                 RateLimitConfig.scope == rule.scope,
                 RateLimitConfig.scope_id == rule.scope_id
             ).first()
-            return int(row[0]) if row and row[0] else None
+            if not row or not row[0]:
+                return None
+            return float(row[0]) if unit == 'usd' else int(row[0])
         except Exception as e:
             logger.error("Failed to resolve budget limit for rule %s: %s", rule.id, e)
             return None
@@ -322,20 +400,35 @@ class AlertService:
 
     def _build_payload(self, rule: AlertRule, measurement: Dict[str, Any]) -> Dict[str, Any]:
         detail = measurement.get('detail') or {}
+        # A global rule has no scope_id; name what it covers instead of "global None"
+        subject = 'all agents' if rule.scope == 'global' else f"{rule.scope} {rule.scope_id}"
         if rule.condition_type == 'budget_threshold':
             # Keep the historical event name so webhooks written against the old
             # rate-limit alert keep working after the migration.
             event = 'rate_limit_alert'
-            message = (f"{rule.scope} {rule.scope_id} has used {measurement['value']}% of its "
-                       f"{detail.get('period')} token budget "
-                       f"({detail.get('used')}/{detail.get('limit')})")
+            if detail.get('unit') == 'usd':
+                message = (f"{subject} has used {measurement['value']}% of its "
+                           f"{detail.get('period')} budget "
+                           f"(${detail.get('used'):.2f} of ${detail.get('limit'):.2f})")
+                if detail.get('unpriced_calls'):
+                    message += (f"; {detail['unpriced_calls']} calls without a price "
+                                f"are not counted")
+            else:
+                message = (f"{subject} has used {measurement['value']}% of its "
+                           f"{detail.get('period')} token budget "
+                           f"({detail.get('used')}/{detail.get('limit')})")
         elif rule.condition_type == 'agent_error_count':
             event = 'agent_error_alert'
-            message = (f"{rule.scope} {rule.scope_id} recorded {measurement['value']} errors in "
+            message = (f"{subject} recorded {measurement['value']} errors in "
                        f"the last {detail.get('window_minutes')} minutes")
+        elif rule.condition_type == 'model_fallback_count':
+            event = 'model_fallback_alert'
+            message = (f"The fallback model answered for {subject} "
+                       f"{measurement['value']} times in the last "
+                       f"{detail.get('window_minutes')} minutes; check the primary model's provider")
         else:
             event = 'guardrail_alert'
-            message = (f"{rule.scope} {rule.scope_id} triggered guardrails "
+            message = (f"{subject} triggered guardrails "
                        f"{measurement['value']} times in the last "
                        f"{detail.get('window_minutes')} minutes")
         return {
@@ -363,6 +456,16 @@ class AlertService:
             body = payload['message'] + "\n\n" + "\n".join(
                 f"{k}: {v}" for k, v in payload.items() if k != 'message')
             return send_email(config.get('to', ''), subject, body)
+        if rule.destination_type in _CHAT_MESSAGE_KEYS:
+            label = "MATE alert test" if payload.get('test') else "MATE alert"
+            text = f"[{label}] {rule.name}: {payload['message']}"
+            if rule.destination_type == 'slack':
+                # Slack reads <...> as links and mentions (<!channel>); these three are its escapes
+                text = text.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+            body: Dict[str, Any] = {_CHAT_MESSAGE_KEYS[rule.destination_type]: text}
+            if rule.destination_type == 'discord':
+                body['allowed_mentions'] = {'parse': []}  # no @everyone from a rule or agent name
+            return post_json(config.get('url', ''), body, timeout=float(config.get('timeout', 30)))
         return False, f"unknown destination_type '{rule.destination_type}'"
 
     def evaluate_rule(self, rule_id: int, force: bool = False) -> Dict[str, Any]:

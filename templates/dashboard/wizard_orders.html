@@ -14,17 +14,17 @@
         <div class="flex flex-wrap gap-2 items-center flex-shrink-0">
             <input type="text" id="searchInput" placeholder="Search order #, name, email…"
                    class="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg w-56">
-            <select id="filterPartner" onchange="loadOrders()" class="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg">
+            <select id="filterPartner" data-change="loadOrders" class="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg">
                 <option value="">All partners</option>
             </select>
-            <select id="filterStatus" onchange="loadOrders()" class="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg">
+            <select id="filterStatus" data-change="loadOrders" class="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg">
                 <option value="">All statuses</option>
                 <option value="new">New</option>
                 <option value="contacted">Contacted</option>
                 <option value="fulfilled">Fulfilled</option>
                 <option value="cancelled">Cancelled</option>
             </select>
-            <button type="button" onclick="loadOrders()" class="px-3 py-2 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center min-h-[44px] touch-target">
+            <button type="button" data-click="loadOrders" class="px-3 py-2 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center min-h-[44px] touch-target">
                 <i class="fas fa-sync-alt mr-1"></i>Refresh
             </button>
         </div>
@@ -37,7 +37,10 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
+// Handlers this page's markup calls through data-click and friends (csp-actions.js)
+mateActions.allow('deleteOrder', 'loadOrders', 'updateStatus');
+
 function esc(s) {
     return String(s == null ? "" : s)
         .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
@@ -145,7 +148,7 @@ function renderOrders(orders) {
                 return '<option value="' + s + '"' + (s === o.status ? " selected" : "") + '>' + s + '</option>';
             }).join("");
             const badge = STATUS_BADGE[o.status] || "bg-gray-100 text-gray-500";
-            const deleteBtn = '<button onclick="deleteOrder(' + o.id + ')" class="text-red-500 hover:text-red-700 text-xs" title="Delete order"><i class="fas fa-trash"></i></button>';
+            const deleteBtn = '<button data-click="deleteOrder" data-args="[' + o.id + ']" class="text-red-500 hover:text-red-700 text-xs" title="Delete order"><i class="fas fa-trash"></i></button>';
             const noteCell = o.note ? '<div class="text-xs text-gray-400 dark:text-gray-500 mt-0.5">' + esc(o.note) + '</div>' : '';
             const customer =
                 '<div class="font-medium text-gray-900 dark:text-white">' + esc(o.customer_name || "—") + '</div>' +
@@ -160,7 +163,7 @@ function renderOrders(orders) {
                     '<span class="inline-block px-2 py-0.5 rounded-full text-xs ' + badge + '">' + esc(o.status) + '</span>' +
                 '</td>' +
                 '<td class="px-4 py-2 whitespace-nowrap">' +
-                    '<select onchange="updateStatus(' + o.id + ', this.value)" class="text-xs border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1">' + opts + '</select>' +
+                    '<select data-change="updateStatus" data-args="' + mateActions.attr([o.id, '$value']) + '" class="text-xs border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1">' + opts + '</select>' +
                 '</td>' +
                 '<td class="px-4 py-2 whitespace-nowrap">' + deleteBtn + '</td>' +
                 '</tr>';

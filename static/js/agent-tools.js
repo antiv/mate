@@ -69,8 +69,8 @@ function syncToolConfigToJson(prefix = '') {
         config.cv_tools = true;
     }
     if (imageTools && imageTools.checked) {
-        if (imageModel && imageModel.value) {
-            config.image_tools = { model: imageModel.value };
+        if (imageModel && imageModel.value.trim()) {
+            config.image_tools = { model: imageModel.value.trim() };
         } else {
             config.image_tools = true;
         }
@@ -317,7 +317,6 @@ function syncJsonToToolConfig(prefix = '') {
  * Setup event listeners for tool configuration
  */
 function setupToolListeners(prefix) {
-    console.log('setupToolListeners called with prefix:', prefix);
     
     // Find the parent container that holds all tool checkboxes
     // Look for the first tool checkbox to find its parent container
@@ -338,7 +337,6 @@ function setupToolListeners(prefix) {
     }
     
     if (parentContainer) {
-        console.log('Using event delegation on parent container');
         // Use event delegation - listen for change events on the parent
         parentContainer.addEventListener('change', function(e) {
             const target = e.target;
@@ -418,9 +416,9 @@ function setupToolListeners(prefix) {
         });
     }
     
-    const imageModelSelect = document.getElementById(prefix + 'ImageModel');
-    if (imageModelSelect) {
-        imageModelSelect.addEventListener('change', function() {
+    const imageModelInput = document.getElementById(prefix + 'ImageModel');
+    if (imageModelInput) {
+        imageModelInput.addEventListener('input', function() {
             syncToolConfigToJson(prefix);
         });
     }

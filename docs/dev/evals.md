@@ -229,7 +229,7 @@ All endpoints require HTTP Basic Auth (same credentials as the dashboard).
 | `GET` | `/dashboard/api/evals/agent/{name}` | Test cases for agent + each case's latest result |
 | `GET` | `/dashboard/api/evals/agent/{name}/history` | Score history for chart (avg_score + pass_rate per version) |
 | `GET` | `/dashboard/api/evals/agent/{name}/versions-list` | Real version records for the version dropdown |
-| `GET` | `/dashboard/api/evals/feedback` | Rated-down responses with question and answer (admin only); `?agent_name=` filters |
+| `GET` | `/dashboard/api/evals/feedback` | Rated-down responses with question and answer (admin only); `?agent_name=` filters; `reported: true` when the exchange is the one a standalone build sent, used only without a session |
 | `POST` | `/dashboard/api/evals` | Create a test case; optional `source_feedback_id` links it to a rating |
 | `PUT` | `/dashboard/api/evals/{id}` | Update a test case |
 | `DELETE` | `/dashboard/api/evals/{id}` | Soft-delete (sets `is_active=False`) |

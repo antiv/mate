@@ -183,6 +183,10 @@ class TestRateLimitOffload(unittest.IsolatedAsyncioTestCase):
             tokens_per_hour=100,
             tokens_per_day=None,
             tokens_per_month=None,
+            usd_per_day=None,
+            usd_per_month=None,
+            block_unpriced=False,
+            include_sub_agents=False,
             action_on_limit="block",
         )
         svc, session = self._make_service(cfg, token_delay=0.1, tokens=150)
@@ -203,8 +207,10 @@ class TestRateLimitOffload(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.action, "block")
         self.assertEqual(usage.tokens_last_hour, 150)
         session.close.assert_called_once()
-        # Three 0.1s token queries run in a worker thread; the loop must keep ticking
-        self.assertGreaterEqual(ticks, 10)
+        # Three 0.1s token queries run in a worker thread; the loop must keep ticking.
+        # Run on the loop, they would leave the heartbeat no tick at all. The
+        # bound stays low because a busy CI runner has managed only 7 of ~30.
+        self.assertGreaterEqual(ticks, 3)
 
     async def test_returns_plain_values_not_orm_objects(self):
         from types import SimpleNamespace
@@ -214,6 +220,10 @@ class TestRateLimitOffload(unittest.IsolatedAsyncioTestCase):
             tokens_per_hour=None,
             tokens_per_day=None,
             tokens_per_month=None,
+            usd_per_day=None,
+            usd_per_month=None,
+            block_unpriced=False,
+            include_sub_agents=False,
             action_on_limit="warn",
         )
         svc, _ = self._make_service(cfg, token_delay=0.0, tokens=5)

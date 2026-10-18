@@ -3,6 +3,10 @@
  * Handles project creation, editing, deletion, and selection
  */
 
+// Handlers this file's markup calls through data-click and friends (csp-actions.js)
+mateActions.allow('deleteProject', 'handleProjectSelection', 'hideProjectModal',
+                  'showProjectModal', 'startCreateProject', 'startEditProject');
+
 (function() {
     'use strict';
 

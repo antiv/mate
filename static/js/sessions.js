@@ -2,18 +2,16 @@
  * MATE Dashboard - Session Tracking (ADK & LangGraph)
  */
 
+// Handlers this file's markup calls through data-click and friends (csp-actions.js)
+mateActions.allow('sessionsApp.closeSessionInspector', 'sessionsApp.copySessionId',
+                  'sessionsApp.deleteSession', 'sessionsApp.inspectSession',
+                  'sessionsApp.loadOnEnter', 'sessionsApp.loadSessions',
+                  'sessionsApp.resetFilters', 'sessionsApp.switchInspectorTab');
+
 (function () {
     let currentPage = 1;
     const limit = 50;
     let currentSessionData = null;
-
-    // A value as a JS argument in a double-quoted onclick attribute. escapeHtml
-    // inside '...' did not hold: the browser decodes &#039; back to a quote
-    // before the handler is parsed, and a visitor chooses their own user_id.
-    function jsArg(value) {
-        return JSON.stringify(value == null ? '' : String(value))
-            .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    }
 
     function escapeHtml(str) {
         if (str === null || str === undefined) return '';
@@ -107,7 +105,7 @@
                 <td class="px-3 py-3 text-xs font-mono text-gray-900 dark:text-white" title="${escapeHtml(s.id)}">
                     <div class="flex items-center space-x-1">
                         <span>${escapeHtml(shortId)}</span>
-                        <button onclick="navigator.clipboard.writeText(${jsArg(s.id)})" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-0.5" title="Copy Session ID">
+                        <button data-click="sessionsApp.copySessionId" data-args="${mateActions.attr([s.id])}" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-0.5" title="Copy Session ID">
                             <i class="fas fa-copy text-[10px]"></i>
                         </button>
                     </div>
@@ -122,10 +120,10 @@
                 </td>
                 <td class="px-3 py-3 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">${formatTime(s.updated_at)}</td>
                 <td class="px-3 py-3 text-xs text-right whitespace-nowrap space-x-2">
-                    <button onclick="window.sessionsApp.inspectSession(${jsArg(s.runtime)}, ${jsArg(s.app_name)}, ${jsArg(s.user_id)}, ${jsArg(s.id)})" class="px-2.5 py-1 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded shadow-sm inline-flex items-center touch-target">
+                    <button data-click="sessionsApp.inspectSession" data-args="${mateActions.attr([s.runtime, s.app_name, s.user_id, s.id])}" class="px-2.5 py-1 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded shadow-sm inline-flex items-center touch-target">
                         <i class="fas fa-eye mr-1"></i>Inspect
                     </button>
-                    <button onclick="window.sessionsApp.deleteSession(${jsArg(s.runtime)}, ${jsArg(s.app_name)}, ${jsArg(s.user_id)}, ${jsArg(s.id)})" class="px-2 py-1 text-xs bg-red-100 hover:bg-red-200 text-red-700 dark:bg-red-900/30 dark:hover:bg-red-900/50 dark:text-red-300 rounded inline-flex items-center touch-target">
+                    <button data-click="sessionsApp.deleteSession" data-args="${mateActions.attr([s.runtime, s.app_name, s.user_id, s.id])}" class="px-2 py-1 text-xs bg-red-100 hover:bg-red-200 text-red-700 dark:bg-red-900/30 dark:hover:bg-red-900/50 dark:text-red-300 rounded inline-flex items-center touch-target">
                         <i class="fas fa-trash-alt"></i>
                     </button>
                 </td>
@@ -147,11 +145,11 @@
 
         let html = `
         <div class="flex items-center space-x-1">
-            <button onclick="window.sessionsApp.loadSessions(${page - 1})" ${page <= 1 ? 'disabled' : ''} class="px-2 py-1 text-xs rounded border border-gray-300 dark:border-gray-600 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-100 dark:hover:bg-gray-700">
+            <button data-click="sessionsApp.loadSessions" data-args="[${page - 1}]" ${page <= 1 ? 'disabled' : ''} class="px-2 py-1 text-xs rounded border border-gray-300 dark:border-gray-600 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-100 dark:hover:bg-gray-700">
                 <i class="fas fa-chevron-left"></i>
             </button>
             <span class="px-2 text-xs text-gray-600 dark:text-gray-400">${page} / ${totalPages}</span>
-            <button onclick="window.sessionsApp.loadSessions(${page + 1})" ${page >= totalPages ? 'disabled' : ''} class="px-2 py-1 text-xs rounded border border-gray-300 dark:border-gray-600 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-100 dark:hover:bg-gray-700">
+            <button data-click="sessionsApp.loadSessions" data-args="[${page + 1}]" ${page >= totalPages ? 'disabled' : ''} class="px-2 py-1 text-xs rounded border border-gray-300 dark:border-gray-600 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-100 dark:hover:bg-gray-700">
                 <i class="fas fa-chevron-right"></i>
             </button>
         </div>`;
@@ -226,13 +224,13 @@
 
         <!-- Inspector Tabs -->
         <div class="border-b border-gray-200 dark:border-gray-700 mb-4 flex space-x-4">
-            <button onclick="window.sessionsApp.switchInspectorTab('turns')" id="tabBtnTurns" class="py-2 px-3 text-sm font-semibold border-b-2 border-blue-600 text-blue-600 dark:text-blue-400 focus:outline-none">
+            <button data-click="sessionsApp.switchInspectorTab" data-args='["turns"]' id="tabBtnTurns" class="py-2 px-3 text-sm font-semibold border-b-2 border-blue-600 text-blue-600 dark:text-blue-400 focus:outline-none">
                 <i class="fas fa-comments mr-1.5"></i>Conversation View (${events.length})
             </button>
-            <button onclick="window.sessionsApp.switchInspectorTab('state')" id="tabBtnState" class="py-2 px-3 text-sm font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 border-b-2 border-transparent focus:outline-none">
+            <button data-click="sessionsApp.switchInspectorTab" data-args='["state"]' id="tabBtnState" class="py-2 px-3 text-sm font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 border-b-2 border-transparent focus:outline-none">
                 <i class="fas fa-database mr-1.5"></i>Session State
             </button>
-            <button onclick="window.sessionsApp.switchInspectorTab('json')" id="tabBtnJson" class="py-2 px-3 text-sm font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 border-b-2 border-transparent focus:outline-none">
+            <button data-click="sessionsApp.switchInspectorTab" data-args='["json"]' id="tabBtnJson" class="py-2 px-3 text-sm font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 border-b-2 border-transparent focus:outline-none">
                 <i class="fas fa-code mr-1.5"></i>Raw JSON
             </button>
         </div>
@@ -410,6 +408,23 @@
         currentSessionData = null;
     }
 
+    // The filter inputs search when Enter is pressed
+    function loadOnEnter(event) {
+        if (event.key === 'Enter') loadSessions(1);
+    }
+
+    function resetFilters() {
+        ['filterAppName', 'filterUserId', 'filterSearch'].forEach(id => {
+            document.getElementById(id).value = '';
+        });
+        document.getElementById('filterRuntime').value = 'all';
+        loadSessions(1);
+    }
+
+    function copySessionId(sessionId) {
+        navigator.clipboard.writeText(sessionId);
+    }
+
     async function deleteSession(runtime, appName, userId, sessionId) {
         if (!confirm(`Are you sure you want to delete session "${sessionId}"?\nThis action cannot be undone.`)) {
             return;
@@ -441,13 +456,23 @@
         inspectSession,
         closeSessionInspector,
         deleteSession,
-        switchInspectorTab
+        switchInspectorTab,
+        loadOnEnter,
+        resetFilters,
+        copySessionId
     };
 
     // Auto load on init
     document.addEventListener('DOMContentLoaded', () => {
         if (document.getElementById('sessionTableBody')) {
             loadSessions(1);
+        }
+        // A click on the backdrop, outside the dialog, closes the inspector
+        const modal = document.getElementById('sessionInspectorModal');
+        if (modal) {
+            modal.addEventListener('click', (event) => {
+                if (event.target === modal) closeSessionInspector();
+            });
         }
     });
 

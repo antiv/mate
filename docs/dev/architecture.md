@@ -117,7 +117,7 @@ and which `user_id` is used. See [Agent runtime](agent-runtime.md) for steps 5 t
 |---|---|
 | Agents, users, projects, memory blocks, triggers, logs | The main database; see the [database reference](../reference/database.md) |
 | Conversations | The agent runtime's session store. ADK and LangGraph each keep their own, so switching runtime starts with empty history. |
-| Files agents produce | The artifact service: local folder, S3 or Supabase (`ARTIFACT_SERVICE`) |
+| Files agents produce | The artifact service: local folder, S3 or Supabase (`ARTIFACT_SERVICE`); see [Artifact storage](artifact-storage.md) |
 | Bearer tokens, request counters, the cron scheduler | Memory of the auth server process |
 
 The last row is why the auth server runs as a single process: a second worker would

@@ -9,7 +9,7 @@
                     <h3 class="text-sm font-semibold text-gray-900 dark:text-white">Version History</h3>
                     <span id="vhAgentName" class="text-xs text-gray-500 dark:text-gray-400"></span>
                 </div>
-                <button type="button" onclick="hideVersionHistoryModal()" class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 p-1" title="Close">
+                <button type="button" data-click="hideVersionHistoryModal" class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 p-1" title="Close">
                     <i class="fas fa-times text-lg"></i>
                 </button>
             </div>
@@ -28,10 +28,10 @@
                     <div class="px-3 py-2 border-b border-gray-200 dark:border-gray-700 text-xs font-medium text-gray-500 dark:text-gray-400 flex items-center justify-between">
                         <span id="vhDiffTitle">Select a version to view changes</span>
                         <div id="vhDiffActions" class="hidden flex items-center space-x-1">
-                            <button id="vhRunEvalsBtn" onclick="window._vhRunEvals()" class="px-2 py-1 text-xs bg-green-600 hover:bg-green-700 text-white rounded flex items-center">
+                            <button id="vhRunEvalsBtn" data-click="_vhRunEvals" class="px-2 py-1 text-xs bg-green-600 hover:bg-green-700 text-white rounded flex items-center">
                                 <i class="fas fa-flask mr-1"></i>Run Evals
                             </button>
-                            <button id="vhRollbackBtn" onclick="rollbackToVersion()" class="px-2 py-1 text-xs bg-orange-600 hover:bg-orange-700 text-white rounded flex items-center">
+                            <button id="vhRollbackBtn" data-click="rollbackToVersion" class="px-2 py-1 text-xs bg-orange-600 hover:bg-orange-700 text-white rounded flex items-center">
                                 <i class="fas fa-undo mr-1"></i>Rollback
                             </button>
                         </div>

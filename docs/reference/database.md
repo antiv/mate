@@ -10,7 +10,7 @@ generated: true
 
 # Database reference
 
-**32** tables defined in `shared/utils/models.py`; migrations are at **V036**. Migrations apply automatically on startup and are the source of truth for the schema: the models describe it, the migrations create it.
+**34** tables defined in `shared/utils/models.py`; migrations are at **V043**. Migrations apply automatically on startup and are the source of truth for the schema: the models describe it, the migrations create it.
 
 ## Migrations
 
@@ -54,6 +54,13 @@ A ✗ means that dialect has no file for that version. All dialects are in step.
 | V034 | agent fallback model | ✓ | ✓ | ✓ |
 | V035 | scrub tavily key | ✓ | ✓ | ✓ |
 | V036 | mate help agent | ✓ | ✓ | ✓ |
+| V037 | alert rules open types | ✓ | ✓ | ✓ |
+| V038 | feedback reported exchange | ✓ | ✓ | ✓ |
+| V039 | widget feedback key | ✓ | ✓ | ✓ |
+| V040 | system settings | ✓ | ✓ | ✓ |
+| V041 | token costs | ✓ | ✓ | ✓ |
+| V042 | usd budgets | ✓ | ✓ | ✓ |
+| V043 | budget coverage | ✓ | ✓ | ✓ |
 
 ## `users`
 
@@ -90,6 +97,20 @@ Model `TokenUsageLog`. Model for token usage logs.
 | `status` | `String(50)` | — | `'SUCCESS'` | SUCCESS, ERROR, ACCESS_DENIED, etc. |
 | `error_description` | `Text` | — | — | Description of error if status is not SUCCESS |
 | `timestamp` | `DateTime` | not null | `(computed)` | — |
+| `cost_usd` | `Float` | — | — | The call's cost in US dollars, priced when logged; NULL when the model has no known price, which is not the same as free (see shared/utils/model_pricing.py) |
+| `is_fallback` | `Boolean` | not null | `False` | Answered by the agent's fallback model after its own model failed |
+
+## `model_prices`
+
+Model `ModelPrice`. A model's price an admin set, in US dollars per million tokens.
+
+| Column | Type | Constraints | Default | Notes |
+|---|---|---|---|---|
+| `model_name` | `String(255)` | PK | — | — |
+| `input_usd_per_mtok` | `Float` | not null | — | — |
+| `output_usd_per_mtok` | `Float` | not null | — | — |
+| `updated_by` | `String(255)` | — | — | — |
+| `updated_at` | `DateTime` | not null | `(computed)` | — |
 
 ## `guardrail_logs`
 
@@ -292,6 +313,17 @@ Model `AuditLog`. Append-only audit log.
 | `details` | `Text` | — | — | JSON string for portability (SQLite/MySQL/PostgreSQL) |
 | `ip_address` | `String(45)` | — | — | — |
 
+## `system_settings`
+
+Model `SystemSetting`. A server-wide setting an admin changes in the dashboard.
+
+| Column | Type | Constraints | Default | Notes |
+|---|---|---|---|---|
+| `setting_key` | `String(100)` | PK | — | — |
+| `value` | `Text` | — | — | — |
+| `updated_by` | `String(255)` | — | — | — |
+| `updated_at` | `DateTime` | not null | `(computed)` | — |
+
 ## `widget_api_keys`
 
 Model `WidgetApiKey`. Model for embeddable chat widget API keys, scoped to a project and root agent.
@@ -301,6 +333,7 @@ Model `WidgetApiKey`. Model for embeddable chat widget API keys, scoped to a pro
 | `id` | `Integer` | PK | — | — |
 | `api_key` | `String(255)` | unique, not null | — | — |
 | `admin_key` | `String(255)` | unique | — | Separate secret for the /widget/api admin routes: api_key is embedded in customer pages and therefore public, admin_key never leaves the dashboard. |
+| `feedback_key` | `String(255)` | unique | — | For a standalone build forwarding its ratings: only this key may send the rated question and answer, which the server cannot check. Kept out of web pages. |
 | `project_id` | `Integer` | FK → `projects.id`, not null | — | — |
 | `agent_name` | `String(255)` | not null | — | — |
 | `label` | `String(255)` | — | — | — |
@@ -449,6 +482,10 @@ Model `RateLimitConfig`. Model for rate limit and budget configuration per user,
 | `tokens_per_day` | `Integer` | — | — | — |
 | `tokens_per_month` | `Integer` | — | — | — |
 | `max_tokens_per_request` | `Integer` | — | — | — |
+| `usd_per_day` | `Float` | — | — | Spend in US dollars over the last 24 hours / 30 days, priced calls only |
+| `usd_per_month` | `Float` | — | — | — |
+| `block_unpriced` | `Boolean` | not null | `False` | Treat calls without a price in the period as over the dollar budget |
+| `include_sub_agents` | `Boolean` | not null | `False` | Agent scope: count what the agent's sub-agents use too |
 | `action_on_limit` | `String(20)` | not null | `'block'` | warn, throttle, block |
 | `alert_thresholds` | `Text` | — | — | JSON array e.g. [80, 90, 100] |
 | `alert_webhook_url` | `Text` | — | — | — |
@@ -549,6 +586,8 @@ Model `ResponseFeedback`. A visitor's thumbs up/down on one agent response.
 | `project_id` | `Integer` | FK → `projects.id` | — | — |
 | `rating` | `String(10)` | not null | — | up \| down |
 | `comment` | `Text` | — | — | — |
+| `question` | `Text` | — | — | Sent by a standalone build, whose sessions this server cannot read. NULL for MATE's own chats, where the exchange is read from the session. |
+| `answer` | `Text` | — | — | — |
 | `created_at` | `DateTime` | not null | `(computed)` | — |
 | `updated_at` | `DateTime` | not null | `(computed)` | — |
 
@@ -579,9 +618,9 @@ Model `AlertRule`. Notification rule: a condition over recorded events, a destin
 | `description` | `Text` | — | — | — |
 | `scope` | `String(20)` | not null | — | user \| agent \| project \| global |
 | `scope_id` | `String(255)` | — | — | NULL only when scope='global' |
-| `condition_type` | `String(50)` | not null | — | agent_error_count \| budget_threshold \| guardrail_count |
+| `condition_type` | `String(50)` | not null | — | agent_error_count \| budget_threshold \| guardrail_count \| model_fallback_count |
 | `condition_config` | `Text` | — | — | — |
-| `destination_type` | `String(50)` | not null | — | http \| email |
+| `destination_type` | `String(50)` | not null | — | http \| email \| slack \| discord |
 | `destination_config` | `Text` | — | — | — |
 | `cooldown_seconds` | `Integer` | not null | `3600` | — |
 | `is_enabled` | `Boolean` | not null | `True` | — |

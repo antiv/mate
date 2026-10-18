@@ -14,7 +14,7 @@
                 Budget notifications live on the <a href="/dashboard/alerts" class="text-blue-600 hover:underline">Alerts</a> page now.
             </p>
         </div>
-        <button onclick="openAddModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm flex items-center min-h-[44px] touch-target flex-shrink-0">
+        <button data-click="openAddModal" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm flex items-center min-h-[44px] touch-target flex-shrink-0">
             <i class="fas fa-plus mr-2"></i>Add Config
         </button>
     </div>
@@ -36,7 +36,7 @@
                 <input type="text" id="usageUserId" placeholder="user_id" class="w-full sm:flex-1 min-w-0 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-sm">
                 <input type="text" id="usageAgentName" placeholder="agent_name" class="w-full sm:flex-1 min-w-0 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-sm">
                 <input type="number" id="usageProjectId" placeholder="project_id" class="w-full sm:w-24 min-w-0 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-sm">
-                <button onclick="loadUsage()" class="bg-gray-600 hover:bg-gray-700 text-white px-3 py-1.5 rounded text-sm min-h-[44px] touch-target w-full sm:w-auto">Load</button>
+                <button data-click="loadUsage" class="bg-gray-600 hover:bg-gray-700 text-white px-3 py-1.5 rounded text-sm min-h-[44px] touch-target w-full sm:w-auto">Load</button>
             </div>
         </div>
     </div>
@@ -79,6 +79,25 @@
                     <input type="number" id="formTokensPerMonth" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 rounded px-2 py-1.5 text-sm" placeholder="500000" min="0">
                 </div>
             </div>
+            <div class="grid grid-cols-2 gap-2">
+                <div>
+                    <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">USD/day</label>
+                    <input type="number" id="formUsdPerDay" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 rounded px-2 py-1.5 text-sm" placeholder="5.00" min="0" step="0.01">
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">USD/month</label>
+                    <input type="number" id="formUsdPerMonth" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 rounded px-2 py-1.5 text-sm" placeholder="100.00" min="0" step="0.01">
+                </div>
+                <p class="col-span-2 text-[11px] text-gray-500 dark:text-gray-400">Spend over the last 24 hours and 30 days, at list prices. Calls whose model has no price do not count unless the box below is ticked; see <a href="/dashboard/settings#model-prices" class="text-blue-600 hover:underline">model prices</a>.</p>
+                <label class="col-span-2 flex items-start gap-2 text-xs text-gray-700 dark:text-gray-300">
+                    <input type="checkbox" id="formBlockUnpriced" class="mt-0.5">
+                    <span>Treat calls without a price as over the dollar budget</span>
+                </label>
+            </div>
+            <label class="flex items-start gap-2 text-xs text-gray-700 dark:text-gray-300">
+                <input type="checkbox" id="formIncludeSubAgents" class="mt-0.5">
+                <span>Include sub-agents (agent scope): the agent's token and dollar budgets count what its sub-agents use too</span>
+            </label>
             <div>
                 <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Max tokens/request (agent)</label>
                 <input type="number" id="formMaxTokensPerRequest" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 rounded px-2 py-1.5 text-sm" placeholder="4096" min="0">
@@ -90,13 +109,10 @@
                     <option value="throttle">Throttle (delay)</option>
                     <option value="block">Block (429)</option>
                 </select>
-            </div>
-            <div>
-                <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Alert webhook URL</label>
-                <input type="url" id="formAlertWebhook" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 rounded px-2 py-1.5 text-sm" placeholder="https://...">
+                <p class="text-[11px] text-gray-500 dark:text-gray-400 mt-1">Throttle delays requests over the per-minute limit; token limits are only logged.</p>
             </div>
             <div class="flex justify-end gap-2 pt-2">
-                <button type="button" onclick="closeModal()" class="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded text-sm text-gray-700 dark:text-gray-300">Cancel</button>
+                <button type="button" data-click="closeModal" class="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded text-sm text-gray-700 dark:text-gray-300">Cancel</button>
                 <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm">Save</button>
             </div>
         </form>
@@ -105,11 +121,10 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
-    function jsArg(value) {
-        return JSON.stringify(value == null ? '' : String(value))
-            .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    }
+<script nonce="{{ request.state.csp_nonce }}">
+    // Handlers this page's markup calls through data-click (csp-actions.js)
+    mateActions.allow('closeModal', 'deleteConfig', 'editConfigByIndex', 'loadUsage',
+                      'loadUsageFor', 'openAddModal');
 
     let editingId = null;
     let configsCache = [];
@@ -130,13 +145,17 @@
                     <span class="text-xs text-gray-500 dark:text-gray-400 ml-2">
                         ${c.requests_per_minute ? c.requests_per_minute + '/min' : ''}
                         ${c.tokens_per_day ? '| ' + c.tokens_per_day + ' tokens/day' : ''}
+                        ${c.usd_per_day != null ? '| $' + c.usd_per_day.toFixed(2) + '/day' : ''}
+                        ${c.usd_per_month != null ? '| $' + c.usd_per_month.toFixed(2) + '/month' : ''}
+                        ${c.block_unpriced ? '| unpriced = over' : ''}
+                        ${c.include_sub_agents ? '| incl. sub-agents' : ''}
                         ${c.action_on_limit ? '| ' + c.action_on_limit : ''}
                     </span>
                 </div>
                 <div class="flex gap-1">
-                    <button onclick="loadUsageFor(${jsArg(c.scope)}, ${jsArg(c.scope_id)})" class="text-blue-600 dark:text-blue-400 text-xs px-2 py-1 hover:underline">Usage</button>
-                    <button onclick="editConfigByIndex(${i})" class="text-gray-600 dark:text-gray-400 text-xs px-2 py-1 hover:underline">Edit</button>
-                    <button onclick="deleteConfig(${jsArg(c.scope)}, ${jsArg(c.scope_id)})" class="text-red-600 dark:text-red-400 text-xs px-2 py-1 hover:underline">Delete</button>
+                    <button data-click="loadUsageFor" data-args="${mateActions.attr([c.scope, c.scope_id])}" class="text-blue-600 dark:text-blue-400 text-xs px-2 py-1 hover:underline">Usage</button>
+                    <button data-click="editConfigByIndex" data-args="[${i}]" class="text-gray-600 dark:text-gray-400 text-xs px-2 py-1 hover:underline">Edit</button>
+                    <button data-click="deleteConfig" data-args="${mateActions.attr([c.scope, c.scope_id])}" class="text-red-600 dark:text-red-400 text-xs px-2 py-1 hover:underline">Delete</button>
                 </div>
             </div>
         `).join('');
@@ -146,7 +165,11 @@
         editConfig(configsCache[i]);
     }
 
+    // The config whose usage is shown, for its sub-agent switch and dollar budget
+    let usageConfig = null;
+
     function loadUsageFor(scope, scopeId) {
+        usageConfig = configsCache.find(c => c.scope === scope && c.scope_id === scopeId) || null;
         if (scope === 'user') {
             document.getElementById('usageUserId').value = scopeId;
             document.getElementById('usageAgentName').value = '';
@@ -160,10 +183,11 @@
             document.getElementById('usageAgentName').value = '';
             document.getElementById('usageProjectId').value = scopeId;
         }
-        loadUsage();
+        loadUsage(true);
     }
 
-    async function loadUsage() {
+    async function loadUsage(fromConfig) {
+        if (fromConfig !== true) usageConfig = null;
         const userId = document.getElementById('usageUserId').value.trim() || null;
         const agentName = document.getElementById('usageAgentName').value.trim() || null;
         const projectId = document.getElementById('usageProjectId').value ? parseInt(document.getElementById('usageProjectId').value) : null;
@@ -175,13 +199,26 @@
         if (userId) params.set('user_id', userId);
         if (agentName) params.set('agent_name', agentName);
         if (projectId) params.set('project_id', projectId);
+        if (usageConfig && usageConfig.include_sub_agents) params.set('include_sub_agents', 'true');
         const res = await apiCall('/dashboard/api/rate-limits/usage?' + params.toString());
+        // Calls without a price add nothing to the spend, so a dollar budget can't see them
+        const unpriced = Math.max(res.unpriced_calls_day ?? 0, res.unpriced_calls_month ?? 0);
+        let unpricedNote = '';
+        if (unpriced > 0) {
+            const hasUsdBudget = usageConfig && (usageConfig.usd_per_day != null || usageConfig.usd_per_month != null);
+            const effect = !hasUsdBudget ? 'they are not in the spend above.'
+                : usageConfig.block_unpriced ? 'this budget treats them as over budget.'
+                : 'they do not count toward this dollar budget.';
+            unpricedNote = `<div class="text-xs text-amber-700 dark:text-amber-400"><i class="fas fa-exclamation-triangle mr-1"></i>${res.unpriced_calls_day ?? 0} calls in the last day and ${res.unpriced_calls_month ?? 0} in 30 days have no price; ${effect} Set a price under <a href="/dashboard/settings#model-prices" class="underline">model prices</a>.</div>`;
+        }
         document.getElementById('usagePanel').innerHTML = `
             <div class="space-y-1">
                 <div>Requests (last min): <strong>${res.requests_last_min ?? 0}</strong></div>
                 <div>Tokens (last hour): <strong>${(res.tokens_last_hour ?? 0).toLocaleString()}</strong></div>
                 <div>Tokens (last day): <strong>${(res.tokens_last_day ?? 0).toLocaleString()}</strong></div>
                 <div>Tokens (last 30 days): <strong>${(res.tokens_last_month ?? 0).toLocaleString()}</strong></div>
+                <div>Spent (last day / 30 days): <strong>$${(res.usd_last_day ?? 0).toFixed(2)}</strong> / <strong>$${(res.usd_last_month ?? 0).toFixed(2)}</strong>${usageConfig && usageConfig.include_sub_agents ? ' (with sub-agents)' : ''}</div>
+                ${unpricedNote}
             </div>
         `;
     }
@@ -205,8 +242,12 @@
         document.getElementById('formTokensPerDay').value = c.tokens_per_day || '';
         document.getElementById('formTokensPerMonth').value = c.tokens_per_month || '';
         document.getElementById('formMaxTokensPerRequest').value = c.max_tokens_per_request || '';
+        // 0 is a real dollar budget (spend nothing), so only null leaves the field empty
+        document.getElementById('formUsdPerDay').value = c.usd_per_day ?? '';
+        document.getElementById('formUsdPerMonth').value = c.usd_per_month ?? '';
+        document.getElementById('formBlockUnpriced').checked = !!c.block_unpriced;
+        document.getElementById('formIncludeSubAgents').checked = !!c.include_sub_agents;
         document.getElementById('formActionOnLimit').value = c.action_on_limit || 'block';
-        document.getElementById('formAlertWebhook').value = c.alert_webhook_url || '';
         document.getElementById('configModal').classList.remove('hidden');
     }
 
@@ -226,8 +267,11 @@
             tokens_per_day: document.getElementById('formTokensPerDay').value ? parseInt(document.getElementById('formTokensPerDay').value) : null,
             tokens_per_month: document.getElementById('formTokensPerMonth').value ? parseInt(document.getElementById('formTokensPerMonth').value) : null,
             max_tokens_per_request: document.getElementById('formMaxTokensPerRequest').value ? parseInt(document.getElementById('formMaxTokensPerRequest').value) : null,
+            usd_per_day: document.getElementById('formUsdPerDay').value !== '' ? parseFloat(document.getElementById('formUsdPerDay').value) : null,
+            usd_per_month: document.getElementById('formUsdPerMonth').value !== '' ? parseFloat(document.getElementById('formUsdPerMonth').value) : null,
+            block_unpriced: document.getElementById('formBlockUnpriced').checked,
+            include_sub_agents: document.getElementById('formIncludeSubAgents').checked,
             action_on_limit: document.getElementById('formActionOnLimit').value,
-            alert_webhook_url: document.getElementById('formAlertWebhook').value || null,
             alert_thresholds: [80, 90, 100],
         };
         await apiCall('/dashboard/api/rate-limits', 'POST', body);
