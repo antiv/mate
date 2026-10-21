@@ -22,6 +22,7 @@ from starlette.middleware.sessions import SessionMiddleware
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from shared.utils.dashboard.dashboard_server import DashboardServer
+from shared.test.request_context_helpers import as_caller
 
 
 class TestDashboardTokens(unittest.TestCase):
@@ -53,6 +54,7 @@ class TestDashboardTokens(unittest.TestCase):
         for p in patches:
             p.start()
             self.addCleanup(p.stop)
+        as_caller(self.app, "alice", admin)
 
     def test_user_without_an_api_role_cannot_create_a_token(self):
         self._as(roles=["user"])

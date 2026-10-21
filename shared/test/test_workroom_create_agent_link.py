@@ -19,6 +19,7 @@ from starlette.middleware.sessions import SessionMiddleware
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from shared.utils.dashboard.dashboard_server import DashboardServer
+from shared.test.request_context_helpers import as_caller
 
 
 class TestWorkroomCreateAgentLink(unittest.TestCase):
@@ -38,11 +39,8 @@ class TestWorkroomCreateAgentLink(unittest.TestCase):
         self.server._get_all_agent_configs = lambda: []
 
     def _get_workroom(self, *, is_admin: bool) -> str:
-        self.app.dependency_overrides[self.server._get_auth_user_dependency] = (
-            lambda: "admin" if is_admin else "alice"
-        )
-        with patch.object(self.server, "_get_is_admin", return_value=is_admin):
-            resp = TestClient(self.app).get("/dashboard/workroom")
+        as_caller(self.app, "admin" if is_admin else "alice", is_admin)
+        resp = TestClient(self.app).get("/dashboard/workroom")
         self.assertEqual(resp.status_code, 200)
         return resp.text
 

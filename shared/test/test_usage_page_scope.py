@@ -23,6 +23,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 
 from shared.utils.dashboard.dashboard_server import DashboardServer
 from shared.utils.models import AgentResponse, Base, ResponseFeedback, TokenUsageLog
+from shared.test.request_context_helpers import as_caller
 
 
 def _utcnow() -> datetime:
@@ -98,9 +99,8 @@ class TestScopedHelpers(_TwoUsers):
 class TestUsagePage(_TwoUsers):
 
     def get(self, user: str, is_admin: bool, query: str = "") -> str:
-        self.app.dependency_overrides[self.server._get_auth_user_dependency] = lambda: user
-        with patch.object(self.server, "_get_is_admin", return_value=is_admin):
-            resp = TestClient(self.app).get(f"/dashboard/usage{query}")
+        as_caller(self.app, user, is_admin)
+        resp = TestClient(self.app).get(f"/dashboard/usage{query}")
         self.assertEqual(resp.status_code, 200)
         return resp.text
 

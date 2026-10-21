@@ -18,6 +18,7 @@ from starlette.middleware.sessions import SessionMiddleware
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from shared.utils.dashboard.dashboard_server import DashboardServer
+from shared.test.request_context_helpers import as_caller
 
 
 class TestDocsApiSameOrigin(unittest.TestCase):
@@ -36,11 +37,8 @@ class TestDocsApiSameOrigin(unittest.TestCase):
         self.server.db_client = db
 
     def _get_docs_page(self) -> str:
-        self.app.dependency_overrides[self.server._get_auth_user_dependency] = (
-            lambda: "admin"
-        )
-        with patch.object(self.server, "_get_is_admin", return_value=True):
-            resp = TestClient(self.app).get("/dashboard/docs")
+        as_caller(self.app, "admin", is_admin=True)
+        resp = TestClient(self.app).get("/dashboard/docs")
         self.assertEqual(resp.status_code, 200)
         return resp.text
 

@@ -9,6 +9,7 @@ covers:
   - server/oauth_routes.py
   - server/pat_auth.py
   - server/dashboard_authz.py
+  - server/request_context.py
   - shared/utils/auth_utils.py
   - server/proxy_routes.py::_non_admin_refusal
 ---
@@ -99,7 +100,23 @@ fails when one gets anything but the middleware's 403, or when the allowlists le
 through a route that is not in its `USER_ROUTES`. A new allowlist entry therefore
 also goes into `USER_ROUTES`.
 
-Dashboard pages do their own check and redirect non-admins to the Work Room.
+### The request context
+
+A dashboard route learns who is calling from one dependency,
+`ctx: RequestContext = Depends(get_request_context)` (`server/request_context.py`):
+
+- `ctx.user_id` is the signed-in user. Without one, the caller is redirected to the
+  login page, as `require_dashboard_auth` does.
+- `ctx.role` is `get_user_role`'s answer, `admin` or `user`, and `ctx.is_admin`
+  says whether it is `admin`. It is read the first time a route asks, since for a
+  single sign-on user it is a database lookup.
+
+In 2.0 the context also carries the caller's workspace, so scoping is added in one
+function rather than in every route. The route inventory test fails on a
+`/dashboard` route that does not take the context. Groups of routes not yet moved
+to it are listed in its `NOT_YET_ON_CONTEXT`; so far the pages use it.
+
+Dashboard pages check `ctx.is_admin` and redirect non-admins to the Work Room.
 
 ## Layer 2: the proxy to the agent server
 
@@ -165,6 +182,7 @@ accepts an empty password.
 
 | The route is | Use |
 |---|---|
+| A dashboard page | Take `ctx: RequestContext = Depends(get_request_context)`; redirect to the Work Room unless `ctx.is_admin`, if it is for admins. |
 | Dashboard JSON for admins | Put it under `/dashboard/api/`; depend on `get_dashboard_auth_user` and return 401 on `None`. The middleware does the rest. |
 | Dashboard JSON for every signed-in user | The same, plus an allowlist entry and its `USER_ROUTES` line in the route inventory test, plus scoping to the caller in the handler. |
 | For external programs | Depend on `get_pat_user` (PAT with role check) or `get_auth_user` (bearer or Basic). |
