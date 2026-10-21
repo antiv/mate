@@ -23,6 +23,7 @@ from fastapi.staticfiles import StaticFiles
 from shared.utils import audit_service
 from ..ai_disclosure import resolve_disclosure, validate_waiver
 from shared.utils.path_safety import resolve_within_base
+from server.request_context import RequestContext, get_request_context
 
 logger = logging.getLogger(__name__)
 
@@ -3316,42 +3317,42 @@ class DashboardServer:
         
         # Dashboard page endpoints
         @self.app.get("/dashboard", tags=["Dashboard - Pages"], include_in_schema=False)
-        async def dashboard_index(request: Request, username: str = Depends(self._get_auth_user_dependency)):
+        async def dashboard_index(request: Request, ctx: RequestContext = Depends(get_request_context)):
             """Redirect to Work Room (default space)."""
             return RedirectResponse(url="/dashboard/workroom", status_code=302)
 
         @self.app.get("/dashboard/overview", response_class=HTMLResponse, tags=["Dashboard - Pages"])
-        async def dashboard_overview(request: Request, username: str = Depends(self._get_auth_user_dependency)):
+        async def dashboard_overview(request: Request, ctx: RequestContext = Depends(get_request_context)):
             """Platform Overview — Control Room landing page."""
-            if not self._get_is_admin(request):
+            if not ctx.is_admin:
                 return RedirectResponse(url="/dashboard/workroom", status_code=302)
             stats = self._get_usage_stats(7)
             return self.templates.TemplateResponse(request, "dashboard/index.html", {
                 "request": request,
                 "page_title": "Platform Overview",
-                "username": username,
+                "username": ctx.user_id,
                 "stats": stats,
                 "is_admin": True,
             })
 
         @self.app.get("/dashboard/users", response_class=HTMLResponse, tags=["Dashboard - Pages"])
-        async def dashboard_users(request: Request, username: str = Depends(self._get_auth_user_dependency)):
+        async def dashboard_users(request: Request, ctx: RequestContext = Depends(get_request_context)):
             """Dashboard users page"""
-            if not self._get_is_admin(request):
+            if not ctx.is_admin:
                 return RedirectResponse(url="/dashboard/workroom", status_code=302)
             users = self._get_all_users()
             return self.templates.TemplateResponse(request, "dashboard/users.html", {
                 "request": request,
                 "page_title": "User Management",
-                "username": username,
+                "username": ctx.user_id,
                 "users": users,
                 "is_admin": True,
             })
 
         @self.app.get("/dashboard/agents", response_class=HTMLResponse, tags=["Dashboard - Pages"])
-        async def dashboard_agents(request: Request, username: str = Depends(self._get_auth_user_dependency)):
+        async def dashboard_agents(request: Request, ctx: RequestContext = Depends(get_request_context)):
             """Dashboard agents page"""
-            if not self._get_is_admin(request):
+            if not ctx.is_admin:
                 return RedirectResponse(url="/dashboard/workroom", status_code=302)
             project_param = request.query_params.get("project_id")
             try:
@@ -3364,7 +3365,7 @@ class DashboardServer:
             return self.templates.TemplateResponse(request, "dashboard/agents.html", {
                 "request": request,
                 "page_title": "Agent Management",
-                "username": username,
+                "username": ctx.user_id,
                 "configs": configs,
                 "projects": projects,
                 "selected_project_id": selected_project_id,
@@ -3372,9 +3373,9 @@ class DashboardServer:
             })
 
         @self.app.get("/dashboard/agents/visual", response_class=HTMLResponse, tags=["Dashboard - Pages"])
-        async def dashboard_agents_visual(request: Request, username: str = Depends(self._get_auth_user_dependency)):
+        async def dashboard_agents_visual(request: Request, ctx: RequestContext = Depends(get_request_context)):
             """Dashboard visual agent builder page"""
-            if not self._get_is_admin(request):
+            if not ctx.is_admin:
                 return RedirectResponse(url="/dashboard/workroom", status_code=302)
             project_param = request.query_params.get("project_id")
             try:
@@ -3387,7 +3388,7 @@ class DashboardServer:
             return self.templates.TemplateResponse(request, "dashboard/agents_visual.html", {
                 "request": request,
                 "page_title": "Agent Visual Builder",
-                "username": username,
+                "username": ctx.user_id,
                 "configs": configs,
                 "projects": projects,
                 "selected_project_id": selected_project_id,
@@ -3395,37 +3396,37 @@ class DashboardServer:
             })
 
         @self.app.get("/dashboard/templates", response_class=HTMLResponse, tags=["Dashboard - Pages"])
-        async def dashboard_templates(request: Request, username: str = Depends(self._get_auth_user_dependency)):
+        async def dashboard_templates(request: Request, ctx: RequestContext = Depends(get_request_context)):
             """Dashboard templates gallery page"""
-            if not self._get_is_admin(request):
+            if not ctx.is_admin:
                 return RedirectResponse(url="/dashboard/workroom", status_code=302)
             return self.templates.TemplateResponse(request, "dashboard/templates.html", {
                 "request": request,
                 "page_title": "Template Library",
-                "username": username,
+                "username": ctx.user_id,
                 "is_admin": True,
             })
 
         @self.app.get("/dashboard/migrations", response_class=HTMLResponse, tags=["Dashboard - Pages"])
-        async def dashboard_migrations(request: Request, username: str = Depends(self._get_auth_user_dependency)):
+        async def dashboard_migrations(request: Request, ctx: RequestContext = Depends(get_request_context)):
             """Dashboard migrations page"""
-            if not self._get_is_admin(request):
+            if not ctx.is_admin:
                 return RedirectResponse(url="/dashboard/workroom", status_code=302)
             migrations = self._get_schema_migrations()
             return self.templates.TemplateResponse(request, "dashboard/migrations.html", {
                 "request": request,
                 "page_title": "Database Migrations",
-                "username": username,
+                "username": ctx.user_id,
                 "migrations": migrations,
                 "is_admin": True,
             })
 
         @self.app.get("/dashboard/usage", response_class=HTMLResponse, tags=["Dashboard - Pages"])
-        async def dashboard_usage(request: Request, days: int = 30, view: str = "analytics", origin: str = "interactive", username: str = Depends(self._get_auth_user_dependency)):
+        async def dashboard_usage(request: Request, days: int = 30, view: str = "analytics", origin: str = "interactive", ctx: RequestContext = Depends(get_request_context)):
             """Dashboard usage page"""
-            is_admin = self._get_is_admin(request)
+            is_admin = ctx.is_admin
             # Non-admin users see only their own usage
-            current_user_id = username
+            current_user_id = ctx.user_id
             scope = None if is_admin else current_user_id
             stats = self._get_usage_stats(days, self.resolve_origins(origin), user_id=scope)
             logs = (self._get_token_usage_logs(24, limit=1000, user_id=scope)
@@ -3433,7 +3434,7 @@ class DashboardServer:
             return self.templates.TemplateResponse(request, "dashboard/usage.html", {
                 "request": request,
                 "page_title": "Usage Analytics",
-                "username": username,
+                "username": ctx.user_id,
                 "stats": stats,
                 "logs": logs.get("logs", []) if isinstance(logs, dict) else [],
                 "days": days,
@@ -3444,76 +3445,76 @@ class DashboardServer:
             })
 
         @self.app.get("/dashboard/rate-limits", response_class=HTMLResponse, tags=["Dashboard - Pages"])
-        async def dashboard_rate_limits(request: Request, username: str = Depends(self._get_auth_user_dependency)):
+        async def dashboard_rate_limits(request: Request, ctx: RequestContext = Depends(get_request_context)):
             """Dashboard rate limits and budgets page"""
-            if not self._get_is_admin(request):
+            if not ctx.is_admin:
                 return RedirectResponse(url="/dashboard/workroom", status_code=302)
             return self.templates.TemplateResponse(request, "dashboard/rate_limits.html", {
                 "request": request,
                 "page_title": "Rate Limits & Budgets",
-                "username": username,
+                "username": ctx.user_id,
                 "is_admin": True,
             })
 
         @self.app.get("/dashboard/traces", response_class=HTMLResponse, tags=["Dashboard - Pages"])
-        async def dashboard_traces(request: Request, username: str = Depends(self._get_auth_user_dependency)):
+        async def dashboard_traces(request: Request, ctx: RequestContext = Depends(get_request_context)):
             """Dashboard traces page - OpenTelemetry distributed tracing viewer"""
-            if not self._get_is_admin(request):
+            if not ctx.is_admin:
                 return RedirectResponse(url="/dashboard/workroom", status_code=302)
             return self.templates.TemplateResponse(request, "dashboard/traces.html", {
                 "request": request,
                 "page_title": "Traces",
-                "username": username,
+                "username": ctx.user_id,
                 "is_admin": True,
             })
 
         @self.app.get("/dashboard/docs", response_class=HTMLResponse, tags=["Dashboard - Pages"])
-        async def dashboard_docs(request: Request, username: str = Depends(self._get_auth_user_dependency)):
+        async def dashboard_docs(request: Request, ctx: RequestContext = Depends(get_request_context)):
             """Dashboard docs page"""
-            if not self._get_is_admin(request):
+            if not ctx.is_admin:
                 return RedirectResponse(url="/dashboard/workroom", status_code=302)
             # Agent Swagger/ReDoc iframes use same-origin /docs and /redoc
             # (proxied to ADK_PORT); do not hard-code a dashboard or agent port.
             return self.templates.TemplateResponse(request, "dashboard/docs.html", {
                 "request": request,
                 "page_title": "Documentation",
-                "username": username,
+                "username": ctx.user_id,
                 "is_admin": True,
             })
 
         @self.app.get("/dashboard/audit-logs", response_class=HTMLResponse, tags=["Dashboard - Pages"])
-        async def dashboard_audit_logs(request: Request, username: str = Depends(self._get_auth_user_dependency)):
+        async def dashboard_audit_logs(request: Request, ctx: RequestContext = Depends(get_request_context)):
             """Dashboard audit log viewer. Evidence toward EU AI Act Art. 12 record-keeping."""
-            if not self._get_is_admin(request):
+            if not ctx.is_admin:
                 return RedirectResponse(url="/dashboard/workroom", status_code=302)
             return self.templates.TemplateResponse(request, "dashboard/audit_logs.html", {
                 "request": request,
                 "page_title": "Audit Logs",
-                "username": username,
+                "username": ctx.user_id,
                 "is_admin": True,
             })
 
         @self.app.get("/dashboard/guardrail-logs", response_class=HTMLResponse, tags=["Dashboard - Pages"])
-        async def dashboard_guardrail_logs(request: Request, username: str = Depends(self._get_auth_user_dependency)):
+        async def dashboard_guardrail_logs(request: Request, ctx: RequestContext = Depends(get_request_context)):
             """Dashboard guardrail trigger log viewer."""
-            if not self._get_is_admin(request):
+            if not ctx.is_admin:
                 return RedirectResponse(url="/dashboard/workroom", status_code=302)
             return self.templates.TemplateResponse(request, "dashboard/guardrail_logs.html", {
                 "request": request,
                 "page_title": "Guardrail Logs",
-                "username": username,
+                "username": ctx.user_id,
                 "is_admin": True,
             })
 
         @self.app.get("/dashboard/sessions", response_class=HTMLResponse, tags=["Dashboard - Pages"])
-        async def dashboard_sessions(request: Request, username: str = Depends(self._get_auth_user_dependency)):
+        async def dashboard_sessions(request: Request, ctx: RequestContext = Depends(get_request_context)):
             """Dashboard session tracking page (ADK & LangGraph)."""
-            if not self._get_is_admin(request):
+            if not ctx.is_admin:
                 return RedirectResponse(url="/dashboard/workroom", status_code=302)
             return self.templates.TemplateResponse(request, "dashboard/sessions.html", {
                 "request": request,
                 "page_title": "Session Tracking",
-                "username": username,
+                "username": ctx.user_id,
                 "is_admin": True,
             })
 
@@ -3569,14 +3570,14 @@ class DashboardServer:
             return {"success": True, "message": f"Session {session_id} deleted successfully"}
 
         @self.app.get("/dashboard/wizard-leads", response_class=HTMLResponse, tags=["Dashboard - Pages"])
-        async def dashboard_wizard_leads(request: Request, username: str = Depends(self._get_auth_user_dependency)):
+        async def dashboard_wizard_leads(request: Request, ctx: RequestContext = Depends(get_request_context)):
             """Dashboard page listing leads captured by the public Agent Builder Wizard."""
-            if not self._get_is_admin(request):
+            if not ctx.is_admin:
                 return RedirectResponse(url="/dashboard/workroom", status_code=302)
             return self.templates.TemplateResponse(request, "dashboard/wizard_leads.html", {
                 "request": request,
                 "page_title": "Wizard Leads",
-                "username": username,
+                "username": ctx.user_id,
                 "is_admin": True,
             })
 
@@ -3680,14 +3681,14 @@ class DashboardServer:
                 session.close()
 
         @self.app.get("/dashboard/wizard-pricing", response_class=HTMLResponse, tags=["Dashboard - Pages"])
-        async def dashboard_wizard_pricing(request: Request, username: str = Depends(self._get_auth_user_dependency)):
+        async def dashboard_wizard_pricing(request: Request, ctx: RequestContext = Depends(get_request_context)):
             """Dashboard page to edit Agent Builder Wizard tier prices and currencies."""
-            if not self._get_is_admin(request):
+            if not ctx.is_admin:
                 return RedirectResponse(url="/dashboard/workroom", status_code=302)
             return self.templates.TemplateResponse(request, "dashboard/wizard_pricing.html", {
                 "request": request,
                 "page_title": "Wizard Pricing",
-                "username": username,
+                "username": ctx.user_id,
                 "is_admin": True,
             })
 
@@ -3752,14 +3753,14 @@ class DashboardServer:
             return partners_svc.delete_partner(partner_key)
 
         @self.app.get("/dashboard/shop-orders", response_class=HTMLResponse, tags=["Dashboard - Pages"])
-        async def dashboard_shop_orders(request: Request, username: str = Depends(self._get_auth_user_dependency)):
+        async def dashboard_shop_orders(request: Request, ctx: RequestContext = Depends(get_request_context)):
             """Dashboard page listing orders placed through the e-commerce MCP, grouped by partner."""
-            if not self._get_is_admin(request):
+            if not ctx.is_admin:
                 return RedirectResponse(url="/dashboard/workroom", status_code=302)
             return self.templates.TemplateResponse(request, "dashboard/wizard_orders.html", {
                 "request": request,
                 "page_title": "Shop Orders",
-                "username": username,
+                "username": ctx.user_id,
                 "is_admin": True,
             })
 
@@ -6152,13 +6153,13 @@ class DashboardServer:
         # ── Eval Framework ────────────────────────────────────────────────────
 
         @self.app.get("/dashboard/evals", response_class=HTMLResponse, tags=["Dashboard - Pages"])
-        async def dashboard_evals(request: Request, username: str = Depends(self._get_auth_user_dependency)):
-            if not self._get_is_admin(request):
+        async def dashboard_evals(request: Request, ctx: RequestContext = Depends(get_request_context)):
+            if not ctx.is_admin:
                 return RedirectResponse(url="/dashboard/workroom", status_code=302)
             return self.templates.TemplateResponse(request, "dashboard/evals.html", {
                 "request": request,
                 "page_title": "Evals",
-                "username": username,
+                "username": ctx.user_id,
                 "is_admin": True,
             })
 
@@ -7158,15 +7159,15 @@ class DashboardServer:
         # ── Trigger Engine ────────────────────────────────────────────────────
 
         @self.app.get("/dashboard/triggers", response_class=HTMLResponse, tags=["Dashboard - Pages"])
-        async def dashboard_triggers(request: Request, username: str = Depends(self._get_auth_user_dependency)):
-            if not self._get_is_admin(request):
+        async def dashboard_triggers(request: Request, ctx: RequestContext = Depends(get_request_context)):
+            if not ctx.is_admin:
                 return RedirectResponse(url="/dashboard/workroom", status_code=302)
             projects = self._get_all_projects()
             agents = self._get_all_agent_configs()
             return self.templates.TemplateResponse(request, "dashboard/triggers.html", {
                 "request": request,
                 "page_title": "Triggers",
-                "username": username,
+                "username": ctx.user_id,
                 "projects": projects,
                 "agents": [{"name": a.get("name", ""), "type": a.get("type", ""), "project_id": a.get("project_id"), "parent_agents": a.get("parent_agents") or []} for a in agents],
                 "is_admin": True,
@@ -7175,15 +7176,15 @@ class DashboardServer:
         # ── Chat Integrations ─────────────────────────────────────────────────
 
         @self.app.get("/dashboard/integrations", response_class=HTMLResponse, tags=["Dashboard - Pages"])
-        async def dashboard_integrations(request: Request, username: str = Depends(self._get_auth_user_dependency)):
-            if not self._get_is_admin(request):
+        async def dashboard_integrations(request: Request, ctx: RequestContext = Depends(get_request_context)):
+            if not ctx.is_admin:
                 return RedirectResponse(url="/dashboard/workroom", status_code=302)
             projects = self._get_all_projects()
             agents = self._get_all_agent_configs()
             return self.templates.TemplateResponse(request, "dashboard/integrations.html", {
                 "request": request,
                 "page_title": "Integrations",
-                "username": username,
+                "username": ctx.user_id,
                 "projects": projects,
                 "agents": [{"name": a.get("name", ""), "type": a.get("type", ""), "project_id": a.get("project_id"), "parent_agents": a.get("parent_agents") or []} for a in agents],
                 "is_admin": True,
@@ -7191,7 +7192,7 @@ class DashboardServer:
 
         @self.app.get("/dashboard/workroom/canvas", response_class=HTMLResponse, include_in_schema=False,
                       tags=["Dashboard - Pages"])
-        async def dashboard_workroom_canvas(username: str = Depends(self._get_auth_user_dependency)):
+        async def dashboard_workroom_canvas(ctx: RequestContext = Depends(get_request_context)):
             """An empty page that runs the code shown in the Work Room canvas.
 
             The code arrives by postMessage from the Work Room (workroom-canvas-frame.js).
@@ -7207,8 +7208,8 @@ class DashboardServer:
             return HTMLResponse(html, headers={CSP_HEADER: canvas_policy()})
 
         @self.app.get("/dashboard/workroom", response_class=HTMLResponse, tags=["Dashboard - Pages"])
-        async def dashboard_workroom(request: Request, agent: Optional[str] = None, session: Optional[str] = None, username: str = Depends(self._get_auth_user_dependency)):
-            is_admin = self._get_is_admin(request)
+        async def dashboard_workroom(request: Request, agent: Optional[str] = None, session: Optional[str] = None, ctx: RequestContext = Depends(get_request_context)):
+            is_admin = ctx.is_admin
             all_agents = self._get_all_agent_configs()
             # Only expose root agents (no parent_agents) in the Work Room
             agent_list = []
@@ -7231,7 +7232,7 @@ class DashboardServer:
             return self.templates.TemplateResponse(request, "dashboard/workroom.html", {
                 "request": request,
                 "page_title": "Work Room",
-                "username": username,
+                "username": ctx.user_id,
                 "agents": agent_list,
                 "selected_agent": agent or "",
                 "selected_session": session or "",
@@ -7731,27 +7732,27 @@ class DashboardServer:
         # ------------------------------------------------------------------ #
 
         @self.app.get("/dashboard/alerts", response_class=HTMLResponse, tags=["Dashboard - Pages"])
-        async def dashboard_alerts(request: Request, username: str = Depends(self._get_auth_user_dependency)):
-            if not self._get_is_admin(request):
+        async def dashboard_alerts(request: Request, ctx: RequestContext = Depends(get_request_context)):
+            if not ctx.is_admin:
                 return RedirectResponse(url="/dashboard/workroom", status_code=302)
             agents = self._get_all_agent_configs()
             return self.templates.TemplateResponse(request, "dashboard/alerts.html", {
                 "request": request,
                 "page_title": "Alerts",
-                "username": username,
+                "username": ctx.user_id,
                 "projects": self._get_all_projects(),
                 "agents": [{"name": a.get("name", "")} for a in agents],
                 "is_admin": True,
             })
 
         @self.app.get("/dashboard/settings", response_class=HTMLResponse, tags=["Dashboard - Pages"])
-        async def dashboard_settings(request: Request, username: str = Depends(self._get_auth_user_dependency)):
-            if not self._get_is_admin(request):
+        async def dashboard_settings(request: Request, ctx: RequestContext = Depends(get_request_context)):
+            if not ctx.is_admin:
                 return RedirectResponse(url="/dashboard/workroom", status_code=302)
             return self.templates.TemplateResponse(request, "dashboard/settings.html", {
                 "request": request,
                 "page_title": "Settings",
-                "username": username,
+                "username": ctx.user_id,
                 "is_admin": True,
             })
 

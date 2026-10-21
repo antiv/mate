@@ -27,6 +27,7 @@ from fastapi.testclient import TestClient
 
 from server import csp
 from server import widget_routes as wr
+from shared.test.request_context_helpers import as_caller
 
 
 def _directives(policy):
@@ -327,7 +328,7 @@ class TestCanvasPage(unittest.TestCase):
         app.middleware("http")(csp.add_csp_header)
         with patch("shared.utils.database_client.get_database_client", return_value=MagicMock()):
             server = DashboardServer(app, project_root=Path(self._TEMPLATES).parent)
-        app.dependency_overrides[server._get_auth_user_dependency] = lambda: "someone"
+        as_caller(app, "someone", is_admin=False)
         with patch.dict(os.environ, {"CSP_MODE": mode}):
             return TestClient(app).get(csp.CANVAS_PATH)
 
