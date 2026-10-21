@@ -23,7 +23,8 @@
                                data-input="filterParentAgentsList" data-args='[{{ id_prefix|string|tojson }}]'>
                         <i class="fas fa-search absolute left-2.5 top-2.5 text-gray-400 text-xs"></i>
                         <button type="button" 
-                                id="{{ id_prefix }}ParentAgentsSearchClear" 
+                                id="{{ id_prefix }}ParentAgentsSearchClear"
+                                aria-label="Clear search"
                                 data-click="clearParentAgentsSearch" data-args='[{{ id_prefix|string|tojson }}]'
                                 class="absolute right-2 top-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hidden">
                             <i class="fas fa-times text-xs"></i>
