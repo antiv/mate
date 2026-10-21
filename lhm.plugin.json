@@ -1,7 +1,7 @@
 {
   "identifier": "antiv-mate",
   "name": "MATE (Multi-Agent Tree Engine)",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "description": "A production-ready multi-agent orchestration engine built on Google ADK. Configure agents, tools, and LLM providers from a web dashboard with no code changes needed. Every agent listed in MCP_EXPOSED_AGENTS is served as its own Streamable HTTP MCP server at /agents/<agent>/mcp; GET /mcp lists them with their URLs. This listing connects to the built-in mate_help agent. Clients authenticate with a Personal Access Token from the MATE dashboard, sent as the header Authorization: Bearer mate_pat_...; the token's user needs the admin or developer role. Supports 50+ LLM providers including local Ollama, persistent memory, RBAC, and multi-tenant project isolation. Requires an LLM provider key such as GOOGLE_API_KEY.",
   "author": "antiv",
   "authorUrl": "https://github.com/antiv",

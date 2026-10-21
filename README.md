@@ -12,6 +12,7 @@ Self-hosted, on Google ADK or LangGraph, with any of 50+ LLM providers.
 [![LangGraph](https://img.shields.io/badge/LangGraph-supported-1C3C3C.svg)](https://github.com/langchain-ai/langgraph)
 [![LiteLLM](https://img.shields.io/badge/LiteLLM-50%2B%20providers-purple.svg)](https://github.com/BerriAI/litellm)
 [![MCP](https://img.shields.io/badge/MCP-compatible-brightgreen.svg)](https://modelcontextprotocol.io/)
+[![MCP Badge](https://lobehub.com/badge/mcp/antiv-mate)](https://lobehub.com/mcp/antiv-mate)
 
 [**Live demo**](#try-it-without-installing-anything) · [**Quick Start**](#quick-start) · [**Docs**](docs/README.md) · [**Changelog**](CHANGELOG.md)
 
