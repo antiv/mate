@@ -154,8 +154,8 @@ python shared/migrate.py status
 # in Docker: docker compose exec mate python shared/migrate.py status
 ```
 
-Applied and available are the same number, and pending is 0. The start log does not
-list migrations, so this is the place to look.
+Applied and available are the same number, and pending is 0. The start log shows
+migrations only at INFO level, so this is the reliable check.
 
 ### A streamed reply from an allowed origin
 
@@ -170,9 +170,11 @@ curl -N "$MATE_URL/widget/api/chat" \
 The response is `text/event-stream`. MATE sends the first event,
 `{"session_id": ..., "debug_mode": ...}`, before the model is called, so it proves
 nothing on its own. After it come events with `"partial": true`, each carrying a piece
-of the answer in `content.parts[].text`, and a last one with `"partial": false` and
-`"finishReason": "STOP"`. An event with `errorCode` means the model call failed, even
-though the status is 200.
+of the answer in `content.parts[].text`, and a last one with `"partial": false`. On
+the ADK runtime (the default) that last event also has `"finishReason": "STOP"`; on
+the LangGraph runtime (`AGENT_FRAMEWORK=langgraph`) it has no `finishReason`. An event
+with `errorCode` (`error_code` on LangGraph) means the model call failed, even though
+the status is 200.
 
 ### 403 from a disallowed origin
 
