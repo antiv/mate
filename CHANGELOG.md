@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Route inventory test** (#276, 1.6.0 item 1) - `shared/test/test_route_inventory.py` lists every `/dashboard/api/` route of the real app from its router, those of included routers too (FastAPI keeps those out of `app.routes`), and requests each as a non-admin. It fails when a route answers anything but the middleware's 403, or when the allowlists in `server/dashboard_authz.py` let through a route the test does not list as reviewed. The four routes a non-admin may call today (reading and sending ratings, reading their own tokens, renaming a conversation) are the reviewed ones. The test is the skeleton of the 2.0 cross-workspace test. See `docs/dev/auth-and-access.md`
+
 ## [1.5.1] - 2026-10-17
 
 Every deployment should upgrade, and soon: a signed-in user who is not an admin
