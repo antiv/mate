@@ -28,6 +28,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 
 from shared.utils.models import AgentConfig, AgentConfigVersion, Base
 from shared.utils.utils import STORED_SECRET_SENTINEL, mask_config_secrets
+from shared.test.request_context_helpers import as_caller
 
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 KEY = "sk-live-secret"
@@ -91,6 +92,7 @@ class TestDashboard(_Db):
         self.server.db_client = self.db_client
         self.server.AgentConfig, self.server.AgentConfigVersion = AgentConfig, AgentConfigVersion
         app.dependency_overrides[self.server._get_auth_user_dependency] = lambda: "someone"
+        as_caller(app, "someone", True)
         self.client = TestClient(app)
 
     def test_the_agent_list_does_not_carry_the_key(self):

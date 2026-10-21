@@ -114,7 +114,12 @@ A dashboard route learns who is calling from one dependency,
 In 2.0 the context also carries the caller's workspace, so scoping is added in one
 function rather than in every route. The route inventory test fails on a
 `/dashboard` route that does not take the context. Groups of routes not yet moved
-to it are listed in its `NOT_YET_ON_CONTEXT`; so far the pages use it.
+to it are listed in its `NOT_YET_ON_CONTEXT`. The pages and the agents, alerts,
+evals, settings, triggers, users and wizard APIs use it.
+
+An API route that is for admins and is reachable by others, because it is on an
+allowlist or outside `/dashboard/api/`, checks `ctx.is_admin` itself and answers
+403.
 
 Dashboard pages check `ctx.is_admin` and redirect non-admins to the Work Room.
 
@@ -183,7 +188,7 @@ accepts an empty password.
 | The route is | Use |
 |---|---|
 | A dashboard page | Take `ctx: RequestContext = Depends(get_request_context)`; redirect to the Work Room unless `ctx.is_admin`, if it is for admins. |
-| Dashboard JSON for admins | Put it under `/dashboard/api/`; depend on `get_dashboard_auth_user` and return 401 on `None`. The middleware does the rest. |
+| Dashboard JSON for admins | Put it under `/dashboard/api/` and take `ctx: RequestContext = Depends(get_request_context)`. The middleware does the rest. |
 | Dashboard JSON for every signed-in user | The same, plus an allowlist entry and its `USER_ROUTES` line in the route inventory test, plus scoping to the caller in the handler. |
 | For external programs | Depend on `get_pat_user` (PAT with role check) or `get_auth_user` (bearer or Basic). |
 | Public | No dependency. Think about rate limiting, and about what the response reveals. |

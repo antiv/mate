@@ -38,6 +38,7 @@ from shared.utils.eval_agent_runner import (AdkSnapshotAgent, ReplyCollector, Sn
 from shared.utils.langgraph.snapshot_agent import LangGraphSnapshotAgent
 from shared.utils.models import (AgentConfig, AgentConfigVersion, Base, EvalResult,
                                  TestCase)
+from shared.test.request_context_helpers import as_caller
 
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 
@@ -325,7 +326,7 @@ class TestEvalEndpoints(unittest.TestCase):
         server.db_client = db_client
         server.TestCase, server.EvalResult = TestCase, EvalResult
         server.AgentConfig, server.AgentConfigVersion = AgentConfig, AgentConfigVersion
-        app.dependency_overrides[server._get_auth_user_dependency] = lambda: "admin"
+        as_caller(app, "admin", True)
         self.client = TestClient(app)
 
         import json

@@ -25,6 +25,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from shared.utils.models import AgentTrigger, Base, Project
 from shared.utils.trigger_runner import UNIMPLEMENTED_TRIGGER_TYPES, TriggerRunner
+from shared.test.request_context_helpers import as_caller
 
 
 class TestUnimplementedTriggerTypes(unittest.TestCase):
@@ -58,7 +59,7 @@ class TestUnimplementedTriggerTypes(unittest.TestCase):
         app = FastAPI()
         self.server = DashboardServer(app, project_root)
         self.server.db_client = self.db_client
-        app.dependency_overrides[self.server._get_auth_user_dependency] = lambda: "admin"
+        as_caller(app, "admin", True)
         self.client = TestClient(app)
 
     def tearDown(self):

@@ -27,6 +27,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 from shared.utils.agent_improver import ImproveError, propose_instruction
 from shared.utils.models import (AgentConfig, AgentConfigVersion, Base, EvalResult,
                                  ResponseFeedback, TestCase)
+from shared.test.request_context_helpers import as_caller
 
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 
@@ -107,7 +108,7 @@ class TestImproveEndpoints(unittest.TestCase):
         self.server.db_client = db
         self.server.TestCase, self.server.AgentConfig = TestCase, AgentConfig
         self.server.AgentConfigVersion = AgentConfigVersion
-        app.dependency_overrides[self.server._get_auth_user_dependency] = lambda: "admin"
+        as_caller(app, "admin", True)
         self.client = TestClient(app)
 
         session = self.Session()

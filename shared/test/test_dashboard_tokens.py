@@ -37,7 +37,6 @@ class TestDashboardTokens(unittest.TestCase):
         self.server = DashboardServer(self.app, Path(__file__).resolve().parent.parent.parent)
         self.server.db_client = db
         self.server._get_all_agent_configs = lambda: []
-        self.app.dependency_overrides[self.server._get_auth_user_dependency] = lambda: "alice"
         self.client = TestClient(self.app)
 
     def _as(self, *, admin: bool = False, roles=("user",)):
@@ -47,7 +46,6 @@ class TestDashboardTokens(unittest.TestCase):
         patches = [
             patch("server.auth.get_dashboard_auth_user", return_value="alice"),
             patch("server.auth.is_admin_user", return_value=admin),
-            patch.object(self.server, "_get_is_admin", return_value=admin),
             patch("shared.utils.user_service.get_user_service", return_value=service),
             patch.dict(os.environ, {"ALLOWED_API_ROLES": "developer"}),
         ]

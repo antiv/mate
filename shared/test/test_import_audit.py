@@ -27,6 +27,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from shared.utils import audit_service
 from shared.utils.models import AuditLog, Base
+from shared.test.request_context_helpers import as_caller
 
 
 class ImportAuditTestCase(unittest.TestCase):
@@ -58,6 +59,7 @@ class ImportAuditTestCase(unittest.TestCase):
         app = FastAPI()
         self.server = DashboardServer(app, project_root)
         app.dependency_overrides[self.server._get_auth_user_dependency] = lambda: "alice"
+        as_caller(app, "alice", True)
         self.client = TestClient(app)
 
     def tearDown(self):
