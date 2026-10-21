@@ -9,6 +9,7 @@ covers:
   - shared/utils/database_client.py
   - shared/utils/models.py
   - shared/sql/README.md
+  - shared/utils/log_projects.py
 ---
 
 # Database and migrations
@@ -116,6 +117,29 @@ installation the insert may run for the first time over rows an admin has edited
 - SQLite's `INSERT OR IGNORE` also skips a row that breaks a `NOT NULL` constraint,
   without an error, so test a seed on a `create_all` schema
   (`shared/test/test_mate_help_agent.py` does this for V036).
+
+## Log rows carry their project
+
+`token_usage_logs`, `guardrail_logs`, `agent_responses` and `audit_logs` have a
+`project_id` (V044), written with the row by the four functions that write them
+(`shared/utils/log_projects.py` does the lookup):
+
+- token usage, guardrail hits and responses get their agent's project, or NULL for
+  an agent that is not configured;
+- an audit entry gets the project of the agent or project its `resource_id` names,
+  NULL for installation-wide entries. `audit_service.log(..., project_id=...)` sets
+  it when the agent is already gone, as on agent delete.
+
+The column has no foreign key: a row keeps its project id after the project is
+deleted. Queries per project read it rather than joining through `agents_config`,
+so a row stays with the project it happened in. The Usage page does this.
+
+Rows written before V044 are filled in by `log_projects.backfill()`, from each
+agent's current project. `python auth_server.py` runs it once in a background thread
+after startup: it walks each table by id, 10,000 rows per `UPDATE` and commit, and
+writes `log_project_backfill = done` to `system_settings` when it is finished. A
+failed run logs an error and runs again on the next start. It only writes rows
+without a project, so running it twice, or on two servers at once, is harmless.
 
 ## Undoing a migration
 

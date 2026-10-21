@@ -10,7 +10,7 @@ generated: true
 
 # Database reference
 
-**34** tables defined in `shared/utils/models.py`; migrations are at **V043**. Migrations apply automatically on startup and are the source of truth for the schema: the models describe it, the migrations create it.
+**34** tables defined in `shared/utils/models.py`; migrations are at **V044**. Migrations apply automatically on startup and are the source of truth for the schema: the models describe it, the migrations create it.
 
 ## Migrations
 
@@ -61,6 +61,7 @@ A ✗ means that dialect has no file for that version. All dialects are in step.
 | V041 | token costs | ✓ | ✓ | ✓ |
 | V042 | usd budgets | ✓ | ✓ | ✓ |
 | V043 | budget coverage | ✓ | ✓ | ✓ |
+| V044 | log project id | ✓ | ✓ | ✓ |
 
 ## `users`
 
@@ -99,6 +100,7 @@ Model `TokenUsageLog`. Model for token usage logs.
 | `timestamp` | `DateTime` | not null | `(computed)` | — |
 | `cost_usd` | `Float` | — | — | The call's cost in US dollars, priced when logged; NULL when the model has no known price, which is not the same as free (see shared/utils/model_pricing.py) |
 | `is_fallback` | `Boolean` | not null | `False` | Answered by the agent's fallback model after its own model failed |
+| `project_id` | `Integer` | — | — | The agent's project when the row was written; kept when the agent is renamed, moved or deleted (V044, shared/utils/log_projects.py) |
 
 ## `model_prices`
 
@@ -129,6 +131,7 @@ Model `GuardrailLog`. Model for guardrail trigger logs.
 | `matched_content` | `Text` | — | — | — |
 | `details` | `Text` | — | — | — |
 | `timestamp` | `DateTime` | not null | `(computed)` | — |
+| `project_id` | `Integer` | — | — | The agent's project when the row was written; kept when the agent is renamed, moved or deleted (V044, shared/utils/log_projects.py) |
 
 ## `projects`
 
@@ -312,6 +315,7 @@ Model `AuditLog`. Append-only audit log.
 | `resource_id` | `String(500)` | — | — | — |
 | `details` | `Text` | — | — | JSON string for portability (SQLite/MySQL/PostgreSQL) |
 | `ip_address` | `String(45)` | — | — | — |
+| `project_id` | `Integer` | — | — | The project the entry is about: the agent's, or the project itself; NULL for installation-wide entries (V044, shared/utils/log_projects.py) |
 
 ## `system_settings`
 
@@ -606,6 +610,7 @@ Model `AgentResponse`. One row per agent invocation: how long the whole response
 | `started_at` | `DateTime` | not null | — | — |
 | `duration_ms` | `Integer` | — | — | — |
 | `status` | `String(50)` | not null | `'SUCCESS'` | — |
+| `project_id` | `Integer` | — | — | The agent's project when the row was written; kept when the agent is renamed, moved or deleted (V044, shared/utils/log_projects.py) |
 
 ## `alert_rules`
 

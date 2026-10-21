@@ -102,6 +102,9 @@ class TokenUsageLog(Base):
     cost_usd = Column(Float, nullable=True)
     # Answered by the agent's fallback model after its own model failed
     is_fallback = Column(Boolean, nullable=False, default=False)
+    # The agent's project when the row was written; kept when the agent is renamed,
+    # moved or deleted (V044, shared/utils/log_projects.py)
+    project_id = Column(Integer, nullable=True)
     
     def to_dict(self) -> dict:
         """Convert model instance to dictionary."""
@@ -157,6 +160,9 @@ class GuardrailLog(Base):
     matched_content = Column(Text, nullable=True)
     details = Column(Text, nullable=True)
     timestamp = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    # The agent's project when the row was written; kept when the agent is renamed,
+    # moved or deleted (V044, shared/utils/log_projects.py)
+    project_id = Column(Integer, nullable=True)
 
     def to_dict(self) -> dict:
         return {
@@ -638,6 +644,9 @@ class AuditLog(Base):
     resource_id = Column(String(500), nullable=True)
     details = Column(Text, nullable=True)  # JSON string for portability (SQLite/MySQL/PostgreSQL)
     ip_address = Column(String(45), nullable=True)
+    # The project the entry is about: the agent's, or the project itself; NULL for
+    # installation-wide entries (V044, shared/utils/log_projects.py)
+    project_id = Column(Integer, nullable=True)
 
     def get_details(self) -> Optional[dict]:
         if not self.details:
@@ -1336,6 +1345,9 @@ class AgentResponse(Base):
     started_at = Column(DateTime, nullable=False)
     duration_ms = Column(Integer, nullable=True)
     status = Column(String(50), nullable=False, default='SUCCESS')
+    # The agent's project when the row was written; kept when the agent is renamed,
+    # moved or deleted (V044, shared/utils/log_projects.py)
+    project_id = Column(Integer, nullable=True)
 
     def to_dict(self) -> dict:
         return {

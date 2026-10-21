@@ -37,6 +37,7 @@ class GuardrailLogService:
             logger.warning("No DB session — guardrail log dropped")
             return False
         try:
+            from .log_projects import project_of_agent
             log = GuardrailLog(
                 request_id=request_id,
                 session_id=session_id,
@@ -48,6 +49,7 @@ class GuardrailLogService:
                 matched_content=matched_content[:2000] if matched_content else None,
                 details=details[:2000] if details else None,
                 timestamp=datetime.now(timezone.utc),
+                project_id=project_of_agent(session, agent_name),
             )
             session.add(log)
             session.commit()

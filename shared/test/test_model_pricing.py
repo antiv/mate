@@ -16,7 +16,7 @@ from unittest.mock import MagicMock, patch
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from shared.utils import model_pricing as mp
-from shared.utils.models import Base, ModelPrice, TokenUsageLog
+from shared.utils.models import AgentConfig, Base, ModelPrice, Project, TokenUsageLog
 from shared.utils.token_usage_service import TokenUsageService
 from shared.test.request_context_helpers import as_caller
 
@@ -281,9 +281,11 @@ class _DashboardTest(_PricingTest):
         session.close()
 
     def _log(self, agent, model, cost, fallback=False, status="SUCCESS", tokens=1000):
+        from shared.utils.log_projects import project_of_agent
         session = self.Session()
         session.add(TokenUsageLog(request_id="r", agent_name=agent, model_name=model, prompt_tokens=tokens,
-                                  response_tokens=0, status=status, cost_usd=cost, is_fallback=fallback))
+                                  response_tokens=0, status=status, cost_usd=cost, is_fallback=fallback,
+                                  project_id=project_of_agent(session, agent)))
         session.commit()
         session.close()
 
@@ -318,6 +320,25 @@ class TestCostStats(_DashboardTest):
         self.assertEqual(agents["helper"]["unpriced_calls"], 1)
         self.assertEqual([r["project"] for r in stats["by_project"]], ["Shop", "Support", "No project"])
         self.assertAlmostEqual(stats["by_project"][0]["cost_usd"], 1.5)
+
+    def test_a_call_stays_with_the_project_it_was_made_in(self):
+        # Since V044 the project is on the row: moving the agent later changes nothing
+        self._log("seller", "a", 1.0)
+        session = self.Session()
+        session.query(AgentConfig).filter_by(name="seller").update({"project_id": 2})
+        session.commit()
+        session.close()
+        self._log("seller", "a", 0.25)
+        projects = {r["project"]: r["cost_usd"] for r in self._stats()["by_project"]}
+        self.assertEqual(projects, {"Shop": 1.0, "Support": 0.25})
+
+    def test_calls_of_a_deleted_project_have_no_project(self):
+        self._log("helper", "a", 0.25)
+        session = self.Session()
+        session.query(Project).filter_by(id=2).delete()
+        session.commit()
+        session.close()
+        self.assertEqual([r["project"] for r in self._stats()["by_project"]], ["No project"])
 
     def test_no_calls_cost_nothing(self):
         stats = self._stats()

@@ -75,11 +75,13 @@ def start_response(invocation_id: str, started_at: Optional[datetime] = None,
     if not session:
         return False
     try:
+        from .log_projects import project_of_agent
         session.add(AgentResponse(
             invocation_id=invocation_id,
             session_id=session_id,
             user_id=user_id,
             agent_name=agent_name,
+            project_id=project_of_agent(session, agent_name),
             origin=resolve_origin(user_id, session_id),
             started_at=started_at or datetime.now(timezone.utc),
             duration_ms=None,
