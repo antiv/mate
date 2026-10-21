@@ -452,6 +452,10 @@ if __name__ == "__main__":
     adk_thread = threading.Thread(target=start_adk_in_thread, daemon=True)
     adk_thread.start()
 
+    # project_id on log rows written before V044; once, beside the server
+    from shared.utils.log_projects import start_backfill_thread
+    start_backfill_thread()
+
     time.sleep(3)
 
     logger.info("Starting authenticated server on port 8000")

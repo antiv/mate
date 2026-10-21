@@ -80,6 +80,8 @@ class TokenUsageService:
                 except Exception as e:
                     logger.warning(f"Could not price the call: {e}")
             
+            from .log_projects import project_of_agent
+
             # Create TokenUsageLog instance
             token_log = TokenUsageLog(
                 request_id=request_id,
@@ -95,6 +97,7 @@ class TokenUsageService:
                 error_description=token_data.get('error_description'),
                 cost_usd=cost,
                 is_fallback=bool(token_data.get('is_fallback')),
+                project_id=project_of_agent(session, token_data.get('agent_name')),
             )
             
             session.add(token_log)

@@ -107,9 +107,13 @@ def log(
     resource_id: Optional[str] = None,
     details: Optional[Dict[str, Any]] = None,
     request: Any = None,
+    project_id: Optional[int] = None,
 ) -> None:
     """
     Append a single audit log entry. Never raises; logs and swallows errors.
+
+    project_id is the project the entry is about. Left out, it is taken from the
+    agent or project named by resource_id; pass it when that is already gone.
     """
     ip = _client_ip(request) if request is not None else None
     db = get_database_client()
@@ -121,12 +125,16 @@ def log(
         logger.warning("Audit log: no session, skipping log")
         return
     try:
+        if project_id is None:
+            from .log_projects import project_of_audit_entry
+            project_id = project_of_audit_entry(session, resource_type, resource_id)
         entry = AuditLog(
             actor=actor or "system",
             action=action,
             resource_type=resource_type,
             resource_id=str(resource_id) if resource_id is not None else None,
             ip_address=ip,
+            project_id=project_id,
         )
         entry.set_details(details)
         session.add(entry)

@@ -55,7 +55,10 @@ from and how to set one).
 | **Without a Price** | The share of tokens whose model has no known price. When it is high, the cost leaves much out; admins can follow **set prices** to fix that. |
 | **Cost by Agent**, **Cost by Project** | The same cost per agent and per project, with the calls that have no price. An agent row also shows its fallback cost. |
 
-Agents that are not configured in the dashboard, such as deleted ones, are counted
+A call counts toward the project its agent was in when the call was made, so moving,
+renaming or deleting the agent later does not move its cost. Calls from before
+MATE 1.6 are counted toward their agent's project at the time of the upgrade. Calls of
+agents that were already deleted then, and of projects deleted since, are counted
 under **No project**. Failed calls and refusals are never priced.
 
 ### Which traffic you are looking at

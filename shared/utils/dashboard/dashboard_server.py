@@ -484,23 +484,31 @@ class DashboardServer:
             func.sum(case((log.is_fallback.is_(True), log.cost_usd), else_=0)),
         ).filter(*in_period).group_by(log.agent_name).all()
 
-        agent_rows = []
-        project_totals: Dict[Any, Dict[str, Any]] = {}
-        names = [row[0] for row in by_agent if row[0]]
-        project_of = dict(session.query(self.AgentConfig.name, self.AgentConfig.project_id)
-                          .filter(self.AgentConfig.name.in_(names)).all()) if names else {}
+        agent_rows = [
+            {"agent": agent or "unknown", "calls": int(calls or 0), "cost_usd": float(cost or 0),
+             "unpriced_calls": int(unpriced_calls or 0), "fallback_cost_usd": float(fallback_cost or 0)}
+            for agent, calls, cost, unpriced_calls, fallback_cost in by_agent
+        ]
+
+        # By the project on the row (V044), so a call stays with the project it was
+        # made in when its agent is renamed, moved or deleted
+        by_project_rows = session.query(
+            log.project_id,
+            func.count(log.id),
+            func.sum(log.cost_usd),
+            func.sum(case((unpriced, 1), else_=0)),
+        ).filter(*in_period).group_by(log.project_id).all()
         project_names = dict(session.query(self.Project.id, self.Project.name).all())
-        for agent, calls, cost, unpriced_calls, fallback_cost in by_agent:
-            row = {"agent": agent or "unknown", "calls": int(calls or 0), "cost_usd": float(cost or 0),
-                   "unpriced_calls": int(unpriced_calls or 0), "fallback_cost_usd": float(fallback_cost or 0)}
-            agent_rows.append(row)
-            project_id = project_of.get(agent)
+        project_totals: Dict[Any, Dict[str, Any]] = {}
+        for project_id, calls, cost, unpriced_calls in by_project_rows:
+            name = project_names.get(project_id)
+            if name is None:
+                project_id = None  # no project, or one deleted since
             project = project_totals.setdefault(project_id, {
-                "project": project_names.get(project_id, "No project"),
-                "calls": 0, "cost_usd": 0.0, "unpriced_calls": 0})
-            project["calls"] += row["calls"]
-            project["cost_usd"] += row["cost_usd"]
-            project["unpriced_calls"] += row["unpriced_calls"]
+                "project": name or "No project", "calls": 0, "cost_usd": 0.0, "unpriced_calls": 0})
+            project["calls"] += int(calls or 0)
+            project["cost_usd"] += float(cost or 0)
+            project["unpriced_calls"] += int(unpriced_calls or 0)
 
         by_cost = lambda r: (-r["cost_usd"], -r["calls"])  # noqa: E731
         return {
@@ -5146,6 +5154,7 @@ class DashboardServer:
             # Fetch config to know name and hardcoded flag
             agent_name = None
             agent_hardcoded = False
+            agent_project_id = None
             try:
                 if self.db_client:
                     session = self.db_client.get_session()
@@ -5155,6 +5164,7 @@ class DashboardServer:
                             if config:
                                 agent_name = config.name
                                 agent_hardcoded = bool(getattr(config, 'hardcoded', False))
+                                agent_project_id = config.project_id
                         finally:
                             session.close()
             except Exception as e:
@@ -5177,7 +5187,8 @@ class DashboardServer:
                     print(f"Error deleting agent folder '{agent_name}': {e}")
 
             if success:
-                audit_service.log(ctx.user_id, audit_service.ACTION_AGENT_DELETE, audit_service.RESOURCE_AGENT, resource_id=agent_name or str(config_id), details={"config_id": config_id, "folder_deleted": folder_deleted}, request=request)
+                audit_service.log(ctx.user_id, audit_service.ACTION_AGENT_DELETE, audit_service.RESOURCE_AGENT, resource_id=agent_name or str(config_id), details={"config_id": config_id, "folder_deleted": folder_deleted}, request=request,
+                                  project_id=agent_project_id)
 
             return {
                 "success": success,
