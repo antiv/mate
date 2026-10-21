@@ -71,7 +71,6 @@ class TestImageModelApi(_Db):
         app = FastAPI()
         with patch("shared.utils.database_client.get_database_client", return_value=self.db):
             self.server = DashboardServer(app, project_root=PROJECT_ROOT)
-        app.dependency_overrides[self.server._get_auth_user_dependency] = lambda: "admin"
         self.is_admin = True
         as_caller(app, "admin", lambda: self.is_admin)
         self.audit = patch("shared.utils.audit_service.log").start()

@@ -91,7 +91,6 @@ class TestDashboard(_Db):
             self.server = DashboardServer(app, project_root=PROJECT_ROOT)
         self.server.db_client = self.db_client
         self.server.AgentConfig, self.server.AgentConfigVersion = AgentConfig, AgentConfigVersion
-        app.dependency_overrides[self.server._get_auth_user_dependency] = lambda: "someone"
         as_caller(app, "someone", True)
         self.client = TestClient(app)
 

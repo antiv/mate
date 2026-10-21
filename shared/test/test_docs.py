@@ -16,6 +16,7 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
@@ -24,6 +25,7 @@ from fastapi.testclient import TestClient
 
 from server import docs_routes
 from server.dashboard_authz import _is_user_readable, _is_user_writable
+from shared.test.request_context_helpers import as_caller
 from shared.utils import docs_service
 from shared.utils.docs_service import (
     DocsService, extract_headings, parse_frontmatter, slugify, tokenize,
@@ -287,7 +289,7 @@ class TestDocsRoutes(unittest.TestCase):
         docs_service._service = DocsService(root)
         self.app = FastAPI()
         self.app.include_router(docs_routes.router)
-        self.app.dependency_overrides[docs_routes.current_user] = lambda: "admin"
+        as_caller(self.app, "admin", True)
         self.client = TestClient(self.app)
 
     def tearDown(self):
@@ -316,10 +318,11 @@ class TestDocsRoutes(unittest.TestCase):
         self.assertEqual(long_query.status_code, 422)
 
     def test_signed_out_is_refused(self):
-        self.app.dependency_overrides[docs_routes.current_user] = lambda: None
-        for url in ("/dashboard/api/docs/pages", "/dashboard/api/docs/page?path=user/triggers.md",
-                    "/dashboard/api/docs/search?q=fire"):
-            self.assertEqual(self.client.get(url).status_code, 401, url)
+        self.app.dependency_overrides.clear()
+        with patch("server.request_context.get_dashboard_auth_user", return_value=None):
+            for url in ("/dashboard/api/docs/pages", "/dashboard/api/docs/page?path=user/triggers.md",
+                        "/dashboard/api/docs/search?q=fire"):
+                self.assertEqual(self.client.get(url).status_code, 401, url)
 
     def test_routes_are_admin_only(self):
         # DashboardAuthzMiddleware requires admin for /dashboard/api/* unless a path is

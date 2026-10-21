@@ -106,16 +106,16 @@ A dashboard route learns who is calling from one dependency,
 `ctx: RequestContext = Depends(get_request_context)` (`server/request_context.py`):
 
 - `ctx.user_id` is the signed-in user. Without one, the caller is redirected to the
-  login page, as `require_dashboard_auth` does.
+  login page, as `require_dashboard_auth` does. The routers in `server/` (docs,
+  widget keys, chat integrations) take `get_api_request_context` instead, which
+  answers 401, as they always have.
 - `ctx.role` is `get_user_role`'s answer, `admin` or `user`, and `ctx.is_admin`
   says whether it is `admin`. It is read the first time a route asks, since for a
   single sign-on user it is a database lookup.
 
 In 2.0 the context also carries the caller's workspace, so scoping is added in one
-function rather than in every route. The route inventory test fails on a
-`/dashboard` route that does not take the context. Groups of routes not yet moved
-to it are listed in its `NOT_YET_ON_CONTEXT`. The pages and the agents, alerts,
-evals, settings, triggers, users and wizard APIs use it.
+function rather than in every route. Every `/dashboard` route takes it, and the
+route inventory test fails on one that does not.
 
 An API route that is for admins and is reachable by others, because it is on an
 allowlist or outside `/dashboard/api/`, checks `ctx.is_admin` itself and answers

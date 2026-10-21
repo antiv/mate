@@ -23,6 +23,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 from shared.test.test_memory_block_versions import PROJECT_ROOT, FakeDbClient, _no_embeddings
 from shared.utils.memory_blocks_service import MemoryBlocksService
 from shared.utils.models import AgentConfig
+from shared.test.request_context_helpers import as_caller
 
 
 class LockTestCase(unittest.TestCase):
@@ -166,7 +167,7 @@ class TestDashboardEditForm(LockTestCase):
             self.server = DashboardServer(app, project_root=PROJECT_ROOT)
         self.server.db_client = self.db
         self.server.AgentConfig = AgentConfig
-        app.dependency_overrides[self.server._get_auth_user_dependency] = lambda: "admin"
+        as_caller(app, "admin", True)
         self.client = TestClient(app)
 
     def save(self, **form):

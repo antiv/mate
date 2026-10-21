@@ -2930,13 +2930,6 @@ class DashboardServer:
         # Mount static files
         self.app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
     
-    def _get_auth_user_dependency(self, request: Request):
-        """Get authenticated user for dashboard routes without triggering browser popup.
-        Uses auth function from auth_server."""
-        # Import here to avoid circular imports
-        from server.auth import require_dashboard_auth
-        return require_dashboard_auth(request)
-
     def _memory_blocks_project(self, agent_name: str):
         """(project_id, None) for an agent with memory blocks, else (None, error response)."""
         if not self.db_client:
@@ -3516,7 +3509,7 @@ class DashboardServer:
         @self.app.get("/dashboard/api/sessions", tags=["Dashboard - Sessions"])
         async def get_sessions_api(
             request: Request,
-            username: str = Depends(self._get_auth_user_dependency),
+            ctx: RequestContext = Depends(get_request_context),
             runtime: str = "all",
             app_name: Optional[str] = None,
             user_id: Optional[str] = None,
@@ -3541,7 +3534,7 @@ class DashboardServer:
             app_name: str = Query(""),
             user_id: str = Query(""),
             runtime: str = Query("auto"),
-            username: str = Depends(self._get_auth_user_dependency)
+            ctx: RequestContext = Depends(get_request_context)
         ):
             """Get complete history of prompts, responses, thoughts, tool calls, and state for a session."""
             detail = self._get_session_detail(runtime=runtime, app_name=app_name, user_id=user_id, session_id=session_id)
@@ -3556,7 +3549,7 @@ class DashboardServer:
             app_name: str = Query(""),
             user_id: str = Query(""),
             runtime: str = Query("auto"),
-            username: str = Depends(self._get_auth_user_dependency)
+            ctx: RequestContext = Depends(get_request_context)
         ):
             """Delete a specific session and its associated events."""
             deleted = self._delete_session(runtime=runtime, app_name=app_name, user_id=user_id, session_id=session_id)
@@ -3922,14 +3915,14 @@ class DashboardServer:
 
         # API Endpoints for Dashboard
         @self.app.get("/dashboard/api/stats", tags=["Dashboard - Usage Analytics"])
-        async def get_stats(request: Request, username: str = Depends(self._get_auth_user_dependency), days: int = 7, origin: str = "interactive"):
+        async def get_stats(request: Request, ctx: RequestContext = Depends(get_request_context), days: int = 7, origin: str = "interactive"):
             """Get usage statistics. `origin` narrows the latency panel only."""
             return self._get_usage_stats(days, self.resolve_origins(origin))
 
         @self.app.get("/dashboard/api/usage/logs", tags=["Dashboard - Usage Analytics"])
         async def get_usage_logs_api(
             request: Request,
-            username: str = Depends(self._get_auth_user_dependency),
+            ctx: RequestContext = Depends(get_request_context),
             hours: int = 24,
             limit: int = 100,
             page: int = 1
@@ -3938,7 +3931,7 @@ class DashboardServer:
             return self._get_token_usage_logs(hours, limit, page)
 
         @self.app.get("/dashboard/api/rate-limits", tags=["Dashboard - Rate Limits"])
-        async def get_rate_limits_api(request: Request, username: str = Depends(self._get_auth_user_dependency), scope: Optional[str] = None):
+        async def get_rate_limits_api(request: Request, ctx: RequestContext = Depends(get_request_context), scope: Optional[str] = None):
             """Get rate limit configs, optionally filtered by scope (user, agent, project)."""
             from shared.utils.rate_limit_service import get_rate_limit_service
             svc = get_rate_limit_service()
@@ -3948,7 +3941,7 @@ class DashboardServer:
         @self.app.get("/dashboard/api/rate-limits/usage", tags=["Dashboard - Rate Limits"])
         async def get_rate_limit_usage_api(
             request: Request,
-            username: str = Depends(self._get_auth_user_dependency),
+            ctx: RequestContext = Depends(get_request_context),
             user_id: Optional[str] = None,
             agent_name: Optional[str] = None,
             project_id: Optional[int] = None,
@@ -3977,7 +3970,7 @@ class DashboardServer:
         @self.app.post("/dashboard/api/rate-limits", tags=["Dashboard - Rate Limits"])
         async def upsert_rate_limit_api(
             request: Request,
-            username: str = Depends(self._get_auth_user_dependency),
+            ctx: RequestContext = Depends(get_request_context),
         ):
             """Create or update rate limit config."""
             from shared.utils.rate_limit_service import get_rate_limit_service
@@ -4033,7 +4026,7 @@ class DashboardServer:
             scope: str,
             scope_id: str,
             request: Request,
-            username: str = Depends(self._get_auth_user_dependency),
+            ctx: RequestContext = Depends(get_request_context),
         ):
             """Delete rate limit config."""
             from shared.utils.rate_limit_service import get_rate_limit_service
@@ -4047,7 +4040,7 @@ class DashboardServer:
         @self.app.get("/dashboard/api/traces", tags=["Dashboard - Traces"])
         async def get_traces_api(
             request: Request,
-            username: str = Depends(self._get_auth_user_dependency),
+            ctx: RequestContext = Depends(get_request_context),
             hours: int = 24,
             limit: int = 50,
             trace_id: Optional[str] = None,
@@ -4058,7 +4051,7 @@ class DashboardServer:
         @self.app.get("/dashboard/api/traces/sessions", tags=["Dashboard - Traces"])
         async def get_replay_sessions_api(
             request: Request,
-            username: str = Depends(self._get_auth_user_dependency),
+            ctx: RequestContext = Depends(get_request_context),
             hours: int = Query(24, ge=1, le=24 * 30),
             limit: int = Query(50, ge=1, le=200),
             project_id: Optional[int] = None,
@@ -4070,7 +4063,7 @@ class DashboardServer:
         async def get_session_replay_api(
             request: Request,
             session_id: str,
-            username: str = Depends(self._get_auth_user_dependency),
+            ctx: RequestContext = Depends(get_request_context),
             hours: int = Query(168, ge=1, le=24 * 90),
         ):
             """One session's traced turns as replay timelines: agents, model calls, tools, fallbacks."""
@@ -4082,14 +4075,14 @@ class DashboardServer:
             return {"users": self._get_all_users()}
 
         @self.app.get("/dashboard/api/projects", tags=["Dashboard - Projects"])
-        async def get_projects_api(request: Request, username: str = Depends(self._get_auth_user_dependency)):
+        async def get_projects_api(request: Request, ctx: RequestContext = Depends(get_request_context)):
             """Get all projects."""
             return {"projects": self._get_all_projects()}
 
         @self.app.post("/dashboard/api/projects", tags=["Dashboard - Projects"])
         async def create_project_api(
             request: Request,
-            username: str = Depends(self._get_auth_user_dependency),
+            ctx: RequestContext = Depends(get_request_context),
             name: str = Form(...),
             description: str = Form("")
         ):
@@ -4101,7 +4094,7 @@ class DashboardServer:
         async def update_project_api(
             project_id: int,
             request: Request,
-            username: str = Depends(self._get_auth_user_dependency),
+            ctx: RequestContext = Depends(get_request_context),
             name: str = Form(...),
             description: str = Form("")
         ):
@@ -4113,7 +4106,7 @@ class DashboardServer:
         async def delete_project_api(
             project_id: int,
             request: Request,
-            username: str = Depends(self._get_auth_user_dependency)
+            ctx: RequestContext = Depends(get_request_context)
         ):
             """Delete a project."""
             result = self._delete_project(project_id)
@@ -4175,7 +4168,7 @@ class DashboardServer:
         @self.app.post("/dashboard/api/feedback", tags=["Dashboard - Feedback"])
         async def submit_feedback(
             request: Request,
-            username: str = Depends(self._get_auth_user_dependency),
+            ctx: RequestContext = Depends(get_request_context),
         ):
             """Record a thumbs up/down from the workroom chat."""
             from shared.utils.feedback_service import get_feedback_service
@@ -4220,7 +4213,7 @@ class DashboardServer:
         async def list_session_feedback(
             request: Request,
             session_id: str,
-            username: str = Depends(self._get_auth_user_dependency),
+            ctx: RequestContext = Depends(get_request_context),
         ):
             """Ratings already given in a session, so a reloaded chat shows them."""
             from shared.utils.feedback_service import get_feedback_service
@@ -4704,7 +4697,7 @@ class DashboardServer:
         @self.app.get("/dashboard/api/templates", tags=["Dashboard - Templates"])
         async def get_templates(
             request: Request,
-            username: str = Depends(self._get_auth_user_dependency),
+            ctx: RequestContext = Depends(get_request_context),
             category: Optional[str] = None,
             search: Optional[str] = None,
         ):
@@ -4716,7 +4709,7 @@ class DashboardServer:
         async def get_template(
             template_id: str,
             request: Request,
-            username: str = Depends(self._get_auth_user_dependency),
+            ctx: RequestContext = Depends(get_request_context),
         ):
             """Get single template by id."""
             template = self.template_service.get_template(template_id)
@@ -4728,7 +4721,7 @@ class DashboardServer:
         async def delete_template(
             template_id: str,
             request: Request,
-            username: str = Depends(self._get_auth_user_dependency),
+            ctx: RequestContext = Depends(get_request_context),
         ):
             """Delete a template."""
             success = self.template_service.delete_template(template_id)
@@ -4739,7 +4732,7 @@ class DashboardServer:
             # own database client, so it needs neither a try/except nor the
             # self.AuditLog guard that used to stand here.
             audit_service.log(
-                username,
+                ctx.user_id,
                 audit_service.ACTION_TEMPLATE_DELETE,
                 audit_service.RESOURCE_TEMPLATE,
                 resource_id=template_id,
@@ -4751,7 +4744,7 @@ class DashboardServer:
         @self.app.post("/dashboard/api/templates/import", tags=["Dashboard - Templates"])
         async def import_template(
             request: Request,
-            username: str = Depends(self._get_auth_user_dependency),
+            ctx: RequestContext = Depends(get_request_context),
         ):
             """One-click import: create project, agents, memory blocks from template."""
             try:
@@ -4760,11 +4753,11 @@ class DashboardServer:
                 project_name = body.get("project_name")
                 if not template_id:
                     raise HTTPException(status_code=400, detail="template_id is required")
-                result = self._import_template(template_id, project_name=project_name, changed_by=username)
+                result = self._import_template(template_id, project_name=project_name, changed_by=ctx.user_id)
                 if "error" in result:
                     raise HTTPException(status_code=400, detail=result["error"])
                 audit_service.log(
-                    username,
+                    ctx.user_id,
                     audit_service.ACTION_TEMPLATE_IMPORT,
                     audit_service.RESOURCE_TEMPLATE,
                     resource_id=template_id,
@@ -4786,7 +4779,7 @@ class DashboardServer:
         @self.app.post("/dashboard/api/templates/create-from-agents", tags=["Dashboard - Templates"])
         async def create_template_from_agents(
             request: Request,
-            username: str = Depends(self._get_auth_user_dependency),
+            ctx: RequestContext = Depends(get_request_context),
         ):
             """Create a template from existing agents (project + root agent hierarchy)."""
             try:
@@ -4815,7 +4808,7 @@ class DashboardServer:
                 # The saved id is the sanitized one, which is what a later delete
                 # or import will name — audit that, not the raw request value.
                 audit_service.log(
-                    username,
+                    ctx.user_id,
                     audit_service.ACTION_TEMPLATE_CREATE,
                     audit_service.RESOURCE_TEMPLATE,
                     resource_id=result.get("template_id"),
@@ -4836,7 +4829,7 @@ class DashboardServer:
         async def get_template_sync_status(
             project_id: int,
             request: Request,
-            username: str = Depends(self._get_auth_user_dependency),
+            ctx: RequestContext = Depends(get_request_context),
         ):
             """Get sync status: what changes would be applied if syncing with the source template."""
             result = self._get_template_sync_status(project_id)
@@ -4847,7 +4840,7 @@ class DashboardServer:
         @self.app.post("/dashboard/api/templates/sync", tags=["Dashboard - Templates"])
         async def sync_template(
             request: Request,
-            username: str = Depends(self._get_auth_user_dependency),
+            ctx: RequestContext = Depends(get_request_context),
         ):
             """Sync a project with its source template: add new agents, update changed agents."""
             try:
@@ -4855,11 +4848,11 @@ class DashboardServer:
                 project_id = body.get("project_id")
                 if not project_id:
                     raise HTTPException(status_code=400, detail="project_id is required")
-                result = self._sync_template(int(project_id), changed_by=username)
+                result = self._sync_template(int(project_id), changed_by=ctx.user_id)
                 if "error" in result:
                     raise HTTPException(status_code=400, detail=result["error"])
                 audit_service.log(
-                    username,
+                    ctx.user_id,
                     audit_service.ACTION_TEMPLATE_SYNC,
                     audit_service.RESOURCE_TEMPLATE,
                     resource_id=result.get("template_id"),
@@ -4881,12 +4874,12 @@ class DashboardServer:
                 raise HTTPException(status_code=400, detail=str(e))
 
         @self.app.get("/dashboard/api/migrations", tags=["Dashboard - Migrations"])
-        async def get_migrations(request: Request, username: str = Depends(self._get_auth_user_dependency)):
+        async def get_migrations(request: Request, ctx: RequestContext = Depends(get_request_context)):
             """Get all schema migrations."""
             return {"migrations": self._get_schema_migrations()}
 
         @self.app.delete("/dashboard/api/migrations/{version}", tags=["Dashboard - Migrations"])
-        async def delete_migration(version: str, request: Request, username: str = Depends(self._get_auth_user_dependency)):
+        async def delete_migration(version: str, request: Request, ctx: RequestContext = Depends(get_request_context)):
             """Delete a migration from the schema_migrations table."""
             if not self.db_client:
                 raise HTTPException(status_code=500, detail="Database connection failed")
@@ -4911,7 +4904,7 @@ class DashboardServer:
                 session.close()
 
         @self.app.post("/dashboard/api/migrations/{version}/rerun", tags=["Dashboard - Migrations"])
-        async def rerun_migration(version: str, request: Request, username: str = Depends(self._get_auth_user_dependency)):
+        async def rerun_migration(version: str, request: Request, ctx: RequestContext = Depends(get_request_context)):
             """Re-run a specific migration by deleting it first, then running migrations."""
             if not self.db_client:
                 raise HTTPException(status_code=500, detail="Database connection failed")
@@ -4947,7 +4940,7 @@ class DashboardServer:
                 session.close()
 
         @self.app.post("/dashboard/api/migrations/run", tags=["Dashboard - Migrations"])
-        async def run_all_migrations(request: Request, username: str = Depends(self._get_auth_user_dependency)):
+        async def run_all_migrations(request: Request, ctx: RequestContext = Depends(get_request_context)):
             """Run all pending migrations."""
             try:
                 from shared.utils.migration_system import MigrationSystem
@@ -5246,21 +5239,21 @@ class DashboardServer:
         # ── Agent Config Versioning Endpoints ────────────────────────────────
 
         @self.app.get("/dashboard/api/agents/{config_id}/versions", tags=["Dashboard - Agent Versions"])
-        async def get_agent_versions(config_id: int, request: Request, username: str = Depends(self._get_auth_user_dependency)):
+        async def get_agent_versions(config_id: int, request: Request, ctx: RequestContext = Depends(get_request_context)):
             """Return all version snapshots for an agent config."""
             versions = self._get_agent_versions(config_id)
             return {"success": True, "versions": versions}
 
         @self.app.post("/dashboard/api/agents/{config_id}/rollback/{version_id}", tags=["Dashboard - Agent Versions"])
-        async def rollback_agent(config_id: int, version_id: int, request: Request, username: str = Depends(self._get_auth_user_dependency)):
+        async def rollback_agent(config_id: int, version_id: int, request: Request, ctx: RequestContext = Depends(get_request_context)):
             """Rollback an agent config to a previous version snapshot."""
-            result = self._rollback_agent_config(config_id, version_id, changed_by=username)
+            result = self._rollback_agent_config(config_id, version_id, changed_by=ctx.user_id)
             if result:
                 return {"success": True, "message": "Agent rolled back successfully", "config": result}
             return {"success": False, "message": "Failed to rollback agent"}
 
         @self.app.put("/dashboard/api/agents/versions/{version_id}/tag", tags=["Dashboard - Agent Versions"])
-        async def tag_agent_version(version_id: int, request: Request, username: str = Depends(self._get_auth_user_dependency)):
+        async def tag_agent_version(version_id: int, request: Request, ctx: RequestContext = Depends(get_request_context)):
             """Set or clear a tag on a specific version."""
             body = await request.json()
             tag = body.get("tag", "")
@@ -5275,7 +5268,7 @@ class DashboardServer:
         async def get_agent_file_search_config(
             agent_name: str,
             request: Request,
-            username: str = Depends(self._get_auth_user_dependency)
+            ctx: RequestContext = Depends(get_request_context)
         ):
             """Get File Search configuration for an agent (diagnostic endpoint)."""
             if not self.db_client:
@@ -5326,7 +5319,7 @@ class DashboardServer:
         async def get_agent_file_search_stores(
             agent_name: str,
             request: Request,
-            username: str = Depends(self._get_auth_user_dependency)
+            ctx: RequestContext = Depends(get_request_context)
         ):
             """Get all file search stores assigned to an agent."""
             from shared.utils.file_search_service import FileSearchService
@@ -5338,7 +5331,7 @@ class DashboardServer:
         async def get_agent_file_search_files(
             agent_name: str,
             request: Request,
-            username: str = Depends(self._get_auth_user_dependency)
+            ctx: RequestContext = Depends(get_request_context)
         ):
             """Get all files accessible to an agent from all its stores."""
             from shared.utils.file_search_service import FileSearchService
@@ -5350,7 +5343,7 @@ class DashboardServer:
         async def assign_file_search_store(
             agent_name: str,
             request: Request,
-            username: str = Depends(self._get_auth_user_dependency),
+            ctx: RequestContext = Depends(get_request_context),
             store_name: str = Form(...),
             is_primary: bool = Form(False)
         ):
@@ -5371,7 +5364,7 @@ class DashboardServer:
         async def unassign_file_search_store(
             agent_name: str,
             request: Request,
-            username: str = Depends(self._get_auth_user_dependency),
+            ctx: RequestContext = Depends(get_request_context),
             store_name: str = Form(...)
         ):
             """Unassign a file search store from an agent."""
@@ -5389,7 +5382,7 @@ class DashboardServer:
         @self.app.post("/dashboard/api/file-search/stores/create", tags=["Dashboard - File Search"])
         async def create_file_search_store(
             request: Request,
-            username: str = Depends(self._get_auth_user_dependency)
+            ctx: RequestContext = Depends(get_request_context)
         ):
             """Create a new file search store and optionally assign it to an agent."""
             from shared.utils.file_search_service import FileSearchService
@@ -5444,7 +5437,7 @@ class DashboardServer:
         @self.app.post("/dashboard/api/file-search/stores/upload", tags=["Dashboard - File Search"])
         async def upload_file_to_store(
             request: Request,
-            username: str = Depends(self._get_auth_user_dependency),
+            ctx: RequestContext = Depends(get_request_context),
             file: UploadFile = File(...),
             store_name: str = Form(...),
             display_name: str = Form(None),
@@ -5515,7 +5508,7 @@ class DashboardServer:
         async def list_store_files(
             store_name: str,
             request: Request,
-            username: str = Depends(self._get_auth_user_dependency)
+            ctx: RequestContext = Depends(get_request_context)
         ):
             """List all files in a file search store."""
             from shared.utils.file_search_service import FileSearchService
@@ -5528,7 +5521,7 @@ class DashboardServer:
         async def list_agent_memory_blocks(
             agent_name: str,
             request: Request,
-            username: str = Depends(self._get_auth_user_dependency),
+            ctx: RequestContext = Depends(get_request_context),
             label_search: Optional[str] = None,
             value_search: Optional[str] = None
         ):
@@ -5579,7 +5572,7 @@ class DashboardServer:
             agent_name: str,
             block_id: str,
             request: Request,
-            username: str = Depends(self._get_auth_user_dependency)
+            ctx: RequestContext = Depends(get_request_context)
         ):
             """Get a specific memory block."""
             if not self.db_client:
@@ -5621,7 +5614,7 @@ class DashboardServer:
         async def create_agent_memory_block(
             agent_name: str,
             request: Request,
-            username: str = Depends(self._get_auth_user_dependency),
+            ctx: RequestContext = Depends(get_request_context),
             label: str = Form(...),
             value: str = Form(...),
             description: Optional[str] = Form(None),
@@ -5669,7 +5662,7 @@ class DashboardServer:
                     value=value,
                     description=description,
                     metadata=metadata if metadata else None,
-                    changed_by=username,
+                    changed_by=ctx.user_id,
                 )
                 
                 if result.get("status") == "success":
@@ -5685,7 +5678,7 @@ class DashboardServer:
             agent_name: str,
             block_id: str,
             request: Request,
-            username: str = Depends(self._get_auth_user_dependency),
+            ctx: RequestContext = Depends(get_request_context),
             label: Optional[str] = Form(None),
             value: Optional[str] = Form(None),
             description: Optional[str] = Form(None),
@@ -5738,7 +5731,7 @@ class DashboardServer:
                     block_id=block_id,
                     value=value,
                     description=description,
-                    changed_by=username,
+                    changed_by=ctx.user_id,
                     metadata_updates=metadata_updates,
                 )
                 
@@ -5755,7 +5748,7 @@ class DashboardServer:
             agent_name: str,
             block_id: str,
             request: Request,
-            username: str = Depends(self._get_auth_user_dependency)
+            ctx: RequestContext = Depends(get_request_context)
         ):
             """Delete a memory block."""
             if not self.db_client:
@@ -5784,7 +5777,7 @@ class DashboardServer:
                 from shared.utils.memory_blocks_service import MemoryBlocksService
                 svc = MemoryBlocksService(self.db_client)
                 result = svc.delete_block(project_id=agent.project_id, block_id=block_id,
-                                          changed_by=username)
+                                          changed_by=ctx.user_id)
                 
                 if result.get("status") == "success":
                     return {"success": True, "message": result.get("message", "Block deleted successfully")}
@@ -5799,7 +5792,7 @@ class DashboardServer:
         async def list_memory_block_versions(
             agent_name: str,
             block_id: str,
-            username: str = Depends(self._get_auth_user_dependency)
+            ctx: RequestContext = Depends(get_request_context)
         ):
             """A memory block's history, newest first. Works for a deleted block by its id."""
             project_id, error = self._memory_blocks_project(agent_name)
@@ -5814,7 +5807,7 @@ class DashboardServer:
         @self.app.get("/dashboard/api/agents/{agent_name}/memory-blocks-deleted", tags=["Dashboard - Memory Blocks"])
         async def list_deleted_memory_blocks(
             agent_name: str,
-            username: str = Depends(self._get_auth_user_dependency)
+            ctx: RequestContext = Depends(get_request_context)
         ):
             """Deleted blocks of the agent's project that can still be restored."""
             project_id, error = self._memory_blocks_project(agent_name)
@@ -5832,21 +5825,21 @@ class DashboardServer:
             agent_name: str,
             version_id: int,
             request: Request,
-            username: str = Depends(self._get_auth_user_dependency)
+            ctx: RequestContext = Depends(get_request_context)
         ):
             """Put a block back as it was in a version, recreating it if it was deleted."""
             project_id, error = self._memory_blocks_project(agent_name)
             if error:
                 return error
             from shared.utils.memory_blocks_service import MemoryBlocksService
-            result = MemoryBlocksService(self.db_client).restore_version(project_id, version_id, changed_by=username)
+            result = MemoryBlocksService(self.db_client).restore_version(project_id, version_id, changed_by=ctx.user_id)
             if result.get("status") != "success":
                 code = {"not_found": 404, "conflict": 409}.get(result.get("error_code"), 500)
                 return JSONResponse(status_code=code, content={
                     "success": False, "error": result.get("error_message", "Failed to restore block")})
             if not result.get("unchanged"):
                 audit_service.log(
-                    username, audit_service.ACTION_MEMORY_BLOCK_RESTORE, audit_service.RESOURCE_MEMORY_BLOCK,
+                    ctx.user_id, audit_service.ACTION_MEMORY_BLOCK_RESTORE, audit_service.RESOURCE_MEMORY_BLOCK,
                     resource_id=result["block_id"],
                     details={"project_id": project_id, "label": result["label"],
                              "restored_from": result["restored_from"], "recreated": result["recreated"]},
@@ -5857,7 +5850,7 @@ class DashboardServer:
         @self.app.get("/dashboard/api/file-search/stores/agents", tags=["Dashboard - File Search"])
         async def get_store_agents(
             request: Request,
-            username: str = Depends(self._get_auth_user_dependency),
+            ctx: RequestContext = Depends(get_request_context),
             store_name: str = None
         ):
             """Get all agents using a specific store."""
@@ -5878,7 +5871,7 @@ class DashboardServer:
         async def get_project_file_search_stores(
             project_id: int,
             request: Request,
-            username: str = Depends(self._get_auth_user_dependency)
+            ctx: RequestContext = Depends(get_request_context)
         ):
             """Get all file search stores in a project."""
             from shared.utils.file_search_service import FileSearchService
@@ -5889,7 +5882,7 @@ class DashboardServer:
         @self.app.post("/dashboard/api/file-search/stores/files/delete", tags=["Dashboard - File Search"])
         async def delete_file_from_store(
             request: Request,
-            username: str = Depends(self._get_auth_user_dependency),
+            ctx: RequestContext = Depends(get_request_context),
             store_name: str = Form(...),
             document_name: str = Form(...)
         ):
@@ -5905,7 +5898,7 @@ class DashboardServer:
         @self.app.post("/dashboard/api/file-search/stores/delete", tags=["Dashboard - File Search"])
         async def delete_file_search_store(
             request: Request,
-            username: str = Depends(self._get_auth_user_dependency),
+            ctx: RequestContext = Depends(get_request_context),
             store_name: str = Form(...)
         ):
             """Delete a file search store and remove it from all agents."""
@@ -5944,22 +5937,22 @@ class DashboardServer:
         
         # Server Control API Endpoints
         @self.app.get("/dashboard/api/server/status", tags=["Dashboard - Server Control"])
-        async def get_server_status(request: Request, username: str = Depends(self._get_auth_user_dependency)):
+        async def get_server_status(request: Request, ctx: RequestContext = Depends(get_request_context)):
             """Get ADK server status."""
             return self._get_adk_status()
 
         @self.app.post("/dashboard/api/server/start", tags=["Dashboard - Server Control"])
-        async def start_server(request: Request, username: str = Depends(self._get_auth_user_dependency)):
+        async def start_server(request: Request, ctx: RequestContext = Depends(get_request_context)):
             """Start ADK server."""
             return self._start_adk_server()
 
         @self.app.post("/dashboard/api/server/stop", tags=["Dashboard - Server Control"])
-        async def stop_server(request: Request, username: str = Depends(self._get_auth_user_dependency)):
+        async def stop_server(request: Request, ctx: RequestContext = Depends(get_request_context)):
             """Stop ADK server."""
             return self._stop_adk_server()
 
         @self.app.post("/dashboard/api/server/restart", tags=["Dashboard - Server Control"])
-        async def restart_server(request: Request, username: str = Depends(self._get_auth_user_dependency)):
+        async def restart_server(request: Request, ctx: RequestContext = Depends(get_request_context)):
             """Restart ADK server."""
             return self._restart_adk_server()
 
@@ -5968,7 +5961,7 @@ class DashboardServer:
         @self.app.get("/dashboard/api/guardrail-logs", tags=["Dashboard - Guardrails"])
         async def get_guardrail_logs(
             request: Request,
-            username: str = Depends(self._get_auth_user_dependency),
+            ctx: RequestContext = Depends(get_request_context),
             agent_name: str = None,
             guardrail_type: str = None,
             action_taken: str = None,
@@ -6012,7 +6005,7 @@ class DashboardServer:
         @self.app.get("/dashboard/api/audit-logs", tags=["Dashboard - Audit"])
         async def get_audit_logs(
             request: Request,
-            username: str = Depends(self._get_auth_user_dependency),
+            ctx: RequestContext = Depends(get_request_context),
             actor: Optional[str] = None,
             action: Optional[str] = None,
             resource_type: Optional[str] = None,
@@ -6066,7 +6059,7 @@ class DashboardServer:
         @self.app.get("/dashboard/api/audit-logs/export", tags=["Dashboard - Audit"])
         async def export_audit_logs(
             request: Request,
-            username: str = Depends(self._get_auth_user_dependency),
+            ctx: RequestContext = Depends(get_request_context),
             format: str = "json",
             actor: Optional[str] = None,
             action: Optional[str] = None,
@@ -6126,7 +6119,7 @@ class DashboardServer:
                 session.close()
 
         @self.app.post("/dashboard/api/audit-logs/retention", tags=["Dashboard - Audit"])
-        async def run_audit_retention(request: Request, username: str = Depends(self._get_auth_user_dependency)):
+        async def run_audit_retention(request: Request, ctx: RequestContext = Depends(get_request_context)):
             """Run retention policy: delete entries older than AUDIT_RETENTION_DAYS."""
             try:
                 from shared.utils.audit_service import run_retention
@@ -6137,7 +6130,7 @@ class DashboardServer:
                 raise HTTPException(status_code=500, detail=str(e))
 
         @self.app.get("/dashboard/api/audit-logs/retention-config", tags=["Dashboard - Audit"])
-        async def get_audit_retention_config(request: Request, username: str = Depends(self._get_auth_user_dependency)):
+        async def get_audit_retention_config(request: Request, ctx: RequestContext = Depends(get_request_context)):
             """Get configured retention days (0 = keep forever)."""
             try:
                 from shared.utils.audit_service import get_retention_days
@@ -7235,7 +7228,7 @@ class DashboardServer:
             })
 
         @self.app.post("/dashboard/api/workroom/title", tags=["Dashboard - WorkRoom"])
-        async def generate_session_title(request: Request, username: str = Depends(self._get_auth_user_dependency)):
+        async def generate_session_title(request: Request, ctx: RequestContext = Depends(get_request_context)):
             """Generate and persist a descriptive title for a Work Room session."""
             import httpx
             body = await request.json()
