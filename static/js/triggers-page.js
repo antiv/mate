@@ -250,7 +250,7 @@ const TriggerPage = (function () {
     async function deleteTrigger(triggerId) {
         const trigger = _triggers.find(t => t.id === triggerId);
         if (!trigger) return;
-        if (!confirm(`Delete trigger "${trigger.name}"? This cannot be undone.`)) return;
+        if (!await showConfirm(`Delete trigger "${trigger.name}"? This cannot be undone.`, "Delete trigger", "Delete", "Cancel", "danger")) return;
         try {
             const resp = await fetch(`/dashboard/api/triggers/${triggerId}`, {
                 method: 'DELETE',
@@ -312,7 +312,7 @@ const TriggerPage = (function () {
     async function regenerateSigningSecret() {
         const triggerId = document.getElementById('triggerFormId').value;
         if (!triggerId) return;
-        if (!confirm('Regenerate the signing secret? Senders using the old secret will start failing immediately.')) return;
+        if (!await showConfirm('Regenerate the signing secret? Senders using the old secret will start failing immediately.', 'Regenerate secret', 'Regenerate', 'Cancel', 'warning')) return;
         try {
             const resp = await fetch(`/dashboard/api/triggers/${triggerId}`, {
                 method: 'PUT',
@@ -333,7 +333,7 @@ const TriggerPage = (function () {
     async function regenerateKey() {
         const triggerId = document.getElementById('triggerFormId').value;
         if (!triggerId) return;
-        if (!confirm('Regenerate the fire key? The old key will stop working immediately.')) return;
+        if (!await showConfirm('Regenerate the fire key? The old key will stop working immediately.', 'Regenerate key', 'Regenerate', 'Cancel', 'warning')) return;
         try {
             const resp = await fetch(`/dashboard/api/triggers/${triggerId}`, {
                 method: 'PUT',

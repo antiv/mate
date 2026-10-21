@@ -206,8 +206,8 @@ function updateStatus(id, status) {
         .catch(() => alert("Could not update status"));
 }
 
-function deleteOrder(id) {
-    if (!confirm("Delete this order? This cannot be undone.")) return;
+async function deleteOrder(id) {
+    if (!await showConfirm("Delete this order? This cannot be undone.", "Delete order", "Delete", "Cancel", "danger")) return;
     fetch("/dashboard/api/shop/orders/" + id, { method: "DELETE" })
         .then(r => r.json().then(d => { if (!r.ok) throw new Error(d.detail || "Failed"); return d; }))
         .then(() => loadOrders())

@@ -1729,9 +1729,9 @@
     }
 
     if (_browserResetBtn) {
-        _browserResetBtn.addEventListener("click", function() {
+        _browserResetBtn.addEventListener("click", async function() {
             if (!_browserWs || _browserWs.readyState !== WebSocket.OPEN) return;
-            if (confirm("Are you sure you want to delete all saved sessions and cookies? This will log you out of all websites and reset the browser.")) {
+            if (await showConfirm("Are you sure you want to delete all saved sessions and cookies? This will log you out of all websites and reset the browser.", "Reset browser", "Reset", "Cancel", "danger")) {
                 _browserWs.send(JSON.stringify({
                     type: "reset_profile"
                 }));

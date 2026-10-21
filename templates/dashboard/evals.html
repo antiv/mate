@@ -631,7 +631,7 @@ async function saveTestCase() {
 // ── Delete ────────────────────────────────────────────────────────────────────
 
 async function deleteTestCase(id) {
-    if (!confirm('Delete this test case?')) return;
+    if (!await showConfirm('Delete this test case?', 'Delete test case', 'Delete', 'Cancel', 'danger')) return;
     try {
         const data = await apiCall(`/dashboard/api/evals/${id}`, 'DELETE');
         if (data.error) { showNotification(data.error, 'error'); return; }
@@ -1023,7 +1023,7 @@ async function applyImprove() {
     const labels = Object.keys(checked.blocks);
     const what = labels.length ? 'the instruction of ' + _improve.agent_name + ' and the block(s) ' + labels.join(', ')
                                : 'the instruction of ' + _improve.agent_name;
-    if (!confirm('Update ' + what + '? Each change becomes a new version, so it can be rolled back.')) return;
+    if (!await showConfirm('Update ' + what + '? Each change becomes a new version, so it can be rolled back.', 'Update', 'Update', 'Cancel', 'warning')) return;
     const baseBlocks = {};
     labels.forEach(l => { baseBlocks[l] = _improve.current_blocks[l]; });
     try {
