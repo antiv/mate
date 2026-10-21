@@ -26,6 +26,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 from shared.utils import memory_blocks_service
 from shared.utils.memory_blocks_service import MAX_VERSIONS_PER_BLOCK, MemoryBlocksService
 from shared.utils.models import AgentConfig, Base, MemoryBlock, MemoryBlockVersion
+from shared.test.request_context_helpers import as_caller
 
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 
@@ -223,7 +224,7 @@ class TestRestoreRoute(unittest.TestCase):
             self.server = DashboardServer(app, project_root=PROJECT_ROOT)
         self.server.db_client = self.db
         self.server.AgentConfig = AgentConfig
-        app.dependency_overrides[self.server._get_auth_user_dependency] = lambda: "admin"
+        as_caller(app, "admin", True)
         self.client = TestClient(app)
         self.audit = patch("shared.utils.audit_service.log").start()
         self.addCleanup(patch.stopall)

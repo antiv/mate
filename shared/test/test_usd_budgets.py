@@ -298,7 +298,6 @@ class TestApiValidation(_Db):
         with patch("shared.utils.database_client.get_database_client", return_value=db_client):
             server = DashboardServer(app, project_root=Path(__file__).parent.parent.parent)
         server.db_client = db_client
-        app.dependency_overrides[server._get_auth_user_dependency] = lambda: "admin"
         as_caller(app, "admin", True)
         self.client = TestClient(app)
 

@@ -58,7 +58,6 @@ class ImportAuditTestCase(unittest.TestCase):
             os.path.dirname(os.path.abspath(__file__)))))
         app = FastAPI()
         self.server = DashboardServer(app, project_root)
-        app.dependency_overrides[self.server._get_auth_user_dependency] = lambda: "alice"
         as_caller(app, "alice", True)
         self.client = TestClient(app)
 

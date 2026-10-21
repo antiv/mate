@@ -28,15 +28,12 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request,
 from shared.utils.agent_invoke import run_agent_message
 from shared.utils.database_client import get_database_client
 from shared.utils.models import ChannelIntegration
+from server.request_context import RequestContext, get_api_request_context
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/integrations/slack", tags=["Slack Integration"])
 dashboard_router = APIRouter(prefix="/dashboard/api", tags=["Dashboard - Channel Integrations"])
 
-
-def _dashboard_auth():
-    from server.auth import get_dashboard_auth_user
-    return get_dashboard_auth_user
 
 SLACK_POST_MESSAGE_URL = "https://slack.com/api/chat.postMessage"
 _MENTION_RE = re.compile(r"<@[A-Z0-9]+>")
@@ -436,9 +433,7 @@ _EDITABLE_FIELDS = (
 
 
 @dashboard_router.get("/channel-integrations")
-async def list_integrations(username: str = Depends(_dashboard_auth())):
-    if not username:
-        raise HTTPException(status_code=401, detail="Not authenticated")
+async def list_integrations(ctx: RequestContext = Depends(get_api_request_context)):
     db = get_database_client()
     session = db.get_session()
     if not session:
@@ -453,9 +448,7 @@ async def list_integrations(username: str = Depends(_dashboard_auth())):
 
 
 @dashboard_router.post("/channel-integrations")
-async def create_integration(request: Request, username: str = Depends(_dashboard_auth())):
-    if not username:
-        raise HTTPException(status_code=401, detail="Not authenticated")
+async def create_integration(request: Request, ctx: RequestContext = Depends(get_api_request_context)):
     data = await request.json()
     project_id = data.get("project_id")
     agent_name = (data.get("agent_name") or "").strip()
@@ -492,9 +485,7 @@ async def create_integration(request: Request, username: str = Depends(_dashboar
 
 @dashboard_router.put("/channel-integrations/{integration_id}")
 async def update_integration(integration_id: int, request: Request,
-                             username: str = Depends(_dashboard_auth())):
-    if not username:
-        raise HTTPException(status_code=401, detail="Not authenticated")
+                             ctx: RequestContext = Depends(get_api_request_context)):
     data = await request.json()
     db = get_database_client()
     session = db.get_session()
@@ -525,9 +516,7 @@ async def update_integration(integration_id: int, request: Request,
 
 
 @dashboard_router.delete("/channel-integrations/{integration_id}")
-async def delete_integration(integration_id: int, username: str = Depends(_dashboard_auth())):
-    if not username:
-        raise HTTPException(status_code=401, detail="Not authenticated")
+async def delete_integration(integration_id: int, ctx: RequestContext = Depends(get_api_request_context)):
     db = get_database_client()
     session = db.get_session()
     if not session:

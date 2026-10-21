@@ -27,6 +27,7 @@ from shared.utils.database_client import get_database_client
 from shared.utils.models import WidgetApiKey, AgentConfig, Project
 from shared.utils.ai_disclosure import DEFAULT_DISCLOSURE, resolve_disclosure
 from server.csp import set_csp_header, widget_frame_ancestors
+from server.request_context import RequestContext, get_api_request_context
 
 logger = logging.getLogger(__name__)
 
@@ -993,19 +994,12 @@ async def delete_widget_file(file_id: int, wk: WidgetApiKey = Depends(verify_wid
 # Dashboard API — widget key management
 # ---------------------------------------------------------------------------
 
-def _get_dashboard_auth_dependency():
-    from server.auth import get_dashboard_auth_user
-    return get_dashboard_auth_user
-
-
 @dashboard_widget_router.get("/widget-keys", tags=["Dashboard - Widget Keys"])
 async def list_widget_keys(
     request: Request,
     project_id: Optional[int] = None,
-    username: str = Depends(_get_dashboard_auth_dependency()),
+    ctx: RequestContext = Depends(get_api_request_context),
 ):
-    if not username:
-        raise HTTPException(status_code=401, detail="Not authenticated")
     db = get_database_client()
     session = db.get_session()
     if not session:
@@ -1023,10 +1017,8 @@ async def list_widget_keys(
 @dashboard_widget_router.post("/widget-keys", tags=["Dashboard - Widget Keys"])
 async def create_widget_key(
     request: Request,
-    username: str = Depends(_get_dashboard_auth_dependency()),
+    ctx: RequestContext = Depends(get_api_request_context),
 ):
-    if not username:
-        raise HTTPException(status_code=401, detail="Not authenticated")
     data = await request.json()
     project_id = data.get("project_id")
     agent_name = (data.get("agent_name") or "").strip()
@@ -1062,7 +1054,7 @@ async def create_widget_key(
         session.refresh(wk)
         try:
             from shared.utils.audit_service import log, ACTION_KEY_CREATE, RESOURCE_WIDGET_KEY
-            log(username, ACTION_KEY_CREATE, RESOURCE_WIDGET_KEY, resource_id=str(wk.id), details={"agent_name": agent_name, "project_id": project_id}, request=request)
+            log(ctx.user_id, ACTION_KEY_CREATE, RESOURCE_WIDGET_KEY, resource_id=str(wk.id), details={"agent_name": agent_name, "project_id": project_id}, request=request)
         except Exception as e:
             logger.debug("Audit log widget key create: %s", e)
         return {"success": True, "key": wk.to_dict()}
@@ -1077,10 +1069,8 @@ async def create_widget_key(
 async def update_widget_key(
     key_id: int,
     request: Request,
-    username: str = Depends(_get_dashboard_auth_dependency()),
+    ctx: RequestContext = Depends(get_api_request_context),
 ):
-    if not username:
-        raise HTTPException(status_code=401, detail="Not authenticated")
     data = await request.json()
     db = get_database_client()
     session = db.get_session()
@@ -1102,7 +1092,7 @@ async def update_widget_key(
         session.refresh(wk)
         try:
             from shared.utils.audit_service import log, ACTION_KEY_UPDATE, RESOURCE_WIDGET_KEY
-            log(username, ACTION_KEY_UPDATE, RESOURCE_WIDGET_KEY, resource_id=str(key_id), details={"agent_name": wk.agent_name}, request=request)
+            log(ctx.user_id, ACTION_KEY_UPDATE, RESOURCE_WIDGET_KEY, resource_id=str(key_id), details={"agent_name": wk.agent_name}, request=request)
         except Exception as e:
             logger.debug("Audit log widget key update: %s", e)
         return {"success": True, "key": wk.to_dict()}
@@ -1117,10 +1107,8 @@ async def update_widget_key(
 async def delete_widget_key(
     key_id: int,
     request: Request,
-    username: str = Depends(_get_dashboard_auth_dependency()),
+    ctx: RequestContext = Depends(get_api_request_context),
 ):
-    if not username:
-        raise HTTPException(status_code=401, detail="Not authenticated")
     db = get_database_client()
     session = db.get_session()
     if not session:
@@ -1134,7 +1122,7 @@ async def delete_widget_key(
         session.commit()
         try:
             from shared.utils.audit_service import log, ACTION_KEY_DELETE, RESOURCE_WIDGET_KEY
-            log(username, ACTION_KEY_DELETE, RESOURCE_WIDGET_KEY, resource_id=str(key_id), details={"agent_name": agent_name}, request=request)
+            log(ctx.user_id, ACTION_KEY_DELETE, RESOURCE_WIDGET_KEY, resource_id=str(key_id), details={"agent_name": agent_name}, request=request)
         except Exception as e:
             logger.debug("Audit log widget key delete: %s", e)
         return {"success": True}
@@ -1149,10 +1137,8 @@ async def delete_widget_key(
 async def get_embed_code(
     key_id: int,
     request: Request,
-    username: str = Depends(_get_dashboard_auth_dependency()),
+    ctx: RequestContext = Depends(get_api_request_context),
 ):
-    if not username:
-        raise HTTPException(status_code=401, detail="Not authenticated")
     db = get_database_client()
     session = db.get_session()
     if not session:
