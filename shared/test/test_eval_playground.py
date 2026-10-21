@@ -28,6 +28,7 @@ from sqlalchemy.pool import StaticPool
 from shared.utils.eval_playground import Case, Variant, add_costs, run_variant, summarize
 from shared.utils.eval_runner import EvalRunner
 from shared.utils.models import AgentConfig, AgentConfigVersion, Base, TestCase, TokenUsageLog
+from shared.test.request_context_helpers import as_caller
 
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 
@@ -146,7 +147,7 @@ class TestEndpoints(_Db):
         with patch("shared.utils.database_client.get_database_client", return_value=db_client):
             server = DashboardServer(app, project_root=PROJECT_ROOT)
         server.db_client = db_client
-        app.dependency_overrides[server._get_auth_user_dependency] = lambda: "admin"
+        as_caller(app, "admin", True)
         self.client = TestClient(app)
 
         session = self.Session()

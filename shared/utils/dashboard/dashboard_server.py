@@ -2937,11 +2937,6 @@ class DashboardServer:
         from server.auth import require_dashboard_auth
         return require_dashboard_auth(request)
 
-    def _get_is_admin(self, request: Request) -> bool:
-        """Return True if the current request comes from an admin user."""
-        from server.auth import is_admin_user
-        return is_admin_user(request)
-
     def _memory_blocks_project(self, agent_name: str):
         """(project_id, None) for an agent with memory blocks, else (None, error response)."""
         if not self.db_client:
@@ -3582,7 +3577,7 @@ class DashboardServer:
             })
 
         @self.app.get("/dashboard/api/wizard/leads", tags=["Dashboard - Wizard"])
-        async def get_wizard_leads(request: Request, username: str = Depends(self._get_auth_user_dependency),
+        async def get_wizard_leads(request: Request, ctx: RequestContext = Depends(get_request_context),
                                    status: Optional[str] = None, search: Optional[str] = None,
                                    partner: Optional[str] = None, limit: int = 200):
             """List wizard leads: NEW first, then newest first. Optional status/partner filter + text search."""
@@ -3635,7 +3630,7 @@ class DashboardServer:
 
         @self.app.patch("/dashboard/api/wizard/leads/{lead_id}", tags=["Dashboard - Wizard"])
         async def update_wizard_lead(lead_id: int, request: Request,
-                                     username: str = Depends(self._get_auth_user_dependency)):
+                                     ctx: RequestContext = Depends(get_request_context)):
             """Update a lead's status (new|contacted|converted|archived)."""
             from shared.utils.models import WizardLead
             body = await request.json()
@@ -3693,16 +3688,16 @@ class DashboardServer:
             })
 
         @self.app.get("/dashboard/api/wizard/pricing", tags=["Dashboard - Wizard"])
-        async def get_wizard_pricing(request: Request, username: str = Depends(self._get_auth_user_dependency),
+        async def get_wizard_pricing(request: Request, ctx: RequestContext = Depends(get_request_context),
                                      partner: Optional[str] = None):
             """Return the effective wizard pricing config (global or for a partner)."""
             from shared.utils.wizard import pricing
             return pricing.get_pricing_config_for_admin(partner or None)
 
         @self.app.put("/dashboard/api/wizard/pricing", tags=["Dashboard - Wizard"])
-        async def update_wizard_pricing(request: Request, username: str = Depends(self._get_auth_user_dependency)):
+        async def update_wizard_pricing(request: Request, ctx: RequestContext = Depends(get_request_context)):
             """Save wizard tier prices + default currency, global or for a partner (admin only)."""
-            if not self._get_is_admin(request):
+            if not ctx.is_admin:
                 raise HTTPException(status_code=403, detail="Admin only")
             from shared.utils.wizard import pricing
             body = await request.json()
@@ -3719,15 +3714,15 @@ class DashboardServer:
                 raise HTTPException(status_code=500, detail=str(exc))
 
         @self.app.get("/dashboard/api/wizard/partners", tags=["Dashboard - Wizard"])
-        async def list_wizard_partners(request: Request, username: str = Depends(self._get_auth_user_dependency)):
+        async def list_wizard_partners(request: Request, ctx: RequestContext = Depends(get_request_context)):
             """List embedding partners/sites."""
             from shared.utils.wizard import partners as partners_svc
             return {"partners": partners_svc.list_partners()}
 
         @self.app.post("/dashboard/api/wizard/partners", tags=["Dashboard - Wizard"])
-        async def upsert_wizard_partner(request: Request, username: str = Depends(self._get_auth_user_dependency)):
+        async def upsert_wizard_partner(request: Request, ctx: RequestContext = Depends(get_request_context)):
             """Create or update a partner (admin only)."""
-            if not self._get_is_admin(request):
+            if not ctx.is_admin:
                 raise HTTPException(status_code=403, detail="Admin only")
             from shared.utils.wizard import partners as partners_svc
             body = await request.json()
@@ -3745,9 +3740,9 @@ class DashboardServer:
 
         @self.app.delete("/dashboard/api/wizard/partners/{partner_key}", tags=["Dashboard - Wizard"])
         async def delete_wizard_partner(partner_key: str, request: Request,
-                                        username: str = Depends(self._get_auth_user_dependency)):
+                                        ctx: RequestContext = Depends(get_request_context)):
             """Delete a partner (admin only)."""
-            if not self._get_is_admin(request):
+            if not ctx.is_admin:
                 raise HTTPException(status_code=403, detail="Admin only")
             from shared.utils.wizard import partners as partners_svc
             return partners_svc.delete_partner(partner_key)
@@ -3765,7 +3760,7 @@ class DashboardServer:
             })
 
         @self.app.get("/dashboard/api/shop/orders", tags=["Dashboard - Wizard"])
-        async def get_shop_orders(request: Request, username: str = Depends(self._get_auth_user_dependency),
+        async def get_shop_orders(request: Request, ctx: RequestContext = Depends(get_request_context),
                                   status: Optional[str] = None, partner: Optional[str] = None,
                                   search: Optional[str] = None, limit: int = 200):
             """List shop orders: NEW first, then newest first. Optional status/partner filter + text search."""
@@ -3793,7 +3788,7 @@ class DashboardServer:
 
         @self.app.patch("/dashboard/api/shop/orders/{order_pk}", tags=["Dashboard - Wizard"])
         async def update_shop_order(order_pk: int, request: Request,
-                                    username: str = Depends(self._get_auth_user_dependency)):
+                                    ctx: RequestContext = Depends(get_request_context)):
             """Update an order's status (new|contacted|fulfilled|cancelled)."""
             from shared.utils.models import ShopOrder
             body = await request.json()
@@ -3813,9 +3808,9 @@ class DashboardServer:
 
         @self.app.delete("/dashboard/api/shop/orders/{order_pk}", tags=["Dashboard - Wizard"])
         async def delete_shop_order(order_pk: int, request: Request,
-                                    username: str = Depends(self._get_auth_user_dependency)):
+                                    ctx: RequestContext = Depends(get_request_context)):
             """Delete an order (admin only)."""
-            if not self._get_is_admin(request):
+            if not ctx.is_admin:
                 raise HTTPException(status_code=403, detail="Admin only")
             from shared.utils.models import ShopOrder
             session = self.db_client.get_session()
@@ -3831,9 +3826,9 @@ class DashboardServer:
 
         @self.app.post("/dashboard/api/wizard/leads/{lead_id}/convert", tags=["Dashboard - Wizard"])
         async def convert_wizard_lead(lead_id: int, request: Request,
-                                      username: str = Depends(self._get_auth_user_dependency)):
+                                      ctx: RequestContext = Depends(get_request_context)):
             """Convert a lead's live trial into a permanent agent (rename project + keep widget)."""
-            if not self._get_is_admin(request):
+            if not ctx.is_admin:
                 raise HTTPException(status_code=403, detail="Admin only")
             from shared.utils.models import WizardLead
             from shared.utils.wizard.provisioning_service import WizardProvisioningService
@@ -3875,7 +3870,7 @@ class DashboardServer:
 
         @self.app.get("/dashboard/api/wizard/leads/{lead_id}/snapshot", tags=["Dashboard - Wizard"])
         async def download_wizard_lead_snapshot(lead_id: int, request: Request,
-                                                username: str = Depends(self._get_auth_user_dependency)):
+                                                ctx: RequestContext = Depends(get_request_context)):
             """Download the captured trial agent JSON snapshot for a lead."""
             from shared.utils.models import WizardLead
             from fastapi.responses import Response
@@ -3894,9 +3889,9 @@ class DashboardServer:
 
         @self.app.delete("/dashboard/api/wizard/leads/{lead_id}", tags=["Dashboard - Wizard"])
         async def delete_wizard_lead(lead_id: int, request: Request,
-                                     username: str = Depends(self._get_auth_user_dependency)):
+                                     ctx: RequestContext = Depends(get_request_context)):
             """Permanently delete an archived lead and any remaining trial assets (agent, project, memory blocks)."""
-            if not self._get_is_admin(request):
+            if not ctx.is_admin:
                 raise HTTPException(status_code=403, detail="Admin only")
             from shared.utils.models import WizardLead
             session = self.db_client.get_session()
@@ -4082,7 +4077,7 @@ class DashboardServer:
             return self._get_session_replay(session_id, hours)
 
         @self.app.get("/dashboard/api/users", tags=["Dashboard - Users"])
-        async def get_users(request: Request, username: str = Depends(self._get_auth_user_dependency)):
+        async def get_users(request: Request, ctx: RequestContext = Depends(get_request_context)):
             """Get all users."""
             return {"users": self._get_all_users()}
 
@@ -4125,20 +4120,20 @@ class DashboardServer:
             return {"success": True, **result}
 
         @self.app.post("/dashboard/api/users", tags=["Dashboard - Users"])
-        async def create_user(request: Request, username: str = Depends(self._get_auth_user_dependency), user_id: str = Form(...), roles: str = Form(...)):
+        async def create_user(request: Request, ctx: RequestContext = Depends(get_request_context), user_id: str = Form(...), roles: str = Form(...)):
             """Create a new user."""
             try:
                 import json
                 roles_list = json.loads(roles) if roles else ["user"]
                 success = self._create_user(user_id, roles_list)
                 if success:
-                    audit_service.log(username, audit_service.ACTION_USER_CREATE, audit_service.RESOURCE_USER, resource_id=user_id, details={"roles": roles_list}, request=request)
+                    audit_service.log(ctx.user_id, audit_service.ACTION_USER_CREATE, audit_service.RESOURCE_USER, resource_id=user_id, details={"roles": roles_list}, request=request)
                 return {"success": success, "message": "User created successfully" if success else "Failed to create user"}
             except json.JSONDecodeError:
                 return {"success": False, "message": "Invalid roles format"}
 
         @self.app.put("/dashboard/api/users/{user_id}", tags=["Dashboard - Users"])
-        async def update_user(user_id: str, request: Request, username: str = Depends(self._get_auth_user_dependency), roles: str = Form(...), profile_data: str = Form(None)):
+        async def update_user(user_id: str, request: Request, ctx: RequestContext = Depends(get_request_context), roles: str = Form(...), profile_data: str = Form(None)):
             """Update user roles and profile data."""
             try:
                 import json
@@ -4146,23 +4141,23 @@ class DashboardServer:
                 profile_data_value = profile_data if profile_data else None
                 success = self._update_user(user_id, roles_list, profile_data_value)
                 if success:
-                    audit_service.log(username, audit_service.ACTION_USER_UPDATE, audit_service.RESOURCE_USER, resource_id=user_id, details={"roles": roles_list}, request=request)
+                    audit_service.log(ctx.user_id, audit_service.ACTION_USER_UPDATE, audit_service.RESOURCE_USER, resource_id=user_id, details={"roles": roles_list}, request=request)
                 return {"success": success, "message": "User updated successfully" if success else "Failed to update user"}
             except json.JSONDecodeError:
                 return {"success": False, "message": "Invalid roles format"}
 
         @self.app.delete("/dashboard/api/users/{user_id}", tags=["Dashboard - Users"])
-        async def delete_user(user_id: str, request: Request, username: str = Depends(self._get_auth_user_dependency)):
+        async def delete_user(user_id: str, request: Request, ctx: RequestContext = Depends(get_request_context)):
             """Delete a user."""
             success = self._delete_user(user_id)
             if success:
-                audit_service.log(username, audit_service.ACTION_USER_DELETE, audit_service.RESOURCE_USER, resource_id=user_id, request=request)
+                audit_service.log(ctx.user_id, audit_service.ACTION_USER_DELETE, audit_service.RESOURCE_USER, resource_id=user_id, request=request)
             return {"success": success, "message": "User deleted successfully" if success else "Failed to delete user"}
 
         @self.app.post("/dashboard/api/users/cleanup", tags=["Dashboard - Users"])
-        async def trigger_user_cleanup(request: Request, username: str = Depends(self._get_auth_user_dependency)):
+        async def trigger_user_cleanup(request: Request, ctx: RequestContext = Depends(get_request_context)):
             """Manually trigger temporary user cleanup."""
-            if not self._get_is_admin(request):
+            if not ctx.is_admin:
                 from fastapi import HTTPException
                 raise HTTPException(status_code=403, detail="Forbidden")
             from shared.utils.user_cleanup import cleanup_inactive_users
@@ -4234,7 +4229,7 @@ class DashboardServer:
         @self.app.get("/dashboard/api/tokens", tags=["Dashboard - Users"])
         async def list_user_tokens(
             request: Request,
-            username: str = Depends(self._get_auth_user_dependency)
+            ctx: RequestContext = Depends(get_request_context)
         ):
             """Get all personal access tokens for the logged-in user."""
             from shared.utils.models import PersonalAccessToken
@@ -4243,7 +4238,7 @@ class DashboardServer:
             if not session:
                 raise HTTPException(status_code=500, detail="Database unavailable")
             try:
-                tokens = session.query(PersonalAccessToken).filter_by(user_id=username).all()
+                tokens = session.query(PersonalAccessToken).filter_by(user_id=ctx.user_id).all()
                 return {"success": True, "tokens": [t.to_dict() for t in tokens]}
             finally:
                 session.close()
@@ -4252,7 +4247,7 @@ class DashboardServer:
         async def create_user_token(
             request: Request,
             body: Dict[str, Any],
-            username: str = Depends(self._get_auth_user_dependency)
+            ctx: RequestContext = Depends(get_request_context)
         ):
             """Create a new personal access token."""
             from shared.utils.models import PersonalAccessToken
@@ -4299,13 +4294,13 @@ class DashboardServer:
                     token_hash=token_hash,
                     token_prefix=token_prefix,
                     name=name,
-                    user_id=username,
+                    user_id=ctx.user_id,
                     expires_at=expires_at
                 )
                 session.add(pat)
                 session.commit()
                 
-                audit_service.log(username, "pat_create", "personal_access_token", resource_id=str(pat.id), details={"name": name}, request=request)
+                audit_service.log(ctx.user_id, "pat_create", "personal_access_token", resource_id=str(pat.id), details={"name": name}, request=request)
                 
                 return {
                     "success": True,
@@ -4322,7 +4317,7 @@ class DashboardServer:
         async def revoke_user_token(
             token_id: int,
             request: Request,
-            username: str = Depends(self._get_auth_user_dependency)
+            ctx: RequestContext = Depends(get_request_context)
         ):
             """Revoke a personal access token."""
             from shared.utils.models import PersonalAccessToken
@@ -4331,14 +4326,14 @@ class DashboardServer:
             if not session:
                 raise HTTPException(status_code=500, detail="Database unavailable")
             try:
-                pat = session.query(PersonalAccessToken).filter_by(id=token_id, user_id=username).first()
+                pat = session.query(PersonalAccessToken).filter_by(id=token_id, user_id=ctx.user_id).first()
                 if not pat:
                     raise HTTPException(status_code=404, detail="Token not found")
                 
                 session.delete(pat)
                 session.commit()
                 
-                audit_service.log(username, "pat_revoke", "personal_access_token", resource_id=str(token_id), request=request)
+                audit_service.log(ctx.user_id, "pat_revoke", "personal_access_token", resource_id=str(token_id), request=request)
                 return {"success": True, "message": "Token revoked successfully"}
             except HTTPException:
                 raise
@@ -4352,7 +4347,7 @@ class DashboardServer:
         async def expose_agent(
             config_id: int,
             request: Request,
-            username: str = Depends(self._get_auth_user_dependency)
+            ctx: RequestContext = Depends(get_request_context)
         ):
             """Toggle or set agent's expose_as_model flag."""
             body = await request.json()
@@ -4377,8 +4372,8 @@ class DashboardServer:
                 config.expose_as_model = expose
                 session.commit()
                 
-                self._snapshot_agent_config(session, config, change_type='expose_toggle', changed_by=username)
-                audit_service.log(username, "agent_expose_toggle", audit_service.RESOURCE_AGENT, resource_id=config.name, details={"expose": expose}, request=request)
+                self._snapshot_agent_config(session, config, change_type='expose_toggle', changed_by=ctx.user_id)
+                audit_service.log(ctx.user_id, "agent_expose_toggle", audit_service.RESOURCE_AGENT, resource_id=config.name, details={"expose": expose}, request=request)
                 return {"success": True, "expose_as_model": config.expose_as_model}
             except HTTPException:
                 raise
@@ -4391,7 +4386,7 @@ class DashboardServer:
         @self.app.get("/dashboard/api/agents", tags=["Dashboard - Agents"])
         async def get_agents(
             request: Request,
-            username: str = Depends(self._get_auth_user_dependency),
+            ctx: RequestContext = Depends(get_request_context),
             project_id: Optional[int] = None
         ):
             """Get all agent configurations."""
@@ -4400,7 +4395,7 @@ class DashboardServer:
         @self.app.get("/dashboard/api/agents/export", tags=["Dashboard - Agents"])
         async def export_agents(
             request: Request, 
-            username: str = Depends(self._get_auth_user_dependency),
+            ctx: RequestContext = Depends(get_request_context),
             search: str = None,
             root_agent: str = None,
             project_id: Optional[int] = None
@@ -4545,7 +4540,7 @@ class DashboardServer:
         @self.app.post("/dashboard/api/agents/build-binary", tags=["Dashboard - Agents"])
         async def start_build_binary(
             request: Request,
-            username: str = Depends(self._get_auth_user_dependency),
+            ctx: RequestContext = Depends(get_request_context),
         ):
             """Start a standalone binary build in the background. Returns a build_id for polling."""
             import tempfile
@@ -4600,7 +4595,7 @@ class DashboardServer:
         async def get_build_status(
             build_id: str,
             request: Request,
-            username: str = Depends(self._get_auth_user_dependency),
+            ctx: RequestContext = Depends(get_request_context),
         ):
             """Poll the status of a background binary build."""
             entry = _active_builds.get(build_id)
@@ -4620,7 +4615,7 @@ class DashboardServer:
         async def download_build(
             build_id: str,
             request: Request,
-            username: str = Depends(self._get_auth_user_dependency),
+            ctx: RequestContext = Depends(get_request_context),
         ):
             """Download the completed binary."""
             from fastapi.responses import FileResponse
@@ -4647,10 +4642,10 @@ class DashboardServer:
         async def clone_agent_tree(
             agent_name: str,
             request: Request,
-            username: str = Depends(self._get_auth_user_dependency),
+            ctx: RequestContext = Depends(get_request_context),
         ):
             """Deep-copy a root agent and its sub-agent tree into another project."""
-            if not self._get_is_admin(request):
+            if not ctx.is_admin:
                 raise HTTPException(status_code=403, detail="Forbidden")
             body = await request.json()
             try:
@@ -4663,7 +4658,7 @@ class DashboardServer:
                 suffix=body.get("suffix") or "",
                 include_memory_blocks=bool(body.get("include_memory_blocks")),
                 include_file_search=bool(body.get("include_file_search")),
-                changed_by=username,
+                changed_by=ctx.user_id,
             )
             if "error" in result:
                 raise HTTPException(status_code=result.get("status_code", 500),
@@ -4673,7 +4668,7 @@ class DashboardServer:
         @self.app.post("/dashboard/api/agents/import", tags=["Dashboard - Agents"])
         async def import_agents(
             request: Request,
-            username: str = Depends(self._get_auth_user_dependency),
+            ctx: RequestContext = Depends(get_request_context),
             overwrite: bool = False
         ):
             """Import agent configurations from JSON."""
@@ -4687,7 +4682,7 @@ class DashboardServer:
                 # overwrite=true rewrites existing agents wholesale, so it is the
                 # one detail separating adding from destroying — record it.
                 audit_service.log(
-                    username,
+                    ctx.user_id,
                     audit_service.ACTION_AGENTS_IMPORT,
                     audit_service.RESOURCE_AGENT,
                     details={
@@ -4971,7 +4966,7 @@ class DashboardServer:
         @self.app.post("/dashboard/api/agents", tags=["Dashboard - Agents"])
         async def create_agent(
             request: Request,
-            username: str = Depends(self._get_auth_user_dependency),
+            ctx: RequestContext = Depends(get_request_context),
             name: str = Form(...),
             type: str = Form(...),
             project_id: str = Form(...),
@@ -5042,17 +5037,17 @@ class DashboardServer:
                 "expose_as_model": expose_as_model,
                 "debug_mode": debug_mode
             }
-            success = self._create_agent_config(config_data, changed_by=username)
+            success = self._create_agent_config(config_data, changed_by=ctx.user_id)
             if success:
-                audit_service.log(username, audit_service.ACTION_AGENT_CREATE, audit_service.RESOURCE_AGENT, resource_id=name, details={"project_id": config_data.get("project_id")}, request=request)
-                self._audit_disclosure_change(username, name, None, ai_disclosure_waiver, request)
+                audit_service.log(ctx.user_id, audit_service.ACTION_AGENT_CREATE, audit_service.RESOURCE_AGENT, resource_id=name, details={"project_id": config_data.get("project_id")}, request=request)
+                self._audit_disclosure_change(ctx.user_id, name, None, ai_disclosure_waiver, request)
             return {"success": success, "message": "Agent created successfully" if success else "Failed to create agent"}
 
         @self.app.put("/dashboard/api/agents/{config_id}", tags=["Dashboard - Agents"])
         async def update_agent(
             config_id: int,
             request: Request,
-            username: str = Depends(self._get_auth_user_dependency),
+            ctx: RequestContext = Depends(get_request_context),
             name: str = Form(...),
             type: str = Form(...),
             project_id: str = Form(...),
@@ -5130,11 +5125,11 @@ class DashboardServer:
             # a compliance decision and gets its own entry rather than hiding
             # inside a generic agent.update.
             previous_waiver = self._get_disclosure_waiver(config_id)
-            success = self._update_agent_config(config_id, config_data, changed_by=username)
+            success = self._update_agent_config(config_id, config_data, changed_by=ctx.user_id)
             if success:
-                audit_service.log(username, audit_service.ACTION_AGENT_UPDATE, audit_service.RESOURCE_AGENT, resource_id=name, details={"config_id": config_id}, request=request)
+                audit_service.log(ctx.user_id, audit_service.ACTION_AGENT_UPDATE, audit_service.RESOURCE_AGENT, resource_id=name, details={"config_id": config_id}, request=request)
                 self._audit_disclosure_change(
-                    username, name, previous_waiver, ai_disclosure_waiver, request)
+                    ctx.user_id, name, previous_waiver, ai_disclosure_waiver, request)
                 # Auto-reinitialize agent on agent server so configuration changes take effect immediately
                 try:
                     import httpx
@@ -5151,7 +5146,7 @@ class DashboardServer:
         async def delete_agent(
             config_id: int,
             request: Request,
-            username: str = Depends(self._get_auth_user_dependency),
+            ctx: RequestContext = Depends(get_request_context),
             delete_folder: bool = False
         ):
             """Delete an agent configuration and optionally its folder if not hardcoded."""
@@ -5189,7 +5184,7 @@ class DashboardServer:
                     print(f"Error deleting agent folder '{agent_name}': {e}")
 
             if success:
-                audit_service.log(username, audit_service.ACTION_AGENT_DELETE, audit_service.RESOURCE_AGENT, resource_id=agent_name or str(config_id), details={"config_id": config_id, "folder_deleted": folder_deleted}, request=request)
+                audit_service.log(ctx.user_id, audit_service.ACTION_AGENT_DELETE, audit_service.RESOURCE_AGENT, resource_id=agent_name or str(config_id), details={"config_id": config_id, "folder_deleted": folder_deleted}, request=request)
 
             return {
                 "success": success,
@@ -5200,7 +5195,7 @@ class DashboardServer:
             }
 
         @self.app.post("/dashboard/api/agents/{agent_name}/create-folder", tags=["Dashboard - Agents"])
-        async def create_agent_folder(agent_name: str, request: Request, username: str = Depends(self._get_auth_user_dependency)):
+        async def create_agent_folder(agent_name: str, request: Request, ctx: RequestContext = Depends(get_request_context)):
             """Create agent folder from template for a specific agent."""
             result = self._copy_template_agent(agent_name)
             
@@ -5210,7 +5205,7 @@ class DashboardServer:
             return result
 
         @self.app.delete("/dashboard/api/agents/{agent_name}/delete-folder", tags=["Dashboard - Agents"])
-        async def delete_agent_folder(agent_name: str, request: Request, username: str = Depends(self._get_auth_user_dependency)):
+        async def delete_agent_folder(agent_name: str, request: Request, ctx: RequestContext = Depends(get_request_context)):
             """Delete agent folder for a specific agent."""
             result = self._delete_agent_folder(agent_name)
             
@@ -5220,7 +5215,7 @@ class DashboardServer:
             return result
 
         @self.app.post("/dashboard/api/agents/{agent_name}/reinitialize", tags=["Dashboard - Agents"])
-        async def reinitialize_agent(agent_name: str, request: Request, username: str = Depends(self._get_auth_user_dependency)):
+        async def reinitialize_agent(agent_name: str, request: Request, ctx: RequestContext = Depends(get_request_context)):
             """Reinitialize a specific agent with fresh configuration from database by proxying to ADK server."""
             import httpx
             from shared.utils.utils import get_adk_config
@@ -5920,7 +5915,7 @@ class DashboardServer:
             return result
 
         @self.app.post("/dashboard/api/agents/reinitialize-all", tags=["Dashboard - Agents"])
-        async def reinitialize_all_agents(request: Request, username: str = Depends(self._get_auth_user_dependency)):
+        async def reinitialize_all_agents(request: Request, ctx: RequestContext = Depends(get_request_context)):
             """Clear all cached agents to force reinitialization by proxying to ADK server."""
             import httpx
             from shared.utils.utils import get_adk_config
@@ -6164,7 +6159,7 @@ class DashboardServer:
             })
 
         @self.app.get("/dashboard/api/evals/agent/{agent_name}/versions-list", tags=["Dashboard - Evals"])
-        async def list_agent_versions_for_eval(agent_name: str, request: Request, username: str = Depends(self._get_auth_user_dependency)):
+        async def list_agent_versions_for_eval(agent_name: str, request: Request, ctx: RequestContext = Depends(get_request_context)):
             """Return available config versions for an agent — used to populate the run modal dropdown."""
             if not self.db_client:
                 return {"versions": []}
@@ -6200,7 +6195,7 @@ class DashboardServer:
                 session.close()
 
         @self.app.get("/dashboard/api/evals", tags=["Dashboard - Evals"])
-        async def list_eval_suites(request: Request, username: str = Depends(self._get_auth_user_dependency)):
+        async def list_eval_suites(request: Request, ctx: RequestContext = Depends(get_request_context)):
             """List test suites grouped by agent with latest avg score and last run time."""
             if not self.db_client:
                 return {"suites": []}
@@ -6243,7 +6238,7 @@ class DashboardServer:
                 session.close()
 
         @self.app.get("/dashboard/api/evals/agent/{agent_name}/history", tags=["Dashboard - Evals"])
-        async def get_eval_history(agent_name: str, request: Request, username: str = Depends(self._get_auth_user_dependency)):
+        async def get_eval_history(agent_name: str, request: Request, ctx: RequestContext = Depends(get_request_context)):
             """Score history per version for Chart.js: [{version_number, version_id, avg_score, pass_rate, run_at}]"""
             if not self.db_client:
                 return {"history": []}
@@ -6287,7 +6282,7 @@ class DashboardServer:
                 session.close()
 
         @self.app.get("/dashboard/api/evals/agent/{agent_name}", tags=["Dashboard - Evals"])
-        async def get_agent_test_cases(agent_name: str, request: Request, username: str = Depends(self._get_auth_user_dependency)):
+        async def get_agent_test_cases(agent_name: str, request: Request, ctx: RequestContext = Depends(get_request_context)):
             """Return all active test cases for an agent with each case's latest eval result."""
             if not self.db_client:
                 return {"test_cases": []}
@@ -6326,7 +6321,7 @@ class DashboardServer:
         def list_rated_down_responses(
             request: Request,
             agent_name: str = Query(""),
-            username: str = Depends(self._get_auth_user_dependency),
+            ctx: RequestContext = Depends(get_request_context),
         ):
             """
             Responses rated thumbs-down, with the question and answer resolved from
@@ -6336,7 +6331,7 @@ class DashboardServer:
             Deliberately sync: it reads up to one session store per row, which
             FastAPI then runs in its threadpool instead of on the event loop.
             """
-            if not self._get_is_admin(request):
+            if not ctx.is_admin:
                 raise HTTPException(status_code=403, detail="Admin access required")
             from shared.utils.feedback_service import extract_exchange, get_feedback_service
 
@@ -6440,7 +6435,7 @@ class DashboardServer:
             return blocks
 
         @self.app.post("/dashboard/api/evals/improve/propose", tags=["Dashboard - Evals"])
-        async def propose_improvement(request: Request, username: str = Depends(self._get_auth_user_dependency),
+        async def propose_improvement(request: Request, ctx: RequestContext = Depends(get_request_context),
                                       body: Dict[str, Any] = Body(...)):
             """
             Suggest a revised instruction for the agent behind a failing test case
@@ -6511,7 +6506,7 @@ class DashboardServer:
                     "shared_with": shared_with}
 
         @self.app.post("/dashboard/api/evals/improve/check", tags=["Dashboard - Evals"])
-        async def check_improvement(request: Request, username: str = Depends(self._get_auth_user_dependency),
+        async def check_improvement(request: Request, ctx: RequestContext = Depends(get_request_context),
                                     body: Dict[str, Any] = Body(...)):
             """
             Run the agent's active eval suite with its current config and with the
@@ -6581,7 +6576,7 @@ class DashboardServer:
         # ── Playground: the same prompts on 2-3 variants of an agent ──────────────
 
         @self.app.get("/dashboard/api/evals/playground/agents", tags=["Dashboard - Evals"])
-        async def playground_agents(request: Request, username: str = Depends(self._get_auth_user_dependency)):
+        async def playground_agents(request: Request, ctx: RequestContext = Depends(get_request_context)):
             """Agents the Playground can run, with their model and how many active test cases they have."""
             session = self.db_client.get_session() if self.db_client else None
             if not session:
@@ -6600,7 +6595,7 @@ class DashboardServer:
 
         @self.app.get("/dashboard/api/evals/playground/agent/{agent_name}", tags=["Dashboard - Evals"])
         async def playground_agent(agent_name: str, request: Request,
-                                   username: str = Depends(self._get_auth_user_dependency)):
+                                   ctx: RequestContext = Depends(get_request_context)):
             """An agent's current model and instructions, and its stored versions, to start variants from."""
             session = self.db_client.get_session() if self.db_client else None
             if not session:
@@ -6621,7 +6616,7 @@ class DashboardServer:
                 session.close()
 
         @self.app.post("/dashboard/api/evals/playground/run", tags=["Dashboard - Evals"])
-        async def playground_run(request: Request, username: str = Depends(self._get_auth_user_dependency),
+        async def playground_run(request: Request, ctx: RequestContext = Depends(get_request_context),
                                  body: Dict[str, Any] = Body(...)):
             """
             Run one prompt, or the agent's active eval suite, on 2-3 variants of the
@@ -6715,7 +6710,7 @@ class DashboardServer:
                     detail["instruction_changed"] = {
                         "chars": len(text), "sha256": hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]}
                 audited.append(detail)
-            await run_in_threadpool(log, username, ACTION_PLAYGROUND_RUN, RESOURCE_AGENT, config.name,
+            await run_in_threadpool(log, ctx.user_id, ACTION_PLAYGROUND_RUN, RESOURCE_AGENT, config.name,
                                     {"mode": mode, "cases": len(cases), "variants": audited}, request)
 
             # Have OpenRouter's prices before the runs log their calls, so a variant on
@@ -6749,7 +6744,7 @@ class DashboardServer:
             }
 
         @self.app.post("/dashboard/api/evals/improve/apply", tags=["Dashboard - Evals"])
-        async def apply_improvement(request: Request, username: str = Depends(self._get_auth_user_dependency),
+        async def apply_improvement(request: Request, ctx: RequestContext = Depends(get_request_context),
                                     body: Dict[str, Any] = Body(...)):
             """
             Replace the agent's instruction and block values with the reviewed ones:
@@ -6781,14 +6776,14 @@ class DashboardServer:
 
             fields = []
             if instruction != current or not blocks:
-                if not self._update_agent_config(config_id, {"instruction": instruction}, changed_by=username):
+                if not self._update_agent_config(config_id, {"instruction": instruction}, changed_by=ctx.user_id):
                     raise HTTPException(status_code=500, detail="Failed to update the agent")
                 fields.append("instruction")
             from shared.utils.memory_blocks_service import MemoryBlocksService
             svc = MemoryBlocksService(self.db_client)
             block_versions = {}
             for label, value in blocks.items():
-                result = svc.modify_block(project_id, label, value=value, changed_by=username)
+                result = svc.modify_block(project_id, label, value=value, changed_by=ctx.user_id)
                 if result.get("status") != "success":
                     status = 400 if result.get("error_code") in ("read_only", "too_long") else 500
                     raise HTTPException(status_code=status, detail=result.get("error_message")
@@ -6799,7 +6794,7 @@ class DashboardServer:
             details = {"config_id": config_id, "fields": fields, "via": "suggested_fix", **source}
             if block_versions:
                 details["memory_blocks"] = block_versions
-            audit_service.log(username, audit_service.ACTION_AGENT_UPDATE, audit_service.RESOURCE_AGENT,
+            audit_service.log(ctx.user_id, audit_service.ACTION_AGENT_UPDATE, audit_service.RESOURCE_AGENT,
                               resource_id=name, details=details, request=request)
             try:
                 import httpx
@@ -6813,7 +6808,7 @@ class DashboardServer:
             return {"success": True, "agent_name": name, "fields": fields, "memory_blocks": block_versions}
 
         @self.app.post("/dashboard/api/evals", tags=["Dashboard - Evals"])
-        async def create_test_case(request: Request, username: str = Depends(self._get_auth_user_dependency)):
+        async def create_test_case(request: Request, ctx: RequestContext = Depends(get_request_context)):
             """Create a new test case."""
             body = await request.json()
             agent_name = body.get("agent_name", "").strip()
@@ -6857,7 +6852,7 @@ class DashboardServer:
                     eval_method=eval_method,
                     judge_model=body.get("judge_model"),
                     threshold=float(body.get("threshold", 0.7)),
-                    created_by=username,
+                    created_by=ctx.user_id,
                     source_feedback_id=source_feedback_id,
                 )
                 session.add(tc)
@@ -6874,7 +6869,7 @@ class DashboardServer:
                 session.close()
 
         @self.app.put("/dashboard/api/evals/{test_case_id}", tags=["Dashboard - Evals"])
-        async def update_test_case(test_case_id: int, request: Request, username: str = Depends(self._get_auth_user_dependency)):
+        async def update_test_case(test_case_id: int, request: Request, ctx: RequestContext = Depends(get_request_context)):
             """Update a test case's fields."""
             body = await request.json()
             if not self.db_client:
@@ -6905,7 +6900,7 @@ class DashboardServer:
                 session.close()
 
         @self.app.delete("/dashboard/api/evals/{test_case_id}", tags=["Dashboard - Evals"])
-        async def delete_test_case(test_case_id: int, request: Request, username: str = Depends(self._get_auth_user_dependency)):
+        async def delete_test_case(test_case_id: int, request: Request, ctx: RequestContext = Depends(get_request_context)):
             """Soft-delete a test case (sets is_active=False)."""
             if not self.db_client:
                 raise HTTPException(status_code=503, detail="Database not available")
@@ -6929,7 +6924,7 @@ class DashboardServer:
                 session.close()
 
         @self.app.post("/dashboard/api/evals/version/{version_id}/run", tags=["Dashboard - Evals"])
-        async def run_version_eval_suite(version_id: int, request: Request, username: str = Depends(self._get_auth_user_dependency)):
+        async def run_version_eval_suite(version_id: int, request: Request, ctx: RequestContext = Depends(get_request_context)):
             """
             Run the eval suite for all active test cases linked to the agent of this version.
 
@@ -7091,7 +7086,7 @@ class DashboardServer:
                 session.close()
 
         @self.app.post("/dashboard/api/evals/{test_case_id}/run", tags=["Dashboard - Evals"])
-        async def run_single_eval(test_case_id: int, request: Request, username: str = Depends(self._get_auth_user_dependency)):
+        async def run_single_eval(test_case_id: int, request: Request, ctx: RequestContext = Depends(get_request_context)):
             """
             Score a single test case.
             Body: {"version_id": int, "actual_output"?: str}
@@ -7316,7 +7311,7 @@ class DashboardServer:
         @self.app.get("/dashboard/api/triggers", tags=["Dashboard - Triggers"])
         async def list_triggers(
             request: Request,
-            username: str = Depends(self._get_auth_user_dependency),
+            ctx: RequestContext = Depends(get_request_context),
             project_id: Optional[int] = None,
             agent_name: Optional[str] = None,
         ):
@@ -7342,10 +7337,10 @@ class DashboardServer:
         @self.app.get("/dashboard/api/system-jobs", tags=["Dashboard - Triggers"])
         async def list_system_jobs(
             request: Request,
-            username: str = Depends(self._get_auth_user_dependency),
+            ctx: RequestContext = Depends(get_request_context),
         ):
             """List all active programmatically-registered system cron jobs."""
-            if not self._get_is_admin(request):
+            if not ctx.is_admin:
                 from fastapi import HTTPException
                 raise HTTPException(status_code=403, detail="Forbidden")
             
@@ -7373,10 +7368,10 @@ class DashboardServer:
         async def toggle_system_job(
             job_id: str,
             request: Request,
-            username: str = Depends(self._get_auth_user_dependency)
+            ctx: RequestContext = Depends(get_request_context)
         ):
             """Pause or resume a system background job."""
-            if not self._get_is_admin(request):
+            if not ctx.is_admin:
                 from fastapi import HTTPException
                 raise HTTPException(status_code=403, detail="Forbidden")
             
@@ -7406,10 +7401,10 @@ class DashboardServer:
         async def reschedule_system_job(
             job_id: str,
             request: Request,
-            username: str = Depends(self._get_auth_user_dependency)
+            ctx: RequestContext = Depends(get_request_context)
         ):
             """Reschedule a system background job using a standard cron expression."""
-            if not self._get_is_admin(request):
+            if not ctx.is_admin:
                 from fastapi import HTTPException
                 raise HTTPException(status_code=403, detail="Forbidden")
             
@@ -7449,7 +7444,7 @@ class DashboardServer:
         @self.app.post("/dashboard/api/triggers", tags=["Dashboard - Triggers"])
         async def create_trigger(
             request: Request,
-            username: str = Depends(self._get_auth_user_dependency),
+            ctx: RequestContext = Depends(get_request_context),
         ):
             """Create a new trigger.
 
@@ -7520,7 +7515,7 @@ class DashboardServer:
                     require_signature=bool(body.get("require_signature", False)),
                     output_type=body.get("output_type", "memory_block"),
                     is_enabled=body.get("is_enabled", True),
-                    created_by=username,
+                    created_by=ctx.user_id,
                 )
                 trigger.set_output_config(body.get("output_config") or {})
                 session.add(trigger)
@@ -7544,7 +7539,7 @@ class DashboardServer:
         async def update_trigger(
             trigger_id: int,
             request: Request,
-            username: str = Depends(self._get_auth_user_dependency),
+            ctx: RequestContext = Depends(get_request_context),
         ):
             """Update a trigger.
 
@@ -7644,7 +7639,7 @@ class DashboardServer:
         async def delete_trigger(
             trigger_id: int,
             request: Request,
-            username: str = Depends(self._get_auth_user_dependency),
+            ctx: RequestContext = Depends(get_request_context),
         ):
             """Delete a trigger."""
             from shared.utils.trigger_runner import get_trigger_runner
@@ -7676,7 +7671,7 @@ class DashboardServer:
         async def toggle_trigger(
             trigger_id: int,
             request: Request,
-            username: str = Depends(self._get_auth_user_dependency),
+            ctx: RequestContext = Depends(get_request_context),
         ):
             """Toggle a trigger's is_enabled state."""
             from shared.utils.trigger_runner import get_trigger_runner
@@ -7709,7 +7704,7 @@ class DashboardServer:
         async def test_fire_trigger(
             trigger_id: int,
             request: Request,
-            username: str = Depends(self._get_auth_user_dependency),
+            ctx: RequestContext = Depends(get_request_context),
         ):
             """Immediately execute a trigger and return the result.
 
@@ -7771,17 +7766,17 @@ class DashboardServer:
                               "missing_keys": details.get("missing_keys") or []}}
 
         @self.app.get("/dashboard/api/settings/image-model", tags=["Dashboard - Settings"])
-        async def get_image_model_setting(request: Request, username: str = Depends(self._get_auth_user_dependency)):
+        async def get_image_model_setting(request: Request, ctx: RequestContext = Depends(get_request_context)):
             """The default image model for agents that name none, where it comes from, and whether its key is set."""
-            if not self._get_is_admin(request):
+            if not ctx.is_admin:
                 raise HTTPException(status_code=403, detail="Forbidden")
             return _image_model_state()
 
         @self.app.put("/dashboard/api/settings/image-model", tags=["Dashboard - Settings"])
-        async def put_image_model_setting(request: Request, username: str = Depends(self._get_auth_user_dependency),
+        async def put_image_model_setting(request: Request, ctx: RequestContext = Depends(get_request_context),
                                           body: Dict[str, Any] = Body(...)):
             """Set the default image model; an empty model falls back to IMAGE_MODEL, then dall-e-3."""
-            if not self._get_is_admin(request):
+            if not ctx.is_admin:
                 raise HTTPException(status_code=403, detail="Forbidden")
             from shared.utils.system_settings import IMAGE_MODEL, get_setting, set_setting
             model = body.get("model")
@@ -7799,11 +7794,11 @@ class DashboardServer:
                     raise HTTPException(status_code=400,
                                         detail=f"Unknown model '{model}': write it as provider/model, e.g. gemini/gemini-2.5-flash-image")
             before = get_setting(IMAGE_MODEL) or ""
-            if not set_setting(IMAGE_MODEL, model, username):
+            if not set_setting(IMAGE_MODEL, model, ctx.user_id):
                 raise HTTPException(status_code=500, detail="Could not store the setting")
             try:
                 from shared.utils.audit_service import ACTION_CONFIG_CHANGE, log
-                log(username, ACTION_CONFIG_CHANGE, "setting", resource_id=IMAGE_MODEL,
+                log(ctx.user_id, ACTION_CONFIG_CHANGE, "setting", resource_id=IMAGE_MODEL,
                     details={"before": before or None, "after": model or None}, request=request)
             except Exception as e:
                 logger.debug("Audit log for image model setting: %s", e)
@@ -7838,18 +7833,18 @@ class DashboardServer:
                 logger.debug("Audit log for model price: %s", e)
 
         @self.app.get("/dashboard/api/settings/model-prices", tags=["Dashboard - Settings"])
-        async def get_model_prices(request: Request, username: str = Depends(self._get_auth_user_dependency)):
+        async def get_model_prices(request: Request, ctx: RequestContext = Depends(get_request_context)):
             """Every model used or priced by hand: its price per million tokens, where it comes from, and calls without a cost."""
-            if not self._get_is_admin(request):
+            if not ctx.is_admin:
                 raise HTTPException(status_code=403, detail="Forbidden")
             from starlette.concurrency import run_in_threadpool
             return await run_in_threadpool(_with_session, _price_rows)
 
         @self.app.put("/dashboard/api/settings/model-prices", tags=["Dashboard - Settings"])
-        async def put_model_price(request: Request, username: str = Depends(self._get_auth_user_dependency),
+        async def put_model_price(request: Request, ctx: RequestContext = Depends(get_request_context),
                                   body: Dict[str, Any] = Body(...)):
             """Set a model's price by hand, in US dollars per million tokens, and price all its calls with it."""
-            if not self._get_is_admin(request):
+            if not ctx.is_admin:
                 raise HTTPException(status_code=403, detail="Forbidden")
             import math
             model_name = body.get("model_name")
@@ -7875,10 +7870,10 @@ class DashboardServer:
                     session.add(row)
                 row.input_usd_per_mtok = prices["input_usd_per_mtok"]
                 row.output_usd_per_mtok = prices["output_usd_per_mtok"]
-                row.updated_by = username
+                row.updated_by = ctx.user_id
                 session.commit()
                 _reprice(session, model_name)
-                _audit_price(username, request, model_name, before, prices)
+                _audit_price(ctx.user_id, request, model_name, before, prices)
                 return _price_rows(session)
 
             from starlette.concurrency import run_in_threadpool
@@ -7886,9 +7881,9 @@ class DashboardServer:
 
         @self.app.delete("/dashboard/api/settings/model-prices", tags=["Dashboard - Settings"])
         async def delete_model_price(request: Request, model: str = Query(...),
-                                     username: str = Depends(self._get_auth_user_dependency)):
+                                     ctx: RequestContext = Depends(get_request_context)):
             """Remove a manual price: the model's calls are priced from the published lists again, or have no cost."""
-            if not self._get_is_admin(request):
+            if not ctx.is_admin:
                 raise HTTPException(status_code=403, detail="Forbidden")
 
             def work(session):
@@ -7901,16 +7896,16 @@ class DashboardServer:
                 session.delete(row)
                 session.commit()
                 _reprice(session, model)
-                _audit_price(username, request, model, before, None)
+                _audit_price(ctx.user_id, request, model, before, None)
                 return _price_rows(session)
 
             from starlette.concurrency import run_in_threadpool
             return await run_in_threadpool(_with_session, work)
 
         @self.app.post("/dashboard/api/settings/model-prices/fill-missing", tags=["Dashboard - Settings"])
-        async def fill_missing_costs(request: Request, username: str = Depends(self._get_auth_user_dependency)):
+        async def fill_missing_costs(request: Request, ctx: RequestContext = Depends(get_request_context)):
             """Price the calls logged without a cost whose model has a price now."""
-            if not self._get_is_admin(request):
+            if not ctx.is_admin:
                 raise HTTPException(status_code=403, detail="Forbidden")
 
             def work(session):
@@ -7989,7 +7984,7 @@ class DashboardServer:
         @self.app.get("/dashboard/api/alert-rules", tags=["Dashboard - Alerts"])
         async def list_alert_rules(
             request: Request,
-            username: str = Depends(self._get_auth_user_dependency),
+            ctx: RequestContext = Depends(get_request_context),
             scope: Optional[str] = None,
             condition_type: Optional[str] = None,
         ):
@@ -8001,15 +7996,15 @@ class DashboardServer:
         @self.app.post("/dashboard/api/alert-rules", tags=["Dashboard - Alerts"])
         async def create_alert_rule(
             request: Request,
-            username: str = Depends(self._get_auth_user_dependency),
+            ctx: RequestContext = Depends(get_request_context),
         ):
             """Create an alert rule."""
-            if not self._get_is_admin(request):
+            if not ctx.is_admin:
                 raise HTTPException(status_code=403, detail="Forbidden")
             from shared.utils.alert_service import get_alert_service
             body = await request.json()
             fields = _validate_alert_rule(body)
-            fields.setdefault("created_by", username)
+            fields.setdefault("created_by", ctx.user_id)
             rule = get_alert_service().create_rule(**fields)
             if not rule:
                 raise HTTPException(status_code=500, detail="Failed to create alert rule")
@@ -8019,10 +8014,10 @@ class DashboardServer:
         async def update_alert_rule(
             rule_id: int,
             request: Request,
-            username: str = Depends(self._get_auth_user_dependency),
+            ctx: RequestContext = Depends(get_request_context),
         ):
             """Update an alert rule."""
-            if not self._get_is_admin(request):
+            if not ctx.is_admin:
                 raise HTTPException(status_code=403, detail="Forbidden")
             from shared.utils.alert_service import get_alert_service
             body = await request.json()
@@ -8036,10 +8031,10 @@ class DashboardServer:
         async def delete_alert_rule(
             rule_id: int,
             request: Request,
-            username: str = Depends(self._get_auth_user_dependency),
+            ctx: RequestContext = Depends(get_request_context),
         ):
             """Delete an alert rule."""
-            if not self._get_is_admin(request):
+            if not ctx.is_admin:
                 raise HTTPException(status_code=403, detail="Forbidden")
             from shared.utils.alert_service import get_alert_service
             if not get_alert_service().delete_rule(rule_id):
@@ -8050,14 +8045,14 @@ class DashboardServer:
         async def test_alert_rule(
             rule_id: int,
             request: Request,
-            username: str = Depends(self._get_auth_user_dependency),
+            ctx: RequestContext = Depends(get_request_context),
         ):
             """Measure the rule now and send a test notification.
 
             Runs with force so a trial cannot consume the rule's real cooldown or
             inflate fire_count.
             """
-            if not self._get_is_admin(request):
+            if not ctx.is_admin:
                 raise HTTPException(status_code=403, detail="Forbidden")
             from shared.utils.alert_service import get_alert_service
             result = get_alert_service().evaluate_rule(rule_id, force=True)

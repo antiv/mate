@@ -29,6 +29,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 from shared.utils.feedback_service import FeedbackService, extract_exchange
 from shared.utils.models import (Base, LangGraphEvent, LangGraphSession,
                                  ResponseFeedback, TestCase)
+from shared.test.request_context_helpers import as_caller
 
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 
@@ -174,9 +175,8 @@ class TestDashboardEndpoints(_DbTestCase):
             self.server = DashboardServer(self.app, project_root=PROJECT_ROOT)
         self.server.db_client = self.db_client
         self.server.TestCase = TestCase
-        self.app.dependency_overrides[self.server._get_auth_user_dependency] = lambda: "admin"
         self.is_admin = True
-        self.server._get_is_admin = lambda request: self.is_admin
+        as_caller(self.app, "admin", lambda: self.is_admin)
         self.sessions = {}
         self.server._get_session_events = lambda sid: self.sessions.get(sid)
         patcher = patch("shared.utils.feedback_service.get_feedback_service",

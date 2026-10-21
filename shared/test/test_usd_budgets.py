@@ -28,6 +28,7 @@ from shared.test.test_alert_rules import _AlertTestCase
 from shared.utils.models import AgentConfig, AlertRule, Base, Project, RateLimitConfig, TokenUsageLog
 from shared.utils.rate_limit_service import RateLimitService
 from shared.utils.token_usage_service import TokenUsageService
+from shared.test.request_context_helpers import as_caller
 
 
 class _Db(unittest.TestCase):
@@ -297,8 +298,8 @@ class TestApiValidation(_Db):
         with patch("shared.utils.database_client.get_database_client", return_value=db_client):
             server = DashboardServer(app, project_root=Path(__file__).parent.parent.parent)
         server.db_client = db_client
-        server._get_is_admin = lambda request: True
         app.dependency_overrides[server._get_auth_user_dependency] = lambda: "admin"
+        as_caller(app, "admin", True)
         self.client = TestClient(app)
 
     def test_rate_limit_dollar_budgets_must_be_amounts(self):

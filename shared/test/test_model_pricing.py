@@ -18,6 +18,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 from shared.utils import model_pricing as mp
 from shared.utils.models import Base, ModelPrice, TokenUsageLog
 from shared.utils.token_usage_service import TokenUsageService
+from shared.test.request_context_helpers import as_caller
 
 OPENROUTER_PAYLOAD = {"data": [
     {"id": "deepseek/deepseek-chat-v3.1", "pricing": {"prompt": "0.0000002", "completion": "0.0000008"}},
@@ -268,8 +269,7 @@ class _DashboardTest(_PricingTest):
         with patch("shared.utils.database_client.get_database_client", return_value=db_client):
             self.server = DashboardServer(app, project_root=Path(__file__).parent.parent.parent)
         self.server.db_client = db_client
-        self.server._get_is_admin = lambda request: True
-        app.dependency_overrides[self.server._get_auth_user_dependency] = lambda: "admin"
+        as_caller(app, "admin", True)
         self.client = TestClient(app)
 
         session = self.Session()
@@ -382,7 +382,7 @@ class TestPriceRoutes(_DashboardTest):
         self.assertAlmostEqual(self._costs()[0], 0.2)
 
     def test_only_admins(self):
-        self.server._get_is_admin = lambda request: False
+        as_caller(self.client.app, "admin", False)
         self.assertEqual(self.client.get(self.URL).status_code, 403)
         self.assertEqual(self.client.post(self.URL + "/fill-missing").status_code, 403)
 

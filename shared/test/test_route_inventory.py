@@ -46,12 +46,9 @@ USER_ROUTES = {
 # 1.6.0 item 2 moves groups to get_request_context and removes them here (#276).
 NOT_YET_ON_CONTEXT = {
     "Dashboard - Agent Versions",
-    "Dashboard - Agents",
-    "Dashboard - Alerts",
     "Dashboard - Audit",
     "Dashboard - Channel Integrations",
     "Dashboard - Docs",
-    "Dashboard - Evals",
     "Dashboard - Feedback",
     "Dashboard - File Search",
     "Dashboard - Guardrails",
@@ -61,14 +58,10 @@ NOT_YET_ON_CONTEXT = {
     "Dashboard - Rate Limits",
     "Dashboard - Server Control",
     "Dashboard - Sessions",
-    "Dashboard - Settings",
     "Dashboard - Templates",
     "Dashboard - Traces",
-    "Dashboard - Triggers",
     "Dashboard - Usage Analytics",
-    "Dashboard - Users",
     "Dashboard - Widget Keys",
-    "Dashboard - Wizard",
     "Dashboard - WorkRoom",
 }
 

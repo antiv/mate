@@ -14,6 +14,7 @@ import sys
 import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
+from shared.test.request_context_helpers import as_caller
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -32,7 +33,7 @@ class TestImportAgentsErrorMessage(unittest.TestCase):
             app = FastAPI()
             self.server = DashboardServer(app, project_root)
 
-        app.dependency_overrides[self.server._get_auth_user_dependency] = lambda: "alice"
+        as_caller(app, "alice", True)
         self.client = TestClient(app)
 
     def test_a_rejected_import_reports_its_own_reason(self):

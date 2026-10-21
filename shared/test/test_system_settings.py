@@ -23,6 +23,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 
 from shared.utils import system_settings as ss
 from shared.utils.models import Base, SystemSetting
+from shared.test.request_context_helpers import as_caller
 
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 
@@ -72,7 +73,7 @@ class TestImageModelApi(_Db):
             self.server = DashboardServer(app, project_root=PROJECT_ROOT)
         app.dependency_overrides[self.server._get_auth_user_dependency] = lambda: "admin"
         self.is_admin = True
-        self.server._get_is_admin = lambda request: self.is_admin
+        as_caller(app, "admin", lambda: self.is_admin)
         self.audit = patch("shared.utils.audit_service.log").start()
         self.addCleanup(patch.stopall)
         self.client = TestClient(app)

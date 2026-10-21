@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **One request context for dashboard routes, starting with the pages** (#276, 1.6.0 item 2) - a dashboard route now learns who is calling from one dependency, `get_request_context` (`server/request_context.py`), which gives it the user and their role, instead of resolving the user and calling `_get_is_admin` itself. The 24 dashboard pages use it; the API routes follow in the next pull requests, and 2.0 adds the workspace to it. Nothing changes for users: a signed-out caller is still sent to the login page, and a non-admin to the Work Room. The route inventory test now also fails on a dashboard route that does not take the context, outside the groups not yet moved. See `docs/dev/auth-and-access.md`
+- **One request context for dashboard routes** (#276, 1.6.0 item 2) - a dashboard route now learns who is calling from one dependency, `get_request_context` (`server/request_context.py`), which gives it the user and their role, instead of resolving the user and calling `_get_is_admin` itself. The 24 dashboard pages use it, and so do the agents, alerts, evals, settings, triggers, users and wizard APIs; `_get_is_admin` is gone. The remaining API routes follow, and 2.0 adds the workspace to it. Nothing changes for users: a signed-out caller is still sent to the login page, and a non-admin to the Work Room. The route inventory test now also fails on a dashboard route that does not take the context, outside the groups not yet moved. See `docs/dev/auth-and-access.md`
 
 ### Fixed
 

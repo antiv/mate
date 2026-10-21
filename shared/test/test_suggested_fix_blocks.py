@@ -28,6 +28,7 @@ from shared.utils.agent_improver import blocks_read, propose_instruction
 from shared.utils.memory_blocks_service import MemoryBlocksService, block_overrides
 from shared.utils.models import (AgentConfig, AgentConfigVersion, Base, MemoryBlock, ResponseFeedback,
                                  TestCase)
+from shared.test.request_context_helpers import as_caller
 
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 
@@ -205,7 +206,7 @@ class TestImproveBlockEndpoints(unittest.TestCase):
         self.server.db_client = db
         self.server.TestCase, self.server.AgentConfig = TestCase, AgentConfig
         self.server.AgentConfigVersion, self.server.MemoryBlock = AgentConfigVersion, MemoryBlock
-        app.dependency_overrides[self.server._get_auth_user_dependency] = lambda: "admin"
+        as_caller(app, "admin", True)
         self.client = TestClient(app)
         self.audit = patch("shared.utils.audit_service.log").start()
 
