@@ -62,6 +62,12 @@ Users create PATs from the account menu. Only the SHA-256 hash is stored. A PAT
 authenticates the `/v1` routes, and only for users holding one of the roles in
 `ALLOWED_API_ROLES` (default `admin`, `developer`). A PAT can carry an expiry.
 
+The same rule (`roles_allow_api` in `server/pat_auth.py`) decides who may create
+one: the menu shows **Personal Tokens** only to admins and users with such a
+role, and `POST /dashboard/api/tokens` refuses anyone else with 403. Listing and
+revoking one's own tokens needs no role, so a user who lost theirs can still
+revoke them through the API.
+
 ## Who is an administrator
 
 `get_user_role` returns `admin` or `user`:
@@ -78,8 +84,9 @@ whether to answer.
 
 `DashboardAuthzMiddleware` requires an administrator for every request under
 `/dashboard/api/`, reads included. The exceptions are two short allowlists in
-`server/dashboard_authz.py`, for what the Work Room needs: renaming a conversation,
-rating a reply, and reading one's own ratings and tokens.
+`server/dashboard_authz.py`, for what the Work Room and the account menu need:
+renaming a conversation, rating a reply, reading one's own ratings, and listing,
+creating and revoking one's own personal access tokens.
 
 A route added under `/dashboard/api/` is therefore admin-only without any code in
 the handler. Add it to an allowlist only after deciding a non-admin may call it,

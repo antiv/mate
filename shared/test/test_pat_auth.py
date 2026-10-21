@@ -20,7 +20,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from server.pat_auth import (
     DEFAULT_ALLOWED_ROLES,
     get_allowed_roles,
+    dashboard_user_may_hold_token,
     get_pat_user,
+    roles_allow_api,
     verify_pat_hash,
 )
 
@@ -175,6 +177,53 @@ class TestGetPatUser(unittest.TestCase):
         with self.assertRaises(HTTPException):
             self._call(_request("Bearer bad"))
         self.session.close.assert_called_once()
+
+
+class TestRolesAllowApi(unittest.TestCase):
+
+    def test_admin_role_is_allowed(self):
+        self.assertTrue(roles_allow_api("alice", ["admin"]))
+
+    def test_allowed_role_is_allowed(self):
+        with patch.dict(os.environ, {"ALLOWED_API_ROLES": "developer"}):
+            self.assertTrue(roles_allow_api("alice", ["user", "developer"]))
+
+    def test_other_roles_are_refused(self):
+        with patch.dict(os.environ, {"ALLOWED_API_ROLES": "developer"}):
+            self.assertFalse(roles_allow_api("alice", ["user"]))
+
+
+class TestDashboardUserMayHoldToken(unittest.TestCase):
+    """The account menu offers a token only to users the API would accept."""
+
+    def _may(self, user_id, admin, roles):
+        service = MagicMock()
+        service.get_user_roles.return_value = roles
+        with patch("server.auth.get_dashboard_auth_user", return_value=user_id), \
+                patch("server.auth.is_admin_user", return_value=admin), \
+                patch("shared.utils.user_service.get_user_service", return_value=service), \
+                patch.dict(os.environ, {"ALLOWED_API_ROLES": "developer"}):
+            return dashboard_user_may_hold_token(MagicMock())
+
+    def test_admin_may(self):
+        self.assertTrue(self._may("admin", True, []))
+
+    def test_user_with_an_allowed_role_may(self):
+        self.assertTrue(self._may("dev@example.com", False, ["developer"]))
+
+    def test_user_without_one_may_not(self):
+        self.assertFalse(self._may("someone@example.com", False, ["user"]))
+
+    def test_signed_out_may_not(self):
+        self.assertFalse(self._may(None, True, ["admin"]))
+
+    def test_roles_that_cannot_be_read_refuse(self):
+        service = MagicMock()
+        service.get_user_roles.side_effect = RuntimeError("database down")
+        with patch("server.auth.get_dashboard_auth_user", return_value="dev@example.com"), \
+                patch("server.auth.is_admin_user", return_value=False), \
+                patch("shared.utils.user_service.get_user_service", return_value=service):
+            self.assertFalse(dashboard_user_may_hold_token(MagicMock()))
 
 
 if __name__ == "__main__":

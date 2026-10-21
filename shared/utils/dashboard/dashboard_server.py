@@ -2922,7 +2922,10 @@ class DashboardServer:
         static_dir = self.project_root / "static"
         
         self.templates = Jinja2Templates(directory=str(templates_dir))
-        
+        # base.html offers Personal Tokens only to users the API would accept
+        from server.pat_auth import dashboard_user_may_hold_token
+        self.templates.env.globals["may_hold_api_token"] = dashboard_user_may_hold_token
+
         # Mount static files
         self.app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
     
@@ -4252,13 +4255,28 @@ class DashboardServer:
         ):
             """Create a new personal access token."""
             from shared.utils.models import PersonalAccessToken
+            from server.pat_auth import dashboard_user_may_hold_token
             import secrets
             import hashlib
             from datetime import datetime, timezone
-            
+
+            # The API refuses a token whose user lacks a role in ALLOWED_API_ROLES
+            if not dashboard_user_may_hold_token(request):
+                raise HTTPException(
+                    status_code=403,
+                    detail="Your role does not allow API access, so you cannot create a token",
+                )
+
             name = body.get("name", "Unnamed Token")
             expires_in_days = body.get("expires_in_days")
-            
+            if expires_in_days:
+                try:
+                    expires_in_days = float(expires_in_days)
+                except (TypeError, ValueError):
+                    raise HTTPException(status_code=400, detail="expires_in_days must be a number")
+                if not math.isfinite(expires_in_days) or expires_in_days <= 0:
+                    raise HTTPException(status_code=400, detail="expires_in_days must be a positive number")
+
             raw_token = f"mate_pat_{secrets.token_urlsafe(32)}"
             token_hash = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
             token_prefix = raw_token[:13]
@@ -4266,8 +4284,11 @@ class DashboardServer:
             expires_at = None
             if expires_in_days:
                 from datetime import timedelta
-                expires_at = datetime.now(timezone.utc) + timedelta(days=float(expires_in_days))
-                
+                try:
+                    expires_at = datetime.now(timezone.utc) + timedelta(days=expires_in_days)
+                except OverflowError:
+                    raise HTTPException(status_code=400, detail="expires_in_days is too large")
+
             db = self.db_client
             session = db.get_session()
             if not session:

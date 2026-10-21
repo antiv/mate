@@ -29,9 +29,13 @@ PROTECTED_PREFIX = "/dashboard/api/"
 
 # Routes a non-admin (regular SSO user) may write to. Work Room is the non-admin
 # space: renaming a conversation, and rating a reply (with an optional note).
+# The account menu creates and revokes the caller's own personal access tokens;
+# creating one also needs a role in ALLOWED_API_ROLES, checked in the handler.
 USER_WRITABLE_PATHS = [
     re.compile(r"^/dashboard/api/workroom/title/?$"),
     re.compile(r"^/dashboard/api/feedback/?$"),
+    re.compile(r"^/dashboard/api/tokens/?$"),
+    re.compile(r"^/dashboard/api/tokens/\d+/?$"),
 ]
 
 # Routes a non-admin may read. The Work Room shows their own ratings, and the

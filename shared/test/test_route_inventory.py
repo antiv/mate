@@ -35,6 +35,8 @@ USER_ROUTES = {
     ("GET", "/dashboard/api/feedback"),
     ("POST", "/dashboard/api/feedback"),
     ("GET", "/dashboard/api/tokens"),
+    ("POST", "/dashboard/api/tokens"),
+    ("DELETE", "/dashboard/api/tokens/{token_id}"),
     ("POST", "/dashboard/api/workroom/title"),
 }
 
@@ -43,7 +45,8 @@ _PARAM = re.compile(r"\{(\w+)(?::(\w+))?\}")
 
 def _concrete(path: str) -> str:
     """The path with every parameter filled in, so it can be requested."""
-    return _PARAM.sub(lambda m: "x/y" if m.group(2) == "path" else "x", path)
+    # Digits, since an allowlist entry may require them (a token id)
+    return _PARAM.sub(lambda m: "1/2" if m.group(2) == "path" else "1", path)
 
 
 def dashboard_api_routes(app: FastAPI) -> List[Tuple[str, str]]:

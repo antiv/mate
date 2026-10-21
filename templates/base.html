@@ -468,9 +468,11 @@
                             {% else %}Dashboard User{% endif %}
                         </div>
                     </div>
+                    {% if may_hold_api_token is defined and may_hold_api_token(request) %}
                     <a href="#" data-click="showTokensModal" data-args='["$event"]' class="mate-menu-item">
                         <i class="fas fa-key" style="width: 14px;"></i>Personal Tokens
                     </a>
+                    {% endif %}
                     <a href="#" data-click="confirmLogout" data-args='["$event"]' class="mate-menu-item danger">
                         <i class="fas fa-sign-out-alt" style="width: 14px;"></i>Logout
                     </a>

@@ -47,6 +47,14 @@ def _app() -> FastAPI:
     async def list_tokens():
         return {"ok": True}
 
+    @app.post("/dashboard/api/tokens")
+    async def create_token():
+        return {"ok": True}
+
+    @app.delete("/dashboard/api/tokens/{token_id}")
+    async def revoke_token(token_id: str):
+        return {"ok": True}
+
     @app.post("/dashboard/api/feedback")
     async def submit_feedback():
         return {"ok": True}
@@ -113,13 +121,20 @@ class TestDashboardAuthz(unittest.TestCase):
         with self._as(False):
             self.assertEqual(self.client.post("/dashboard/api/feedback").status_code, 200)
 
+    def test_own_tokens_writable_for_users(self):
+        # The handler checks ALLOWED_API_ROLES before it creates one
+        with self._as(False):
+            self.assertEqual(self.client.post("/dashboard/api/tokens").status_code, 200)
+            self.assertEqual(self.client.delete("/dashboard/api/tokens/5").status_code, 200)
+            self.assertEqual(self.client.delete("/dashboard/api/tokens/5/x").status_code, 403)
+
     def test_non_dashboard_routes_untouched(self):
         with self._as(False):
             self.assertEqual(self.client.post("/run_sse").status_code, 200)
 
     def test_allowlist_stays_small(self):
         # Every entry here is a route a non-admin may write to; keep it deliberate.
-        self.assertEqual(len(USER_WRITABLE_PATHS), 2)
+        self.assertEqual(len(USER_WRITABLE_PATHS), 4)
         self.assertEqual(len(USER_READABLE_PATHS), 2)
 
 
