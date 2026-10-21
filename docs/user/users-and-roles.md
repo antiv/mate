@@ -27,7 +27,9 @@ Users are managed in **Control Room → Users**.
 
 A person gets the whole dashboard (Studio and Control Room) when they sign in with
 the built-in account, or sign in through Google or GitHub and have the `admin` role.
-Everyone else sees the Work Room and their own usage.
+Everyone else sees the Work Room and their own usage. People with a role in
+`ALLOWED_API_ROLES` (by default `admin` and `developer`) also get **Personal Tokens**
+in the account menu, for the OpenAI-compatible API and the agents' MCP servers.
 
 ## Agent access
 
@@ -37,11 +39,12 @@ agent's **Allowed Roles**. Being a dashboard administrator does not bypass it.
 ## Roles
 
 A role is a label. A person can have several, and you can invent your own, such as
-`support` or `sales`. Four have a built-in meaning:
+`support` or `sales`. Five have a built-in meaning:
 
 | Role | Meaning |
 |---|---|
 | `admin` | The whole dashboard for people who sign in through Google or GitHub. Admits the person to agents with an empty **Allowed Roles** list, and lets agents change memory blocks on their behalf. |
+| `developer` | May create personal access tokens and call the API with them, while the dashboard stays the Work Room. The roles with this right are set by `ALLOWED_API_ROLES`, `admin` and `developer` by default. |
 | `user` | An ordinary person. Agents that list `user` in **Allowed Roles** are open to them. |
 | `pending` | Signed in, but not yet given access to anything. New single sign-on users start here. |
 | `widget` | Assigned automatically to visitors who chat through an embedded widget. |

@@ -82,7 +82,7 @@ An agent must be a **root agent** (it cannot have parent agents) to be exposed.
 ### 2. Generate a Personal Access Token
 * **Via Dashboard UI**: 
   1. Click on the user profile dropdown icon in the top right corner of the dashboard navbar.
-  2. Select **Personal Tokens** from the menu.
+  2. Select **Personal Tokens** from the menu. It is there for admins and users with a role in `ALLOWED_API_ROLES` (default `admin`, `developer`).
   3. Enter a descriptive token name (e.g. "VS Code Continue") and select an expiration period, then click **Generate Token**.
   4. Copy the generated token immediately. **For security, it is only shown once.**
 * **Via API**: Send a `POST` request to `/dashboard/api/tokens` with a JSON payload:

@@ -21,6 +21,35 @@ def get_allowed_roles() -> set:
         return {r.strip().lower() for r in env_roles.split(",") if r.strip()}
     return DEFAULT_ALLOWED_ROLES
 
+def roles_allow_api(user_id: str, roles: list) -> bool:
+    """True if a user with these roles may use the API: an admin, or a role in ALLOWED_API_ROLES."""
+    if user_id == AUTH_USERNAME or "admin" in roles:
+        return True
+    return any(role in roles for role in get_allowed_roles())
+
+
+def dashboard_user_may_hold_token(request: Request) -> bool:
+    """True if the signed-in dashboard user may create personal access tokens.
+
+    The same rule get_pat_user applies when a token is used, so a user is not
+    offered a token the API would refuse.
+    """
+    from server.auth import get_dashboard_auth_user, is_admin_user
+    from shared.utils.user_service import get_user_service
+
+    user_id = get_dashboard_auth_user(request)
+    if not user_id:
+        return False
+    if is_admin_user(request):
+        return True
+    try:
+        roles = get_user_service().get_user_roles(user_id)
+    except Exception as exc:
+        logger.warning("Could not read the roles of %s: %s", user_id, exc)
+        return False
+    return roles_allow_api(user_id, roles)
+
+
 def verify_pat_hash(token: str) -> str:
     """Compute the SHA-256 hash of a token string."""
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
@@ -128,22 +157,10 @@ async def get_pat_user(request: Request) -> User:
             )
             
         # 4. Role Authorization Check
-        allowed = get_allowed_roles()
-        has_role = False
-        
-        # Admin bypasses role check
-        if user_record.user_id == AUTH_USERNAME or "admin" in user_record.get_roles():
-            has_role = True
-        else:
-            for role in allowed:
-                if user_record.has_role(role):
-                    has_role = True
-                    break
-                    
-        if not has_role:
+        if not roles_allow_api(user_record.user_id, user_record.get_roles()):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"User roles {user_record.get_roles()} are not authorized to use the API (allowed: {list(allowed)})"
+                detail=f"User roles {user_record.get_roles()} are not authorized to use the API (allowed: {list(get_allowed_roles())})"
             )
             
         return user_record

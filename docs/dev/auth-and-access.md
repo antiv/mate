@@ -62,6 +62,12 @@ Users create PATs from the account menu. Only the SHA-256 hash is stored. A PAT
 authenticates the `/v1` routes, and only for users holding one of the roles in
 `ALLOWED_API_ROLES` (default `admin`, `developer`). A PAT can carry an expiry.
 
+The same rule (`roles_allow_api` in `server/pat_auth.py`) decides who may create
+one: the menu shows **Personal Tokens** only to admins and users with such a
+role, and `POST /dashboard/api/tokens` refuses anyone else with 403. Listing and
+revoking one's own tokens needs no role, so a user who lost theirs can still
+revoke them through the API.
+
 ## Who is an administrator
 
 `get_user_role` returns `admin` or `user`:
@@ -78,13 +84,20 @@ whether to answer.
 
 `DashboardAuthzMiddleware` requires an administrator for every request under
 `/dashboard/api/`, reads included. The exceptions are two short allowlists in
-`server/dashboard_authz.py`, for what the Work Room needs: renaming a conversation,
-rating a reply, and reading one's own ratings and tokens.
+`server/dashboard_authz.py`, for what the Work Room and the account menu need:
+renaming a conversation, rating a reply, reading one's own ratings, and listing,
+creating and revoking one's own personal access tokens.
 
 A route added under `/dashboard/api/` is therefore admin-only without any code in
 the handler. Add it to an allowlist only after deciding a non-admin may call it,
 and scope the handler to the caller's own data. A denied request is written to the
 audit log as `rbac.denial`.
+
+`shared/test/test_route_inventory.py` lists every `/dashboard/api/` route from the
+app's router, those of included routers too, and requests each as a non-admin. It
+fails when one gets anything but the middleware's 403, or when the allowlists let
+through a route that is not in its `USER_ROUTES`. A new allowlist entry therefore
+also goes into `USER_ROUTES`.
 
 Dashboard pages do their own check and redirect non-admins to the Work Room.
 
@@ -153,6 +166,6 @@ accepts an empty password.
 | The route is | Use |
 |---|---|
 | Dashboard JSON for admins | Put it under `/dashboard/api/`; depend on `get_dashboard_auth_user` and return 401 on `None`. The middleware does the rest. |
-| Dashboard JSON for every signed-in user | The same, plus an allowlist entry, plus scoping to the caller in the handler. |
+| Dashboard JSON for every signed-in user | The same, plus an allowlist entry and its `USER_ROUTES` line in the route inventory test, plus scoping to the caller in the handler. |
 | For external programs | Depend on `get_pat_user` (PAT with role check) or `get_auth_user` (bearer or Basic). |
 | Public | No dependency. Think about rate limiting, and about what the response reveals. |
