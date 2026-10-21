@@ -130,8 +130,8 @@ function toggleWidgetKey(keyId, activate) {
     });
 }
 
-function deleteWidgetKey(keyId) {
-    if (!confirm('Delete this widget key? Any sites using it will stop working.')) return;
+async function deleteWidgetKey(keyId) {
+    if (!await showConfirm('Delete this widget key? Any sites using it will stop working.', 'Delete widget key', 'Delete', 'Cancel', 'danger')) return;
     fetch('/dashboard/api/widget-keys/' + keyId, {
         method: 'DELETE',
         headers: _authHeaders(),
