@@ -1023,7 +1023,7 @@ async function applyImprove() {
     const labels = Object.keys(checked.blocks);
     const what = labels.length ? 'the instruction of ' + _improve.agent_name + ' and the block(s) ' + labels.join(', ')
                                : 'the instruction of ' + _improve.agent_name;
-    if (!await showConfirm('Update ' + what + '? Each change becomes a new version, so it can be rolled back.', 'Update', 'Update', 'Cancel', 'warning')) return;
+    if (!await showConfirm('Update ' + what + '? Each change becomes a new version, so it can be rolled back.', 'Update instructions', 'Update', 'Cancel', 'warning')) return;
     const baseBlocks = {};
     labels.forEach(l => { baseBlocks[l] = _improve.current_blocks[l]; });
     try {
