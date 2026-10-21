@@ -11,7 +11,7 @@
                     <h4 class="text-sm font-semibold text-gray-900 dark:text-white">Tool Configuration</h4>
                     <p class="text-xs text-gray-500 dark:text-gray-400">Toggle built-in tools or author custom JSON.</p>
                 </div>
-                <button type="button"
+                <button type="button" aria-label="Close"
                     class="text-gray-500 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-100"
                     data-click="closeConfigModal" data-args='[{{ id_prefix|string|tojson }}, "ToolConfig"]'>
                     <i class="fas fa-times text-base"></i>
@@ -222,7 +222,7 @@
                     <p class="text-xs text-gray-500 dark:text-gray-400">Define remote MCP endpoints and auth headers.
                     </p>
                 </div>
-                <button type="button"
+                <button type="button" aria-label="Close"
                     class="text-gray-500 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-100"
                     data-click="closeConfigModal" data-args='[{{ id_prefix|string|tojson }}, "McpServersConfig"]'>
                     <i class="fas fa-times text-base"></i>
@@ -286,7 +286,7 @@
                     <h4 class="text-sm font-semibold text-gray-900 dark:text-white">Planner Configuration</h4>
                     <p class="text-xs text-gray-500 dark:text-gray-400">Select presets or fine-tune planner JSON.</p>
                 </div>
-                <button type="button"
+                <button type="button" aria-label="Close"
                     class="text-gray-500 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-100"
                     data-click="closeConfigModal" data-args='[{{ id_prefix|string|tojson }}, "PlannerConfig"]'>
                     <i class="fas fa-times text-base"></i>
@@ -385,7 +385,7 @@
                     <p class="text-xs text-gray-500 dark:text-gray-400">Adjust temperature, tokens, and sampling
                         strategies.</p>
                 </div>
-                <button type="button"
+                <button type="button" aria-label="Close"
                     class="text-gray-500 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-100"
                     data-click="closeConfigModal" data-args='[{{ id_prefix|string|tojson }}, "GenerateContentConfig"]'>
                     <i class="fas fa-times text-base"></i>
@@ -487,7 +487,7 @@
                     <p class="text-xs text-gray-500 dark:text-gray-400">Define the JSON schema that validates incoming
                         payloads.</p>
                 </div>
-                <button type="button"
+                <button type="button" aria-label="Close"
                     class="text-gray-500 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-100"
                     data-click="closeConfigModal" data-args='[{{ id_prefix|string|tojson }}, "InputSchema"]'>
                     <i class="fas fa-times text-base"></i>
@@ -543,7 +543,7 @@
                     <p class="text-xs text-gray-500 dark:text-gray-400">Toggle built-in guardrails, set actions (block /
                         warn / log / redact), or edit raw JSON.</p>
                 </div>
-                <button type="button"
+                <button type="button" aria-label="Close"
                     class="text-gray-500 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-100"
                     data-click="closeConfigModal" data-args='[{{ id_prefix|string|tojson }}, "GuardrailConfig"]'>
                     <i class="fas fa-times text-base"></i>
@@ -750,7 +750,7 @@
                     <p class="text-xs text-gray-500 dark:text-gray-400">Describe the JSON structure your agent returns.
                     </p>
                 </div>
-                <button type="button"
+                <button type="button" aria-label="Close"
                     class="text-gray-500 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-100"
                     data-click="closeConfigModal" data-args='[{{ id_prefix|string|tojson }}, "OutputSchema"]'>
                     <i class="fas fa-times text-base"></i>

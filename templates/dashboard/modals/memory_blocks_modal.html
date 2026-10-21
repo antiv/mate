@@ -5,7 +5,7 @@
             <!-- Modal Header -->
             <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
                 <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Memory blocks</h3>
-                <button data-click="hideMemoryBlocksModal" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+                <button aria-label="Close" data-click="hideMemoryBlocksModal" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
                     <i class="fas fa-times"></i>
                 </button>
             </div>
@@ -74,7 +74,7 @@
                     <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Edit Memory Block</h3>
                 </div>
                 <div class="flex items-center space-x-2">
-                    <button data-click="hideEditMemoryBlockModal" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+                    <button aria-label="Close" data-click="hideEditMemoryBlockModal" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
                         <i class="fas fa-times"></i>
                     </button>
                 </div>
@@ -93,7 +93,7 @@
                         </label>
                         <div class="flex items-center space-x-2">
                             <input type="text" id="editBlockLabel" required class="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                            <button type="button" data-click="deleteMemoryBlock" class="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300">
+                            <button aria-label="Delete memory block" type="button" data-click="deleteMemoryBlock" class="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300">
                                 <i class="fas fa-trash"></i>
                             </button>
                         </div>
@@ -167,7 +167,7 @@
             <!-- Modal Header -->
             <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
                 <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Create Memory Block</h3>
-                <button data-click="hideCreateMemoryBlockModal" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+                <button aria-label="Close" data-click="hideCreateMemoryBlockModal" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
                     <i class="fas fa-times"></i>
                 </button>
             </div>
@@ -252,7 +252,7 @@
         <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col">
             <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
                 <h3 id="memoryBlockHistoryTitle" class="text-lg font-semibold text-gray-900 dark:text-white">History</h3>
-                <button data-click="hideMemoryBlockHistory" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+                <button aria-label="Close" data-click="hideMemoryBlockHistory" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
                     <i class="fas fa-times"></i>
                 </button>
             </div>

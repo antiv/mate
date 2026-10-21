@@ -12,7 +12,7 @@
                         <i class="fas fa-plus mr-1"></i>
                         New Project
                     </button>
-                    <button type="button" data-click="hideProjectModal" class="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">
+                    <button type="button" aria-label="Close" data-click="hideProjectModal" class="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">
                         <i class="fas fa-times text-lg"></i>
                     </button>
                 </div>
@@ -66,10 +66,10 @@
                                             {{ project.description or '—' }}
                                         </td>
                                         <td class="px-3 py-2 text-sm text-right space-x-2">
-                                            <button type="button" data-click="startEditProject" data-args='[{{ project.id|tojson }}]' class="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-200">
+                                            <button type="button" aria-label="Edit project" data-click="startEditProject" data-args='[{{ project.id|tojson }}]' class="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-200">
                                                 <i class="fas fa-edit"></i>
                                             </button>
-                                            <button type="button" data-click="deleteProject" data-args='[{{ project.id|tojson }}]' class="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-200">
+                                            <button type="button" aria-label="Delete project" data-click="deleteProject" data-args='[{{ project.id|tojson }}]' class="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-200">
                                                 <i class="fas fa-trash"></i>
                                             </button>
                                         </td>
