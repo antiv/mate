@@ -133,6 +133,47 @@ class TestSubagentDelegationTool(unittest.IsolatedAsyncioTestCase):
         m3, name3 = _resolve_subagent_model(None, None, self.parent_config)
         self.assertEqual(name3, "gemini-2.5-pro")
 
+    def _endpoint_of(self, task_model, default_model, parent_config):
+        from unittest.mock import patch
+        from shared.utils.tools import subagent_delegation_tool
+        with patch.object(subagent_delegation_tool, "create_model") as factory:
+            _resolve_subagent_model(task_model, default_model, parent_config)
+        kwargs = factory.call_args.kwargs
+        return kwargs["base_url"], kwargs["api_key"]
+
+    def test_the_parents_endpoint_without_a_key_does_not_get_the_env_key(self):
+        """With a base URL and no key, LiteLLM would send the provider's env key there."""
+        parent = {"name": "p", "model_name": "openai/agent",
+                  "model_base_url": "https://agent.example.com/v1", "model_api_key": None}
+        self.assertEqual(self._endpoint_of(None, None, parent),
+                         ("https://agent.example.com/v1", "not-required"))
+
+    def test_the_parents_env_reference_is_resolved(self):
+        import os
+        from unittest.mock import patch
+        parent = {"name": "p", "model_name": "openai/agent",
+                  "model_base_url": "https://agent.example.com/v1", "model_api_key": "${SUB_KEY}"}
+        with patch.dict(os.environ, {"SUB_KEY": "sk-resolved"}):
+            self.assertEqual(self._endpoint_of(None, None, parent),
+                             ("https://agent.example.com/v1", "sk-resolved"))
+
+    def test_an_unset_env_reference_refuses_to_build(self):
+        import os
+        os.environ.pop("SUB_KEY_NOT_SET", None)
+        parent = {"name": "p", "model_name": "openai/agent",
+                  "model_base_url": "https://agent.example.com/v1", "model_api_key": "${SUB_KEY_NOT_SET}"}
+        with self.assertRaises(ValueError):
+            _resolve_subagent_model(None, None, parent)
+
+    def test_another_model_does_not_get_the_parents_endpoint(self):
+        """Not through the task's model, nor through the delegator's default model."""
+        parent = {"name": "p", "model_name": "openai/agent",
+                  "model_base_url": "https://agent.example.com/v1", "model_api_key": "sk-parent"}
+        self.assertEqual(self._endpoint_of("openai/gpt-4o", None, parent), (None, None))
+        self.assertEqual(self._endpoint_of(None, "openai/gpt-4o", parent), (None, None))
+        self.assertEqual(self._endpoint_of("openai/agent", None, parent),
+                         ("https://agent.example.com/v1", "sk-parent"))
+
     async def test_delegate_subtasks_empty_input(self):
         """Empty or invalid subtask list should return a structured error."""
         delegator = SubagentDelegator(self.parent_config, {"max_subagents": 3})

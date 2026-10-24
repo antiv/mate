@@ -31,7 +31,7 @@ from shared.callbacks.token_usage_callback import (
     capture_model_name_callback,
     log_token_usage_callback,
 )
-from shared.utils.utils import create_model
+from shared.utils.utils import create_model, model_context_of, resolve_agent_endpoint
 
 logger = logging.getLogger(__name__)
 
@@ -280,14 +280,16 @@ def _resolve_subagent_model(
     base_url = None
     api_key = None
 
-    # Inherit endpoint overrides if model matches parent
-    if parent_config:
-        parent_model = parent_config.get("model_name")
-        if not task_model or task_model.strip() == parent_model:
-            base_url = parent_config.get("model_base_url")
-            api_key = parent_config.get("model_api_key")
+    # A subagent on the parent's model reaches it the way the parent does. Through
+    # resolve_agent_endpoint, as the parent itself: it resolves ${VAR} and, with a
+    # base URL but no key, sends a placeholder, so LiteLLM never falls back to the
+    # provider's env key and sends it to the host base_url names.
+    if parent_config and model_name == (parent_config.get("model_name") or "").strip():
+        base_url, api_key = resolve_agent_endpoint(parent_config)
 
-    model = create_model(model_name=model_name, api_key=api_key, base_url=base_url)
+    # A subagent works for its parent, so its model is built in the parent's context
+    model = create_model(model_name=model_name, api_key=api_key, base_url=base_url,
+                         context=model_context_of(parent_config or {}))
     return model, model_name
 
 

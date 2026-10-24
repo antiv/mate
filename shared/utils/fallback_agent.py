@@ -5,6 +5,7 @@ from typing import Any
 
 from google.adk.agents import Agent
 from shared.utils import create_model
+from shared.utils.utils import ModelContext
 from shared.callbacks.token_usage_callback import capture_model_name_callback
 from shared.callbacks.function_call_guardrail import combined_after_model_callback
 
@@ -62,6 +63,7 @@ def create_fallback_agent(agent_context_name: str = "MATE", error_message: str =
         name="mate_fallback_agent",
         model=create_model(
             model_name="openrouter/google/gemini-2.5-flash-lite",
+            context=ModelContext(),
         ),
         description="Fallback agent that informs users about missing database configuration.",
         instruction=instruction_text,

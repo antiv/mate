@@ -125,6 +125,7 @@ class TestModelBuiltFromConfig(unittest.TestCase):
             model_name="openai/my-agent",
             api_key="sk-literal",
             base_url="https://agent.example.com/v1",
+            context=utils.ModelContext(agent_name="a"),
         )
 
     def test_an_ordinary_agent_still_passes_no_endpoint(self):
@@ -132,7 +133,8 @@ class TestModelBuiltFromConfig(unittest.TestCase):
         with patch.object(utils, "create_model") as create:
             utils.create_model_from_agent_config({"name": "a", "model_name": "gemini-2.5-flash"})
         create.assert_called_once_with(
-            model_name="gemini-2.5-flash", api_key=None, base_url=None)
+            model_name="gemini-2.5-flash", api_key=None, base_url=None,
+            context=utils.ModelContext(agent_name="a"))
 
 
 class TestStoredKeyMasking(unittest.TestCase):

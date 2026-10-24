@@ -36,7 +36,7 @@ The LangGraph runtime lives in `shared/utils/langgraph/`:
 |---|---|
 | `api.py` | FastAPI app emulating ADK's endpoints (`/list-apps`, session CRUD, `/run_sse`, artifacts, reload) |
 | `agent_builder.py` | Builds compiled LangGraph graphs from `agents_config` DB rows (react agent per `llm` agent; handoff-based multi-agent trees) |
-| `model_factory.py` | Provider-prefix routing to `ChatLiteLLM` — same model strings as the ADK path (`create_model()` in `shared/utils/utils.py`) |
+| `model_factory.py` | Provider-prefix routing to `ChatLiteLLM` — same model strings as the ADK path (`create_model()` in `shared/utils/utils.py`), and the same `ModelContext` ([Agent runtime](agent-runtime.md#who-a-model-is-built-for)) |
 | `executor.py` | Run loop: RBAC → input guardrails → graph stream → event translation, output guardrails, persistence, token logging |
 | `event_translator.py` | LangGraph stream → ADK Event JSON (partial deltas + complete events, functionCall/functionResponse, `transfer_to_agent`, `artifactDelta`, `usage_metadata`) |
 | `tool_adapter.py` | Reuses the existing ADK-style tools unchanged: strips `tool_context` from the LLM-visible schema and injects a duck-typed `MateToolContext` at call time |
