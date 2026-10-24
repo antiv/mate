@@ -185,6 +185,20 @@ async def _resume_map(graph: Any, config: Dict[str, Any],
     return resume_map
 
 
+async def _resumed_agent(built: Any, config: Dict[str, Any]) -> str:
+    """The agent this turn runs in: the one the conversation was transferred to.
+
+    A multi-agent graph starts each turn at the checkpointed current_agent (its
+    route_entry), and a paused tool call resumes inside that agent's node. Raises
+    when the checkpoint cannot be read, so the caller refuses rather than guesses.
+    """
+    if len(built.model_names) <= 1:
+        return built.name
+    state = await built.graph.aget_state(config)
+    current = (state.values or {}).get("current_agent")
+    return current if current in built.model_names else built.name
+
+
 async def execute_run(app_name: str, user_id: str, session_id: str,
                       new_message: Dict[str, Any], invocation_id: str,
                       custom_metadata: Optional[Dict[str, Any]] = None
@@ -220,6 +234,24 @@ async def execute_run(app_name: str, user_id: str, session_id: str,
         "user_id": user_id,
         "app_name": app_name,
     }}
+
+    # The check above is for the agent requested. After a transfer the turn runs
+    # in the sub-agent instead, whose roles may differ or have changed since: ADK
+    # checks the agent that answers on every model call, so check it here too.
+    try:
+        resumed_agent = await _resumed_agent(built, config)
+    except Exception:
+        logger.exception(f"[LangGraph] could not read which agent session {session_id} resumes in")
+        from shared.utils.langgraph.hooks import _access_denied_event
+        rbac_denial = _access_denied_event(
+            "Access could not be verified. Please try again.", user_id, app_name)
+    else:
+        rbac_denial = (check_rbac(user_id, resumed_agent, session_id=session_id)
+                       if resumed_agent != app_name else None)
+    if rbac_denial:
+        rbac_denial["invocationId"] = invocation_id
+        yield rbac_denial
+        return
 
     from shared.utils.langgraph.hitl import (extract_client_tool_responses,
                                              extract_confirmation_response)

@@ -16,6 +16,8 @@ Notes:
 - Runs started from Studio have no MATE run context, so tools receive
   tool_context=None: chat/LLM/transfer flows work, but tools that need the
   MATE session (artifacts, session state, user profile) degrade gracefully.
+  Transfers are not checked against roles, since there is no MATE user; outside
+  Studio a transfer without a run context is refused.
 """
 
 import logging
@@ -47,5 +49,6 @@ async def make_graph():
 
     agent_name = _pick_agent_name()
     logger.info(f"[Studio] Building graph for agent '{agent_name}' (override with STUDIO_AGENT)")
-    built = await AgentBuilder()._build(agent_name, use_checkpointer=False)
+    # Studio runs have no MATE user, so transfers cannot be checked against roles
+    built = await AgentBuilder(require_run_context=False)._build(agent_name, use_checkpointer=False)
     return built.graph

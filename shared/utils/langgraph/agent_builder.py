@@ -192,8 +192,15 @@ def _build_transfer_note(agent_name: str, tree: Dict[str, Dict[str, Any]],
     return "\n\n".join(sections)
 
 
-def _make_handoff_tool(source_name: str, targets: Dict[str, str]):
-    """The transfer_to_agent tool (ADK-compatible name/args) for one agent node."""
+def _make_handoff_tool(source_name: str, targets: Dict[str, str],
+                       require_run_context: bool = True):
+    """The transfer_to_agent tool (ADK-compatible name/args) for one agent node.
+
+    A transfer is checked against the user's roles for the target. Without a run
+    context there is no user to check, so it is refused, unless the graph was
+    built for LangGraph Studio (require_run_context=False), a developer tool that
+    runs with no MATE user.
+    """
     from langchain_core.messages import ToolMessage
     from langchain_core.tools import InjectedToolCallId, StructuredTool
     from langgraph.types import Command
@@ -209,6 +216,9 @@ def _make_handoff_tool(source_name: str, targets: Dict[str, str]):
             denied = check_rbac_message(run_context.user_id, agent_name)
             if denied:
                 return denied
+        elif require_run_context:
+            logger.error(f"Transfer from '{source_name}' to '{agent_name}' refused: no run context")
+            return "Transfer refused: the user's access to that agent could not be checked."
         return Command(
             goto=agent_name,
             graph=Command.PARENT,
@@ -237,8 +247,10 @@ def _require_llm(config: Dict[str, Any]) -> None:
 class AgentBuilder:
     """Caches compiled graphs per app name; invalidated by the reload endpoints."""
 
-    def __init__(self):
+    def __init__(self, require_run_context: bool = True):
         self._cache: Dict[Tuple[str, str], BuiltAgent] = {}
+        # False only for LangGraph Studio: see _make_handoff_tool
+        self._require_run_context = require_run_context
 
     def invalidate(self, agent_name: str) -> None:
         for key in [k for k in self._cache if k[0] == agent_name]:
@@ -400,7 +412,8 @@ class AgentBuilder:
             extra_tools = []
             transfer_note = None
             if targets:
-                extra_tools.append(_make_handoff_tool(agent_name, targets))
+                extra_tools.append(_make_handoff_tool(agent_name, targets,
+                                                      self._require_run_context))
                 transfer_note = _build_transfer_note(agent_name, tree, children_of)
             node_graph = await self._build_react_agent(
                 config, children_of, checkpointer=None,

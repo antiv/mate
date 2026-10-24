@@ -58,7 +58,18 @@ Sub-agent delegation mirrors ADK semantics: every agent in the tree gets a
 plus its parents. A transfer moves the conversation to that agent's node and
 **persists across turns** (checkpointed `current_agent`), and the SSE events
 carry `actions.transfer_to_agent` plus the new `author`, exactly like ADK.
-RBAC is re-checked when transferring to a target agent.
+The user's roles are checked for the target when transferring, and again at the
+start of every later turn for the agent the turn resumes in: `execute_run` checks
+the agent requested, then reads the checkpointed `current_agent` and checks that
+agent too when it is another one. So a user who loses a sub-agent's role, or whose
+sub-agent changes its allowed roles, is refused there on the next turn instead of
+going on with it, as ADK refuses on the sub-agent's next model call. The session
+stays with that agent, so the user starts a new conversation. A checkpoint that
+cannot be read refuses the turn.
+
+A transfer with no run context, so no user to check, is refused. Only the graph
+built for LangGraph Studio (`studio_graph.py`, `AgentBuilder(require_run_context=False)`)
+transfers without one.
 
 Unlike ADK, an agent that appears under multiple parents is a single node (no
 `{name}_{parent}` instance cloning).
@@ -121,7 +132,8 @@ inspection and time travel. Usage notes:
 - **Studio runs bypass the entire MATE stack.** `langgraph dev` invokes the
   graph directly, so none of the executor hooks run: nothing is written to
   `token_usage_logs` (dashboard Token Usage), there are no MATE sessions/logs,
-  and RBAC/guardrails are not applied — for MATE these runs never happened.
+  and RBAC/guardrails are not applied, transfers included — for MATE these runs
+  never happened.
 - **The LLM cost is still real.** Calls go straight to the provider
   (OpenRouter/Google/…) with the API keys from `.env`, so tokens are billed
   normally — MATE just doesn't count them, and MATE rate limits/budgets don't
@@ -175,5 +187,6 @@ the latter).
 python -m unittest shared.test.test_langgraph_event_translator \
                    shared.test.test_langgraph_tool_adapter \
                    shared.test.test_langgraph_agent_builder \
+                   shared.test.test_langgraph_resumed_agent_rbac \
                    shared.test.test_langgraph_sessions -v
 ```

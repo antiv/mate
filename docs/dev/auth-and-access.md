@@ -164,7 +164,9 @@ a lookup that failed. An error during the check refuses too.
 
 - The LangGraph hook (`shared/utils/langgraph/hooks.py::check_rbac`) refuses an agent
   without a config the same way. Its `/run_sse` already rejects a request without a
-  user id or app name.
+  user id or app name. It runs at the start of each turn for the agent requested
+  and, after a transfer, for the sub-agent the turn resumes in, and on each
+  transfer. A transfer with no run context to check is refused.
 - Eval and Playground runs skip the check (`is_eval_run`), since an admin started
   them. So does the fallback agent that reports a configuration that could not load
   (`shared/utils/fallback_agent.py`). It is recognised by its own class, which the
