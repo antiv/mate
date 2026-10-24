@@ -126,6 +126,12 @@ Each item in `tasks` accepts:
 | `tools` | list[string] | No | Names of tools needed by the subagent (e.g. `["google_search", "browser", "code_executor"]`). |
 | `model` | string | No | Model override (e.g. `gemini-2.5-flash`, `openrouter/deepseek/deepseek-chat`, `ollama_chat/llama3.2`). |
 
+A subagent on the parent agent's own model also uses the parent's **Model Base URL**
+and **Model API Key**, read the same way as for the parent: a `${VAR}` key is read
+from the server environment, and the subagent fails with an error when that variable
+is not set. On any other model, from the task or from `default_model`, it uses the
+provider's key from the server, and the parent's endpoint and key are not used.
+
 ### Supported Tool Names & Aliases
 The subagent can be equipped with any tool registered in `ToolFactory`:
 - **Web & Search**: `google_search` (or `web_search`), `browser` (Playwright headless)
