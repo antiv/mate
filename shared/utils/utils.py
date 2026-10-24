@@ -5,6 +5,7 @@ Utility functions for the MATE (Multi-Agent Tree Engine) system.
 import os
 import logging
 import re
+from dataclasses import dataclass
 from google.adk.models.lite_llm import LiteLlm
 from google.adk.models import Gemini
 from typing import Dict, Any, Optional, Set, Tuple, Any as AnyType
@@ -123,7 +124,32 @@ def resolve_env_placeholders(obj: AnyType) -> Tuple[AnyType, Set[str]]:
     return walk(obj), missing
 
 
-def create_model(model_name: str = None, api_key: str = None, base_url: str = None):
+@dataclass(frozen=True)
+class ModelContext:
+    """Who a model is built for: the agent and its project.
+
+    create_model() and the LangGraph runtime's create_chat_model() take it, and
+    every caller passes the one it has. Today provider keys still come from the
+    environment; per-workspace keys (2.0) plug in here, looked up from this
+    context. A model built for no agent (the fallback agent, the compaction
+    summarizer) gets an empty context: the installation's own.
+    """
+    agent_name: Optional[str] = None
+    project_id: Optional[int] = None
+
+    def describe(self) -> str:
+        if not self.agent_name:
+            return "installation"
+        return f"agent {self.agent_name}, project {self.project_id}"
+
+
+def model_context_of(config: Dict[str, Any]) -> ModelContext:
+    """The context of a database agent, from its config dict."""
+    return ModelContext(agent_name=config.get('name'), project_id=config.get('project_id'))
+
+
+def create_model(model_name: str = None, api_key: str = None, base_url: str = None,
+                 context: Optional[ModelContext] = None):
     """
     Create model based on provider prefix auto-detection.
     
@@ -143,14 +169,16 @@ def create_model(model_name: str = None, api_key: str = None, base_url: str = No
                     Falls back to GEMINI_MODEL env var, then 'gemini-2.5-flash'.
         api_key: Optional API key override (otherwise read from provider env var)
         base_url: Optional base URL override (otherwise read from provider env var)
+        context: The agent and project the model is for; None for the installation.
     
     Returns:
         Model instance (LiteLlm or Gemini)
     """
     effective_model_name = (model_name or os.getenv("GEMINI_MODEL", "gemini-2.5-flash")).strip()
+    context = context or ModelContext()
 
     if _is_gemini_model(effective_model_name):
-        logger.info(f"Creating Gemini model: {effective_model_name}")
+        logger.info(f"Creating Gemini model: {effective_model_name} ({context.describe()})")
         return Gemini(model=effective_model_name)
 
     provider = _detect_provider(effective_model_name)
@@ -197,7 +225,8 @@ def create_model(model_name: str = None, api_key: str = None, base_url: str = No
         if base_url:
             litellm_kwargs['base_url'] = base_url
 
-    logger.info(f"Creating LiteLLM model: {effective_model_name} (provider: {provider})")
+    logger.info(f"Creating LiteLLM model: {effective_model_name} "
+                f"(provider: {provider}; {context.describe()})")
     return LiteLlm(effective_model_name, **litellm_kwargs)
 
 
@@ -274,6 +303,7 @@ def create_model_from_agent_config(config: Dict[str, Any]):
         model_name=config.get('model_name'),
         api_key=api_key,
         base_url=base_url,
+        context=model_context_of(config),
     )
 
 def get_database_config() -> Dict[str, Any]:
@@ -583,7 +613,7 @@ def create_app_with_context_caching(
             # Create custom summarizer if model specified
             if effective_summarizer_model:
                 try:
-                    summarizer_llm = create_model(effective_summarizer_model)
+                    summarizer_llm = create_model(effective_summarizer_model, context=ModelContext())
                     summarizer = LlmEventSummarizer_runtime(llm=summarizer_llm)
                     compaction_config_kwargs['summarizer'] = summarizer
                     logger.info(f"Using custom summarizer model: {effective_summarizer_model}")

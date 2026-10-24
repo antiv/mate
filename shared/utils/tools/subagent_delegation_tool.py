@@ -31,7 +31,7 @@ from shared.callbacks.token_usage_callback import (
     capture_model_name_callback,
     log_token_usage_callback,
 )
-from shared.utils.utils import create_model
+from shared.utils.utils import create_model, model_context_of
 
 logger = logging.getLogger(__name__)
 
@@ -287,7 +287,9 @@ def _resolve_subagent_model(
             base_url = parent_config.get("model_base_url")
             api_key = parent_config.get("model_api_key")
 
-    model = create_model(model_name=model_name, api_key=api_key, base_url=base_url)
+    # A subagent works for its parent, so its model is built in the parent's context
+    model = create_model(model_name=model_name, api_key=api_key, base_url=base_url,
+                         context=model_context_of(parent_config or {}))
     return model, model_name
 
 

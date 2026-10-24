@@ -35,6 +35,9 @@ agent, and then through one model call.
    [Writing a tool](writing-a-tool.md).
 4. The model object comes from the row's `model_name`, and `model_base_url` /
    `model_api_key` when set. The prefix of the name selects the provider.
+   The model is built by `create_model()` (`shared/utils/utils.py`), or
+   `create_chat_model()` on LangGraph, with a `ModelContext`: the agent's name and
+   project. See [Who a model is built for](#who-a-model-is-built-for).
 
 Details that matter when something does not behave:
 
@@ -45,6 +48,29 @@ Details that matter when something does not behave:
 - An agent with sub-agents, or with parents, and no description logs a warning:
   delegation picks a target by description.
 - An agent that appears under several parents is built once per parent on ADK.
+
+### Who a model is built for
+
+Every call to `create_model()` and `create_chat_model()` passes a `ModelContext`
+(`shared/utils/utils.py`), the agent and project the model serves:
+
+| Model | Context |
+|---|---|
+| An agent's own model (both runtimes) | The agent, from its row (`model_context_of(config)`) |
+| Its fallback model | The same agent |
+| A subagent started by `subagent_delegation` | The parent agent: the subagent works for it |
+| The fallback agent shown when configuration fails to load, and the context-compaction summarizer | `ModelContext()`, the installation |
+
+Provider keys still come from the environment, whatever the context; the context
+only appears in the "Creating ... model" log line. It is where per-workspace keys
+will be looked up in 2.0. `shared/test/test_model_context.py` reads the source and
+fails on a call to either function that leaves `context=` out, so pass
+`ModelContext()` when a model serves no agent.
+
+Calls that go to `litellm` directly do not go through `create_model()` and take
+no context yet: the eval judge, the agent improver, the hallucination guardrail,
+image generation, embeddings, the wizard, Work Room session titles and the
+murder-mystery demo.
 
 ### Reloading
 

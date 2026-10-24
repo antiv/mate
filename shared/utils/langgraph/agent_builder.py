@@ -342,7 +342,7 @@ class AgentBuilder:
                                  client_tools: Optional[List[Dict[str, Any]]] = None) -> Any:
         from langgraph.prebuilt import create_react_agent
         from shared.utils.langgraph.model_factory import create_chat_model
-        from shared.utils.utils import resolve_agent_endpoint
+        from shared.utils.utils import model_context_of, resolve_agent_endpoint
 
         app_name = config["name"]
         planner_config = _json_field(config, "planner_config")
@@ -355,6 +355,7 @@ class AgentBuilder:
             generate_content_config=_json_field(config, "generate_content_config"),
             api_key=api_key,
             base_url=base_url,
+            context=model_context_of(config),
         )
         fallback = _fallback_model(config)
         if fallback:
@@ -363,7 +364,8 @@ class AgentBuilder:
             from shared.callbacks.model_fallback_callback import PROVIDER_OUTAGE_ERRORS
             model = model.with_fallbacks(
                 [create_chat_model(fallback,
-                                   generate_content_config=_json_field(config, "generate_content_config"))],
+                                   generate_content_config=_json_field(config, "generate_content_config"),
+                                   context=model_context_of(config))],
                 exceptions_to_handle=PROVIDER_OUTAGE_ERRORS)
         tools = await self._build_tools(config)
         if extra_tools:

@@ -747,7 +747,8 @@ class AgentManager:
                 if fallback_model and fallback_model != (config.get('model_name') or '').strip():
                     from ..callbacks.model_fallback_callback import make_model_fallback_callback
                     error_callbacks.append(make_model_fallback_callback(
-                        agent_name, config.get('model_name'), fallback_model))
+                        agent_name, config.get('model_name'), fallback_model,
+                        project_id=config.get('project_id')))
                     logger.info(f"Applied fallback model {fallback_model} to agent {agent_name}")
                 if error_callbacks and 'on_model_error_callback' in Agent.model_fields:
                     agent_params['on_model_error_callback'] = error_callbacks

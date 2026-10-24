@@ -97,7 +97,9 @@ class TestFallbackCallback(unittest.TestCase):
 
     def test_the_fallback_does_not_inherit_the_agents_endpoint(self):
         _, create = self._callback(MagicMock())
-        create.assert_called_once_with(model_name="anthropic/fallback")
+        from shared.utils.utils import ModelContext
+        create.assert_called_once_with(model_name="anthropic/fallback",
+                                       context=ModelContext(agent_name="support"))
 
 
     def test_a_request_error_does_not_fall_back(self):
@@ -309,7 +311,7 @@ class TestLangGraph(unittest.TestCase):
 
         created = []
 
-        def chat_model(name, generate_content_config=None, api_key=None, base_url=None):
+        def chat_model(name, generate_content_config=None, api_key=None, base_url=None, context=None):
             created.append((name, api_key, base_url))
             reply = _provider_down() if name == "openai/primary" else "hello from the fallback"
             return ChatLiteLLM(model=name, streaming=True, api_key="x",
@@ -344,7 +346,7 @@ class TestLangGraph(unittest.TestCase):
         from shared.utils.langgraph.agent_builder import AgentBuilder
         refused = litellm.ContentPolicyViolationError("refused", model="primary", llm_provider="openai")
 
-        def chat_model(name, generate_content_config=None, api_key=None, base_url=None):
+        def chat_model(name, generate_content_config=None, api_key=None, base_url=None, context=None):
             reply = refused if name == "openai/primary" else "hello from the fallback"
             return ChatLiteLLM(model=name, streaming=True, api_key="x",
                                model_kwargs={"mock_response": reply})

@@ -12,7 +12,7 @@ from typing import Any, Dict, Optional
 
 from langchain_litellm import ChatLiteLLM
 
-from shared.utils.utils import _detect_provider, _is_gemini_model
+from shared.utils.utils import ModelContext, _detect_provider, _is_gemini_model
 
 logger = logging.getLogger(__name__)
 
@@ -44,8 +44,13 @@ def litellm_model_name(model_name: Optional[str] = None) -> str:
 def create_chat_model(model_name: Optional[str] = None,
                       generate_content_config: Optional[Dict[str, Any]] = None,
                       api_key: Optional[str] = None,
-                      base_url: Optional[str] = None) -> ChatLiteLLM:
-    """Create a ChatLiteLLM model using the same routing rules as create_model()."""
+                      base_url: Optional[str] = None,
+                      context: Optional[ModelContext] = None) -> ChatLiteLLM:
+    """Create a ChatLiteLLM model using the same routing rules as create_model().
+
+    `context` is the agent and project the model is for, as in create_model().
+    """
+    context = context or ModelContext()
     requested_name = (model_name or os.getenv("GEMINI_MODEL", "gemini-2.5-flash")).strip()
     effective_model_name = litellm_model_name(requested_name)
     # streaming=True so token deltas reach the graph's "messages" stream mode
@@ -97,5 +102,5 @@ def create_chat_model(model_name: Optional[str] = None,
     if gen_config.get("top_p") is not None:
         kwargs["top_p"] = gen_config["top_p"]
 
-    logger.info(f"Creating ChatLiteLLM model: {effective_model_name}")
+    logger.info(f"Creating ChatLiteLLM model: {effective_model_name} ({context.describe()})")
     return ChatLiteLLM(model=effective_model_name, **kwargs)

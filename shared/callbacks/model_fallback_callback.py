@@ -90,11 +90,13 @@ def record_model_fallback(agent_name: Optional[str], user_id: Optional[str],
 
 
 def make_model_fallback_callback(agent_name: str, primary_model: Optional[str],
-                                 fallback_model: str) -> Callable[..., Any]:
+                                 fallback_model: str,
+                                 project_id: Optional[int] = None) -> Callable[..., Any]:
     """Build an ADK on_model_error_callback that answers with `fallback_model`."""
-    from ..utils.utils import create_model
+    from ..utils.utils import ModelContext, create_model
 
-    llm = create_model(model_name=fallback_model)
+    llm = create_model(model_name=fallback_model,
+                       context=ModelContext(agent_name=agent_name, project_id=project_id))
 
     async def model_fallback_callback(*, callback_context: CallbackContext,
                                       llm_request: LlmRequest,
