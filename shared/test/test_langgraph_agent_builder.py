@@ -165,9 +165,15 @@ class TestHandoffTool(unittest.TestCase):
 
     def test_transfer_returns_parent_command(self):
         from langgraph.types import Command
+        from shared.utils.langgraph.tool_adapter import RunContext, reset_run_context, set_run_context
         tool = _make_handoff_tool("root", {"child": "helper"})
-        with patch("shared.utils.langgraph.hooks.check_rbac_message", return_value=None):
-            result = tool.func(agent_name="child", tool_call_id="tc1")
+        token = set_run_context(RunContext(app_name="root", user_id="u1",
+                                           session_id="s1", agent_name="root"))
+        try:
+            with patch("shared.utils.langgraph.hooks.check_rbac_message", return_value=None):
+                result = tool.func(agent_name="child", tool_call_id="tc1")
+        finally:
+            reset_run_context(token)
         self.assertIsInstance(result, Command)
         self.assertEqual(result.goto, "child")
         self.assertEqual(result.graph, Command.PARENT)

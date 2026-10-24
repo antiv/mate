@@ -129,6 +129,9 @@ What differs from ADK:
 - **Conversations are not shared.** Each runtime has its own session tables.
   Agents, users, roles, usage logs, memory blocks and artifacts are shared.
 - **A shared sub-agent is one node**, not one instance per parent.
+- **The role check runs per turn, not per model call.** It covers the agent
+  requested and, after a transfer, the agent the turn resumes in, plus each
+  transfer ([LangGraph runtime](langgraph-runtime.md#multi-agent-trees)).
 - **Tools receive a stand-in for `ToolContext`.** `tool_adapter.py` hides the
   `tool_context` parameter from the model and injects `MateToolContext`. A tool that
   uses unusual attributes of ADK's context needs checking on this runtime.
