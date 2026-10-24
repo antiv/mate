@@ -1668,10 +1668,10 @@ class DashboardServer:
             version = self.AgentConfigVersion(
                 agent_config_id=config.id,
                 version_number=max_ver + 1,
-                config_snapshot=json.dumps(self._build_config_snapshot(config)),
                 changed_by=changed_by,
                 change_type=change_type,
             )
+            version.set_snapshot(self._build_config_snapshot(config))
             session.add(version)
             session.commit()
         except Exception as e:
@@ -6628,7 +6628,6 @@ class DashboardServer:
             is the current config, or a stored version, with an optional other model
             and other instructions. Nothing is saved or deployed.
             """
-            import json as _json
             from shared.utils.agent_improver import MAX_INSTRUCTION_CHARS
             from shared.utils.eval_playground import (MAX_VARIANTS, MIN_VARIANTS, Case, Variant,
                                                       add_costs, run_variant, summarize)
@@ -6660,7 +6659,7 @@ class DashboardServer:
                             if isinstance(version_id, int) else None
                         if version is None or version.agent_config_id != config.id:
                             raise HTTPException(status_code=400, detail="The version is not one of this agent's")
-                        snapshot = dict(_json.loads(version.config_snapshot or "{}"), name=config.name)
+                        snapshot = dict(version.get_snapshot(), name=config.name)
                     model = raw.get("model_name")
                     if model not in (None, ""):
                         if not isinstance(model, str) or len(model) > 255 or any(c.isspace() for c in model):

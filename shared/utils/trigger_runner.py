@@ -595,7 +595,7 @@ class TriggerRunner:
 
     @staticmethod
     def generate_signing_secret() -> str:
-        """Return a webhook signing secret. Stored in the clear — see the model."""
+        """Return a webhook signing secret. Encrypted at rest with MATE_SECRET_KEY — see the model."""
         return f"whsec_{secrets.token_urlsafe(32)}"
 
     @staticmethod

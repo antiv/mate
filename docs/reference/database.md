@@ -10,7 +10,7 @@ generated: true
 
 # Database reference
 
-**34** tables defined in `shared/utils/models.py`; migrations are at **V044**. Migrations apply automatically on startup and are the source of truth for the schema: the models describe it, the migrations create it.
+**34** tables defined in `shared/utils/models.py`; migrations are at **V045**. Migrations apply automatically on startup and are the source of truth for the schema: the models describe it, the migrations create it.
 
 ## Migrations
 
@@ -62,6 +62,7 @@ A ✗ means that dialect has no file for that version. All dialects are in step.
 | V042 | usd budgets | ✓ | ✓ | ✓ |
 | V043 | budget coverage | ✓ | ✓ | ✓ |
 | V044 | log project id | ✓ | ✓ | ✓ |
+| V045 | encrypted secret columns | ✓ | ✓ | ✓ |
 
 ## `users`
 
@@ -159,7 +160,7 @@ Model `AgentConfig`. Model for agent configuration.
 | `type` | `String(50)` | not null | — | llm, graph, loop |
 | `model_name` | `String(255)` | — | — | — |
 | `model_base_url` | `String(1024)` | — | — | An OpenAI-compatible endpoint this agent's model lives behind. Without it the endpoint comes from provider env vars, so every agent shares one per provider and none can point at an agent you already run elsewhere. |
-| `model_api_key` | `String(1024)` | — | — | Literal, or ${VAR} read from the environment |
+| `model_api_key` | `EncryptedText` | — | — | Literal (encrypted with MATE_SECRET_KEY), or ${VAR} read from the environment |
 | `fallback_model` | `String(255)` | — | — | Re-run a request on this model when model_name still fails after retries. Reached through the provider env vars, never model_base_url / model_api_key. |
 | `ai_disclosure` | `Text` | — | — | EU AI Act Art. 50: people must be told they are interacting with an AI. NULL text means the default disclosure is shown. Setting a waiver turns the disclosure off, and the column holds the reason — so it cannot be switched off without one being recorded. |
 | `ai_disclosure_waiver` | `Text` | — | — | — |
@@ -359,8 +360,8 @@ Model `ChannelIntegration`. Links an external chat platform (Slack, Discord, ...
 | `agent_name` | `String(255)` | not null | — | — |
 | `label` | `String(255)` | — | — | — |
 | `team_id` | `String(64)` | — | — | Slack team/workspace id |
-| `bot_token` | `String(255)` | — | — | xoxb-... token used to post replies |
-| `signing_secret` | `String(255)` | — | — | verifies inbound request signatures |
+| `bot_token` | `EncryptedText` | — | — | xoxb-... token used to post replies; encrypted |
+| `signing_secret` | `EncryptedText` | — | — | verifies inbound request signatures; encrypted |
 | `config` | `Text` | — | — | JSON per-integration options; nothing reads it yet |
 | `is_active` | `Boolean` | not null | `True` | — |
 | `created_at` | `DateTime` | not null | `(computed)` | — |
@@ -566,7 +567,7 @@ Model `AgentTrigger`. Autonomous trigger for an agent: cron, webhook, file_watch
 | `cron_expression` | `String(100)` | — | — | — |
 | `webhook_path` | `String(255)` | unique | — | — |
 | `fire_key_hash` | `String(255)` | — | — | — |
-| `signing_secret` | `String(255)` | — | — | HMAC secret for signing the request body. Unlike the fire key this is stored in the clear — verifying a signature means recomputing it, so a hash would not do. Never returned by to_dict(). |
+| `signing_secret` | `EncryptedText` | — | — | HMAC secret for signing the request body. Unlike the fire key this is not hashed — verifying a signature means recomputing it — so it is encrypted with MATE_SECRET_KEY instead. Never returned by to_dict(). |
 | `require_signature` | `Boolean` | not null | `False` | — |
 | `output_type` | `String(50)` | not null | `'memory_block'` | — |
 | `output_config` | `Text` | — | — | — |

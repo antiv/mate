@@ -10,7 +10,7 @@ generated: true
 
 # Configuration reference
 
-Every environment variable the code reads: **134** in total. Descriptions come from the comments in `.env.example`; defaults come from the code. A ⚠ marks a variable read with different defaults in different places.
+Every environment variable the code reads: **135** in total. Descriptions come from the comments in `.env.example`; defaults come from the code. A ⚠ marks a variable read with different defaults in different places.
 
 | Variable | Default | Description | Read in |
 |---|---|---|---|
@@ -86,6 +86,7 @@ Every environment variable the code reads: **134** in total. Descriptions come f
 | `MATE_FEEDBACK_KEY` | — | API key for the standalone feedback endpoint | `shared/utils/standalone_feedback.py` |
 | `MATE_FEEDBACK_URL` | — | Standalone feedback endpoint base URL | `shared/utils/standalone_feedback.py` |
 | `MATE_PLUGINS_ENABLED` | `false` | App-wide MATE plugin: RBAC/guardrails/token tracking as ADK Plugin instead of per-agent callbacks; covers all agents incl. runtime-created ones (requires ADK >= 2.0) | `shared/utils/agent_manager.py`, `shared/utils/utils.py` |
+| `MATE_SECRET_KEY` | — | Encrypts stored secrets: Slack bot tokens and signing secrets, trigger signing secrets, agent model keys. Unset = stored in the clear, with a startup warning. Generate: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())" Keep it: secrets stored with it cannot be read without it. | `shared/utils/secret_box.py` |
 | `MCP_EXPOSED_AGENTS` | `chess_mate_root` | — | `shared/utils/mcp/agent_mcp_manager.py` |
 | `MEMORY_SERVICE` | `database` | database; any other value keeps memory in RAM (lost on restart) | `adk_main.py` |
 | `MODEL_NAME` | — | Model assumed for attachment handling when an agent has none (decides if PDFs/images are converted to text) | `server/proxy_routes.py`, `server/widget_routes.py` |

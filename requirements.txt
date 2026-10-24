@@ -27,6 +27,7 @@ langgraph-checkpoint-sqlite
 # langgraph-cli[inmem]  # Dev only: LangGraph Studio bridge (langgraph dev --allow-blocking)
 google-genai>=2.19.0
 psutil
+cryptography  # Fernet for secrets at rest (MATE_SECRET_KEY)
 # MCP dependencies for MCP servers
 mcp
 starlette
