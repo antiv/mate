@@ -13,6 +13,7 @@ covers:
   - server/widget_routes.py::*origin*
   - server/widget_routes.py::widget_chat
   - shared/migrate.py
+  - shared/utils/secret_box.py
 ---
 
 # Deployment
@@ -103,6 +104,7 @@ session cookie to HTTPS only.
 |---|---|
 | `AUTH_PASSWORD` | The default is public. |
 | `SECRET_KEY` | Signs the session cookie. Without it, sessions end at every restart. |
+| `MATE_SECRET_KEY` | Encrypts the secrets MATE stores; see [Secrets at rest](#secrets-at-rest). Without it they are stored in the clear, and the server logs a warning at startup. |
 | `DB_TYPE=postgresql` and its connection settings | SQLite is fine for one small installation; use a server database for anything shared. |
 | `ALLOWED_ORIGINS` | The CORS allowlist. The default is localhost. |
 | `TRUSTED_PROXY_HOSTS` | Your reverse proxy's address. The default `*` lets any client spoof `X-Forwarded-*`, and audit logs then record the socket address instead. |
@@ -130,6 +132,36 @@ Terminate TLS at the proxy and forward to port 8000. Chat responses are
 server-sent events and the Work Room's browser panel uses a WebSocket, so the proxy
 must not buffer responses and must allow connection upgrades. Allow long-lived
 requests: a webhook trigger answers only when its agent has finished.
+
+### Secrets at rest
+
+MATE stores some secrets it has to read back: a Slack integration's bot token and
+signing secret, a webhook trigger's signing secret, and an agent's **Model API Key**
+when it is typed literally rather than as `${VAR}`. With `MATE_SECRET_KEY` set, they
+are encrypted in the database with Fernet (AES-128-CBC with an HMAC), the key in an
+agent's version history included. Generate a key with:
+
+```bash
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```
+
+- **Setting the key on an existing installation.** At its next start the auth
+  server encrypts every value still stored in the clear, version history
+  included, and logs how many per column.
+- **A key that is not a Fernet key** stops the auth server at startup.
+- **Keep the key with your database backups, separately from them.** It is not
+  `SECRET_KEY`, so rotating the session secret does not touch it. A secret stored
+  with one key does not decrypt without it: it reads as empty, the server logs an
+  error, Slack requests and signed webhooks to it are refused, and the secret has
+  to be entered again. There is no key rotation yet.
+- **Without the key** nothing changes from earlier versions, and the startup
+  warning gives the number of secrets stored in the clear. 2.0 will require the key
+  in production.
+
+A stored value is either plain text or `enc:v1:` followed by the Fernet token, so
+`shared/utils/secret_box.py` reads both. The columns use its `EncryptedText` type,
+which encrypts on write and decrypts on read, so the code that uses them sees plain
+text.
 
 ### First sign-in
 

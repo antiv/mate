@@ -8,6 +8,8 @@ from datetime import datetime, timezone
 from typing import Optional
 import json
 
+from .secret_box import EncryptedText, decrypt, encrypt
+
 Base = declarative_base()
 
 
@@ -224,7 +226,7 @@ class AgentConfig(Base):
     # endpoint comes from provider env vars, so every agent shares one per provider
     # and none can point at an agent you already run elsewhere.
     model_base_url = Column(String(1024), nullable=True)
-    model_api_key = Column(String(1024), nullable=True)  # Literal, or ${VAR} read from the environment
+    model_api_key = Column(EncryptedText, nullable=True)  # Literal (encrypted with MATE_SECRET_KEY), or ${VAR} read from the environment
     # Re-run a request on this model when model_name still fails after retries.
     # Reached through the provider env vars, never model_base_url / model_api_key.
     fallback_model = Column(String(255), nullable=True)
@@ -372,9 +374,19 @@ class AgentConfigVersion(Base):
 
     def get_snapshot(self) -> dict:
         try:
-            return json.loads(self.config_snapshot) if self.config_snapshot else {}
+            snapshot = json.loads(self.config_snapshot) if self.config_snapshot else {}
         except json.JSONDecodeError:
             return {}
+        if snapshot.get('model_api_key'):
+            snapshot['model_api_key'] = decrypt(snapshot['model_api_key'])
+        return snapshot
+
+    def set_snapshot(self, snapshot: dict) -> None:
+        """Store a snapshot, its model_api_key encrypted like the agent's own column."""
+        snapshot = dict(snapshot)
+        if snapshot.get('model_api_key'):
+            snapshot['model_api_key'] = encrypt(snapshot['model_api_key'])
+        self.config_snapshot = json.dumps(snapshot)
 
     def to_dict(self) -> dict:
         return {
@@ -763,8 +775,8 @@ class ChannelIntegration(Base):
     agent_name = Column(String(255), nullable=False)
     label = Column(String(255), nullable=True)
     team_id = Column(String(64), nullable=True, index=True)  # Slack team/workspace id
-    bot_token = Column(String(255), nullable=True)  # xoxb-... token used to post replies
-    signing_secret = Column(String(255), nullable=True)  # verifies inbound request signatures
+    bot_token = Column(EncryptedText, nullable=True)  # xoxb-... token used to post replies; encrypted
+    signing_secret = Column(EncryptedText, nullable=True)  # verifies inbound request signatures; encrypted
     config = Column(Text, nullable=True)  # JSON per-integration options; nothing reads it yet
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
@@ -1224,10 +1236,10 @@ class AgentTrigger(Base):
     cron_expression = Column(String(100), nullable=True)
     webhook_path = Column(String(255), nullable=True, unique=True)
     fire_key_hash = Column(String(255), nullable=True)
-    # HMAC secret for signing the request body. Unlike the fire key this is
-    # stored in the clear — verifying a signature means recomputing it, so a
-    # hash would not do. Never returned by to_dict().
-    signing_secret = Column(String(255), nullable=True)
+    # HMAC secret for signing the request body. Unlike the fire key this is not
+    # hashed — verifying a signature means recomputing it — so it is encrypted
+    # with MATE_SECRET_KEY instead. Never returned by to_dict().
+    signing_secret = Column(EncryptedText, nullable=True)
     require_signature = Column(Boolean, nullable=False, default=False)
     output_type = Column(String(50), nullable=False, default='memory_block')
     output_config = Column(Text, nullable=True)

@@ -150,7 +150,7 @@ send. There is no timestamp or nonce: a captured signed request can be replayed.
 | Secret | Format | Stored as | Returned |
 |---|---|---|---|
 | Fire key | `secrets.token_urlsafe(32)` | SHA-256 hash in `fire_key_hash` | Once, by create and by update with `regenerate_fire_key` |
-| Signing secret | `whsec_` + `token_urlsafe(32)` | Clear text in `signing_secret` (HMAC needs the original) | Once, by create and by update with `regenerate_signing_secret`. `to_dict()` exposes only `has_signing_secret`. |
+| Signing secret | `whsec_` + `token_urlsafe(32)` | `signing_secret`, encrypted with `MATE_SECRET_KEY` when it is set, else in the clear (HMAC needs the original) | Once, by create and by update with `regenerate_signing_secret`. `to_dict()` exposes only `has_signing_secret`. |
 
 A signing secret is minted for every webhook trigger at creation, so turning
 verification on later needs no rotation. A trigger that predates signing gets one

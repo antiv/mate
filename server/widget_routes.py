@@ -791,16 +791,16 @@ async def update_widget_agent(request: Request, wk: WidgetApiKey = Depends(verif
             # audit entry naming the widget key that made it
             actor = f"widget_admin:{wk.id}"
             try:
-                import json as _json
                 from sqlalchemy import func
                 from shared.utils.dashboard.dashboard_server import DashboardServer
                 from shared.utils.models import AgentConfigVersion
                 last = session.query(func.max(AgentConfigVersion.version_number)).filter(
                     AgentConfigVersion.agent_config_id == agent.id).scalar() or 0
-                session.add(AgentConfigVersion(
+                version = AgentConfigVersion(
                     agent_config_id=agent.id, version_number=last + 1,
-                    config_snapshot=_json.dumps(DashboardServer._build_config_snapshot(agent)),
-                    changed_by=actor, change_type="update"))
+                    changed_by=actor, change_type="update")
+                version.set_snapshot(DashboardServer._build_config_snapshot(agent))
+                session.add(version)
                 session.commit()
             except Exception:
                 session.rollback()

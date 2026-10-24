@@ -36,8 +36,9 @@ Conventions in the models:
 
 - Structured values are stored as JSON text in a `Text` column, with `get_*` and
   `set_*` helpers on the model (`get_roles`, `set_output_config`, and so on).
-- Secrets that must be verified are stored as a hash; ones that must be reused are
-  stored in the clear and left out of `to_dict()`.
+- Secrets that must be verified are stored as a hash; ones that must be reused use
+  the `EncryptedText` column type, encrypted with `MATE_SECRET_KEY` when it is set
+  ([Deployment](deployment.md#secrets-at-rest)), and are left out of `to_dict()`.
 - A trailing comment on a column line becomes its note in the generated reference.
 
 ## How migrations run

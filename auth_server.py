@@ -99,6 +99,14 @@ if not _SECRET_KEY:
         "Set SECRET_KEY in .env for persistent OAuth sessions."
     )
 
+# Fails here, not on the first read, when MATE_SECRET_KEY is set but not a Fernet key
+from shared.utils import secret_box
+if not secret_box.key_configured():
+    logger.warning(
+        "MATE_SECRET_KEY not set — Slack tokens, signing secrets and agent model keys are "
+        "stored in the clear. 2.0 requires it in production. See docs/dev/deployment.md."
+    )
+
 if AUTH_PASSWORD == settings.DEFAULT_AUTH_PASSWORD:
     if _ENFORCE_SECURE:
         raise RuntimeError(
@@ -204,6 +212,26 @@ def initialize_trigger_runner():
         logger.info("TriggerRunner initialized successfully")
     except Exception as e:
         logger.warning("TriggerRunner initialization error: %s", e)
+
+
+def _encrypt_stored_secrets():
+    session = get_database_client().get_session()
+    if not session:
+        return
+    try:
+        if secret_box.key_configured():
+            for column, count in secret_box.encrypt_stored_secrets(session).items():
+                logger.info("Encrypted %s stored value(s) of %s with MATE_SECRET_KEY", count, column)
+        else:
+            count = secret_box.count_unencrypted_secrets(session)
+            if count:
+                logger.warning("%s secret(s) are stored in the clear; set MATE_SECRET_KEY "
+                               "to encrypt them", count)
+    except Exception as e:
+        session.rollback()
+        logger.error("Could not encrypt stored secrets: %s", e)
+    finally:
+        session.close()
 
 
 def initialize_agent_folders():
@@ -451,6 +479,9 @@ if __name__ == "__main__":
 
     adk_thread = threading.Thread(target=start_adk_in_thread, daemon=True)
     adk_thread.start()
+
+    # Secrets stored before MATE_SECRET_KEY was set; small tables, so before serving
+    _encrypt_stored_secrets()
 
     # project_id on log rows written before V044; once, beside the server
     from shared.utils.log_projects import start_backfill_thread

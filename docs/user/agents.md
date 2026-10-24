@@ -60,7 +60,7 @@ Three optional fields change where the model comes from:
   run. The model name then needs a provider prefix, for example `openai/my-agent`.
 - **Model API Key** is the key for that endpoint. Write `${MY_KEY}` to read it from
   the server environment. A key typed literally is stored in the database and in
-  the agent's version history.
+  the agent's version history, encrypted when the server has `MATE_SECRET_KEY`.
 - **Fallback Model** answers when the main model fails, so a provider outage does
   not reach the person chatting. It uses the provider's key from the server, not
   the base URL or key above.
