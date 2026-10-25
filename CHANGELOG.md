@@ -23,6 +23,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Slack users from different Slack workspaces shared one MATE user** (#276, 1.6.0 item 6) - a Slack user's MATE id was `slack_<user>`, without the workspace, so the same Slack user id in two workspaces had one set of roles, one profile, one memory and one store of connected accounts (OAuth credentials). The id is now `slack_<team>_<user>`. On upgrade:
+  - A Slack user's first message creates the new id with the roles of the old one, so no one loses access to a restricted agent, and the audit log records it.
+  - The bot starts existing threads and direct messages afresh.
+  - The old id keeps its conversations, usage and audit entries, which stay readable in the dashboard; its profile, memory and connected accounts are not carried over.
+
+  See `docs/user/slack.md`
+
 - **LangGraph checked roles only for the agent requested, not the one that answered** (#276, 1.6.0 item 7) - on `AGENT_FRAMEWORK=langgraph`, a conversation transferred to a sub-agent goes on there in later turns, but each turn checked the user's roles only for the root agent requested. A user who lost the sub-agent's role, or whose sub-agent's allowed roles changed after the transfer, kept talking to it. Each turn now also checks the agent it resumes in and refuses it as ADK does; the user starts a new conversation to continue. A transfer with no run context, and so no user to check, was let through and is now refused, except in the graph built for LangGraph Studio. See `docs/dev/langgraph-runtime.md`
 
 - **A subagent could send the provider's key to the parent agent's endpoint** - a subagent started by `subagent_delegation` on its parent's model took the parent's `model_base_url` and `model_api_key` as stored, without `resolve_agent_endpoint()`, which builds the parent itself. With a base URL and no key, LiteLLM then sent the provider's key from the server environment to the host the base URL names, and a `${VAR}` key was sent as the literal text `${VAR}`. The subagent now reads the endpoint as the parent does: the variable is resolved, an unset one fails the subtask, and an endpoint without a key gets a placeholder. A subagent on another model given as `default_model` also took the parent's endpoint and key; now only a subagent on the parent's own model does. See `docs/user/subagent-delegation.md`

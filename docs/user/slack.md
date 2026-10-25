@@ -59,8 +59,25 @@ Invite the bot to a channel with `/invite @YourBot`, then write
 - In a channel, the agent answers only when it is mentioned. Each Slack thread is one
   conversation: mention the bot again in the same thread and it remembers what was
   said there.
-- Each Slack user is a separate MATE user, so usage and roles are tracked per
-  person. They appear on the **Users** page with ids starting `slack_`.
+- Each Slack user is a separate MATE user in each Slack workspace, so usage and
+  roles are tracked per person. They appear on the **Users** page as
+  `slack_<team id>_<user id>`. The same Slack user id in two workspaces is two MATE
+  users, with their own roles, profile, connected accounts and memory.
+
+### Upgrading from 1.5 or earlier
+
+Before 1.6 the id was `slack_<user id>`, without the workspace. After the upgrade:
+
+- A Slack user's first message creates the new id with the roles you gave the old
+  one, so nobody loses access to a restricted agent. The **Audit Log** records it as
+  a user created by `system`, naming the old id. Change roles on the new id from
+  then on; the old id is no longer used.
+- The bot starts every existing thread and direct-message conversation afresh: it
+  does not see what was said before the upgrade.
+- The old id keeps its conversations, usage and audit entries, so they are still
+  on the **Users** page, in **Session Tracking** and on the **Usage** page. Its profile, memory and
+  connected accounts (Google Drive, Calendar) are not carried over; each person
+  connects them again.
 - There is no option to answer every message in a channel; the agent always waits
   to be mentioned there.
 
