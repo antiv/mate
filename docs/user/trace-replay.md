@@ -8,6 +8,7 @@ covers:
   - static/js/agents-visual-builder.js
   - shared/utils/tracing/replay.py
   - shared/utils/dashboard/dashboard_server.py::*replay*
+  - static/js/modals/version-history.js
 ---
 
 # Trace Replay
@@ -48,6 +49,9 @@ which opens the Visual Builder with that session already chosen.
 | Green border and **✓ time** | The agent is not running now; the time is how long it has run so far in the session. |
 | Red border and **✗ time** | One of the agent's steps ended in an error. |
 | **fallback: model** | The agent's own model failed and its [fallback model](fallback-model.md) answered. Hover it for the model that failed. |
+| **v12** | The version of the agent's configuration that answered. Click it to open the agent's version history at that version, with its changes. |
+| **v12 (now v14)**, in amber | The agent answered on an older version than it has now. |
+| **config 3f9a…**, in grey | The agent answered on a configuration no saved version holds: it was changed outside the dashboard (by an agent, a template import or the API) or not saved since. Two replays with different codes ran on different configurations. |
 | Faded | The agent has not started yet, or did not take part in the session. |
 | Amber edge | The agent at its start is running the agent at its end: a hand-off to a sub-agent while it happens. |
 
@@ -64,6 +68,11 @@ another project; choose that project to see it.
 - Replay shows timing and order, not content. To read what an agent was asked and
   what it answered, open the session in [Session Tracking](sessions-and-traces.md#session-tracking).
 - Fallbacks show from the time this feature was added; older traces do not record
-  them.
+  them. The same goes for versions, which show from MATE 1.6.
+- The version is the one the agent was loaded with. After you edit an agent, the
+  running agent changes when it is reloaded, so the replay shows the version that
+  really answered, not the one saved last.
+- Agents built in code have no versions and show none. Each step in the list says
+  which version answered, so two turns before and after a change show the change.
 - The replay is read-only. While it is open you can still edit the graph, but the
   coloured states describe the recorded turn, not your changes.

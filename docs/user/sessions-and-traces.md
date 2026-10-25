@@ -50,8 +50,10 @@ slow" rather than "why was this wrong".
 
 **Studio → Traces** lists recent traces with their total duration and number of
 steps. Open one to see the steps nested inside each other; the long bar is your
-answer. A trace recorded for a chat session also has **Replay on canvas**, which plays
-it back on the agent graph: see [Trace Replay](trace-replay.md).
+answer. A model call's step also names the version of the agent's configuration that
+answered (`mate.agent.config_version`). A trace recorded for a chat session also has
+**Replay on canvas**, which plays it back on the agent graph: see
+[Trace Replay](trace-replay.md).
 
 > Traces are recorded only when your administrator has set
 > `OTEL_TRACING_ENABLED=true` on the server. Without it the page stays empty.

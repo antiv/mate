@@ -103,6 +103,10 @@ def build_turn(trace_id: str, spans: List[Dict[str, Any]]) -> Optional[Dict[str,
         }
         if kind == "llm":
             fallback = bool(attrs.get("mate.model.fallback"))
+            # The config the agent was built from (agent_config_identity.py)
+            event["config_version"] = attrs.get("mate.agent.config_version")
+            event["config_version_id"] = attrs.get("mate.agent.config_version_id")
+            event["config_hash"] = attrs.get("mate.agent.config_hash")
             event["model"] = attrs.get("gen_ai.response.model") or attrs.get("gen_ai.request.model")
             event["fallback"] = fallback
             if fallback:
@@ -127,12 +131,13 @@ def build_turn(trace_id: str, spans: List[Dict[str, Any]]) -> Optional[Dict[str,
 
 
 def summarize_agents(events: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
-    """Per agent: when it first ran, time spent, model and tool calls, fallback, errors."""
+    """Per agent: when it first ran, time spent, model and tool calls, fallback, errors,
+    and the configs it ran on (more than one when it was reloaded between turns)."""
     agents: Dict[str, Dict[str, Any]] = {}
     for e in events:
         a = agents.setdefault(e["agent"], {
             "first_ms": e["start_ms"], "busy_ms": 0, "llm_calls": 0, "tool_calls": 0,
-            "fallback": False, "error": False, "models": [],
+            "fallback": False, "error": False, "models": [], "configs": [],
         })
         a["first_ms"] = min(a["first_ms"], e["start_ms"])
         if e["kind"] == "agent":
@@ -142,6 +147,9 @@ def summarize_agents(events: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
             a["fallback"] = a["fallback"] or e["fallback"]
             if e.get("model") and e["model"] not in a["models"]:
                 a["models"].append(e["model"])
+            if e.get("config_hash") and all(c["hash"] != e["config_hash"] for c in a["configs"]):
+                a["configs"].append({"hash": e["config_hash"], "version": e.get("config_version"),
+                                     "version_id": e.get("config_version_id")})
         elif e["kind"] == "tool":
             a["tool_calls"] += 1
         if e["status"] == "ERROR":

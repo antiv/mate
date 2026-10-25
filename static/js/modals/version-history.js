@@ -16,6 +16,7 @@ mateActions.allow('_vhRunEvals', '_vhSelectVersion', '_vhTagVersion',
     let _agentName = '';
     let _versions = [];
     let _selectedVersionId = null;
+    let _openVersionId = null;
     let _diffEditor = null;
 
     // ── Public API (attached to window) ──────────────────────────────────
@@ -26,10 +27,13 @@ mateActions.allow('_vhRunEvals', '_vhSelectVersion', '_vhTagVersion',
                                        document.getElementById(idPrefix + 'Name').value);
     };
 
-    window.showVersionHistoryModal = function (configId, agentName) {
+    // versionId, when given, is selected once the list loads (Trace Replay opens
+    // the version an agent ran on)
+    window.showVersionHistoryModal = function (configId, agentName, versionId) {
         _agentConfigId = configId;
         _agentName = agentName;
         _selectedVersionId = null;
+        _openVersionId = versionId || null;
         document.getElementById('vhAgentName').textContent = '— ' + agentName;
         document.getElementById('vhVersionList').innerHTML = '<div class="p-3 text-xs text-gray-400 text-center"><i class="fas fa-spinner fa-spin mr-1"></i>Loading…</div>';
         document.getElementById('vhDiffTitle').textContent = 'Select a version to view changes';
@@ -92,6 +96,10 @@ mateActions.allow('_vhRunEvals', '_vhSelectVersion', '_vhTagVersion',
             _versions = data.versions || [];
             document.getElementById('vhVersionCount').textContent = _versions.length;
             _renderVersionList();
+            if (_openVersionId && _versions.some(v => v.id === _openVersionId)) {
+                window._vhSelectVersion(_openVersionId);
+            }
+            _openVersionId = null;
         } catch (err) {
             document.getElementById('vhVersionList').innerHTML =
                 '<div class="p-3 text-xs text-red-400 text-center">Failed to load versions</div>';
