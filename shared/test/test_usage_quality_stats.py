@@ -273,5 +273,84 @@ class TestQualityStats(unittest.TestCase):
         self.assertEqual(stats["latency"]["p50_ms"], 700)
 
 
+class TestCostPerHelpfulAnswer(TestQualityStats):
+    """Cost per helpful answer (#275): the cost of every rated answer, not helpful
+    ones included, over the number rated helpful. A rating's message id is the
+    request id of each token row its answer wrote, sub-agents included."""
+
+    def _call(self, request_id, cost, agent="a1", session_id="s1"):
+        session = self.Session()
+        session.add(TokenUsageLog(
+            request_id=request_id, session_id=session_id, user_id="u1", agent_name=agent,
+            model_name="m", prompt_tokens=10, response_tokens=10, status="SUCCESS",
+            cost_usd=cost, timestamp=self.now - timedelta(minutes=6)))
+        session.commit()
+        session.close()
+
+    def _row(self, agent="a1"):
+        return next(r for r in self._stats()["satisfaction"]["per_agent"] if r["agent"] == agent)
+
+    def test_the_figure_matches_a_hand_computation(self):
+        # m1 👍: root 0.03 + a sub-agent 0.01; m2 👍: 0.02; m3 👎: 0.04
+        self._call("m1", 0.03)
+        self._call("m1", 0.01, agent="helper")
+        self._call("m2", 0.02)
+        self._call("m3", 0.04)
+        self._call("m4", 9.99)  # not rated: not counted
+        for message, rating in (("m1", "up"), ("m2", "up"), ("m3", "down")):
+            self._rating(rating, message=message)
+        row = self._row()
+        self.assertAlmostEqual(row["rated_cost_usd"], 0.10)
+        self.assertAlmostEqual(row["cost_per_up_usd"], 0.05)
+        self.assertEqual(row["rated_unpriced_calls"], 0)
+
+    def test_unpriced_calls_are_left_out_and_counted(self):
+        self._call("m1", 0.02)
+        self._call("m1", None)
+        self._rating("up", message="m1")
+        row = self._row()
+        self.assertAlmostEqual(row["cost_per_up_usd"], 0.02)
+        self.assertEqual(row["rated_unpriced_calls"], 1)
+
+    def test_an_agent_with_no_helpful_answer_has_no_figure(self):
+        self._call("m1", 0.04)
+        self._rating("down", message="m1")
+        row = self._row()
+        self.assertIsNone(row["cost_per_up_usd"])
+        self.assertAlmostEqual(row["rated_cost_usd"], 0.04)
+
+    def test_only_unpriced_calls_give_no_figure(self):
+        self._call("m1", None)
+        self._rating("up", message="m1")
+        self.assertIsNone(self._row()["cost_per_up_usd"])
+
+    def test_a_rating_with_no_token_rows_costs_nothing(self):
+        self._rating("up", message="m1")
+        row = self._row()
+        self.assertIsNone(row["cost_per_up_usd"])
+        self.assertEqual(row["rated_cost_usd"], 0.0)
+
+    def test_the_same_request_id_in_another_session_is_not_counted(self):
+        self._call("m1", 0.02)
+        self._call("m1", 5.00, session_id="other")
+        self._rating("up", message="m1")
+        self.assertAlmostEqual(self._row()["cost_per_up_usd"], 0.02)
+
+    def test_few_ratings_are_marked_tentative(self):
+        for i in range(DashboardServer.MIN_RATED_FOR_COST):
+            self._call(f"m{i}", 0.01)
+            self._rating("up", message=f"m{i}")
+            tentative = self._row()["cost_per_up_tentative"]
+            self.assertEqual(tentative, i + 1 < DashboardServer.MIN_RATED_FOR_COST)
+
+    def test_agents_are_kept_apart(self):
+        self._call("m1", 0.02)
+        self._call("m2", 0.08, agent="a2")
+        self._rating("up", message="m1")
+        self._rating("up", agent="a2", message="m2")
+        self.assertAlmostEqual(self._row("a1")["cost_per_up_usd"], 0.02)
+        self.assertAlmostEqual(self._row("a2")["cost_per_up_usd"], 0.08)
+
+
 if __name__ == '__main__':
     unittest.main()

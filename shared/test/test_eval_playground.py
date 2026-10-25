@@ -105,6 +105,22 @@ class TestRunVariant(unittest.TestCase):
         self.assertEqual((s["passed"], s["scored"], s["errors"], s["avg_score"]), (1, 2, 1, 0.75))
         self.assertEqual(s["avg_latency_ms"], 2000, "failed replies are not in the latency")
         self.assertEqual((s["cost_usd"], s["tokens"], s["unpriced_calls"]), (0.02, 15, 1))
+        self.assertEqual(s["cost_per_pass_usd"], 0.02)
+
+    def test_cost_per_passed_case(self):
+        variant = Variant("A", {})
+        variant.results = [
+            {"output": "x", "score": 1.0, "passed": True, "latency_ms": 1, "cost_usd": 0.03},
+            {"output": "y", "score": 0.9, "passed": True, "latency_ms": 1, "cost_usd": 0.01},
+            {"output": "z", "score": 0.1, "passed": False, "latency_ms": 1, "cost_usd": 0.02},
+        ]
+        self.assertAlmostEqual(summarize(variant)["cost_per_pass_usd"], 0.03,
+                               msg="a failed case's cost counts against the passes")
+
+    def test_no_pass_has_no_cost_per_pass(self):
+        variant = Variant("A", {})
+        variant.results = [{"output": "z", "score": 0.1, "passed": False, "latency_ms": 1, "cost_usd": 0.02}]
+        self.assertIsNone(summarize(variant)["cost_per_pass_usd"])
 
 
 class _Db(unittest.TestCase):

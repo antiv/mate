@@ -118,14 +118,18 @@ def summarize(variant: Variant) -> Dict[str, Any]:
     scored = [r["score"] for r in results if r.get("score") is not None]
     latencies = [r["latency_ms"] for r in results if r.get("output") is not None]
     costs = [r["cost_usd"] for r in results if r.get("cost_usd") is not None]
+    passed = sum(1 for r in results if r.get("passed"))
     return {
         "runs": len(results),
         "errors": sum(1 for r in results if r.get("output") is None),
         "scored": len(scored),
-        "passed": sum(1 for r in results if r.get("passed")),
+        "passed": passed,
         "avg_score": round(sum(scored) / len(scored), 3) if scored else None,
         "avg_latency_ms": int(sum(latencies) / len(latencies)) if latencies else None,
         "cost_usd": float(sum(costs)) if costs else None,
         "tokens": sum(r.get("tokens", 0) for r in results),
         "unpriced_calls": sum(r.get("unpriced_calls", 0) for r in results),
+        # What one passed case cost: the whole run's cost, failed cases included,
+        # over the cases that passed. None with no pass or no priced call.
+        "cost_per_pass_usd": float(sum(costs)) / passed if costs and passed else None,
     }

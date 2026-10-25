@@ -124,6 +124,10 @@ prompts: which model answers best for the money, or whether new instructions hel
 
 The **Comparison** shows, per variant, the average score (and in a suite how many
 cases passed), the average reply time, the cost in US dollars and the tokens used.
+When the replies are scored, **Cost per passed case** divides the variant's whole
+cost, failed cases included, by the cases it passed, so a cheap variant that fails
+often can come out dearer than one that costs more per call. A variant that passed
+nothing shows **no passes**.
 Below it, each prompt has every variant's reply with its own score, time and cost.
 
 - Nothing is saved or deployed. To keep a winning variant, change the agent, or

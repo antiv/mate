@@ -204,9 +204,11 @@
                 + (data.mode === 'suite' ? ' (' + v.summary.passed + '/' + v.summary.scored + ' passed)' : '')],
             ['Avg latency', v => v.summary.avg_latency_ms == null ? '—' : (v.summary.avg_latency_ms / 1000).toFixed(1) + 's'],
             ['Cost', v => money(v.summary.cost_usd) + (v.summary.unpriced_calls ? ' + ' + v.summary.unpriced_calls + ' unpriced calls' : '')],
+            ['Cost per passed case', v => v.summary.cost_per_pass_usd != null ? money(v.summary.cost_per_pass_usd)
+                : (v.summary.scored && !v.summary.passed ? 'no passes' : '—')],
             ['Tokens', v => v.summary.tokens.toLocaleString()],
             ['Errors', v => v.error ? v.error : String(v.summary.errors)],
-        ].filter(([name]) => name !== 'Score' || scored);
+        ].filter(([name]) => (name !== 'Score' && name !== 'Cost per passed case') || scored);
         const summary = el('table', { className: 'w-full text-xs' }, [el('thead', {}, [head]), el('tbody', {
             className: 'divide-y divide-gray-100 dark:divide-gray-700' }, rows.map(([name, value]) => el('tr', {
                 className: 'text-gray-700 dark:text-gray-300' }, [el('td', { className: cellClass('text-gray-500 dark:text-gray-400'), text: name })]

@@ -116,6 +116,19 @@ class TestUsagePage(_TwoUsers):
         self.assertIn("alice_agent", page)
         self.assertIn("bob_agent", page)
 
+    def test_cost_per_helpful_answer_is_shown_per_agent(self):
+        # Ratings joined to their answers' cost (#275): alice's 👍 answer cost $0.01,
+        # bob's only rated answer was 👎
+        session = self.Session()
+        for row in session.query(ResponseFeedback).all():
+            row.message_id = row.session_id.replace("s-", "r-")
+        session.commit()
+        session.close()
+        page = self.get("admin", is_admin=True)
+        self.assertIn("Cost per helpful answer", page)
+        self.assertIn("$0.0100", page)
+        self.assertIn("no helpful answers", page)
+
 
 if __name__ == "__main__":
     unittest.main()

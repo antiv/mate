@@ -521,6 +521,48 @@ class DashboardServer:
             "by_project": sorted(project_totals.values(), key=by_cost),
         }
 
+    # Below this many rated answers an agent's cost per helpful answer is greyed out:
+    # one 👍 more or less moves it by too much to compare agents on
+    MIN_RATED_FOR_COST = 10
+
+    def _rated_answer_costs(self, session, start_date, end_date, rated_mine: tuple) -> Dict[str, Any]:
+        """Per agent, the cost of the answers rated in the period.
+
+        A rating names its invocation (message_id), which is the request_id of every
+        token row the answer wrote, sub-agents it handed to included. Calls without a
+        price add no cost and are counted, as in the Cost panel.
+        """
+        from sqlalchemy import and_, case, func
+        from shared.utils.models import ResponseFeedback
+
+        log = self.TokenUsageLog
+        rows = session.query(
+            ResponseFeedback.agent_name,
+            func.sum(log.cost_usd),
+            func.count(log.id),
+            func.sum(case((log.cost_usd.is_(None), 1), else_=0)),
+        ).join(log, and_(log.request_id == ResponseFeedback.message_id,
+                         log.session_id == ResponseFeedback.session_id)).filter(
+            ResponseFeedback.created_at >= start_date,
+            ResponseFeedback.created_at <= end_date,
+            *rated_mine,
+        ).group_by(ResponseFeedback.agent_name).all()
+        return {agent or 'unknown': {'cost_usd': float(cost or 0), 'calls': int(calls or 0),
+                                     'unpriced_calls': int(unpriced or 0)}
+                for agent, cost, calls, unpriced in rows}
+
+    def _cost_per_helpful_answer(self, up: int, down: int, cost: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        """What one 👍 answer cost: the cost of every rated answer, 👎 ones included,
+        over the number rated 👍. None when no answer was rated 👍 or none has a cost."""
+        cost = cost or {'cost_usd': 0.0, 'calls': 0, 'unpriced_calls': 0}
+        priced = cost['calls'] - cost['unpriced_calls']
+        return {
+            'rated_cost_usd': cost['cost_usd'],
+            'rated_unpriced_calls': cost['unpriced_calls'],
+            'cost_per_up_usd': cost['cost_usd'] / up if up and priced else None,
+            'cost_per_up_tentative': (up + down) < self.MIN_RATED_FOR_COST,
+        }
+
     def _get_quality_stats(self, session, start_date, end_date,
                            origins: Optional[tuple] = None,
                            user_id: Optional[str] = None) -> Dict[str, Any]:
@@ -589,6 +631,7 @@ class DashboardServer:
                 *mine,
             ).scalar() or 0
 
+            costs = self._rated_answer_costs(session, start_date, end_date, rated_mine)
             rated = total_up + total_down
             stats['satisfaction'] = {
                 'up': total_up,
@@ -602,7 +645,8 @@ class DashboardServer:
                       'down': v['down'],
                       'rated': v['up'] + v['down'],
                       'rate_pct': round(100.0 * v['up'] / (v['up'] + v['down']), 1)
-                      if (v['up'] + v['down']) else None}
+                      if (v['up'] + v['down']) else None,
+                      **self._cost_per_helpful_answer(v['up'], v['down'], costs.get(a))}
                      for a, v in per_agent.items()],
                     key=lambda r: r['rated'], reverse=True)[:10],
             }
@@ -3438,6 +3482,7 @@ class DashboardServer:
                 "origin": origin if origin in self.ORIGIN_FILTERS else "interactive",
                 "is_admin": is_admin,
                 "current_user_id": current_user_id,
+                "min_rated_for_cost": self.MIN_RATED_FOR_COST,
             })
 
         @self.app.get("/dashboard/rate-limits", response_class=HTMLResponse, tags=["Dashboard - Pages"])

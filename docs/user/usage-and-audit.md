@@ -13,6 +13,9 @@ covers:
   - shared/utils/model_pricing.py
   - shared/utils/dashboard/dashboard_server.py::*usage*
   - shared/utils/dashboard/dashboard_server.py::*audit*
+  - shared/utils/dashboard/dashboard_server.py::*quality*
+  - shared/utils/dashboard/dashboard_server.py::*helpful*
+  - shared/utils/dashboard/dashboard_server.py::*rated*
 ---
 
 # Usage and audit logs
@@ -60,6 +63,24 @@ renaming or deleting the agent later does not move its cost. Calls from before
 MATE 1.6 are counted toward their agent's project at the time of the upgrade. Calls of
 agents that were already deleted then, and of projects deleted since, are counted
 under **No project**. Failed calls and refusals are never priced.
+
+### Cost per helpful answer
+
+**Satisfaction by Agent** has a column **Cost per helpful answer**: what each answer
+rated helpful cost, counting the answers rated not helpful too. It is the cost of
+every answer rated in the period, divided by the number rated helpful. An agent that
+is cheap per call but often rated not helpful costs more per useful answer than its
+call cost suggests.
+
+- Only rated answers count, since an unrated one says nothing about success.
+- An answer's cost is every call it made, including the sub-agents it handed to. The
+  figure belongs to the agent the person was talking to.
+- Each answer is counted on its own. When someone asks again because the first
+  answer was poor, only the rated answer is counted, not the one before it.
+- Calls without a price are not in the cost; their number is shown next to it.
+- An agent with fewer than 10 rated answers shows the figure in grey: one rating
+  more or less moves it a lot. An agent with no helpful answer shows
+  **no helpful answers**.
 
 ### Which traffic you are looking at
 
