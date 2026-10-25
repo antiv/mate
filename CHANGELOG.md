@@ -27,6 +27,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **An agent created with the name of a deleted one inherited what was left of it** (#276, found in the reviews of 1.5.1) - many tables refer to an agent by name, with no foreign key to cascade along, and deleting an agent left those rows behind. A new agent with the same name, perhaps in another project, then took them over:
+  - its file-search store links, possibly to another project's stores;
+  - its widget keys, which exposed the new agent publicly, and its Slack integrations and triggers;
+  - its budgets, alert rules and eval test cases;
+  - its users' stored OAuth credentials, their conversations on both runtimes, the memory built from them, and app-wide state.
+
+  Every way of deleting an agent now removes them, in the same transaction: the dashboard's agent and project delete, the **Create Agent** tool and the wizard's trial cleanup (`shared/utils/agent_cleanup.py`). Usage, guardrail, feedback and audit logs stay. Checked on SQLite, PostgreSQL 16 and MySQL 8.0 against the session tables ADK creates. See `docs/user/agents.md`
+
+- **A signed-in user could use up another user's request allowance** (#276, found in the review of 1.5.1 C) - the rate-limit middleware counted a `/run_sse` request against the user id in its body before the proxy checked that id, so requests naming another user, which the proxy then refused with 403, still counted against that user's per-minute limit. A request that is refused is no longer counted. See `docs/user/rate-limits.md`
+
+- **A LangGraph session created with the id of a deleted one resumed its conversation** (#276, found in the review of #302) - deleting a session on `AGENT_FRAMEWORK=langgraph` removed its rows but not its checkpointed graph state. Deleting a session now deletes its checkpoint, and creating a session with a given id deletes any checkpoint left under it. See `docs/dev/langgraph-runtime.md`
+
 - **The LangGraph runtime skipped remote MCP servers** (#289) - on `AGENT_FRAMEWORK=langgraph`, an MCP server given by `url` was dropped with the warning "missing command or args", and the agent ran without its tools. It is now reached as on ADK: over streamable HTTP, or SSE with `"transport": "sse"`, with `headers`, `timeout` and `connect_timeout`; `${NAME}` in the url and headers is read from the environment and an unset one skips the server; only `http` and `https` are accepted; and an entry with both `url` and `command` uses the url. `${NAME}` in a stdio server's `command`, `args` and `env` is now read from the environment too, as on ADK, instead of being passed on as written. A server that cannot be reached now costs only its own tools, not those of every server of the agent. See `docs/user/tools-and-mcp.md`
 
 - **Slack users from different Slack workspaces shared one MATE user** (#276, 1.6.0 item 6) - a Slack user's MATE id was `slack_<user>`, without the workspace, so the same Slack user id in two workspaces had one set of roles, one profile, one memory and one store of connected accounts (OAuth credentials). The id is now `slack_<team>_<user>`. On upgrade:

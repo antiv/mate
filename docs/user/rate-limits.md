@@ -112,7 +112,8 @@ a budget rule on the **Alerts** page.
   cannot be expensive.
 
 Requests per minute are counted per user. Widget visitors each have their own id, so
-that limit protects against one visitor flooding the agent, not against many.
+that limit protects against one visitor flooding the agent, not against many. A
+request that is refused, for example because it names another user, is not counted.
 
 If MATE runs as several server processes, request counts are kept per process unless
 your administrator configures Redis.

@@ -427,9 +427,16 @@ def delete_agent(
             # Get parent agents before deletion
             parent_agents = agent_config.get_parent_agents() if hasattr(agent_config, 'get_parent_agents') else []
             
-            # Delete the agent
+            # Delete the agent, its versions, and the rows keyed by its name, which
+            # an agent created later with the same name would otherwise inherit
+            from shared.utils.agent_cleanup import delete_agent_rows, purge_langgraph_checkpoints
+            from shared.utils.models import AgentConfigVersion
+            removed = delete_agent_rows(session, [agent_name])
+            session.query(AgentConfigVersion).filter(
+                AgentConfigVersion.agent_config_id == agent_config.id).delete(synchronize_session=False)
             session.delete(agent_config)
             session.commit()
+            purge_langgraph_checkpoints(removed["langgraph_threads"])
             
             logger.info(f"Deleted agent '{agent_name}' by agent '{current_agent_name or 'unknown'}'")
             

@@ -48,6 +48,13 @@ def list_apps() -> List[str]:
     return sorted(apps)
 
 
+async def _delete_checkpoint(session_id: str) -> None:
+    """Delete the graph state checkpointed for a session (its thread)."""
+    from shared.utils.langgraph.agent_builder import get_checkpointer
+    checkpointer = await get_checkpointer()
+    await checkpointer.adelete_thread(session_id)
+
+
 def create_app(allow_origins: Optional[List[str]] = None) -> FastAPI:
     app = FastAPI(title="MATE LangGraph Runtime")
     app.add_middleware(
@@ -87,6 +94,14 @@ def create_app(allow_origins: Optional[List[str]] = None) -> FastAPI:
         session = store.create_session(app_name, user_id, session_id=session_id, state=state)
         if session is None:
             raise HTTPException(status_code=400, detail=f"Session already exists: {session_id}")
+        # No session had this id, so a checkpoint under it is a leftover, from a
+        # session deleted before checkpoints were deleted with it. Without this the
+        # new session would resume that conversation.
+        try:
+            await _delete_checkpoint(session_id)
+        except Exception:
+            store.delete_session(app_name, user_id, session_id)
+            raise HTTPException(status_code=500, detail="Could not prepare the session")
         return session
 
     @app.get("/apps/{app_name}/users/{user_id}/sessions")
@@ -102,6 +117,11 @@ def create_app(allow_origins: Optional[List[str]] = None) -> FastAPI:
 
     @app.delete("/apps/{app_name}/users/{user_id}/sessions/{session_id}")
     async def delete_session(app_name: str, user_id: str, session_id: str):
+        if not store.session_exists(app_name, user_id, session_id):
+            raise HTTPException(status_code=404, detail=f"Session not found: {session_id}")
+        # The checkpoint first: the graph resumes a thread from it, so a session
+        # created later with this id would otherwise carry on the old conversation
+        await _delete_checkpoint(session_id)
         if not store.delete_session(app_name, user_id, session_id):
             raise HTTPException(status_code=404, detail=f"Session not found: {session_id}")
         return {}

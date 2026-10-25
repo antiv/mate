@@ -882,45 +882,22 @@ class DashboardServer:
                 self.AlertRule.scope == 'project',
                 self.AlertRule.scope_id == str(project_id)
             ).delete(synchronize_session=False)
-            if agent_names:
-                session.query(self.AlertRule).filter(
-                    self.AlertRule.scope == 'agent',
-                    self.AlertRule.scope_id.in_(agent_names)
-                ).delete(synchronize_session=False)
 
-            # 5c. Rows tied to the project or its agents by id or name, which would
-            # otherwise be left behind: an integration still active for an agent that
-            # is gone, budgets and test cases that a new agent of the same name would
-            # inherit. (The ORM's foreign key on channel_integrations, which migrated
-            # databases don't have, also refused the delete.)
+            # 5c. Rows tied to the project by id, which would otherwise be left behind.
+            # (The ORM's foreign key on channel_integrations, which migrated databases
+            # don't have, also refused the delete.)
             from shared.utils.models import ChannelIntegration, RateLimitConfig
             session.query(ChannelIntegration).filter(
                 ChannelIntegration.project_id == project_id
             ).delete(synchronize_session=False)
-            if agent_names:
-                # An integration is not checked to point at an agent of its own project
-                session.query(ChannelIntegration).filter(
-                    ChannelIntegration.agent_name.in_(agent_names)
-                ).delete(synchronize_session=False)
             session.query(RateLimitConfig).filter(
                 RateLimitConfig.scope == 'project',
                 RateLimitConfig.scope_id == str(project_id)
             ).delete(synchronize_session=False)
-            if agent_names:
-                session.query(RateLimitConfig).filter(
-                    RateLimitConfig.scope == 'agent',
-                    RateLimitConfig.scope_id.in_(agent_names)
-                ).delete(synchronize_session=False)
-                test_case_ids = [t.id for t in session.query(self.TestCase.id).filter(
-                    self.TestCase.agent_name.in_(agent_names)
-                ).all()]
-                if test_case_ids:
-                    session.query(self.EvalResult).filter(
-                        self.EvalResult.test_case_id.in_(test_case_ids)
-                    ).delete(synchronize_session=False)
-                    session.query(self.TestCase).filter(
-                        self.TestCase.id.in_(test_case_ids)
-                    ).delete(synchronize_session=False)
+            # 5d. Rows tied to its agents by name, which a new agent of the same name
+            # would inherit: links, budgets, test cases, credentials, conversations
+            from shared.utils.agent_cleanup import delete_agent_rows, purge_langgraph_checkpoints
+            removed = delete_agent_rows(session, agent_names)
 
             # 6. Disassociate public wizard sessions (set trial_project_id to NULL)
             session.query(self.WizardSession).filter(
@@ -930,6 +907,7 @@ class DashboardServer:
             # 7. Delete the Project itself
             session.delete(project)
             session.commit()
+            purge_langgraph_checkpoints(removed["langgraph_threads"])
             return {"success": True}
         except HTTPException:
             session.rollback()
@@ -1680,10 +1658,13 @@ class DashboardServer:
         try:
             config = session.query(self.AgentConfig).filter(self.AgentConfig.id == config_id).first()
             if config:
+                from shared.utils.agent_cleanup import delete_agent_rows, purge_langgraph_checkpoints
                 from shared.utils.models import AgentConfigVersion
+                removed = delete_agent_rows(session, [config.name])
                 session.query(AgentConfigVersion).filter(AgentConfigVersion.agent_config_id == config_id).delete(synchronize_session=False)
                 session.delete(config)
                 session.commit()
+                purge_langgraph_checkpoints(removed["langgraph_threads"])
                 return True
             return False
         except Exception as e:
