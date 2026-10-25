@@ -39,6 +39,20 @@ def _get_provider_from_model(model_name: Optional[str]) -> str:
     return "unknown"
 
 
+def _set_config_identity(span: Any, agent_name: str) -> None:
+    """The config version the agent was built from, when it was recorded."""
+    from shared.utils.agent_config_identity import loaded
+    from shared.utils.tracing.genai_attributes import (
+        MATE_AGENT_CONFIG_HASH, MATE_AGENT_CONFIG_VERSION, MATE_AGENT_CONFIG_VERSION_ID)
+    identity = loaded(agent_name)
+    if not identity:
+        return
+    span.set_attribute(MATE_AGENT_CONFIG_HASH, identity["hash"])
+    if identity.get("version_id") is not None:
+        span.set_attribute(MATE_AGENT_CONFIG_VERSION_ID, identity["version_id"])
+        span.set_attribute(MATE_AGENT_CONFIG_VERSION, identity["version"])
+
+
 def capture_model_name_callback(
     callback_context: CallbackContext, llm_request: LlmRequest
 ) -> Optional[LlmResponse]:
@@ -101,6 +115,7 @@ def capture_model_name_callback(
             agent_name = getattr(callback_context, 'agent_name', None)
             if agent_name:
                 span.set_attribute(MATE_AGENT_NAME, agent_name)
+                _set_config_identity(span, agent_name)
             user_id, session_id = _get_adk_session_info(callback_context)
             if session_id:
                 span.set_attribute(GEN_AI_CONVERSATION_ID, session_id)

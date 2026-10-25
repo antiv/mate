@@ -287,6 +287,9 @@ class AgentManager:
             if agent:
                 self.initialized_agents[config.name] = agent
                 logger.info(f"Successfully initialized agent: {config.name}")
+                # Which config version answers, for the agent's spans (Trace Replay)
+                from .agent_config_identity import record_for_row
+                record_for_row(self.db_client, config, config.name)
             
             return agent
             
@@ -1081,6 +1084,8 @@ class AgentManager:
                     new_agent = self._initialize_agent(agent_config_dict, [])
                     if new_agent:
                         self.initialized_agents[instance_name] = new_agent
+                        from .agent_config_identity import record_for_row
+                        record_for_row(self.db_client, subagent_config, instance_name)
                         logger.info(f"Successfully created new instance: {instance_name}")
                         return new_agent
                     else:

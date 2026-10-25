@@ -6,6 +6,7 @@ order: 80
 covers:
   - shared/utils/tracing/**
   - server/proxy_routes.py
+  - shared/utils/agent_config_identity.py
 ---
 
 # OpenTelemetry Distributed Tracing
@@ -46,11 +47,36 @@ When `OTEL_TRACING_ENABLED=false` (default), tracing is disabled. Tool wrapping 
 
 | Instrumentation Point | Span Name | Attributes |
 |---|---|---|
-| LLM inference | `gen_ai.inference` | `gen_ai.operation.name`, `gen_ai.provider.name`, `gen_ai.request.model`, `mate.agent.name`, `gen_ai.conversation.id`, `gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens`, `gen_ai.response.model`; `mate.model.fallback=true` when the agent's fallback model answered (then `gen_ai.request.model` is the primary and `gen_ai.response.model` the fallback) |
+| LLM inference | `gen_ai.inference` | `gen_ai.operation.name`, `gen_ai.provider.name`, `gen_ai.request.model`, `mate.agent.name`, `gen_ai.conversation.id`, `gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens`, `gen_ai.response.model`; `mate.model.fallback=true` when the agent's fallback model answered (then `gen_ai.request.model` is the primary and `gen_ai.response.model` the fallback); the config the agent was built from (see below) |
 | RBAC check | `mate.rbac_check` | `mate.agent.name`, `mate.user.id`, `mate.rbac.allowed` |
 | Tool invocation | `mate.tool` | `mate.tool.name`, `mate.agent.name` |
 | Session memory | `mate.memory` | `mate.memory.operation` (add/search) |
 | Memory blocks | `mate.memory_blocks` | `mate.memory.operation` |
+
+### Which config answered
+
+When `AgentManager` builds an agent from its `agents_config` row, it records which
+config it built (`shared/utils/agent_config_identity.py`), and each `gen_ai.inference`
+span of that agent carries it:
+
+| Attribute | Value |
+|---|---|
+| `mate.agent.config_hash` | A 12-character SHA-256 prefix of the config snapshot (the fields a version stores, without `model_api_key`). Always set for an agent built from a row. |
+| `mate.agent.config_version_id`, `mate.agent.config_version` | The `agent_config_versions` row holding this config, and its number. Set only when one does. |
+
+- **What was loaded, not what the row says now.** The identity is taken when the
+  agent is built, at startup or on a reload, so a run after an unreloaded edit still
+  names the config that answered.
+- **Matching a version.** Versions are compared newest first, each over its own
+  keys, since a snapshot from an older MATE lacks fields added since. A config that
+  was rolled back matches the older version it equals.
+- **Configs no version holds.** Versions are only taken by dashboard saves; a config
+  changed by the `create_agent` tool, a template import or SQL matches none and is
+  recorded by its hash alone.
+- **Agents with no row.** An agent built in code records nothing.
+- **Multi-parent copies.** The copy built per parent (`<agent>_<parent>`) records its
+  agent's config under its own name.
+- **LangGraph.** That runtime traces to LangSmith, not these spans, and records nothing.
 
 ## Dashboard
 
@@ -80,7 +106,7 @@ Visual Builder plays that timeline. Two admin-only routes serve it:
 | Route | Returns |
 |---|---|
 | `GET /dashboard/api/traces/sessions?hours=&limit=&project_id=` | Sessions with traced turns (`gen_ai.conversation.id`), most recent first: id, number of turns, agents, last activity. With `project_id`, only sessions in which an agent of that project (`agents_config.project_id`) ran. |
-| `GET /dashboard/api/traces/replay?session_id=&hours=` | `{session_id, turns: [{trace_id, started_at, duration_ms, events, agents}], timeline: {duration_ms, events, agents, turns: [{index, trace_id, started_at, start_ms, end_ms}]}}`, oldest turn first. |
+| `GET /dashboard/api/traces/replay?session_id=&hours=` | `{session_id, turns: [{trace_id, started_at, duration_ms, events, agents}], timeline: {duration_ms, events, agents, turns: [{index, trace_id, started_at, start_ms, end_ms}]}, agent_configs: {agent: {config_id, latest_version}}}`, oldest turn first. A model call event carries `config_version`, `config_version_id` and `config_hash`, and each agent its distinct `configs`. |
 
 A session id must match `[A-Za-z0-9._:-]{1,128}` or the route answers 400. The lookup
 narrows `trace_spans` with `attributes LIKE '%<id>%'` (the column cast to text on
@@ -89,7 +115,10 @@ PostgreSQL, where it is `JSONB`, and on MySQL, where it is `JSON`) and then comp
 time window (default 7 days); there is no index on the session.
 
 `static/js/trace-replay.js` holds the replay bar and `agentStateAt()`, which the
-builder calls for each agent node to decorate it. `?replay=<session_id>` on
+builder calls for each agent node to decorate it, including the config version of
+the agent's latest model call so far. `agent_configs` gives the builder the config id
+to open the version history with (`showVersionHistoryModal(configId, name, versionId)`
+selects that version) and the latest version, to mark a run on an older one. `?replay=<session_id>` on
 `/dashboard/agents/visual` opens the bar with that session chosen; the Traces page
 links there when a trace has a `gen_ai.conversation.id`.
 

@@ -48,6 +48,9 @@ Details that matter when something does not behave:
 - An agent with sub-agents, or with parents, and no description logs a warning:
   delegation picks a target by description.
 - An agent that appears under several parents is built once per parent on ADK.
+- Each agent built from a row records which config it was built from, a hash and the
+  stored version that holds it, for its model call spans and Trace Replay
+  ([Tracing](tracing.md#which-config-answered)).
 
 ### Who a model is built for
 
@@ -136,8 +139,8 @@ What differs from ADK:
   `tool_context` parameter from the model and injects `MateToolContext`. A tool that
   uses unusual attributes of ADK's context needs checking on this runtime.
 - **Tracing** goes to LangSmith rather than through the OpenTelemetry pipeline.
-- The first version targets `llm` agents with delegation, the tool factory, stdio
-  MCP servers, sessions, artifacts and streaming. [LangGraph runtime](langgraph-runtime.md)
+- The first version targets `llm` agents with delegation, the tool factory, MCP
+  servers (remote and stdio), sessions, artifacts and streaming. [LangGraph runtime](langgraph-runtime.md)
   keeps the current list; check it before relying on anything else.
 
 When you change behaviour in a callback, look for the matching code in `hooks.py`

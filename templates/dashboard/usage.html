@@ -274,6 +274,7 @@
                         <th class="px-2 py-1 font-medium">Helpful</th>
                         <th class="px-2 py-1 font-medium">Not helpful</th>
                         <th class="px-2 py-1 font-medium">Rate</th>
+                        <th class="px-2 py-1 font-medium text-right" title="The cost of every rated answer, not helpful ones included, divided by the number rated helpful. An answer's cost includes the sub-agents it handed to.">Cost per helpful answer</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
@@ -284,6 +285,14 @@
                         <td class="px-2 py-1 text-red-600 dark:text-red-400">{{ row.down }}</td>
                         <td class="px-2 py-1">{% if row.rate_pct is not none %}{{ row.rate_pct }}%{% else %}—{% endif %}
                             <span class="text-gray-400">({{ row.rated }})</span></td>
+                        <td class="px-2 py-1 text-right">
+                            {%- if row.cost_per_up_usd is not none -%}
+                            <span class="{% if row.cost_per_up_tentative %}text-gray-400 dark:text-gray-500{% else %}font-medium{% endif %}"
+                                  {% if row.cost_per_up_tentative %}title="Fewer than {{ min_rated_for_cost }} rated answers: one rating more or less moves this a lot"{% endif %}>{{ usd(row.cost_per_up_usd) }}</span>
+                            {%- elif not row.up -%}<span class="text-gray-400">no helpful answers</span>
+                            {%- else -%}—{%- endif -%}
+                            {%- if row.rated_unpriced_calls %} <span class="text-gray-500" title="Calls without a price are not in the cost">+ {{ row.rated_unpriced_calls }} unpriced</span>{% endif -%}
+                        </td>
                     </tr>
                     {% endfor %}
                 </tbody>

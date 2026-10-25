@@ -5,9 +5,9 @@
  * agent graph: which agent ran when, which model answered (and whether it was
  * the fallback), which tools were called and how long each step took.
  *
- * Exposes window.MateTraceReplay = { ReplayBar, agentStateAt }. The builder
- * renders ReplayBar above the canvas and decorates its agent nodes with
- * agentStateAt(turn, agentName, timeMs).
+ * Exposes window.MateTraceReplay = { ReplayBar, agentStateAt, configLabel }. The
+ * builder renders ReplayBar above the canvas and decorates its agent nodes with
+ * agentStateAt(turn, agentName, timeMs), including the config version that ran.
  */
 
 /* global window, fetch, URLSearchParams */
@@ -49,19 +49,30 @@
         });
         const step = running.filter(function (e) { return e.kind !== 'agent'; }).pop();
         const fallbackCall = started.filter(function (e) { return e.kind === 'llm' && e.fallback; }).pop();
+        // The config the agent's latest model call so far ran on
+        const configCall = started.filter(function (e) { return e.kind === 'llm' && e.config_hash; }).pop();
         return {
             state: running.length ? 'active' : 'done',
             busyMs: busy,
             error: started.some(function (e) { return e.status === 'ERROR' && e.end_ms <= t; }),
             step: step ? (step.kind === 'llm' ? (step.model || 'model call') : ('tool: ' + step.tool)) : null,
             fallback: fallbackCall ? { model: fallbackCall.model, primary: fallbackCall.primary_model } : null,
+            config: configCall ? { version: configCall.config_version, versionId: configCall.config_version_id,
+                                   hash: configCall.config_hash } : null,
         };
+    }
+
+    /** "v12", or the config hash when no stored version holds the config that ran. */
+    function configLabel(config) {
+        if (!config) return '';
+        return config.version != null ? 'v' + config.version : 'config ' + config.hash;
     }
 
     function eventLabel(e) {
         if (e.kind === 'agent') return e.agent + ' runs';
         if (e.kind === 'llm') {
-            return e.agent + ' → ' + (e.model || 'model') + (e.fallback ? ' (fallback for ' + (e.primary_model || 'primary') + ')' : '');
+            return e.agent + (e.config_hash ? ' ' + configLabel({ version: e.config_version, hash: e.config_hash }) : '')
+                + ' → ' + (e.model || 'model') + (e.fallback ? ' (fallback for ' + (e.primary_model || 'primary') + ')' : '');
         }
         return e.agent + ' → tool ' + e.tool;
     }
@@ -127,8 +138,8 @@
         const turnCount = timeline ? timeline.turns.length : 0;
 
         useEffect(function () {
-            onFrame(timeline ? { turn: timeline, t: t } : null);
-        }, [timeline, t, onFrame]);
+            onFrame(timeline ? { turn: timeline, t: t, configs: (replay && replay.agent_configs) || {} } : null);
+        }, [timeline, t, onFrame, replay]);
 
         useEffect(function () {
             return function () { onFrame(null); };
@@ -262,5 +273,5 @@
             controls, body);
     }
 
-    window.MateTraceReplay = { ReplayBar: ReplayBar, agentStateAt: agentStateAt, formatMs: formatMs };
+    window.MateTraceReplay = { ReplayBar: ReplayBar, agentStateAt: agentStateAt, formatMs: formatMs, configLabel: configLabel };
 })();

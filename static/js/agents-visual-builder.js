@@ -529,6 +529,30 @@ mateActions.allow('applyConfigModal', 'closeConfigModal', 'hideEditAgentModal',
 
         /* Trace Replay state (see trace-replay.js agentStateAt) */
         var replay = data.replay || null;
+        /* The config version the agent ran on. Opens that version in the history;
+           amber when the agent has a newer version, grey when no version holds it. */
+        function replayConfigChip(config, agentConfig, agentName) {
+            var latest = agentConfig ? agentConfig.latest_version : null;
+            var older = config.version != null && latest != null && config.version < latest;
+            var title = config.version != null
+                ? 'Ran on version ' + config.version + (older ? '; the agent is at version ' + latest + ' now' : '')
+                : 'Ran on a config no saved version holds (changed outside the dashboard, or not saved since)';
+            var canOpen = !!(agentConfig && agentConfig.config_id && window.showVersionHistoryModal);
+            return React.createElement(canOpen ? 'button' : 'span', {
+                type: canOpen ? 'button' : undefined,
+                title: title + (canOpen ? ' · click to open the version history' : ''),
+                onClick: canOpen ? function (ev) {
+                    ev.stopPropagation();
+                    window.showVersionHistoryModal(agentConfig.config_id, agentName, config.versionId);
+                } : undefined,
+                style: {
+                    padding: '2px 8px', borderRadius: 20, fontWeight: 600, border: 'none',
+                    pointerEvents: canOpen ? 'auto' : 'none', cursor: canOpen ? 'pointer' : 'default',
+                    backgroundColor: older ? '#92400e' : (config.version != null ? '#3730a3' : '#4b5563'),
+                    color: older ? '#fde68a' : '#e0e7ff',
+                },
+            }, window.MateTraceReplay.configLabel(config) + (older ? ' (now v' + latest + ')' : ''));
+        }
         var replayFmt = window.MateTraceReplay ? window.MateTraceReplay.formatMs : String;
         var replayGlow = null;
         if (replay && replay.state === 'active') {
@@ -683,6 +707,7 @@ mateActions.allow('applyConfigModal', 'closeConfigModal', 'hideEditAgentModal',
                     title: 'The primary model' + (replay.fallback.primary ? ' (' + replay.fallback.primary + ')' : '') + ' failed; the fallback answered',
                     style: { padding: '2px 8px', borderRadius: 20, backgroundColor: '#78350f', color: '#fde68a', fontWeight: 600, maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis' },
                 }, 'fallback: ' + (replay.fallback.model || '')) : null,
+                replay.config ? replayConfigChip(replay.config, replay.agentConfig, data.label) : null,
             ) : null,
             /* ── Source handle (bottom) ── */
             React.createElement(Handle, {
@@ -1547,6 +1572,7 @@ mateActions.allow('applyConfigModal', 'closeConfigModal', 'hideEditAgentModal',
             return nodes.map(function (n) {
                 if (n.type && n.type !== 'default') return n;
                 const state = Replay.agentStateAt(replayFrame.turn, n.id, replayFrame.t) || { state: 'absent' };
+                state.agentConfig = (replayFrame.configs || {})[n.id] || null;
                 return Object.assign({}, n, { data: Object.assign({}, n.data, { replay: state }) });
             });
         }, [nodes, replayFrame, Replay]);
