@@ -105,4 +105,5 @@ JSON mapping with one entry per server:
 
 It also works the other way round: an administrator can expose chosen agents as MCP
 servers, at `/agents/<agent name>/mcp`, so that other MCP clients can call them.
-This is switched on for named agents with the `MCP_EXPOSED_AGENTS` setting.
+This is switched on for named agents with the `MCP_EXPOSED_AGENTS` setting. A client
+signs in with a [personal access token](personal-access-tokens.md).

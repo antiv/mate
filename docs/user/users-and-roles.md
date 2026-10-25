@@ -29,7 +29,8 @@ A person gets the whole dashboard (Studio and Control Room) when they sign in wi
 the built-in account, or sign in through Google or GitHub and have the `admin` role.
 Everyone else sees the Work Room and their own usage. People with a role in
 `ALLOWED_API_ROLES` (by default `admin` and `developer`) also get **Personal Tokens**
-in the account menu, for the OpenAI-compatible API and the agents' MCP servers.
+in the account menu, for the OpenAI-compatible API and the agents' MCP servers; see
+[Personal access tokens](personal-access-tokens.md).
 
 ## Agent access
 

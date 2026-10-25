@@ -55,6 +55,13 @@ class TestSearchDocs(DocsToolsTestCase):
         paths = {r["path"] for r in self.tools["search_docs"]("APScheduler")["results"]}
         self.assertTrue(any(p.startswith("dev/") for p in paths), paths)
 
+    def test_a_non_admin_finds_how_to_create_a_token(self):
+        # #235: the help panel answered about MCP config placeholders instead
+        self.as_admin(False)
+        for question in ("personal access token", "generate auth key MCP"):
+            paths = [r["path"] for r in self.tools["search_docs"](question)["results"]]
+            self.assertIn("user/personal-access-tokens.md", paths[:3], (question, paths))
+
     def test_others_get_only_user_guides_and_no_links(self):
         self.as_admin(False)
         results = self.tools["search_docs"]("trigger")["results"]
