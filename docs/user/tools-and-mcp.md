@@ -91,7 +91,9 @@ JSON mapping with one entry per server:
 }
 ```
 
-- An entry with a `url` is reached over HTTP. Add `headers` for authentication.
+- An entry with a `url` is reached over HTTP. Add `headers` for authentication, and
+  `"transport": "sse"` for an older server that only speaks SSE. Only `http` and
+  `https` addresses are accepted.
 - An entry with `command` and `args` is started on the MATE server as a subprocess.
   `env` passes it environment variables.
 - `timeout` is the number of seconds to wait for a tool call (60 if not set).

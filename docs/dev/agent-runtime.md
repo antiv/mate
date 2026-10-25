@@ -136,8 +136,8 @@ What differs from ADK:
   `tool_context` parameter from the model and injects `MateToolContext`. A tool that
   uses unusual attributes of ADK's context needs checking on this runtime.
 - **Tracing** goes to LangSmith rather than through the OpenTelemetry pipeline.
-- The first version targets `llm` agents with delegation, the tool factory, stdio
-  MCP servers, sessions, artifacts and streaming. [LangGraph runtime](langgraph-runtime.md)
+- The first version targets `llm` agents with delegation, the tool factory, MCP
+  servers (remote and stdio), sessions, artifacts and streaming. [LangGraph runtime](langgraph-runtime.md)
   keeps the current list; check it before relying on anything else.
 
 When you change behaviour in a callback, look for the matching code in `hooks.py`

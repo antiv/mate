@@ -23,6 +23,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The LangGraph runtime skipped remote MCP servers** (#289) - on `AGENT_FRAMEWORK=langgraph`, an MCP server given by `url` was dropped with the warning "missing command or args", and the agent ran without its tools. It is now reached as on ADK: over streamable HTTP, or SSE with `"transport": "sse"`, with `headers`, `timeout` and `connect_timeout`; `${NAME}` in the url and headers is read from the environment and an unset one skips the server; only `http` and `https` are accepted; and an entry with both `url` and `command` uses the url. `${NAME}` in a stdio server's `command`, `args` and `env` is now read from the environment too, as on ADK, instead of being passed on as written. A server that cannot be reached now costs only its own tools, not those of every server of the agent. See `docs/user/tools-and-mcp.md`
+
 - **Slack users from different Slack workspaces shared one MATE user** (#276, 1.6.0 item 6) - a Slack user's MATE id was `slack_<user>`, without the workspace, so the same Slack user id in two workspaces had one set of roles, one profile, one memory and one store of connected accounts (OAuth credentials). The id is now `slack_<team>_<user>`. On upgrade:
   - A Slack user's first message creates the new id with the roles of the old one, so no one loses access to a restricted agent, and the audit log records it.
   - The bot starts existing threads and direct messages afresh.

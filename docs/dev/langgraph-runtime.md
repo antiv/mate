@@ -40,7 +40,7 @@ The LangGraph runtime lives in `shared/utils/langgraph/`:
 | `executor.py` | Run loop: RBAC → input guardrails → graph stream → event translation, output guardrails, persistence, token logging |
 | `event_translator.py` | LangGraph stream → ADK Event JSON (partial deltas + complete events, functionCall/functionResponse, `transfer_to_agent`, `artifactDelta`, `usage_metadata`) |
 | `tool_adapter.py` | Reuses the existing ADK-style tools unchanged: strips `tool_context` from the LLM-visible schema and injects a duck-typed `MateToolContext` at call time |
-| `mcp_client.py` | Stdio MCP servers via `langchain-mcp-adapters`, reading the same `mcp_servers_config` JSON |
+| `mcp_client.py` | MCP servers via `langchain-mcp-adapters`, reading the same `mcp_servers_config` JSON: `url` entries over streamable HTTP or SSE, `command` entries over stdio, with the same `${VAR}`, scheme and timeout rules as ADK. A server that cannot be reached costs only its own tools. |
 | `session_store.py` | `lg_sessions`/`lg_events` tables serving the ADK session wire shape (graph state lives in the LangGraph checkpointer, `lg_checkpoints.db`) |
 | `artifact_adapter.py` | Reuses the existing local-folder/S3/Supabase artifact services (`ARTIFACT_SERVICE` env) |
 | `hitl.py` | `require_confirmation` tools pause on a LangGraph interrupt and emit the same `adk_request_confirmation` functionCall the frontends already handle |
@@ -79,7 +79,8 @@ Unlike ADK, an agent that appears under multiple parents is a single node (no
 - DB-driven `llm` agents with sub-agent delegation
 - Tools via the existing ToolFactory (custom functions, image tools, browser,
   memory blocks, user profile, shop, calendar, `create_agent` self-building, …)
-- MCP stdio servers
+- MCP servers, remote (`url`, streamable HTTP or SSE) and stdio. `timeout` applies
+  to remote servers; stdio servers on this runtime use the adapter's default.
 - Sessions (DB-persisted, multi-turn memory), artifacts, streaming SSE
 - RBAC (incl. audit + ACCESS_DENIED token logging), guardrails (block/redact,
   input + output, logged to `guardrail_logs`), user-profile injection
