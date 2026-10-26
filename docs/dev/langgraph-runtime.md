@@ -41,7 +41,7 @@ The LangGraph runtime lives in `shared/utils/langgraph/`:
 | `event_translator.py` | LangGraph stream → ADK Event JSON (partial deltas + complete events, functionCall/functionResponse, `transfer_to_agent`, `artifactDelta`, `usage_metadata`) |
 | `tool_adapter.py` | Reuses the existing ADK-style tools unchanged: strips `tool_context` from the LLM-visible schema and injects a duck-typed `MateToolContext` at call time |
 | `mcp_client.py` | MCP servers via `langchain-mcp-adapters`, reading the same `mcp_servers_config` JSON: `url` entries over streamable HTTP or SSE, `command` entries over stdio, with the same `${VAR}`, scheme and timeout rules as ADK. A server that cannot be reached costs only its own tools. |
-| `session_store.py` | `lg_sessions`/`lg_events` tables serving the ADK session wire shape (graph state lives in the LangGraph checkpointer, `lg_checkpoints.db`) |
+| `session_store.py` | `lg_sessions`/`lg_events` tables serving the ADK session wire shape (graph state lives in the LangGraph checkpointer, `lg_checkpoints.db`). Deleting a session deletes its checkpoint thread first, and creating one with a given id deletes any checkpoint left under that id, so a new session never resumes an old conversation. Deleting an agent deletes its sessions and their checkpoints (`shared/utils/agent_cleanup.py`). |
 | `artifact_adapter.py` | Reuses the existing local-folder/S3/Supabase artifact services (`ARTIFACT_SERVICE` env) |
 | `hitl.py` | `require_confirmation` tools pause on a LangGraph interrupt and emit the same `adk_request_confirmation` functionCall the frontends already handle |
 | `hooks.py` | RBAC, guardrails and user-profile injection — thin wrappers over the same ADK-free services the ADK callbacks use |

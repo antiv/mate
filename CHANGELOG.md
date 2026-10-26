@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **User guide for personal access tokens** (#235) - `docs/user/personal-access-tokens.md` explains who can have a token, how to create, use and revoke one, and how to use it as an OpenAI-compatible model or from an MCP client. Before, only the developer guides, which non-admins cannot open, explained them, and the help panel answered questions about tokens with the MCP server configuration instead. **Users and roles** and **Tools and MCP servers** link to it.
+
 - **Cost per helpful answer** (#275) - the Usage page's **Satisfaction by Agent** table shows what each answer rated helpful cost: the cost of every answer rated in the period, not helpful ones included, divided by the number rated helpful. A rating is joined to its answer's token rows through the invocation id, so the cost includes the sub-agents the answer handed to. Calls without a price are left out and counted, and an agent with fewer than 10 rated answers is shown in grey. The Evals Playground shows **Cost per passed case** per variant: its whole cost over the cases it passed, or **no passes**. See `docs/user/usage-and-audit.md` and `docs/user/evals.md`
 
 - **Trace Replay shows which version of an agent answered** (#274) - when an agent is built, MATE records the config it was built from: a short hash, and the id and number of the stored version that holds it, if one does. Each model call's `gen_ai.inference` span carries them (`mate.agent.config_hash`, `mate.agent.config_version_id`, `mate.agent.config_version`). Trace Replay shows the version on each agent node and in the step list. Clicking it opens the agent's version history at that version. A run on an older version than the agent has now is marked in amber, and a config no saved version holds (changed by an agent, a template import or the API) shows its hash, so two replays on different configs can be told apart. See `docs/user/trace-replay.md` and `docs/dev/tracing.md`
@@ -26,6 +28,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`create_model()` takes the caller's context** (#276, 1.6.0 item 5) - `create_model()`, and `create_chat_model()` on the LangGraph runtime, take a `ModelContext`: the agent and project a model is built for. An agent's model and its fallback model get the agent, a subagent gets the agent that started it, and the fallback agent and the compaction summarizer get the installation's empty context. Provider keys still come from the environment, so nothing changes for users; the context appears in the "Creating ... model" log line, and 2.0 looks up a workspace's provider keys from it. `shared/test/test_model_context.py` fails on a call to either function that does not pass a context. See `docs/dev/agent-runtime.md`
 
 ### Fixed
+
+- **An agent created with the name of a deleted one inherited what was left of it** (#276, found in the reviews of 1.5.1) - many tables refer to an agent by name, with no foreign key to cascade along, and deleting an agent left those rows behind. A new agent with the same name, perhaps in another project, then took them over:
+  - its file-search store links, possibly to another project's stores;
+  - its widget keys, which exposed the new agent publicly, and its Slack integrations and triggers;
+  - its budgets, alert rules and eval test cases;
+  - its users' stored OAuth credentials, their conversations on both runtimes, the memory built from them, and app-wide state.
+
+  Every way of deleting an agent now removes them, in the same transaction: the dashboard's agent and project delete, the **Create Agent** tool and the wizard's trial cleanup (`shared/utils/agent_cleanup.py`). Usage, guardrail, feedback and audit logs stay. Checked on SQLite, PostgreSQL 16 and MySQL 8.0 against the session tables ADK creates. See `docs/user/agents.md`
+
+- **A signed-in user could use up another user's request allowance** (#276, found in the review of 1.5.1 C) - the rate-limit middleware counted a `/run_sse` request against the user id in its body before the proxy checked that id, so requests naming another user, which the proxy then refused with 403, still counted against that user's per-minute limit. A request that is refused is no longer counted. See `docs/user/rate-limits.md`
+
+- **A LangGraph session created with the id of a deleted one resumed its conversation** (#276, found in the review of #302) - deleting a session on `AGENT_FRAMEWORK=langgraph` removed its rows but not its checkpointed graph state. Deleting a session now deletes its checkpoint, and creating a session with a given id deletes any checkpoint left under it. See `docs/dev/langgraph-runtime.md`
 
 - **The LangGraph runtime skipped remote MCP servers** (#289) - on `AGENT_FRAMEWORK=langgraph`, an MCP server given by `url` was dropped with the warning "missing command or args", and the agent ran without its tools. It is now reached as on ADK: over streamable HTTP, or SSE with `"transport": "sse"`, with `headers`, `timeout` and `connect_timeout`; `${NAME}` in the url and headers is read from the environment and an unset one skips the server; only `http` and `https` are accepted; and an entry with both `url` and `command` uses the url. `${NAME}` in a stdio server's `command`, `args` and `env` is now read from the environment too, as on ADK, instead of being passed on as written. A server that cannot be reached now costs only its own tools, not those of every server of the agent. See `docs/user/tools-and-mcp.md`
 

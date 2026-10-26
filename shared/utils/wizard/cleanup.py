@@ -13,7 +13,7 @@ from pathlib import Path
 
 from shared.utils.database_client import get_database_client
 from shared.utils.models import (
-    AgentConfig, AgentConfigVersion, Credential, MemoryBlock, MemoryBlockVersion, Project, WidgetApiKey,
+    AgentConfig, AgentConfigVersion, MemoryBlock, MemoryBlockVersion, Project, WidgetApiKey,
     WizardLead, WizardSession,
 )
 
@@ -104,8 +104,12 @@ def _delete_trial_project(session, pid: int) -> list:
     session.query(WidgetApiKey).filter(WidgetApiKey.project_id == pid).delete(synchronize_session=False)
     session.query(MemoryBlock).filter(MemoryBlock.project_id == pid).delete(synchronize_session=False)
     session.query(MemoryBlockVersion).filter(MemoryBlockVersion.project_id == pid).delete(synchronize_session=False)
-    if agent_names:
-        session.query(Credential).filter(Credential.app_name.in_(agent_names)).delete(synchronize_session=False)
+    # Credentials, conversations and every other row keyed by the agents' names.
+    # The checkpoints go now, outside the caller's transaction: a trial that is
+    # being deleted has no conversation worth keeping if the commit fails.
+    from ..agent_cleanup import delete_agent_rows, purge_langgraph_checkpoints
+    removed = delete_agent_rows(session, agent_names)
+    purge_langgraph_checkpoints(removed["langgraph_threads"])
     # Delete version snapshots then agents explicitly (avoids the ORM nulling the
     # NOT NULL agent_config_versions.agent_config_id on project cascade).
     if agent_ids:

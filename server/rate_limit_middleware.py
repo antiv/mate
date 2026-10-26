@@ -115,7 +115,10 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
         response = await call_next(request)
 
-        if result.allowed:
+        # The user id is the body's, which the proxy only checks downstream. A request
+        # it refuses (401, 403, or 400 for a malformed body) did not run, and counting
+        # it would let a caller use up another user's allowance by naming them.
+        if result.allowed and response.status_code < 400:
             await svc.record_request(user_id=user_id, agent_name=agent_name)
 
         return response

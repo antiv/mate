@@ -12,6 +12,7 @@ covers:
   - shared/utils/rbac_middleware.py
   - shared/utils/utils.py::create_model
   - shared/utils/dashboard/dashboard_server.py::*agent*
+  - shared/utils/agent_cleanup.py
 ---
 
 # Agents
@@ -142,3 +143,21 @@ EU AI Act requires the notice unless it is already obvious to the person.
 - **Download Binary** builds a standalone executable of an agent.
 - **Reload All** makes every agent pick up its configuration again, for the rare
   case where a change did not take effect.
+
+## Delete an agent
+
+Deleting an agent, or the project it is in, cannot be undone. It removes, with the
+agent:
+
+- what it is connected to: its file-search store links, widget keys, Slack
+  integrations and triggers;
+- its settings: budgets, alert rules, eval test cases and their results, version
+  history;
+- what people left with it: their conversations with it, the memory built from
+  them, and the accounts they connected for it (Google Drive, Calendar).
+
+Usage, guardrail, feedback and audit logs stay, so the cost and history of what it
+did remain on the Usage and Audit Log pages.
+
+This is so that an agent created later with the same name starts with none of it.
+Before MATE 1.6 these were left behind and passed to the new agent.
