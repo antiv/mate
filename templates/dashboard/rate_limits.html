@@ -33,9 +33,9 @@
                 Select a config or enter scope below
             </div>
             <div class="mt-3 flex flex-col gap-2 sm:flex-row sm:gap-2">
-                <input type="text" id="usageUserId" placeholder="user_id" class="w-full sm:flex-1 min-w-0 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-sm">
-                <input type="text" id="usageAgentName" placeholder="agent_name" class="w-full sm:flex-1 min-w-0 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-sm">
-                <input type="number" id="usageProjectId" placeholder="project_id" class="w-full sm:w-24 min-w-0 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-sm">
+                <input type="text" id="usageUserId" aria-label="User ID" placeholder="user_id" class="w-full sm:flex-1 min-w-0 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-sm">
+                <input type="text" id="usageAgentName" aria-label="Agent name" placeholder="agent_name" class="w-full sm:flex-1 min-w-0 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-sm">
+                <input type="number" id="usageProjectId" aria-label="Project ID" placeholder="project_id" class="w-full sm:w-24 min-w-0 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-sm">
                 <button data-click="loadUsage" class="bg-gray-600 hover:bg-gray-700 text-white px-3 py-1.5 rounded text-sm min-h-[44px] touch-target w-full sm:w-auto">Load</button>
             </div>
         </div>
@@ -48,7 +48,7 @@
         <h3 id="modalTitle" class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Add Rate Limit Config</h3>
         <form id="configForm" class="space-y-3">
             <div>
-                <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Scope</label>
+                <label for="formScope" class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Scope</label>
                 <select id="formScope" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 rounded px-2 py-1.5 text-sm" required>
                     <option value="user">User</option>
                     <option value="agent">Agent</option>
@@ -56,36 +56,36 @@
                 </select>
             </div>
             <div>
-                <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Scope ID (user_id, agent_name, or project_id)</label>
+                <label for="formScopeId" class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Scope ID (user_id, agent_name, or project_id)</label>
                 <input type="text" id="formScopeId" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 rounded px-2 py-1.5 text-sm" required placeholder="e.g. user123 or chess_mate_root">
             </div>
             <div class="grid grid-cols-2 gap-2">
                 <div>
-                    <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Requests/min</label>
+                    <label for="formRequestsPerMin" class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Requests/min</label>
                     <input type="number" id="formRequestsPerMin" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 rounded px-2 py-1.5 text-sm" placeholder="60" min="1">
                 </div>
                 <div>
-                    <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Tokens/hour</label>
+                    <label for="formTokensPerHour" class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Tokens/hour</label>
                     <input type="number" id="formTokensPerHour" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 rounded px-2 py-1.5 text-sm" placeholder="10000" min="0">
                 </div>
             </div>
             <div class="grid grid-cols-2 gap-2">
                 <div>
-                    <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Tokens/day</label>
+                    <label for="formTokensPerDay" class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Tokens/day</label>
                     <input type="number" id="formTokensPerDay" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 rounded px-2 py-1.5 text-sm" placeholder="50000" min="0">
                 </div>
                 <div>
-                    <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Tokens/month (project)</label>
+                    <label for="formTokensPerMonth" class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Tokens/month (project)</label>
                     <input type="number" id="formTokensPerMonth" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 rounded px-2 py-1.5 text-sm" placeholder="500000" min="0">
                 </div>
             </div>
             <div class="grid grid-cols-2 gap-2">
                 <div>
-                    <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">USD/day</label>
+                    <label for="formUsdPerDay" class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">USD/day</label>
                     <input type="number" id="formUsdPerDay" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 rounded px-2 py-1.5 text-sm" placeholder="5.00" min="0" step="0.01">
                 </div>
                 <div>
-                    <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">USD/month</label>
+                    <label for="formUsdPerMonth" class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">USD/month</label>
                     <input type="number" id="formUsdPerMonth" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 rounded px-2 py-1.5 text-sm" placeholder="100.00" min="0" step="0.01">
                 </div>
                 <p class="col-span-2 text-[11px] text-gray-500 dark:text-gray-400">Spend over the last 24 hours and 30 days, at list prices. Calls whose model has no price do not count unless the box below is ticked; see <a href="/dashboard/settings#model-prices" class="text-blue-600 hover:underline">model prices</a>.</p>
@@ -99,11 +99,11 @@
                 <span>Include sub-agents (agent scope): the agent's token and dollar budgets count what its sub-agents use too</span>
             </label>
             <div>
-                <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Max tokens/request (agent)</label>
+                <label for="formMaxTokensPerRequest" class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Max tokens/request (agent)</label>
                 <input type="number" id="formMaxTokensPerRequest" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 rounded px-2 py-1.5 text-sm" placeholder="4096" min="0">
             </div>
             <div>
-                <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Action on limit</label>
+                <label for="formActionOnLimit" class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Action on limit</label>
                 <select id="formActionOnLimit" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 rounded px-2 py-1.5 text-sm">
                     <option value="warn">Warn (log + continue)</option>
                     <option value="throttle">Throttle (delay)</option>
