@@ -30,7 +30,7 @@ jobs:
       # need a real browser skip themselves, and downloading Chromium would add
       # minutes per run.
       - name: Run tests
-        run: python -m unittest discover -s shared/test -p "test_*.py" -v
+        run: python -m unittest discover -s shared/test -t . -p "test_*.py" -v
 
       # test_sessions_api.py is pytest-native (fixtures + bare test functions), so
       # unittest imports it but collects nothing from it.

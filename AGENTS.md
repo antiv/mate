@@ -161,13 +161,13 @@ Use environment variables for all API keys, database settings, and system toggle
 - **ALWAYS run tests as module** within activated virtual environment:
   ```bash
   # Run all tests
-  python -m unittest discover -s shared/test -p "test_*.py" -v
+  python -m unittest discover -s shared/test -t . -p "test_*.py" -v
 
   # Run single test module
   python -m unittest shared.test.test_agent_manager_simple -v
 
   # Run with test coverage
-  coverage run -m unittest discover -s shared/test -p "test_*.py"
+  coverage run -m unittest discover -s shared/test -t . -p "test_*.py"
   coverage report
   ```
 - Write unit tests for all new agent, tool, callback, or route functionality

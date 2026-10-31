@@ -10,6 +10,7 @@ user's conversations, or run as an admin and get past RBAC.
 
 import json
 import os
+import socket
 import sys
 import unittest
 from unittest.mock import patch
@@ -114,9 +115,16 @@ class TestProxyRoute(unittest.TestCase):
         self.assertEqual(resp.status_code, 403)
 
     def test_an_admin_is_not_restricted(self):
+        from server import proxy_routes
         self.admin = True
-        # Passes the check and fails only on reaching the (absent) agent server
-        resp = self.client.get("/apps/bot/users/alice@corp.com/sessions")
+        # Passes the check and fails only on reaching the agent server, which is
+        # absent: a port nothing listens on, even with a local server running
+        with socket.socket() as s:
+            s.bind(("127.0.0.1", 0))
+            free_port = s.getsockname()[1]
+        with patch.object(proxy_routes, "ADK_HOST", "127.0.0.1"), \
+                patch.object(proxy_routes, "ADK_PORT", free_port):
+            resp = self.client.get("/apps/bot/users/alice@corp.com/sessions")
         self.assertEqual(resp.status_code, 503)
 
 

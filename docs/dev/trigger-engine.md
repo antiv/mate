@@ -198,4 +198,4 @@ config builder in `static/js/triggers-page.js`.
 update routes refuse anything listed there), give it a source that calls
 `execute_trigger(trigger_id, payload)`, and enable its option in the modal.
 
-Tests live in `shared/test/`; run `python -m unittest discover -s shared/test -p "test_trigger*.py"`.
+Tests live in `shared/test/`; run `python -m unittest discover -s shared/test -t . -p "test_trigger*.py"`.
