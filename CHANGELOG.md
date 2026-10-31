@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-10-31
+
 ### Added
 
 - **User guide for personal access tokens** (#235) - `docs/user/personal-access-tokens.md` explains who can have a token, how to create, use and revoke one, and how to use it as an OpenAI-compatible model or from an MCP client. Before, only the developer guides, which non-admins cannot open, explained them, and the help panel answered questions about tokens with the MCP server configuration instead. **Users and roles** and **Tools and MCP servers** link to it.
@@ -55,6 +57,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **A subagent could send the provider's key to the parent agent's endpoint** - a subagent started by `subagent_delegation` on its parent's model took the parent's `model_base_url` and `model_api_key` as stored, without `resolve_agent_endpoint()`, which builds the parent itself. With a base URL and no key, LiteLLM then sent the provider's key from the server environment to the host the base URL names, and a `${VAR}` key was sent as the literal text `${VAR}`. The subagent now reads the endpoint as the parent does: the variable is resolved, an unset one fails the subtask, and an endpoint without a key gets a placeholder. A subagent on another model given as `default_model` also took the parent's endpoint and key; now only a subagent on the parent's own model does. See `docs/user/subagent-delegation.md`
 
 - **Only admins could create a personal access token** (#276) - the API and the MCP servers accept a token of any user with a role in `ALLOWED_API_ROLES` (default `admin`, `developer`), and the account menu showed **Personal Tokens** to every signed-in user, but the dashboard's access check refused creating and revoking a token to everyone but admins, and the menu said only "Failed to generate token". A user with such a role now creates and revokes their own tokens. The menu shows **Personal Tokens** only to admins and those users, and creating a token refuses anyone else with 403, by the same rule the API applies when the token is used. An `expires_in_days` that is not a positive number now gets 400 instead of 500. See `docs/dev/auth-and-access.md`
+
+- **Dashboard pages had up to three names** (#288) - a page's sidebar entry, browser tab title and heading could each name it differently, such as **Rate Limits**, "Rate Limits & Budgets" and "Database Migrations". The tab title and heading now match the sidebar on every page; Usage is **My Usage** for non-admins, as in their sidebar. Thanks to @bernalalexis-try
+
+- **Browser dialogs instead of the dashboard's own** (#244) - actions that ask for confirmation on Sessions, Users, Memory Blocks, Migrations, Evals, the Work Room, the wizard pages, Integrations, Triggers and Widget Keys used the browser's `confirm()`, and the Migrations page had its own alert banner. They now use the dashboard's confirmation dialog and notifications, which follow the theme. Some `alert()` calls remain (#244). Thanks to @CRYPTONIKAV
+
+- **Icon-only buttons and fields without a name for screen readers** (#246) - the close buttons of every modal, the project edit and delete buttons, the copy buttons, the parent agents search clear button and the Rate Limits page's fields now have accessible names, and the Rate Limits labels are linked to their fields. Other pages follow in #246. Thanks to @Fire162 and @aoblak
 
 ## [1.5.1] - 2026-10-17
 
