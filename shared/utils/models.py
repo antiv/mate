@@ -2,7 +2,7 @@
 SQLAlchemy models for the application.
 """
 
-from sqlalchemy import Column, Integer, String, DateTime, create_engine, UUID, Text, ForeignKey, Boolean, Date, JSON, Float, UniqueConstraint
+from sqlalchemy import Column, Integer, String, DateTime, create_engine, UUID, Text, ForeignKey, Boolean, Date, JSON, Float, UniqueConstraint, event
 from sqlalchemy.orm import sessionmaker, relationship, declarative_base
 from datetime import datetime, timezone
 from typing import Optional
@@ -11,6 +11,10 @@ import json
 from .secret_box import EncryptedText, decrypt, encrypt
 
 Base = declarative_base()
+
+# The workspace every 1.x row belongs to (V046). Code that does not know the
+# caller's workspace yet writes this one; phase 2 of the 2.0 plan replaces it.
+DEFAULT_WORKSPACE_ID = 1
 
 
 class User(Base):
@@ -107,6 +111,8 @@ class TokenUsageLog(Base):
     # The agent's project when the row was written; kept when the agent is renamed,
     # moved or deleted (V044, shared/utils/log_projects.py)
     project_id = Column(Integer, nullable=True)
+    # That project's workspace, copied the same way (V046)
+    workspace_id = Column(Integer, nullable=True)
     
     def to_dict(self) -> dict:
         """Convert model instance to dictionary."""
@@ -165,6 +171,8 @@ class GuardrailLog(Base):
     # The agent's project when the row was written; kept when the agent is renamed,
     # moved or deleted (V044, shared/utils/log_projects.py)
     project_id = Column(Integer, nullable=True)
+    # That project's workspace, copied the same way (V046)
+    workspace_id = Column(Integer, nullable=True)
 
     def to_dict(self) -> dict:
         return {
@@ -193,6 +201,8 @@ class Project(Base):
     template_id = Column(String(255), nullable=True)  # Source template ID (e.g., "jira-worklog-assistant")
     template_version = Column(String(50), nullable=True)  # Template version at import/sync (e.g., "3.0")
     template_prefix = Column(String(255), nullable=True)  # Template agent_prefix for name mapping
+    workspace_id = Column(Integer, ForeignKey('workspaces.id'), nullable=False, default=DEFAULT_WORKSPACE_ID,
+                          server_default=str(DEFAULT_WORKSPACE_ID))
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc),
                         onupdate=lambda: datetime.now(timezone.utc), nullable=False)
@@ -208,9 +218,56 @@ class Project(Base):
             'template_id': self.template_id,
             'template_version': self.template_version,
             'template_prefix': self.template_prefix,
+            'workspace_id': self.workspace_id,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
+
+
+class Workspace(Base):
+    """An organisation sharing the installation: its projects, members and logs (V046).
+
+    Workspace 1, "Default", holds everything a 1.x installation had.
+    """
+
+    __tablename__ = 'workspaces'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(255), nullable=False, unique=True)
+    slug = Column(String(40), nullable=False, unique=True)
+    # Whether the workspace may call models on the installation's provider keys
+    allow_platform_keys = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc),
+                        onupdate=lambda: datetime.now(timezone.utc), nullable=False)
+    deleted_at = Column(DateTime, nullable=True)
+
+
+@event.listens_for(Workspace.__table__, "after_create")
+def _create_default_workspace(table, connection, **kw) -> None:
+    """A schema built by create_all gets the default workspace, as V046 gives a migrated one."""
+    connection.execute(table.insert().values(id=DEFAULT_WORKSPACE_ID, name="Default", slug="default"))
+
+
+class WorkspaceMember(Base):
+    """A user's membership of a workspace (V046).
+
+    role is owner, admin or member. agent_roles is the JSON list matched against an
+    agent's allowed_for_roles; it takes over from users.roles in a later phase. Until
+    then both are derived from users.roles (shared/utils/workspaces.py).
+    """
+
+    __tablename__ = 'workspace_members'
+    __table_args__ = (UniqueConstraint('workspace_id', 'user_id'),)
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    workspace_id = Column(Integer, ForeignKey('workspaces.id', ondelete='CASCADE'), nullable=False)
+    user_id = Column(String(255), ForeignKey('users.user_id', ondelete='CASCADE'), nullable=False,
+                     index=True)
+    role = Column(String(20), nullable=False, default='member')
+    agent_roles = Column(Text, nullable=False, default='["user"]')
+    invited_by = Column(String(255), nullable=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
 
 
 class AgentConfig(Base):
@@ -659,6 +716,8 @@ class AuditLog(Base):
     # The project the entry is about: the agent's, or the project itself; NULL for
     # installation-wide entries (V044, shared/utils/log_projects.py)
     project_id = Column(Integer, nullable=True)
+    # That project's workspace (V046); NULL for installation-wide entries too
+    workspace_id = Column(Integer, nullable=True)
 
     def get_details(self) -> Optional[dict]:
         if not self.details:
@@ -1032,6 +1091,9 @@ class PersonalAccessToken(Base):
     token_prefix = Column(String(16), nullable=False) # e.g. "mate_pat_abcdef"
     name = Column(String(255), nullable=False) # Label (e.g., "OpenCode VS Code")
     user_id = Column(String(255), ForeignKey('users.user_id', ondelete='CASCADE'), nullable=False)
+    # Its workspace (V046); 1.x code paths write the default one
+    workspace_id = Column(Integer, nullable=False, default=DEFAULT_WORKSPACE_ID,
+                          server_default=str(DEFAULT_WORKSPACE_ID))
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     last_used_at = Column(DateTime, nullable=True)
     expires_at = Column(DateTime, nullable=True)
@@ -1059,6 +1121,9 @@ class RateLimitConfig(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     scope = Column(String(20), nullable=False)  # user, agent, project
     scope_id = Column(String(500), nullable=False)
+    # Its workspace (V046); 1.x code paths write the default one
+    workspace_id = Column(Integer, nullable=False, default=DEFAULT_WORKSPACE_ID,
+                          server_default=str(DEFAULT_WORKSPACE_ID))
     requests_per_minute = Column(Integer, nullable=True)
     tokens_per_hour = Column(Integer, nullable=True)
     tokens_per_day = Column(Integer, nullable=True)
@@ -1166,6 +1231,9 @@ class TestCase(Base):
     is_active = Column(Boolean, nullable=False, default=True)
     # The rated-down response this case was made from, so it is not added twice
     source_feedback_id = Column(Integer, nullable=True)
+    # Its workspace (V046); 1.x code paths write the default one
+    workspace_id = Column(Integer, nullable=False, default=DEFAULT_WORKSPACE_ID,
+                          server_default=str(DEFAULT_WORKSPACE_ID))
 
     version = relationship("AgentConfigVersion")
     results = relationship("EvalResult", back_populates="test_case", cascade="all, delete-orphan")
@@ -1360,6 +1428,8 @@ class AgentResponse(Base):
     # The agent's project when the row was written; kept when the agent is renamed,
     # moved or deleted (V044, shared/utils/log_projects.py)
     project_id = Column(Integer, nullable=True)
+    # That project's workspace, copied the same way (V046)
+    workspace_id = Column(Integer, nullable=True)
 
     def to_dict(self) -> dict:
         return {
@@ -1389,6 +1459,9 @@ class AlertRule(Base):
     description = Column(Text, nullable=True)
     scope = Column(String(20), nullable=False)  # user | agent | project | global
     scope_id = Column(String(255), nullable=True)  # NULL only when scope='global'
+    # Its workspace (V046); 1.x code paths write the default one
+    workspace_id = Column(Integer, nullable=False, default=DEFAULT_WORKSPACE_ID,
+                          server_default=str(DEFAULT_WORKSPACE_ID))
     condition_type = Column(String(50), nullable=False)  # agent_error_count | budget_threshold | guardrail_count | model_fallback_count
     condition_config = Column(Text, nullable=True)
     destination_type = Column(String(50), nullable=False)  # http | email | slack | discord
@@ -1534,3 +1607,9 @@ class LangGraphEvent(Base):
         if usage:
             event['usageMetadata'] = usage
         return event
+
+
+# Registers the listeners that keep each user's membership of the default workspace
+# in line with users.roles, wherever users are written. Imported last: it imports
+# the models above.
+from . import workspaces  # noqa: E402,F401

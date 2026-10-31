@@ -127,7 +127,8 @@ class TestBackfill(_Db):
             log_projects.run_backfill_once()
             log_projects.run_backfill_once()
         backfill.assert_called_once()
-        self.assertEqual(stored, {log_projects.BACKFILL_DONE_KEY: "done"})
+        self.assertEqual(stored, {log_projects.BACKFILL_DONE_KEY: "done",
+                                  log_projects.WORKSPACE_BACKFILL_DONE_KEY: "done"})
 
     def test_a_failed_run_is_retried_next_start(self):
         stored = {}
