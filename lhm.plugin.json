@@ -1,65 +1,65 @@
 {
-  "identifier": "antiv-mate",
-  "name": "MATE (Multi-Agent Tree Engine)",
-  "version": "1.6.0",
-  "description": "A production-ready multi-agent orchestration engine built on Google ADK. Configure agents, tools, and LLM providers from a web dashboard with no code changes needed. Every agent listed in MCP_EXPOSED_AGENTS is served as its own Streamable HTTP MCP server at /agents/<agent>/mcp; GET /mcp lists them with their URLs. This listing connects to the built-in mate_help agent. Clients authenticate with a Personal Access Token from the MATE dashboard, sent as the header Authorization: Bearer mate_pat_...; the token's user needs the admin or developer role. Supports 50+ LLM providers including local Ollama, persistent memory, RBAC, and multi-tenant project isolation. Requires an LLM provider key such as GOOGLE_API_KEY.",
-  "author": "antiv",
-  "authorUrl": "https://github.com/antiv",
-  "homepage": "https://github.com/antiv/mate",
-  "icon": "https://github.com/antiv.png",
-  "category": "developer",
-  "tags": [
-    "multi-agent",
-    "orchestration",
-    "google-adk",
-    "mcp",
-    "llm",
-    "agent-management",
-    "rbac",
-    "persistent-memory",
-    "python"
-  ],
-  "tools": [
-    {
-      "name": "call_mate_help_agent",
-      "description": "Call the mate_help agent with a message. Returns the agent's response.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "message": {
-            "type": "string",
-            "description": "The message to send to the agent"
-          },
-          "session_id": {
-            "type": "string",
-            "description": "Optional session ID for maintaining conversation context"
-          }
-        },
-        "required": [
-          "message"
-        ]
-      }
-    }
-  ],
-  "prompts": [
-    {
-      "name": "ask_mate_help",
-      "description": "Ask the mate_help agent a question about using MATE and its dashboard; it answers from the documentation.",
-      "arguments": [
-        {
-          "name": "question",
-          "description": "What to ask the agent",
-          "required": true,
-          "type": "string"
-        }
-      ]
-    }
-  ],
-  "resources": [
-    {
-      "uri": "mate://agents/mate_help/about",
-      "name": "About mate_help",
-      "mimeType": "text/markdown"
-    }
-  ]
+	"identifier": "antiv-mate",
+	"name": "MATE (Multi-Agent Tree Engine)",
+	"version": "1.6.0",
+	"description": "A production-ready multi-agent orchestration engine built on Google ADK. Configure agents, tools, and LLM providers from a web dashboard with no code changes needed. Every agent listed in MCP_EXPOSED_AGENTS is served as its own Streamable HTTP MCP server at /agents/<agent>/mcp; GET /mcp lists them with their URLs. This listing connects to the built-in mate_help agent. Clients authenticate with a Personal Access Token from the MATE dashboard, sent as the header Authorization: Bearer mate_pat_...; the token's user needs the admin or developer role. Supports 50+ LLM providers including local Ollama, persistent memory, RBAC, and multi-tenant project isolation. Requires an LLM provider key such as GOOGLE_API_KEY.",
+	"author": "antiv",
+	"authorUrl": "https://github.com/antiv",
+	"homepage": "https://github.com/antiv/mate",
+	"icon": "https://github.com/antiv.png",
+	"category": "developer",
+	"tags": [
+		"multi-agent",
+		"orchestration",
+		"google-adk",
+		"mcp",
+		"llm",
+		"agent-management",
+		"rbac",
+		"persistent-memory",
+		"python"
+	],
+	"tools": [
+		{
+			"name": "call_mate_help_agent",
+			"description": "Call the mate_help agent with a message. Returns the agent's response.",
+			"inputSchema": {
+				"type": "object",
+				"properties": {
+					"message": {
+						"type": "string",
+						"description": "The message to send to the agent"
+					},
+					"session_id": {
+						"type": "string",
+						"description": "Optional session ID for maintaining conversation context"
+					}
+				},
+				"required": [
+					"message"
+				]
+			}
+		}
+	],
+	"prompts": [
+		{
+			"name": "ask_mate_help",
+			"description": "Ask the mate_help agent a question about using MATE and its dashboard; it answers from the documentation.",
+			"arguments": [
+				{
+					"name": "question",
+					"description": "What to ask the agent",
+					"required": true,
+					"type": "string"
+				}
+			]
+		}
+	],
+	"resources": [
+		{
+			"uri": "mate://agents/mate_help/about",
+			"name": "About mate_help",
+			"mimeType": "text/markdown"
+		}
+	]
 }

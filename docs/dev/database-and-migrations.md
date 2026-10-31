@@ -10,6 +10,7 @@ covers:
   - shared/utils/models.py
   - shared/sql/README.md
   - shared/utils/log_projects.py
+  - shared/utils/workspaces.py
 ---
 
 # Database and migrations
@@ -119,17 +120,18 @@ installation the insert may run for the first time over rows an admin has edited
   without an error, so test a seed on a `create_all` schema
   (`shared/test/test_mate_help_agent.py` does this for V036).
 
-## Log rows carry their project
+## Log rows carry their project and workspace
 
 `token_usage_logs`, `guardrail_logs`, `agent_responses` and `audit_logs` have a
-`project_id` (V044), written with the row by the four functions that write them
-(`shared/utils/log_projects.py` does the lookup):
+`project_id` (V044) and a `workspace_id` (V046). The four functions that write the
+rows set both, and `shared/utils/log_projects.py` does the lookup:
 
-- token usage, guardrail hits and responses get their agent's project, or NULL for
-  an agent that is not configured;
+- token usage, guardrail hits and responses get their agent's project and that
+  project's workspace, or NULL for an agent that is not configured;
 - an audit entry gets the project of the agent or project its `resource_id` names,
   NULL for installation-wide entries. `audit_service.log(..., project_id=...)` sets
-  it when the agent is already gone, as on agent delete.
+  it when the agent is already gone, as on agent delete. The workspace is the
+  project's, so an entry about a project that no longer exists has none.
 
 The column has no foreign key: a row keeps its project id after the project is
 deleted. Queries per project read it rather than joining through `agents_config`,
@@ -141,6 +143,43 @@ after startup: it walks each table by id, 10,000 rows per `UPDATE` and commit, a
 writes `log_project_backfill = done` to `system_settings` when it is finished. A
 failed run logs an error and runs again on the next start. It only writes rows
 without a project, so running it twice, or on two servers at once, is harmless.
+
+`log_projects.backfill_workspaces()` then fills `workspace_id` on rows written before
+V046, from the project in their `project_id`, in the same thread and the same way. It
+marks itself done with `log_workspace_backfill`, and it doesn't start until the
+project backfill is done, since it reads that backfill's result. A row with no
+project, or whose project was deleted, keeps NULL.
+
+## Workspaces
+
+2.0 lets several organisations share one installation (`documents/design/workspaces.md`).
+Phase 1 (V046) adds the schema only, and nothing reads it yet:
+
+- **New tables.**
+  - `workspaces` holds workspace 1, "Default", which V046 inserts. A schema built
+    by `create_all` gets it too, from an `after_create` hook on the table.
+  - `workspace_members` holds one row per workspace and user, with `role` (`owner`,
+    `admin` or `member`) and `agent_roles`.
+- **Existing tables.** `projects`, `test_cases`, `rate_limit_config`, `alert_rules`
+  and `personal_access_tokens` have `workspace_id NOT NULL DEFAULT 1`.
+  - The default puts existing rows in workspace 1.
+  - Code that doesn't know a workspace yet writes `models.DEFAULT_WORKSPACE_ID`.
+  - Only PostgreSQL and MySQL have a foreign key from `projects.workspace_id`.
+    SQLite can't add a `REFERENCES` column with a default by `ALTER TABLE`.
+- **Members are derived from `users.roles` until a later phase edits them on their
+  own** (`shared/utils/workspaces.py`).
+  - A user with the `admin` role is an `owner`; anyone else is a `member`.
+  - `agent_roles` are the user's roles without `admin`.
+  - A user with the `widget` or `pending` role is no member. A widget reaches its
+    workspace through its key's project. Approving a pending user replaces
+    `pending`, which adds the membership.
+  - The auth server runs `sync_default_members()` at startup, before it starts the
+    agent server. That adds the users of a database that has just migrated. It
+    reads users and members as plain rows and writes only what differs, since
+    widget visitors can make `users` a large table.
+  - Listeners on the `User` model keep a member in step when a user is inserted or
+    their roles change, in whichever process writes it.
+  - Deleting a user deletes their memberships (`ON DELETE CASCADE`).
 
 ## Undoing a migration
 

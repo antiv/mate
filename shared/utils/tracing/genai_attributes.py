@@ -27,3 +27,5 @@ MATE_MODEL_FALLBACK = "mate.model.fallback"
 MATE_AGENT_CONFIG_VERSION_ID = "mate.agent.config_version_id"
 MATE_AGENT_CONFIG_VERSION = "mate.agent.config_version"
 MATE_AGENT_CONFIG_HASH = "mate.agent.config_hash"
+# The workspace of the answering agent's project (V046), from the same identity
+MATE_WORKSPACE_ID = "mate.workspace.id"

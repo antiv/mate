@@ -40,14 +40,17 @@ def _get_provider_from_model(model_name: Optional[str]) -> str:
 
 
 def _set_config_identity(span: Any, agent_name: str) -> None:
-    """The config version the agent was built from, when it was recorded."""
+    """The config version the agent was built from, and its workspace, when recorded."""
     from shared.utils.agent_config_identity import loaded
     from shared.utils.tracing.genai_attributes import (
-        MATE_AGENT_CONFIG_HASH, MATE_AGENT_CONFIG_VERSION, MATE_AGENT_CONFIG_VERSION_ID)
+        MATE_AGENT_CONFIG_HASH, MATE_AGENT_CONFIG_VERSION, MATE_AGENT_CONFIG_VERSION_ID,
+        MATE_WORKSPACE_ID)
     identity = loaded(agent_name)
     if not identity:
         return
     span.set_attribute(MATE_AGENT_CONFIG_HASH, identity["hash"])
+    if identity.get("workspace_id") is not None:
+        span.set_attribute(MATE_WORKSPACE_ID, identity["workspace_id"])
     if identity.get("version_id") is not None:
         span.set_attribute(MATE_AGENT_CONFIG_VERSION_ID, identity["version_id"])
         span.set_attribute(MATE_AGENT_CONFIG_VERSION, identity["version"])

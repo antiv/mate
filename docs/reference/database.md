@@ -10,7 +10,7 @@ generated: true
 
 # Database reference
 
-**34** tables defined in `shared/utils/models.py`; migrations are at **V045**. Migrations apply automatically on startup and are the source of truth for the schema: the models describe it, the migrations create it.
+**36** tables defined in `shared/utils/models.py`; migrations are at **V046**. Migrations apply automatically on startup and are the source of truth for the schema: the models describe it, the migrations create it.
 
 ## Migrations
 
@@ -63,6 +63,7 @@ A ✗ means that dialect has no file for that version. All dialects are in step.
 | V043 | budget coverage | ✓ | ✓ | ✓ |
 | V044 | log project id | ✓ | ✓ | ✓ |
 | V045 | encrypted secret columns | ✓ | ✓ | ✓ |
+| V046 | workspaces | ✓ | ✓ | ✓ |
 
 ## `users`
 
@@ -102,6 +103,7 @@ Model `TokenUsageLog`. Model for token usage logs.
 | `cost_usd` | `Float` | — | — | The call's cost in US dollars, priced when logged; NULL when the model has no known price, which is not the same as free (see shared/utils/model_pricing.py) |
 | `is_fallback` | `Boolean` | not null | `False` | Answered by the agent's fallback model after its own model failed |
 | `project_id` | `Integer` | — | — | The agent's project when the row was written; kept when the agent is renamed, moved or deleted (V044, shared/utils/log_projects.py) |
+| `workspace_id` | `Integer` | — | — | That project's workspace, copied the same way (V046) |
 
 ## `model_prices`
 
@@ -133,6 +135,7 @@ Model `GuardrailLog`. Model for guardrail trigger logs.
 | `details` | `Text` | — | — | — |
 | `timestamp` | `DateTime` | not null | `(computed)` | — |
 | `project_id` | `Integer` | — | — | The agent's project when the row was written; kept when the agent is renamed, moved or deleted (V044, shared/utils/log_projects.py) |
+| `workspace_id` | `Integer` | — | — | That project's workspace, copied the same way (V046) |
 
 ## `projects`
 
@@ -146,8 +149,37 @@ Model `Project`. Model for grouping agents under projects.
 | `template_id` | `String(255)` | — | — | Source template ID (e.g., "jira-worklog-assistant") |
 | `template_version` | `String(50)` | — | — | Template version at import/sync (e.g., "3.0") |
 | `template_prefix` | `String(255)` | — | — | Template agent_prefix for name mapping |
+| `workspace_id` | `Integer` | FK → `workspaces.id`, not null | `DEFAULT_WORKSPACE_ID` | — |
 | `created_at` | `DateTime` | not null | `(computed)` | — |
 | `updated_at` | `DateTime` | not null | `(computed)` | — |
+
+## `workspaces`
+
+Model `Workspace`. An organisation sharing the installation: its projects, members and logs (V046).
+
+| Column | Type | Constraints | Default | Notes |
+|---|---|---|---|---|
+| `id` | `Integer` | PK | — | — |
+| `name` | `String(255)` | not null, unique | — | — |
+| `slug` | `String(40)` | not null, unique | — | — |
+| `allow_platform_keys` | `Boolean` | not null | `True` | Whether the workspace may call models on the installation's provider keys |
+| `created_at` | `DateTime` | not null | `(computed)` | — |
+| `updated_at` | `DateTime` | not null | `(computed)` | — |
+| `deleted_at` | `DateTime` | — | — | — |
+
+## `workspace_members`
+
+Model `WorkspaceMember`. A user's membership of a workspace (V046).
+
+| Column | Type | Constraints | Default | Notes |
+|---|---|---|---|---|
+| `id` | `Integer` | PK | — | — |
+| `workspace_id` | `Integer` | FK → `workspaces.id`, not null | — | — |
+| `user_id` | `String(255)` | FK → `users.user_id`, not null | — | — |
+| `role` | `String(20)` | not null | `'member'` | — |
+| `agent_roles` | `Text` | not null | `'["user"]'` | — |
+| `invited_by` | `String(255)` | — | — | — |
+| `created_at` | `DateTime` | not null | `(computed)` | — |
 
 ## `agents_config`
 
@@ -317,6 +349,7 @@ Model `AuditLog`. Append-only audit log.
 | `details` | `Text` | — | — | JSON string for portability (SQLite/MySQL/PostgreSQL) |
 | `ip_address` | `String(45)` | — | — | — |
 | `project_id` | `Integer` | — | — | The project the entry is about: the agent's, or the project itself; NULL for installation-wide entries (V044, shared/utils/log_projects.py) |
+| `workspace_id` | `Integer` | — | — | That project's workspace (V046); NULL for installation-wide entries too |
 
 ## `system_settings`
 
@@ -469,6 +502,7 @@ Model `PersonalAccessToken`. Model for user Personal Access Tokens (PATs).
 | `token_prefix` | `String(16)` | not null | — | — |
 | `name` | `String(255)` | not null | — | — |
 | `user_id` | `String(255)` | FK → `users.user_id`, not null | — | — |
+| `workspace_id` | `Integer` | not null | `DEFAULT_WORKSPACE_ID` | Its workspace (V046); 1.x code paths write the default one |
 | `created_at` | `DateTime` | not null | `(computed)` | — |
 | `last_used_at` | `DateTime` | — | — | — |
 | `expires_at` | `DateTime` | — | — | — |
@@ -482,6 +516,7 @@ Model `RateLimitConfig`. Model for rate limit and budget configuration per user,
 | `id` | `Integer` | PK | — | — |
 | `scope` | `String(20)` | not null | — | user, agent, project |
 | `scope_id` | `String(500)` | not null | — | — |
+| `workspace_id` | `Integer` | not null | `DEFAULT_WORKSPACE_ID` | Its workspace (V046); 1.x code paths write the default one |
 | `requests_per_minute` | `Integer` | — | — | — |
 | `tokens_per_hour` | `Integer` | — | — | — |
 | `tokens_per_day` | `Integer` | — | — | — |
@@ -533,6 +568,7 @@ Model `TestCase`. Eval test case: an input/expected-output pair used to score an
 | `created_by` | `String(255)` | — | — | — |
 | `is_active` | `Boolean` | not null | `True` | — |
 | `source_feedback_id` | `Integer` | — | — | The rated-down response this case was made from, so it is not added twice |
+| `workspace_id` | `Integer` | not null | `DEFAULT_WORKSPACE_ID` | Its workspace (V046); 1.x code paths write the default one |
 
 ## `eval_results`
 
@@ -612,6 +648,7 @@ Model `AgentResponse`. One row per agent invocation: how long the whole response
 | `duration_ms` | `Integer` | — | — | — |
 | `status` | `String(50)` | not null | `'SUCCESS'` | — |
 | `project_id` | `Integer` | — | — | The agent's project when the row was written; kept when the agent is renamed, moved or deleted (V044, shared/utils/log_projects.py) |
+| `workspace_id` | `Integer` | — | — | That project's workspace, copied the same way (V046) |
 
 ## `alert_rules`
 
@@ -624,6 +661,7 @@ Model `AlertRule`. Notification rule: a condition over recorded events, a destin
 | `description` | `Text` | — | — | — |
 | `scope` | `String(20)` | not null | — | user \| agent \| project \| global |
 | `scope_id` | `String(255)` | — | — | NULL only when scope='global' |
+| `workspace_id` | `Integer` | not null | `DEFAULT_WORKSPACE_ID` | Its workspace (V046); 1.x code paths write the default one |
 | `condition_type` | `String(50)` | not null | — | agent_error_count \| budget_threshold \| guardrail_count \| model_fallback_count |
 | `condition_config` | `Text` | — | — | — |
 | `destination_type` | `String(50)` | not null | — | http \| email \| slack \| discord |

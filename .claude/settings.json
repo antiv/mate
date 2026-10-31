@@ -68,6 +68,7 @@
       "Bash(pkill -f \"adk_main.py\")",
       "Bash(lsof -ti:8000 -ti:8001)",
       "Bash(docker info *)",
+      "Bash(gh pr merge 307 --squash --admin --delete-branch)",
       "Bash(/Users/ivanantonijevic/development/bt/adk/mate/.venv/bin/python -c ' *)",
       "Bash(otool -L /Users/ivanantonijevic/.pyenv/versions/3.11.11/lib/python3.11/lib-dynload/_blake2.cpython-311-darwin.so)"
     ]

@@ -64,13 +64,16 @@ def config_hash(snapshot: Dict[str, Any], keys: Optional[set] = None) -> str:
 
 
 def identify(session: Any, config: Any) -> Dict[str, Any]:
-    """{hash, version_id, version} for an AgentConfig row; the version ones None when
-    no stored version holds this config. Versions are compared newest first, each
-    over its own keys, since an older snapshot lacks fields added since."""
+    """{hash, version_id, version, workspace_id} for an AgentConfig row; the version
+    ones None when no stored version holds this config. Versions are compared newest
+    first, each over its own keys, since an older snapshot lacks fields added since.
+    The workspace is the project's, kept here so a span gets it without a query."""
     from .models import AgentConfigVersion
+    from .workspaces import workspace_of_project
 
     snapshot = config_snapshot(config)
-    identity = {"hash": config_hash(snapshot), "version_id": None, "version": None}
+    identity = {"hash": config_hash(snapshot), "version_id": None, "version": None,
+                "workspace_id": workspace_of_project(session, config.project_id)}
     versions = (session.query(AgentConfigVersion)
                 .filter(AgentConfigVersion.agent_config_id == config.id)
                 .order_by(AgentConfigVersion.version_number.desc()).all())

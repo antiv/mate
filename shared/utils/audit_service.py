@@ -125,6 +125,7 @@ def log(
         logger.warning("Audit log: no session, skipping log")
         return
     try:
+        from .workspaces import workspace_of_project
         if project_id is None:
             from .log_projects import project_of_audit_entry
             project_id = project_of_audit_entry(session, resource_type, resource_id)
@@ -135,6 +136,7 @@ def log(
             resource_id=str(resource_id) if resource_id is not None else None,
             ip_address=ip,
             project_id=project_id,
+            workspace_id=workspace_of_project(session, project_id),
         )
         entry.set_details(details)
         session.add(entry)

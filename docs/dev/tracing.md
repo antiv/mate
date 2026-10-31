@@ -63,6 +63,7 @@ span of that agent carries it:
 |---|---|
 | `mate.agent.config_hash` | A 12-character SHA-256 prefix of the config snapshot (the fields a version stores, without `model_api_key`). Always set for an agent built from a row. |
 | `mate.agent.config_version_id`, `mate.agent.config_version` | The `agent_config_versions` row holding this config, and its number. Set only when one does. |
+| `mate.workspace.id` | The workspace of the agent's project when the agent was built (V046). |
 
 - **What was loaded, not what the row says now.** The identity is taken when the
   agent is built, at startup or on a reload, so a run after an unreloaded edit still

@@ -472,6 +472,11 @@ if __name__ == "__main__":
     import atexit as _atexit
     _atexit.register(lambda: server_control.stop_adk_server())
 
+    # Every user a member of the default workspace (V046); before the agent server
+    # starts, so neither process adds the same member at once
+    from shared.utils.workspaces import run_member_sync
+    run_member_sync(get_database_client())
+
     def start_adk_in_thread():
         result = server_control.start_adk_server()
         if not result.get("success", True):
@@ -483,7 +488,8 @@ if __name__ == "__main__":
     # Secrets stored before MATE_SECRET_KEY was set; small tables, so before serving
     _encrypt_stored_secrets()
 
-    # project_id on log rows written before V044; once, beside the server
+    # project_id and workspace_id on log rows written before V044 and V046; once,
+    # beside the server
     from shared.utils.log_projects import start_backfill_thread
     start_backfill_thread()
 

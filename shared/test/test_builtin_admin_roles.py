@@ -14,14 +14,16 @@ from sqlalchemy.orm import sessionmaker
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from shared.utils.models import Base, User
+from shared.utils.models import Base, User, Workspace, WorkspaceMember
 
 
 class TestBuiltinAdminRoles(unittest.TestCase):
 
     def setUp(self) -> None:
         engine = create_engine("sqlite:///:memory:")
-        Base.metadata.create_all(engine, tables=[User.__table__])
+        # A user is a member of the default workspace from the moment it is written
+        Base.metadata.create_all(engine, tables=[User.__table__, Workspace.__table__,
+                                                 WorkspaceMember.__table__])
         self.Session = sessionmaker(bind=engine, expire_on_commit=False)
         db_client = MagicMock()
         db_client.get_session.side_effect = self.Session
