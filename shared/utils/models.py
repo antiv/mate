@@ -2,15 +2,24 @@
 SQLAlchemy models for the application.
 """
 
-from sqlalchemy import Column, Integer, String, DateTime, create_engine, UUID, Text, ForeignKey, Boolean, Date, JSON, Float, UniqueConstraint, event
+from sqlalchemy import Column, Integer, String, DateTime, create_engine, UUID, Text, ForeignKey, Boolean, Date, JSON, Float, UniqueConstraint, event, text, Table
+from sqlalchemy.engine import Connection
 from sqlalchemy.orm import sessionmaker, relationship, declarative_base
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Optional
 import json
 
 from .secret_box import EncryptedText, decrypt, encrypt
 
 Base = declarative_base()
+
+def parse_roles(raw: Optional[str]) -> list:
+    """users.roles as a list: ["user"] when it is empty or not JSON."""
+    try:
+        return json.loads(raw) if raw else ["user"]
+    except json.JSONDecodeError:
+        return ["user"]
+
 
 # The workspace every 1.x row belongs to (V046). Code that does not know the
 # caller's workspace yet writes this one; phase 2 of the 2.0 plan replaces it.
@@ -35,10 +44,7 @@ class User(Base):
     
     def get_roles(self) -> list:
         """Get user roles as a list."""
-        try:
-            return json.loads(self.roles) if self.roles else ["user"]
-        except json.JSONDecodeError:
-            return ["user"]
+        return parse_roles(self.roles)
     
     def set_roles(self, roles: list):
         """Set user roles from a list."""
@@ -244,9 +250,13 @@ class Workspace(Base):
 
 
 @event.listens_for(Workspace.__table__, "after_create")
-def _create_default_workspace(table, connection, **kw) -> None:
+def _create_default_workspace(table: Table, connection: Connection, **kw: Any) -> None:
     """A schema built by create_all gets the default workspace, as V046 gives a migrated one."""
     connection.execute(table.insert().values(id=DEFAULT_WORKSPACE_ID, name="Default", slug="default"))
+    if connection.dialect.name == "postgresql":
+        # The explicit id leaves the sequence at 1; the next workspace must get 2
+        connection.execute(text("SELECT setval(pg_get_serial_sequence('workspaces', 'id'), "
+                                "(SELECT MAX(id) FROM workspaces))"))
 
 
 class WorkspaceMember(Base):

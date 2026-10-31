@@ -13,9 +13,10 @@ background, in batches so a large table is never locked for long.
 
 import logging
 import threading
-from typing import Dict, Optional
+from typing import Callable, Dict, List, Optional
 
-from sqlalchemy import String, cast, func, select, update
+from sqlalchemy import String, Update, cast, func, select, update
+from sqlalchemy.orm import Session
 
 from .database_client import get_database_client
 from .models import AgentConfig, AgentResponse, AuditLog, GuardrailLog, Project, TokenUsageLog
@@ -39,7 +40,7 @@ def project_of_agent(session, agent_name: Optional[str]) -> Optional[int]:
     return session.query(AgentConfig.project_id).filter(AgentConfig.name == agent_name).scalar()
 
 
-def scope_of_agent(session, agent_name: Optional[str]) -> Dict[str, Optional[int]]:
+def scope_of_agent(session: Session, agent_name: Optional[str]) -> Dict[str, Optional[int]]:
     """project_id and workspace_id for a log row about this agent; None for an unknown one."""
     row = None
     if agent_name:
@@ -99,7 +100,7 @@ def backfill(batch_size: int = BATCH_SIZE) -> Dict[str, int]:
     return _in_batches(_backfill_statements, batch_size, "Log project backfill")
 
 
-def _workspace_backfill_statements(model, lo: int, hi: int):
+def _workspace_backfill_statements(model: type, lo: int, hi: int) -> List[Update]:
     """UPDATE statements that fill workspace_id from project_id for rows lo <= id < hi."""
     workspace = (select(Project.workspace_id)
                  .where(Project.id == model.project_id)
@@ -118,7 +119,8 @@ def backfill_workspaces(batch_size: int = BATCH_SIZE) -> Dict[str, int]:
     return _in_batches(_workspace_backfill_statements, batch_size, "Log workspace backfill")
 
 
-def _in_batches(statements_for, batch_size: int, label: str) -> Dict[str, int]:
+def _in_batches(statements_for: Callable[[type, int, int], List[Update]], batch_size: int,
+                label: str) -> Dict[str, int]:
     """Run statements_for(model, lo, hi) over each log table by id, one commit per batch."""
     db = get_database_client()
     updated: Dict[str, int] = {}

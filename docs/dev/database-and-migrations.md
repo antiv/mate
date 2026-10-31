@@ -170,8 +170,13 @@ Phase 1 (V046) adds the schema only, and nothing reads it yet:
   own** (`shared/utils/workspaces.py`).
   - A user with the `admin` role is an `owner`; anyone else is a `member`.
   - `agent_roles` are the user's roles without `admin`.
+  - A user with the `widget` or `pending` role is no member. A widget reaches its
+    workspace through its key's project. Approving a pending user replaces
+    `pending`, which adds the membership.
   - The auth server runs `sync_default_members()` at startup, before it starts the
-    agent server. That adds the users of a database that has just migrated.
+    agent server. That adds the users of a database that has just migrated. It
+    reads users and members as plain rows and writes only what differs, since
+    widget visitors can make `users` a large table.
   - Listeners on the `User` model keep a member in step when a user is inserted or
     their roles change, in whichever process writes it.
   - Deleting a user deletes their memberships (`ON DELETE CASCADE`).

@@ -150,16 +150,18 @@ class TestMembers(_Db):
         self.assertEqual(workspaces.membership_from_roles(["admin", "user"]), ("owner", ["user"]))
         self.assertEqual(workspaces.membership_from_roles(["user", "developer"]),
                          ("member", ["user", "developer"]))
+        self.assertIsNone(workspaces.membership_from_roles(["widget"]))
+        self.assertIsNone(workspaces.membership_from_roles(["pending"]))
 
     def test_the_startup_sync_adds_every_user(self):
         self._add_users_without_members(boss=["admin", "user"], ana=["user", "developer"])
         session = self.Session()
-        self.assertEqual(workspaces.sync_default_members(session), {"added": 2, "updated": 0})
+        self.assertEqual(workspaces.sync_default_members(session), {"added": 2, "updated": 0, "removed": 0})
         session.close()
         self.assertEqual(self.members(), {"boss": (1, "owner", ["user"]),
                                           "ana": (1, "member", ["user", "developer"])})
         session = self.Session()
-        self.assertEqual(workspaces.sync_default_members(session), {"added": 0, "updated": 0})
+        self.assertEqual(workspaces.sync_default_members(session), {"added": 0, "updated": 0, "removed": 0})
         session.close()
 
     def test_the_startup_sync_corrects_a_member(self):
@@ -167,7 +169,7 @@ class TestMembers(_Db):
         session = self.Session()
         session.add(WorkspaceMember(workspace_id=1, user_id="ana", role="owner", agent_roles="[]"))
         session.commit()
-        self.assertEqual(workspaces.sync_default_members(session), {"added": 0, "updated": 1})
+        self.assertEqual(workspaces.sync_default_members(session), {"added": 0, "updated": 1, "removed": 0})
         session.close()
         self.assertEqual(self.members(), {"ana": (1, "member", ["user"])})
 
@@ -184,6 +186,41 @@ class TestMembers(_Db):
             service.get_or_create_user("ana")
             service.update_user_roles("ana", ["admin", "user"])
         self.assertEqual(self.members(), {"ana": (1, "owner", ["user"])})
+
+    def test_widget_visitors_and_pending_users_are_no_members(self):
+        from shared.utils.user_service import UserService
+        with patch("shared.utils.user_service.get_database_client", return_value=self.db):
+            UserService().get_or_create_user("widget_3_visitor")
+        session = self.Session()
+        session.add(User(user_id="sso@corp.com", roles='["pending"]'))
+        session.commit()
+        session.close()
+        self.assertEqual(self.members(), {})
+
+    def test_approving_a_pending_user_adds_the_member_and_the_reverse_removes_it(self):
+        session = self.Session()
+        user = User(user_id="sso@corp.com", roles='["pending"]')
+        session.add(user)
+        session.commit()
+        user.set_roles(["user"])
+        session.commit()
+        self.assertEqual(self.members(), {"sso@corp.com": (1, "member", ["user"])})
+        user.set_roles(["pending"])
+        session.commit()
+        session.close()
+        self.assertEqual(self.members(), {})
+
+    def test_the_startup_sync_removes_a_widget_visitor(self):
+        # A membership written before visitors were left out
+        self._add_users_without_members(widget_3_visitor=["widget"], ana=["user"])
+        session = self.Session()
+        session.add(WorkspaceMember(workspace_id=1, user_id="widget_3_visitor", role="member",
+                                    agent_roles='["widget"]'))
+        session.commit()
+        self.assertEqual(workspaces.sync_default_members(session),
+                         {"added": 1, "updated": 0, "removed": 1})
+        session.close()
+        self.assertEqual(self.members(), {"ana": (1, "member", ["user"])})
 
     def test_other_changes_leave_the_member_alone(self):
         session = self.Session()
