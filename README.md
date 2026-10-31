@@ -132,7 +132,7 @@ Or build it yourself with `docker-compose up` (it needs `AUTH_PASSWORD` set in `
 uv pip compile requirements.txt -o requirements.lock --universal --python-version 3.11 --generate-hashes
 # add --upgrade to move everything to the latest allowed versions,
 # or --upgrade-package litellm to move just one
-python -m unittest discover -s shared/test -p "test_*.py"
+python -m unittest discover -s shared/test -t . -p "test_*.py"
 ```
 
 On the 1st of every month, `.github/workflows/dependency-upgrade.yml` does this with `--upgrade`, taking only releases at least a week old, runs the tests on the result in a job without write access, and opens a pull request when anything moved (it can also be started by hand from the Actions tab). The exact pins in `requirements.txt`, `google-adk` and SQLAlchemy below 2.1, are moved by hand after reading their changelogs. The workflow needs **Settings → Actions → General → Allow GitHub Actions to create and approve pull requests**; with the default token the pull request gets no CI run of its own, so set a `DEPENDENCY_PR_TOKEN` secret if you want one. Dependabot keeps the workflows' own actions current.
@@ -352,10 +352,10 @@ docker-compose up -d --build        # background
 
 ```bash
 # All tests
-python -m unittest discover -s shared/test -p "test_*.py" -v
+python -m unittest discover -s shared/test -t . -p "test_*.py" -v
 
 # With coverage
-coverage run -m unittest discover -s shared/test -p "test_*.py"
+coverage run -m unittest discover -s shared/test -t . -p "test_*.py"
 coverage report --include="shared/utils/*,server/*,auth_server.py"
 ```
 

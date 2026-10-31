@@ -85,7 +85,7 @@ jobs:
         if: steps.diff.outputs.changed == 'true'
         run: |
           pip install --require-hashes -r requirements.lock
-          python -m unittest discover -s shared/test -p "test_*.py"
+          python -m unittest discover -s shared/test -t . -p "test_*.py"
           python -m pytest shared/test/test_sessions_api.py
 
       - name: List what moved

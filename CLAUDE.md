@@ -28,15 +28,17 @@ Two servers run: **Auth Server** (port 8000, FastAPI with HTTP Basic Auth) proxi
 
 ```bash
 # All tests
-python -m unittest discover -s shared/test -p "test_*.py" -v
+python -m unittest discover -s shared/test -t . -p "test_*.py" -v
 
 # Single test file
 python -m unittest shared.test.test_agent_manager_simple -v
 
 # With coverage
-coverage run -m unittest discover -s shared/test -p "test_*.py"
+coverage run -m unittest discover -s shared/test -t . -p "test_*.py"
 coverage report
 ```
+
+The tests run on a temporary SQLite database and don't load `.env` (`shared/test/__init__.py`). That only happens with `-t .`. Without it the package setup is skipped, and the tests migrate and write into the database `.env` configures.
 
 Tests live in `shared/test/`, covering agent management, tool factory, model switching, RBAC, authorization, migrations, guardrails, tracing, and more.
 

@@ -39,11 +39,13 @@ python auth_server.py
 source .venv/bin/activate
 
 # Run all tests
-python -m unittest discover -s shared/test -p "test_*.py" -v
+python -m unittest discover -s shared/test -t . -p "test_*.py" -v
 
 # Run a specific test module
 python -m unittest shared.test.test_agent_manager_simple -v
 ```
+
+The tests use a temporary SQLite database and ignore your `.env`, so they never touch your own data. Keep the `-t .`: without it that setup in `shared/test/__init__.py` doesn't run.
 
 ## How to Contribute
 
