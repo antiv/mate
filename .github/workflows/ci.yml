@@ -15,7 +15,7 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v7
+        uses: actions/setup-python@v7.1.0
         with:
           python-version: "3.11"
           cache: pip
@@ -46,7 +46,7 @@ jobs:
           fetch-depth: 0  # the drift check compares against the merge base
 
       - name: Set up Python
-        uses: actions/setup-python@v7
+        uses: actions/setup-python@v7.1.0
         with:
           python-version: "3.11"
 
