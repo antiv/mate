@@ -131,7 +131,8 @@ rows set both, and `shared/utils/log_projects.py` does the lookup:
 - an audit entry gets the project of the agent or project its `resource_id` names,
   NULL for installation-wide entries. `audit_service.log(..., project_id=...)` sets
   it when the agent is already gone, as on agent delete. The workspace is the
-  project's, so an entry about a project that no longer exists has none.
+  project's; `workspace_id=...` sets it when the project is gone, as on project
+  delete.
 
 The column has no foreign key: a row keeps its project id after the project is
 deleted. Queries per project read it rather than joining through `agents_config`,
@@ -153,7 +154,8 @@ project, or whose project was deleted, keeps NULL.
 ## Workspaces
 
 2.0 lets several organisations share one installation (`documents/design/workspaces.md`).
-Phase 1 (V046) adds the schema only, and nothing reads it yet:
+Phase 1 (V046) adds the schema. Phase 2 scopes requests by it, starting with the
+request context (`docs/dev/auth-and-access.md`, "The workspace of a request"):
 
 - **New tables.**
   - `workspaces` holds workspace 1, "Default", which V046 inserts. A schema built

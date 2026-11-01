@@ -205,7 +205,7 @@ class TestEveryDeletePath(_Db):
 
     def test_the_project_delete(self):
         self._add_agent_rows("other", 2)
-        self._server()._delete_project(1)
+        self._server()._delete_project(1, 1)
         self.assertEqual(self._left("bot"), [])
         self.assertEqual(self._left("keep"), [])
         self.assertTrue(self._left("other"))

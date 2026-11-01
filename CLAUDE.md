@@ -70,7 +70,7 @@ Agents can be **database-driven** (configured via dashboard, stored in `agents_c
 `shared/callbacks/` hooks into the ADK request lifecycle for RBAC (`rbac_callback.py`), token tracking (`token_usage_callback.py`), and guardrails (`model_guardrail.py`, `function_call_guardrail.py`). Rate limiting is in `server/rate_limit_middleware.py`.
 
 ### Dashboard routes
-Every `/dashboard` route takes `ctx: RequestContext = Depends(get_request_context)` (`server/request_context.py`; routers in `server/` use `get_api_request_context`, which answers 401) and reads the caller from `ctx.user_id` and `ctx.is_admin`. `DashboardAuthzMiddleware` makes `/dashboard/api/*` admin-only outside its allowlists. `shared/test/test_route_inventory.py` fails on a route that skips either. See `docs/dev/auth-and-access.md`.
+Every `/dashboard` route takes `ctx: RequestContext = Depends(get_request_context)` (`server/request_context.py`; routers in `server/` use `get_api_request_context`, which answers 401) and reads the caller from `ctx.user_id` and `ctx.is_admin`. `DashboardAuthzMiddleware` makes `/dashboard/api/*` admin-only outside its allowlists. `shared/test/test_route_inventory.py` fails on a route that skips either. A route filters by `ctx.workspace_id` and answers 404 for another workspace's row; `shared/test/test_cross_workspace.py` checks every route that is not in its `NOT_YET_SCOPED` or `PLATFORM_ONLY` lists. See `docs/dev/auth-and-access.md`.
 
 ### MCP Integration
 `shared/utils/mcp/` exposes agents as MCP servers and implements MCP client consumption. Agents can both serve and consume MCP protocol tools.

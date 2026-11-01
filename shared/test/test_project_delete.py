@@ -128,7 +128,7 @@ class TestProjectDeleteCascade(_ProjectDeleteCase):
         session.close()
 
         # 3. Call _delete_project - this should succeed without any IntegrityError!
-        result = self.server._delete_project(project_id)
+        result = self.server._delete_project(project_id, 1)
         self.assertTrue(result.get("success"))
 
         # 4. Verify cascade deletion results
@@ -181,7 +181,7 @@ class TestProjectDeleteLeavesNothing(_ProjectDeleteCase):
         session.commit()
         session.close()
 
-        self.assertTrue(self.server._delete_project(1).get("success"))
+        self.assertTrue(self.server._delete_project(1, 1).get("success"))
 
         session = self.Session()
         self.assertEqual([i.agent_name for i in session.query(ChannelIntegration)], ["kept_bot"])

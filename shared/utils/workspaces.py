@@ -1,6 +1,6 @@
 """
-Workspaces, phase 1 of 2.0 (documents/design/2.0-plan.md): the schema, with no change
-in behaviour.
+Workspaces (documents/design/2.0-plan.md): memberships, and the lookups that scope a
+request to its workspace (server/request_context.py).
 
 Every 1.x row belongs to the default workspace (V046). Until memberships are edited on
 their own (phase 3), a user's membership of it is derived from users.roles
@@ -27,7 +27,9 @@ from sqlalchemy import delete, event, insert, select, update
 from sqlalchemy.engine import Connection
 from sqlalchemy.orm import Mapper, Session, attributes
 
-from .models import DEFAULT_WORKSPACE_ID, Project, User, WorkspaceMember, parse_roles
+from .models import (
+    DEFAULT_WORKSPACE_ID, Project, User, Workspace, WorkspaceMember, parse_roles,
+)
 
 if TYPE_CHECKING:
     from .database_client import DatabaseClient
@@ -147,3 +149,33 @@ def workspace_of_project(session: Session, project_id: Optional[int]) -> Optiona
     if project_id is None:
         return None
     return session.query(Project.workspace_id).filter(Project.id == project_id).scalar()
+
+
+def workspace_is_open(session: Session, workspace_id: int) -> bool:
+    """True if the workspace exists and is not deleted."""
+    return session.query(Workspace.id).filter(
+        Workspace.id == workspace_id, Workspace.deleted_at.is_(None)).first() is not None
+
+
+def member_role(session: Session, workspace_id: int, user_id: str) -> Optional[str]:
+    """The user's role in the workspace, or None when they are no member."""
+    return session.query(WorkspaceMember.role).filter(
+        WorkspaceMember.workspace_id == workspace_id,
+        WorkspaceMember.user_id == user_id).scalar()
+
+
+def first_workspace_of(session: Session, user_id: str) -> Optional[int]:
+    """The open workspace with the lowest id the user is a member of, or None."""
+    return session.query(WorkspaceMember.workspace_id).join(
+        Workspace, Workspace.id == WorkspaceMember.workspace_id).filter(
+        WorkspaceMember.user_id == user_id, Workspace.deleted_at.is_(None)).order_by(
+        WorkspaceMember.workspace_id).limit(1).scalar()
+
+
+def project_in_workspace(session: Session, workspace_id: int,
+                         project_id: Optional[int]) -> Optional[Project]:
+    """The project, if it belongs to the workspace; None otherwise, for the caller to 404."""
+    if project_id is None:
+        return None
+    return session.query(Project).filter(
+        Project.id == project_id, Project.workspace_id == workspace_id).first()
