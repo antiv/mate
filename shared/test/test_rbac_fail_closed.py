@@ -21,7 +21,7 @@ from sqlalchemy.pool import StaticPool
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from shared.utils.models import AgentConfig, Base
+from shared.utils.models import AgentConfig, Base, Project
 
 
 class _Db(unittest.TestCase):
@@ -56,6 +56,12 @@ class TestAdkCallback(_Db):
         users = self._user_service()
         with patch("shared.utils.rbac_middleware.get_user_service", return_value=users):
             middleware = RBACMiddleware()
+        # In the database too: the check takes the agent's workspace from its project
+        session = self.Session()
+        session.add(Project(id=1, name="p"))
+        session.add(AgentConfig(name=agent_row.name, type="llm", project_id=1))
+        session.commit()
+        session.close()
         manager = MagicMock()
         manager.get_root_agent_by_name.return_value = agent_row
         context = SimpleNamespace(_invocation_context=SimpleNamespace(user_id=user_id),
@@ -63,6 +69,7 @@ class TestAdkCallback(_Db):
         with patch.object(rbac_callback, "get_user_service", return_value=users), \
                 patch.object(rbac_callback, "get_rbac_middleware", return_value=middleware), \
                 patch("shared.utils.agent_manager.get_agent_manager", return_value=manager), \
+                patch("shared.utils.rbac_middleware.get_database_client", return_value=self.db_client), \
                 patch.object(rbac_callback, "_log_access_denied_event"):
             return rbac_callback.rbac_before_model_callback(context, MagicMock())
 

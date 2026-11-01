@@ -16,8 +16,9 @@ in has, whatever their role.
 
 ## Start a conversation
 
-Select an agent, type a message and press **Send**. If no agent is offered, none has
-been created yet; an administrator creates them on the **Agents** page.
+Select an agent, type a message and press **Send**. The list holds the agents your
+roles let you use. If no agent is offered, none you may use has been created yet; an
+administrator creates them on the **Agents** page, and sets who may use each.
 
 If an agent answers with an access-denied message, it names the roles it requires
 and the roles you have. Pass that on to your administrator.

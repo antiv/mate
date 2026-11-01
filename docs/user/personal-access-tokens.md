@@ -51,7 +51,8 @@ with:
 | API key | your token |
 | Model | the agent's name |
 
-The tool's model list (`GET /v1/models`) shows the agents exposed this way.
+The tool's model list (`GET /v1/models`) shows the agents exposed this way, in the
+workspace the token was created in.
 
 ## Use it from an MCP client
 

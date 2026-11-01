@@ -69,6 +69,15 @@ role, and `POST /dashboard/api/tokens` refuses anyone else with 403. Listing and
 revoking one's own tokens needs no role, so a user who lost theirs can still
 revoke them through the API.
 
+A token works in its own workspace (`personal_access_tokens.workspace_id`): `/v1/models`
+lists that workspace's agents, a completion for another workspace's agent is a 404,
+and MCP allows only that workspace's agents. A token whose owner is no longer a
+member of its workspace is refused with 403, unless the owner is a platform
+administrator. `get_pat_user` records the workspace and routes read it from the
+`pat_workspace` dependency. Basic auth, the dashboard's bearer token and a session
+work in the workspace `X-MATE-Workspace` names, or the caller's default (see
+[The workspace of a request](#the-workspace-of-a-request)).
+
 ## Who is an administrator
 
 `get_user_role` returns `admin` or `user`:
@@ -170,24 +179,51 @@ a non-admin, `_non_admin_refusal` allows only:
 Everything else the agent server offers is admin-only. The `/run_live` WebSocket
 applies the same rule.
 
+On what passes, `_workspace_refusal` also refuses an agent of a workspace the
+non-admin can't use (`caller_access`, below), before the agent server is reached.
+
+`/list-apps` answers with the agents of the request's workspace, for everyone: the
+one `X-MATE-Workspace` names, else the caller's default. An app with no
+`agents_config` row is listed to platform administrators in the default workspace.
+Both the plain list and `?detailed=true` are filtered.
+
 ## Layer 3: the agent
 
-Before each model call, the role check compares the roles on the caller's `users`
-row with the agent's `allowed_for_roles`
-(`shared/utils/rbac_middleware.py::check_agent_access`):
+Before each model call, the role check
+(`shared/utils/rbac_middleware.py::check_agent_access`) takes the agent's workspace
+from its project, and asks `shared/utils/workspaces.py::caller_access` whether the
+caller may use that workspace's agents:
 
-- an empty list requires the `admin` role
-- otherwise the user needs any one of the listed roles
+- a platform administrator (the `admin` role) may, and passes `allowed_for_roles`;
+- an owner or admin of the workspace may, and passes `allowed_for_roles`;
+- a member may, matched on their membership's `agent_roles`;
+- a widget visitor (`widget_<key id>_...`) may only in the workspace of their key's
+  project, and `trigger_runner` in any, both matched on their `users.roles`;
+- anyone else may not, and gets "This agent is not available", as for an unknown
+  agent. So does a caller for an agent with no config, unless a platform
+  administrator.
 
-There is no bypass for dashboard administrators other than the built-in account.
+A caller matched on roles needs one of the agent's `allowed_for_roles`; an empty
+list is admin-only.
+
 A user id seen for the first time gets a row with the role `user`, or `widget` when
-the id starts with `widget_` (`shared/utils/user_service.py::get_or_create_user`).
+the id starts with `widget_` (`shared/utils/user_service.py::get_or_create_user`). The
+check creates it as a member of the agent's workspace, so an end user an API client
+runs through `/run_sse`, an A2A or a Slack user joins that workspace, not the
+default one. A widget visitor is no member, and `trigger_runner` joins the default
+workspace. Since users are installation-wide, an id that is already a member of
+another workspace is refused on this one's agents: a client of a second workspace
+should give its end users ids of their own.
 The id equal to `AUTH_USERNAME` gets `admin, user`, and an existing row for it that
 lacks `admin` has it added on the next lookup, so the built-in account passes the
 check for an empty list. An OAuth user whose id equals `AUTH_USERNAME` is treated the
 same way, as it already is by `server/auth.py` and `server/pat_auth.py`.
 
 The check runs again for each sub-agent the conversation is transferred to.
+
+The Work Room lists the root agents of the current workspace the caller may use
+(`roles_allow`), and the MCP listing the agents of the token's workspace the caller
+may use.
 
 It refuses when it can't do its job: no user id in the context, no agent name, or no
 enabled `agents_config` row for the agent. The last also covers a disabled agent and

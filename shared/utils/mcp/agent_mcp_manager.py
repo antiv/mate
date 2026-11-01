@@ -8,7 +8,7 @@ import logging
 from typing import Dict, List, Optional
 from fastapi import Depends, FastAPI, Request
 from .agent_mcp_server import AgentMCPServer
-from .mcp_auth import agent_allowed, require_mcp_user
+from .mcp_auth import agent_allowed, mcp_workspace, require_mcp_user
 from ..database_client import get_database_client
 from ..models import AgentConfig
 
@@ -40,7 +40,7 @@ class AgentMCPManager:
                     "url": f"{base_url}/agents/{name}/mcp",
                 }
                 for name, server in sorted(self.agent_mcp_servers.items())
-                if agent_allowed(user_id, name)
+                if agent_allowed(user_id, name, mcp_workspace(request))
             ]}
     
     def _get_enabled_agents_from_env(self) -> List[str]:

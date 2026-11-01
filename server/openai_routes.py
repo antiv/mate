@@ -28,12 +28,13 @@ from server.openai_translate import (build_runtime_turns, consumed_index,
                                      tool_call_chunk, transcript_text,
                                      TextDeltaTracker, CLIENT_TOOL_METADATA_KEY,
                                      CONVERSATION_ID_HEADER, has_image_parts)
-from server.pat_auth import get_pat_user
+from server.pat_auth import get_pat_user, pat_workspace
 from server.widget_routes import model_supports_vision
 from shared.utils.database_client import get_database_client
-from shared.utils.models import AgentConfig, User
+from shared.utils.models import AgentConfig, Project, User
 from shared.utils.rate_limit_service import get_rate_limit_service
 from shared.utils.utils import get_adk_config
+from shared.utils.workspaces import workspace_of_project
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/v1", tags=["OpenAI Compatibility"])
@@ -70,8 +71,8 @@ class ChatCompletionRequest(BaseModel):
 
 
 @router.get("/models")
-async def list_models(user: User = Depends(get_pat_user)):
-    """List active root agents that have expose_as_model = True."""
+async def list_models(user: User = Depends(get_pat_user), workspace_id: int = Depends(pat_workspace)):
+    """List the active root agents of the caller's workspace that have expose_as_model = True."""
     db = get_database_client()
     session = db.get_session()
     if not session:
@@ -80,7 +81,9 @@ async def list_models(user: User = Depends(get_pat_user)):
             detail="Database unavailable"
         )
     try:
-        agents = session.query(AgentConfig).filter(
+        agents = session.query(AgentConfig).join(
+            Project, Project.id == AgentConfig.project_id).filter(
+            Project.workspace_id == workspace_id,
             AgentConfig.disabled.is_(False),
             AgentConfig.expose_as_model.is_(True),
             (AgentConfig.parent_agents.is_(None) |
@@ -104,9 +107,9 @@ async def list_models(user: User = Depends(get_pat_user)):
         session.close()
 
 
-def _load_exposed_agent(agent_name: str) -> Tuple[Optional[int], str]:
+def _load_exposed_agent(agent_name: str, workspace_id: int) -> Tuple[Optional[int], str]:
     """
-    Refuse anything that is not an agent deliberately exposed as a model.
+    Refuse anything that is not an agent of the workspace deliberately exposed as a model.
 
     Returns the agent's project id, which the rate limiter needs, and its model
     name, which says whether an attached screenshot is worth forwarding — both
@@ -118,7 +121,8 @@ def _load_exposed_agent(agent_name: str) -> Tuple[Optional[int], str]:
         raise HTTPException(status_code=503, detail="Database unavailable")
     try:
         agent = session.query(AgentConfig).filter_by(name=agent_name).first()
-        if not agent or agent.disabled or not agent.expose_as_model:
+        if (not agent or agent.disabled or not agent.expose_as_model
+                or workspace_of_project(session, agent.project_id) != workspace_id):
             raise HTTPException(
                 status_code=404,
                 detail=f"Model/Agent '{agent_name}' not found or not exposed as model"
@@ -352,7 +356,8 @@ async def _run_completion(agent_name: str, user_id: str, session_id: str,
 async def chat_completions(
     request: Request,
     body: ChatCompletionRequest,
-    user: User = Depends(get_pat_user)
+    user: User = Depends(get_pat_user),
+    workspace_id: int = Depends(pat_workspace),
 ):
     """Execute a MATE agent using the OpenAI completions schema."""
     agent_name = body.model
@@ -361,7 +366,7 @@ async def chat_completions(
     if not messages:
         raise HTTPException(status_code=400, detail="Messages list cannot be empty")
 
-    project_id, model_name = _load_exposed_agent(agent_name)
+    project_id, model_name = _load_exposed_agent(agent_name, workspace_id)
     await _enforce_rate_limit(user.user_id, agent_name, project_id)
 
     client_tools = normalize_client_tools(body.tools, body.tool_choice)

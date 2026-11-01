@@ -182,6 +182,13 @@ request context (`docs/dev/auth-and-access.md`, "The workspace of a request"):
   - Listeners on the `User` model keep a member in step when a user is inserted or
     their roles change, in whichever process writes it.
   - Deleting a user deletes their memberships (`ON DELETE CASCADE`).
+  - A user the platform creates for an agent of another workspace joins that one
+    instead: `get_or_create_user(user_id, workspace_id)` sets `home_workspace_id` on
+    the new `User`, and the listener writes the membership there. Neither the sync
+    nor the listeners add a user who is a member of another workspace only to the
+    default one.
+  - When a user's roles change, every membership's `agent_roles` follow them. Only
+    the default workspace's `role` is derived.
 
 ## Undoing a migration
 

@@ -13,7 +13,7 @@ import sys
 import shutil
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 from sqlalchemy.exc import IntegrityError
 from fastapi import Body, FastAPI, Request, HTTPException, Depends, Form, File, UploadFile, Query
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
@@ -24,7 +24,7 @@ from shared.utils import audit_service
 from ..ai_disclosure import resolve_disclosure, validate_waiver
 from shared.utils.path_safety import resolve_within_base
 from shared.utils.models import DEFAULT_WORKSPACE_ID
-from shared.utils.workspaces import project_in_workspace
+from shared.utils.workspaces import caller_access, project_in_workspace, roles_allow
 from server.request_context import RequestContext, get_request_context
 
 logger = logging.getLogger(__name__)
@@ -923,6 +923,19 @@ class DashboardServer:
         finally:
             session.close()
     
+    def _caller_access(self, ctx: RequestContext) -> Optional[Tuple[bool, List[str]]]:
+        """caller_access() for the signed-in caller in the current workspace."""
+        if ctx.is_platform_admin:
+            return True, []
+        session = self.db_client.get_session() if self.db_client else None
+        if not session:
+            return None
+        try:
+            user = session.query(self.User).filter(self.User.user_id == ctx.user_id).first()
+            return caller_access(session, user, ctx.workspace_id) if user else None
+        finally:
+            session.close()
+
     def _get_all_agent_configs(self, project_id: Optional[int] = None) -> List[Dict[str, Any]]:
         """Get agent configurations from database, optionally filtered by project."""
         if not self.db_client:
@@ -7251,13 +7264,18 @@ class DashboardServer:
         async def dashboard_workroom(request: Request, agent: Optional[str] = None, session: Optional[str] = None, ctx: RequestContext = Depends(get_request_context)):
             is_admin = ctx.is_admin
             all_agents = self._get_all_agent_configs()
-            # Only expose root agents (no parent_agents) in the Work Room
+            # The root agents (no parent_agents) of the current workspace the caller
+            # may use; the RBAC check refuses the others at the model call anyway
+            project_ids = {p["id"] for p in self._get_all_projects(ctx.workspace_id)}
+            access = self._caller_access(ctx)
             agent_list = []
             for a in all_agents:
                 if not a.get("name"):
                     continue
                 parents = a.get("parent_agents") or []
                 if parents:
+                    continue
+                if a.get("project_id") not in project_ids or not roles_allow(access, a.get("allowed_for_roles")):
                     continue
                 desc = a.get("description") or ""
                 if not desc:

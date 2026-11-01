@@ -3,9 +3,9 @@
 The cross-workspace test (documents/design/workspaces.md, "Testing"): no route of the
 real app shows or changes the data of a workspace other than the caller's.
 
-Two workspaces: A is the default workspace, B a second one, each with a project and
-agents. B's names all contain B_MARKER. A platform administrator working in A
-(X-MATE-Workspace: 1) calls:
+Two workspaces: A is the default workspace, B a second one, each with a project,
+agents, a member and a personal access token. B's names all contain B_MARKER. A
+platform administrator working in A (X-MATE-Workspace: 1) calls:
 - every GET route under /dashboard/api/, and none may answer with B_MARKER;
 - every route under /dashboard/api/ that names a row in its path, with B's ids, and
   each must answer 404.
@@ -14,9 +14,14 @@ The routes are listed from the app's router, so a route is covered the day it is
 added. Phase 2 scopes them group by group: NOT_YET_SCOPED lists the routes still to
 do, and is empty when phase 2 is done. PLATFORM_ONLY lists the routes that act on the
 whole installation; they stay for platform administrators.
+
+The agent runtime is checked the same way: the RBAC check, the proxy and
+/list-apps, the OpenAI API, MCP and the Work Room, called with A's credentials on
+B's agents.
 """
 
 import base64
+import json
 import os
 import sys
 import unittest
@@ -26,6 +31,7 @@ from unittest.mock import MagicMock, patch
 from fastapi import HTTPException, params
 from fastapi.routing import APIRoute, iter_route_contexts
 from fastapi.testclient import TestClient
+import httpx
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -36,16 +42,25 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 # auth_server sets OTEL_SDK_DISABLED on import; keep that out of other tests.
 with patch.dict(os.environ):
     import auth_server
-from server import auth
+from server import auth, proxy_routes
 from server.dashboard_authz import PROTECTED_PREFIX, WRITE_METHODS
 from server.request_context import WORKSPACE_HEADER, resolve_workspace
+from server.pat_auth import verify_pat_hash
 from shared.utils import database_client
+from shared.utils.mcp.mcp_auth import agent_allowed
 from shared.utils.models import (
-    AgentConfig, AuditLog, Base, Project, User, Workspace, WorkspaceMember,
+    AgentConfig, AuditLog, Base, PersonalAccessToken, Project, User, WidgetApiKey, Workspace,
+    WorkspaceMember,
 )
+from shared.utils.rbac_middleware import RBACMiddleware
+from shared.utils.user_service import UserService
+from shared.utils.workspaces import sync_default_members
 
 B_MARKER = "zz-ws-b"
 A, B = 1, 2
+ALICE, BOB = "alice@a.example", "bob@b.example"
+A_ROOT, B_ROOT = "ws_a_root", "zz_ws_b_root"
+PATS = {ALICE: "mate_pat_alice_in_a", BOB: "mate_pat_bob_in_b"}
 
 Route = Tuple[str, str]
 
@@ -257,20 +272,30 @@ class _TwoWorkspaces(unittest.TestCase):
             session.flush()
             agent = prefix.replace("-", "_")
             session.add(AgentConfig(name=f"{agent}_root", type="llm", model_name="m",
-                                    project_id=project.id, disabled=False))
+                                    project_id=project.id, disabled=False, expose_as_model=True,
+                                    allowed_for_roles='["user", "widget"]'))
             session.add(AgentConfig(name=f"{agent}_sub", type="llm", model_name="m",
                                     project_id=project.id, parent_agents=f'["{agent}_root"]',
                                     disabled=False))
-        session.add(User(user_id="alice@a.example", roles='["user"]'))
-        session.add(User(user_id="bob@b.example", roles='["widget"]'))
+        session.add(User(user_id=ALICE, roles='["user", "developer"]'))
+        # bob is created for B, as the platform creates a user for an agent of B
+        bob = User(user_id=BOB, roles='["user", "developer"]')
+        bob.home_workspace_id = B
+        session.add(bob)
         session.flush()
-        # bob's only membership is B's; users.roles makes members of A only (phase 1)
-        session.add(WorkspaceMember(workspace_id=B, user_id="bob@b.example", role="owner"))
-        session.commit()
+        session.query(WorkspaceMember).filter_by(user_id=BOB).update({"role": "owner"})
+        for user_id, workspace_id in ((ALICE, A), (BOB, B)):
+            session.add(PersonalAccessToken(token_hash=verify_pat_hash(PATS[user_id]),
+                                            token_prefix=PATS[user_id][:16], name="t",
+                                            user_id=user_id, workspace_id=workspace_id))
         self.ids = {
             "project_a": session.query(Project.id).filter_by(workspace_id=A).scalar(),
             "project_b": session.query(Project.id).filter_by(workspace_id=B).scalar(),
         }
+        widget_key = WidgetApiKey(api_key="wk_a", project_id=self.ids["project_a"], agent_name=A_ROOT)
+        session.add(widget_key)
+        session.commit()
+        self.ids["widget_key_a"] = widget_key.id
         session.close()
 
         dashboard = auth_server.dashboard_server
@@ -412,6 +437,184 @@ class TestResolveWorkspace(_TwoWorkspaces):
             with self.subTest(header=header), self.assertRaises(HTTPException) as caught:
                 self._resolve(auth.AUTH_USERNAME, True, header)
             self.assertEqual(caught.exception.status_code, 404)
+
+
+class TestRbacCheck(_TwoWorkspaces):
+    """RBACMiddleware.check_agent_access, which the RBAC callback, LangGraph and MCP use."""
+
+    def _allowed(self, user_id: str, agent: str, roles=("user", "widget")) -> bool:
+        rbac = RBACMiddleware.__new__(RBACMiddleware)
+        rbac.user_service = UserService()
+        return rbac.check_agent_access(user_id, {"name": agent, "allowed_for_roles": list(roles)})[0]
+
+    def _memberships(self, user_id: str) -> Dict[int, str]:
+        session = self.Session()
+        try:
+            return dict(session.query(WorkspaceMember.workspace_id, WorkspaceMember.role)
+                        .filter_by(user_id=user_id).all())
+        finally:
+            session.close()
+
+    def test_a_member_runs_only_their_workspace_s_agents(self):
+        self.assertTrue(self._allowed(ALICE, A_ROOT))
+        self.assertFalse(self._allowed(ALICE, B_ROOT))
+
+    def test_an_owner_passes_the_agent_s_roles_in_their_workspace_only(self):
+        self.assertTrue(self._allowed(BOB, B_ROOT, roles=["finance"]))
+        self.assertFalse(self._allowed(BOB, A_ROOT))
+
+    def test_a_platform_administrator_runs_every_agent(self):
+        self.assertTrue(self._allowed(auth.AUTH_USERNAME, B_ROOT, roles=["finance"]))
+
+    def test_a_new_user_joins_the_workspace_of_the_agent(self):
+        # An end user an API client runs through /run_sse, an A2A or a Slack user
+        self.assertTrue(self._allowed("end-user-of-b", B_ROOT))
+        self.assertEqual(self._memberships("end-user-of-b"), {B: "member"})
+        session = self.Session()
+        sync_default_members(session)
+        session.close()
+        self.assertEqual(self._memberships("end-user-of-b"), {B: "member"})
+        # Once a member of B, the same id doesn't reach A
+        self.assertFalse(self._allowed("end-user-of-b", A_ROOT))
+
+    def test_a_new_user_of_the_default_workspace_joins_it(self):
+        self.assertTrue(self._allowed("end-user-of-a", A_ROOT))
+        self.assertEqual(self._memberships("end-user-of-a"), {A: "member"})
+
+    def test_a_widget_visitor_reaches_their_key_s_workspace_only(self):
+        visitor = f"widget_{self.ids['widget_key_a']}_v1"
+        self.assertTrue(self._allowed(visitor, A_ROOT))
+        self.assertFalse(self._allowed(visitor, B_ROOT))
+        self.assertEqual(self._memberships(visitor), {})
+
+    def test_an_agent_without_a_config_is_for_platform_administrators(self):
+        self.assertFalse(self._allowed(ALICE, "not_configured"))
+        self.assertTrue(self._allowed(auth.AUTH_USERNAME, "not_configured"))
+
+
+class TestOpenAIApiAndMcp(_TwoWorkspaces):
+    """A personal access token works in its own workspace."""
+
+    def _models(self, user_id: str) -> List[str]:
+        response = self.client.get("/v1/models", headers={"Authorization": f"Bearer {PATS[user_id]}"})
+        self.assertEqual(response.status_code, 200, response.text)
+        return [m["id"] for m in response.json()["data"]]
+
+    def test_the_models_are_the_token_s_workspace_s(self):
+        self.assertEqual(self._models(ALICE), [A_ROOT])
+        self.assertEqual(self._models(BOB), [B_ROOT])
+
+    def test_another_workspace_s_model_is_a_404(self):
+        with patch.dict(os.environ, {"RATE_LIMIT_ENABLED": "false"}):
+            response = self.client.post(
+                "/v1/chat/completions", headers={"Authorization": f"Bearer {PATS[ALICE]}"},
+                json={"model": B_ROOT, "messages": [{"role": "user", "content": "hi"}]})
+        self.assertEqual(response.status_code, 404)
+
+    def test_a_token_whose_owner_left_its_workspace_is_refused(self):
+        session = self.Session()
+        session.query(WorkspaceMember).filter_by(user_id=BOB).delete()
+        session.commit()
+        session.close()
+        response = self.client.get("/v1/models", headers={"Authorization": f"Bearer {PATS[BOB]}"})
+        self.assertEqual(response.status_code, 403)
+
+    def test_mcp_allows_the_token_s_workspace_s_agents_only(self):
+        self.assertTrue(agent_allowed(ALICE, A_ROOT, A))
+        self.assertFalse(agent_allowed(ALICE, B_ROOT, A))
+        # Not even an owner of B, with a token of A
+        self.assertFalse(agent_allowed(BOB, B_ROOT, A))
+
+
+class TestProxy(_TwoWorkspaces):
+    """/list-apps and the agent routes, with a fake agent server."""
+
+    APPS = [A_ROOT, B_ROOT, "not_configured"]
+
+    def setUp(self):
+        super().setUp()
+        self.reached = []
+
+        def agent_server(request: httpx.Request) -> httpx.Response:
+            self.reached.append(request.url.path)
+            if request.url.path == "/list-apps":
+                if request.url.params.get("detailed") == "true":
+                    return httpx.Response(200, json={"apps": [{"name": n} for n in self.APPS]})
+                return httpx.Response(200, json=self.APPS)
+            return httpx.Response(200, json={"id": "s1"})
+
+        transport = httpx.MockTransport(agent_server)
+        real_client = httpx.AsyncClient
+        patcher = patch.object(httpx, "AsyncClient",
+                               lambda *a, **kw: real_client(transport=transport, timeout=kw.get("timeout")))
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def _as_member(self, user_id: str) -> None:
+        auth_server.app.dependency_overrides[proxy_routes.get_auth_user] = lambda: user_id
+        self.addCleanup(auth_server.app.dependency_overrides.pop, proxy_routes.get_auth_user, None)
+        for patcher in (patch("server.auth.is_admin_user", return_value=False),
+                        patch("server.request_context.get_user_role", return_value="user")):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def test_list_apps_holds_the_request_s_workspace(self):
+        def apps(workspace_id: int, query: str = "") -> list:
+            response = self.client.get(f"/list-apps{query}", headers=_platform_admin(workspace_id))
+            self.assertEqual(response.status_code, 200)
+            body = response.json()
+            return body if isinstance(body, list) else [a["name"] for a in body["apps"]]
+
+        self.assertEqual(apps(A), [A_ROOT, "not_configured"])
+        self.assertEqual(apps(B), [B_ROOT])
+        self.assertEqual(apps(A, "?detailed=true"), [A_ROOT, "not_configured"])
+
+    def test_a_member_lists_their_workspace_s_apps(self):
+        self._as_member(BOB)
+        self.assertEqual(self.client.get("/list-apps").json(), [B_ROOT])
+
+    def test_a_member_cannot_reach_another_workspace_s_agent(self):
+        self._as_member(ALICE)
+        for method, path, body in (
+            ("POST", f"/apps/{B_ROOT}/users/{ALICE}/sessions", {}),
+            ("GET", f"/apps/{B_ROOT}/users/{ALICE}/sessions", None),
+            ("POST", "/run_sse", {"app_name": B_ROOT, "user_id": ALICE, "session_id": "s",
+                                  "new_message": {"parts": [{"text": "hi"}]}}),
+        ):
+            with self.subTest(path=path):
+                response = self.client.request(method, path, json=body)
+                self.assertEqual(response.status_code, 403)
+        self.assertEqual(self.reached, [])
+
+    def test_a_member_reaches_their_own_workspace_s_agent(self):
+        self._as_member(ALICE)
+        response = self.client.post(f"/apps/{A_ROOT}/users/{ALICE}/sessions", json={})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.reached, [f"/apps/{A_ROOT}/users/{ALICE}/sessions"])
+
+
+class TestWorkRoom(_TwoWorkspaces):
+
+    def _agents(self, user_id: str, role: str, roles=None) -> str:
+        for patcher in (patch("server.request_context.require_dashboard_auth", return_value=user_id),
+                        patch("server.request_context.get_user_role", return_value=role)):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        response = self.client.get("/dashboard/workroom")
+        self.assertEqual(response.status_code, 200)
+        return response.text
+
+    def test_a_member_sees_their_workspace_s_root_agents(self):
+        page = self._agents(ALICE, "user")
+        self.assertIn(A_ROOT, page)
+        self.assertNotIn(B_ROOT, page)
+
+    def test_an_agent_the_member_may_not_use_is_left_out(self):
+        session = self.Session()
+        session.query(AgentConfig).filter_by(name=A_ROOT).update({"allowed_for_roles": '["finance"]'})
+        session.commit()
+        session.close()
+        self.assertNotIn(A_ROOT, self._agents(ALICE, "user"))
 
 
 if __name__ == "__main__":

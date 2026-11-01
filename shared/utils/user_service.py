@@ -28,13 +28,15 @@ class UserService:
         """Get database session."""
         return self.db_client.get_session()
     
-    def get_or_create_user(self, user_id: str) -> Optional[User]:
+    def get_or_create_user(self, user_id: str, workspace_id: Optional[int] = None) -> Optional[User]:
         """
         Get existing user by user_id or create a new one with the default role
         ('user'; 'widget' for widget visitors; 'admin' and 'user' for AUTH_USERNAME).
         
         Args:
             user_id: User identifier from the request
+            workspace_id: The workspace a new user joins, that of the agent they are
+                created for; the default workspace when None (shared/utils/workspaces.py)
             
         Returns:
             User instance or None if database error
@@ -71,6 +73,7 @@ class UserService:
                 roles = ["user"]
             new_user = User(user_id=user_id)
             new_user.set_roles(roles)
+            new_user.home_workspace_id = workspace_id
 
             session.add(new_user)
             session.commit()

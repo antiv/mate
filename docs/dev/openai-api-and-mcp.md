@@ -37,7 +37,7 @@ curl https://your-mate.example.com/v1/chat/completions \
 
 | Route | Returns |
 |---|---|
-| `GET /v1/models` | Active root agents with `expose_as_model` set. |
+| `GET /v1/models` | Active root agents of the token's workspace with `expose_as_model` set. |
 | `POST /v1/chat/completions` | One agent turn, streamed or not. |
 
 ### What the agent does with a request
@@ -100,7 +100,8 @@ curl -X POST https://your-mate.example.com/agents/support_root/mcp/tools/list \
 ```
 
 `GET /mcp`, with the same credentials, lists the exposed agents the caller may use,
-each with its name, description and full MCP URL.
+each with its name, description and full MCP URL. Both, and the agent routes, keep
+to the token's workspace (`docs/dev/auth-and-access.md`, "Personal access tokens").
 
 Only agents named in the setting are exposed. `AgentMCPManager`
 (`shared/utils/mcp/agent_mcp_manager.py`) registers the routes at startup, so a

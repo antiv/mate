@@ -54,6 +54,29 @@ def verify_pat_hash(token: str) -> str:
     """Compute the SHA-256 hash of a token string."""
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
+
+
+
+def _workspace_of_caller(request: Request, user: User, token_workspace_id) -> int:
+    """A token's own workspace, while its owner may still use it; else the workspace
+    the request names or the caller's default (server/request_context.py)."""
+    from server.request_context import resolve_workspace
+    from shared.utils.workspaces import member_role
+
+    platform_admin = user.user_id == AUTH_USERNAME or "admin" in user.get_roles()
+    if token_workspace_id is None:
+        return resolve_workspace(request, user.user_id, platform_admin)[0]
+    if not platform_admin:
+        session = get_database_client().get_session()
+        try:
+            if member_role(session, token_workspace_id, user.user_id) is None:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                                    detail="The token's owner is no longer a member of its workspace")
+        finally:
+            session.close()
+    return token_workspace_id
+
+
 async def get_pat_user(request: Request) -> User:
     """
     FastAPI dependency to authenticate requests using:
@@ -61,7 +84,9 @@ async def get_pat_user(request: Request) -> User:
     2. Session tokens for local dashboard/widget requests
     3. Basic auth for admin/testing
     
-    Verifies that the user has the required roles (e.g. admin or developer).
+    Verifies that the user has the required roles (e.g. admin or developer), and
+    records the request's workspace for pat_workspace(): a token's own, else the
+    one X-MATE-Workspace names or the caller's default.
     """
     auth_header = request.headers.get("Authorization", "")
     db = get_database_client()
@@ -75,6 +100,7 @@ async def get_pat_user(request: Request) -> User:
         
     try:
         user_record = None
+        token_workspace_id = None
         
         # 1. Bearer Token Authentication
         if auth_header.startswith("Bearer "):
@@ -106,6 +132,7 @@ async def get_pat_user(request: Request) -> User:
                     session.commit()
                     
                     user_record = token_record.user
+                    token_workspace_id = token_record.workspace_id
                     logger.debug("Successfully authenticated PAT for user: %s", user_record.user_id)
                 else:
                     raise HTTPException(
@@ -162,8 +189,14 @@ async def get_pat_user(request: Request) -> User:
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"User roles {user_record.get_roles()} are not authorized to use the API (allowed: {list(get_allowed_roles())})"
             )
-            
+
+        request.state.workspace_id = _workspace_of_caller(request, user_record, token_workspace_id)
         return user_record
         
     finally:
         session.close()
+
+
+def pat_workspace(request: Request, user: User = Depends(get_pat_user)) -> int:
+    """FastAPI dependency: the workspace of a request get_pat_user authenticated."""
+    return request.state.workspace_id

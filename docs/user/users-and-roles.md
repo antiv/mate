@@ -44,7 +44,7 @@ A role is a label. A person can have several, and you can invent your own, such 
 
 | Role | Meaning |
 |---|---|
-| `admin` | The whole dashboard for people who sign in through Google or GitHub. Admits the person to agents with an empty **Allowed Roles** list, and lets agents change memory blocks on their behalf. |
+| `admin` | The whole dashboard for people who sign in through Google or GitHub. Admits the person to every agent, whatever its **Allowed Roles**, and lets agents change memory blocks on their behalf. |
 | `developer` | May create personal access tokens and call the API with them, while the dashboard stays the Work Room. The roles with this right are set by `ALLOWED_API_ROLES`, `admin` and `developer` by default. |
 | `user` | An ordinary person. Agents that list `user` in **Allowed Roles** are open to them. |
 | `pending` | Signed in, but not yet given access to anything. New single sign-on users start here. |
@@ -53,11 +53,10 @@ A role is a label. A person can have several, and you can invent your own, such 
 ## Open an agent to people
 
 Each agent has an **Allowed Roles** list. A person can use the agent when at least
-one of their roles is on that list.
+one of their roles is on that list. People with the `admin` role can use every agent.
 
-- An agent with `["user"]` is open to everyone with the `user` role, and closed to
-  someone who has only `admin`.
-- An agent with `["support", "admin"]` is open to people with either role.
+- An agent with `["user"]` is open to everyone with the `user` role.
+- An agent with `["support", "sales"]` is open to people with either role.
 - **An agent with an empty list is open only to people with the `admin` role.**
 
 The built-in account (`AUTH_USERNAME`) always has the `admin` role. Its user record

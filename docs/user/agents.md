@@ -101,11 +101,10 @@ commands on the host.
 ## Who can use an agent
 
 **Allowed Roles** is compared with the roles on the user record of the person
-chatting. The rule has no exceptions, not even for administrators:
+chatting. People with the `admin` role pass it, whatever the list:
 
 - With a list, the person needs at least one of the listed roles. `["user"]` admits
-  everyone with the `user` role, and nobody who has only `admin`. Use
-  `["user", "admin"]` to admit both.
+  everyone with the `user` role.
 - **Left empty, the agent admits only people with the `admin` role.**
 
 A person who is refused gets a message naming the roles required and the roles they
