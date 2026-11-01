@@ -16,6 +16,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 class TestRbacSecureDefault(unittest.TestCase):
     """Empty allowed_for_roles => admin-only; explicit roles => normal matching."""
 
+    def setUp(self):
+        from shared.test.test_rbac import member_of_the_agent_s_workspace
+        member_of_the_agent_s_workspace(self)
+
     def _middleware(self, user_roles):
         from shared.utils.rbac_middleware import RBACMiddleware
         mw = RBACMiddleware.__new__(RBACMiddleware)  # bypass __init__ (no real DB)

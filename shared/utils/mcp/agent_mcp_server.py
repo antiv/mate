@@ -6,7 +6,7 @@ Dynamically creates MCP endpoints for agents from database configuration
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import StreamingResponse, Response
 from ..tools.agent_mcp_protocol_handler import AgentMCPProtocolHandler
-from .mcp_auth import agent_allowed, require_mcp_user
+from .mcp_auth import agent_allowed, mcp_workspace, require_mcp_user
 import logging
 
 logger = logging.getLogger(__name__)
@@ -26,9 +26,9 @@ class AgentMCPServer:
         """Register all agent MCP endpoints"""
         base_path = f"/agents/{self.agent_name}/mcp"
 
-        async def require_user(user_id: str = Depends(require_mcp_user)) -> str:
+        async def require_user(request: Request, user_id: str = Depends(require_mcp_user)) -> str:
             """Every route but health and CORS preflight: a caller allowed to use this agent."""
-            if not agent_allowed(user_id, self.agent_name):
+            if not agent_allowed(user_id, self.agent_name, mcp_workspace(request)):
                 raise HTTPException(status_code=403,
                                     detail=f"Not allowed to use agent {self.agent_name}")
             return user_id

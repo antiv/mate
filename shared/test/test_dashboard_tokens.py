@@ -37,6 +37,7 @@ class TestDashboardTokens(unittest.TestCase):
         self.server = DashboardServer(self.app, Path(__file__).resolve().parent.parent.parent)
         self.server.db_client = db
         self.server._get_all_agent_configs = lambda: []
+        self.server._caller_access = lambda ctx: None
         self.client = TestClient(self.app)
 
     def _as(self, *, admin: bool = False, roles=("user",)):

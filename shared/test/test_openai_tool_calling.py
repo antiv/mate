@@ -27,7 +27,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 import server.openai_routes as openai_routes
-from server.pat_auth import get_pat_user
+from server.pat_auth import get_pat_user, pat_workspace
 from shared.utils.rate_limit_service import RateLimitResult
 
 RECEIVED = {"run_sse": [], "sessions": []}
@@ -154,6 +154,8 @@ class StubRuntimeCase(unittest.TestCase):
         session.query.return_value.filter_by.return_value.first.return_value = agent
         # Usage lookup: no rows recorded by the stub runtime.
         session.query.return_value.filter.return_value.first.return_value = (None, None)
+        # The agent's project is in workspace 1
+        session.query.return_value.filter.return_value.scalar.return_value = 1
         db = MagicMock()
         db.get_session.return_value = session
         self._db = patch.object(openai_routes, "get_database_client", return_value=db)
@@ -165,6 +167,7 @@ class StubRuntimeCase(unittest.TestCase):
         user = MagicMock()
         user.user_id = "tester"
         app.dependency_overrides[get_pat_user] = lambda: user
+        app.dependency_overrides[pat_workspace] = lambda: 1
         self.client = TestClient(app)
 
     def _post(self, messages, tools=None, stream=False):

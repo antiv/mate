@@ -77,6 +77,68 @@ def _non_admin_refusal(path: str, identity: str, body: Optional[bytes]) -> Optio
         return None if user_id == identity else "not your user id"
     return "admin only"
 
+def _app_name(path: str, body: Optional[bytes]) -> Optional[str]:
+    """The agent a request _non_admin_refusal let through runs or reads, if any."""
+    match = _USER_PATH.match(path)
+    if match:
+        return path.split("/", 2)[1]
+    if path in _RUN_PATHS:
+        return run_field(json.loads(body or b"{}"), "app_name")
+    return None
+
+
+def _workspace_refusal(path: str, identity: str, body: Optional[bytes]) -> Optional[str]:
+    """Why a non-admin request is refused for the agent's workspace, or None: they may
+    reach an agent of a workspace they are a member of (shared/utils/workspaces.py)."""
+    app_name = _app_name(path, body)
+    if app_name is None:
+        return None
+    from shared.utils.database_client import get_database_client
+    from shared.utils.models import User
+    from shared.utils.workspaces import agent_workspace, caller_access
+    session = get_database_client().get_session()
+    try:
+        user = session.query(User).filter_by(user_id=identity).first()
+        if user is None or caller_access(session, user, agent_workspace(session, app_name)) is None:
+            return "not an agent of the user's workspaces"
+        return None
+    finally:
+        session.close()
+
+
+def _apps_of_workspace(request: Request, identity: str, content: bytes) -> bytes:
+    """ADK's /list-apps answer cut down to the agents of the request's workspace
+    (server/request_context.py). An app with no agent config is listed to platform
+    administrators, in the default workspace."""
+    from server.auth import is_admin_user
+    from server.request_context import resolve_workspace
+    from shared.utils.database_client import get_database_client
+    from shared.utils.models import DEFAULT_WORKSPACE_ID, AgentConfig, Project
+
+    platform_admin = is_admin_user(request)
+    workspace_id, _ = resolve_workspace(request, identity, platform_admin)
+    answer = json.loads(content)
+    # A list of names, or {"apps": [{"name": ...}]} with ?detailed=true
+    names = answer if isinstance(answer, list) else [a.get("name") for a in answer.get("apps", [])]
+    session = get_database_client().get_session()
+    try:
+        workspaces = dict(session.query(AgentConfig.name, Project.workspace_id).join(
+            Project, Project.id == AgentConfig.project_id).filter(AgentConfig.name.in_(names)).all())
+    finally:
+        session.close()
+
+    def listed(name: str) -> bool:
+        if name in workspaces:
+            return workspaces[name] == workspace_id
+        return platform_admin and workspace_id == DEFAULT_WORKSPACE_ID
+
+    if isinstance(answer, list):
+        answer = [name for name in answer if listed(name)]
+    else:
+        answer["apps"] = [a for a in answer.get("apps", []) if listed(a.get("name"))]
+    return json.dumps(answer).encode()
+
+
 project_root = Path(__file__).parent.parent
 
 ADK_HOST: str = "localhost"
@@ -298,7 +360,7 @@ async def proxy_adk(request: Request, path: str, username: str = Depends(get_aut
 
     from server.auth import is_admin_user
     if not is_admin_user(request):
-        refusal = _non_admin_refusal(path, username, body)
+        refusal = _non_admin_refusal(path, username, body) or _workspace_refusal(path, username, body)
         if refusal:
             logger.warning("Proxy refused %s %s for %s: %s", request.method, path, username, refusal)
             raise HTTPException(status_code=403, detail="Not allowed")
@@ -438,6 +500,11 @@ async def proxy_adk(request: Request, path: str, username: str = Depends(get_aut
             else:
                 await r.aread()
                 await client.aclose()
+                if path == "list-apps" and r.status_code == 200:
+                    content = _apps_of_workspace(request, username, r.content)
+                    headers = {k: v for k, v in r.headers.items()
+                               if k.lower() not in ("content-length", "content-encoding")}
+                    return Response(content=content, status_code=200, headers=headers)
                 return Response(content=r.content, status_code=r.status_code, headers=r.headers)
 
     except httpx.RequestError as e:

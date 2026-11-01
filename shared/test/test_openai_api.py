@@ -85,7 +85,7 @@ class TestOpenAIApiEndpoints(unittest.TestCase):
         agent3 = AgentConfig(name="hidden-root", disabled=False, expose_as_model=False, parent_agents=None)
         agent3.id = 3
 
-        mock_query = mock_session.query.return_value.filter.return_value.all
+        mock_query = mock_session.query.return_value.join.return_value.filter.return_value.all
         mock_query.return_value = [agent1]  # The mock DB returns only the filtered ones
 
         # Call the route handler directly
@@ -97,7 +97,7 @@ class TestOpenAIApiEndpoints(unittest.TestCase):
         except RuntimeError:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
-        result = loop.run_until_complete(list_models(user=mock_user))
+        result = loop.run_until_complete(list_models(user=mock_user, workspace_id=1))
 
         self.assertEqual(result["object"], "list")
         self.assertEqual(len(result["data"]), 1)

@@ -41,10 +41,27 @@ class TestAccessDeniedException(unittest.TestCase):
         self.assertEqual(ctx.exception.required_roles, ["admin"])
 
 
+def member_of_the_agent_s_workspace(test: unittest.TestCase) -> None:
+    """Make every user a member of the agent's workspace, with their users.roles as
+    agent_roles; the admin role passes every agent (shared/utils/workspaces.py)."""
+    for patcher in (
+        patch('shared.utils.rbac_middleware.get_database_client'),
+        patch('shared.utils.rbac_middleware.agent_workspace', return_value=1),
+        patch('shared.utils.rbac_middleware.caller_access',
+              side_effect=lambda session, user, workspace_id:
+              ("admin" in user.get_roles(), user.get_roles())),
+    ):
+        patcher.start()
+        test.addCleanup(patcher.stop)
+
+
 class TestRBACMiddleware(unittest.TestCase):
 
+    def setUp(self):
+        member_of_the_agent_s_workspace(self)
+
     @patch('shared.utils.rbac_middleware.get_user_service')
-    def test_no_role_restrictions_allows_access(self, mock_get_service):
+    def test_no_role_restrictions_is_admin_only(self, mock_get_service):
         mock_service = Mock()
         mock_user = Mock()
         mock_user.get_roles.return_value = ["user"]
@@ -53,20 +70,21 @@ class TestRBACMiddleware(unittest.TestCase):
 
         middleware = RBACMiddleware()
         has_access, error = middleware.check_agent_access("user1", {"name": "agent1", "allowed_for_roles": []})
-        self.assertTrue(has_access)
-        self.assertIsNone(error)
+        self.assertFalse(has_access)
+        self.assertIn("admin-only", error)
 
     @patch('shared.utils.rbac_middleware.get_user_service')
-    def test_none_role_restrictions_allows_access(self, mock_get_service):
+    def test_none_role_restrictions_is_admin_only(self, mock_get_service):
         mock_service = Mock()
         mock_user = Mock()
+        mock_user.get_roles.return_value = ["user"]
         mock_service.get_or_create_user.return_value = mock_user
         mock_get_service.return_value = mock_service
 
         middleware = RBACMiddleware()
         has_access, error = middleware.check_agent_access("user1", {"name": "agent1"})
-        self.assertTrue(has_access)
-        self.assertIsNone(error)
+        self.assertFalse(has_access)
+        self.assertIn("admin-only", error)
 
     @patch('shared.utils.rbac_middleware.get_user_service')
     def test_user_with_matching_role_gets_access(self, mock_get_service):

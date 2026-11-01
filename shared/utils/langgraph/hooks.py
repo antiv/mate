@@ -30,16 +30,6 @@ def check_rbac(user_id: str, agent_name: str, session_id: Optional[str] = None) 
         from shared.utils.user_service import get_user_service
         from shared.utils.rbac_middleware import get_rbac_middleware
 
-        user = get_user_service().get_or_create_user(user_id)
-        if not user:
-            logger.error(f"Failed to get/create user {user_id}")
-            return _access_denied_event("Authentication failed. Please try again.", user_id, agent_name)
-        # Read roles now — the ORM instance detaches once the service session closes
-        try:
-            user_roles = user.get_roles()
-        except Exception:
-            user_roles = []
-
         agent_config = _load_agent_config_row(agent_name)
         if not agent_config:
             # Not found, disabled, or no database: none of these grants access
@@ -53,10 +43,16 @@ def check_rbac(user_id: str, agent_name: str, session_id: Optional[str] = None) 
             except (json.JSONDecodeError, TypeError):
                 logger.warning(f"Invalid JSON in allowed_for_roles for agent {agent_name}")
 
+        # Creates a new user, in the agent's workspace (shared/utils/workspaces.py)
         has_access, error_message = get_rbac_middleware().check_agent_access(user_id, config_dict)
         if has_access:
             logger.debug(f"RBAC: Access granted for user {user_id} to agent {agent_name}")
             return None
+
+        try:
+            user_roles = get_user_service().get_user_roles(user_id)
+        except Exception:
+            user_roles = []
 
         required_roles = config_dict.get("allowed_for_roles", [])
         logger.error(f"RBAC: Access DENIED for user '{user_id}' to agent '{agent_name}'. "

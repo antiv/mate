@@ -111,9 +111,9 @@ Every route except health and CORS preflight, and `GET /mcp`, needs a caller:
   route answers 401.
 - **API role:** the user is an admin or holds a role in `ALLOWED_API_ROLES`
   (default `admin`, `developer`), as for the OpenAI-compatible API. Otherwise 403.
-- **The agent's roles:** the user's roles must grant the agent (`allowed_for_roles`;
-  an agent with none is admin-only). Otherwise 403, and `GET /mcp` leaves the agent
-  out.
+- **The agent's workspace and roles:** the agent is in the token's workspace, and
+  the user may use it there (`allowed_for_roles`; an agent with none is admin-only,
+  and an admin passes it). Otherwise 403, and `GET /mcp` leaves the agent out.
 
 `shared/utils/mcp/mcp_auth.py` does the check, using `get_pat_user` from
 `server/pat_auth.py` and `RBACMiddleware.check_agent_access`. It sits on the route

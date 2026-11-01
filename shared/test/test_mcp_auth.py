@@ -35,14 +35,15 @@ class _AuthPatches(unittest.TestCase):
         async def fake_get_pat_user(request: Request):
             if request.headers.get("Authorization") != f"Bearer {TOKEN}":
                 raise HTTPException(status_code=401, detail="Invalid Personal Access Token")
+            request.state.workspace_id = 1
             return MagicMock(user_id="dev")
 
         for target, kwargs in (
             ("server.pat_auth.get_pat_user", {"side_effect": fake_get_pat_user}),
             ("shared.utils.mcp.agent_mcp_server.agent_allowed",
-             {"side_effect": lambda user_id, name: name in self.allowed}),
+             {"side_effect": lambda user_id, name, workspace_id: name in self.allowed}),
             ("shared.utils.mcp.agent_mcp_manager.agent_allowed",
-             {"side_effect": lambda user_id, name: name in self.allowed}),
+             {"side_effect": lambda user_id, name, workspace_id: name in self.allowed}),
         ):
             p = patch(target, **kwargs)
             p.start()
@@ -144,9 +145,10 @@ class TestAgentAllowed(unittest.TestCase):
         rbac = MagicMock()
         rbac.check_agent_access.return_value = (True, None)
         with patch("shared.utils.database_client.get_database_client") as db, \
+                patch("shared.utils.workspaces.agent_workspace", return_value=1), \
                 patch("shared.utils.rbac_middleware.get_rbac_middleware", return_value=rbac):
             db.return_value.get_session.return_value = session
-            self.assertTrue(mcp_auth.agent_allowed("dev", "helper"))
+            self.assertTrue(mcp_auth.agent_allowed("dev", "helper", 1))
         session.close.assert_called_once()
         return rbac.check_agent_access.call_args.args
 
@@ -156,6 +158,11 @@ class TestAgentAllowed(unittest.TestCase):
 
     def test_invalid_roles_mean_none_so_admin_only(self):
         self.assertEqual(self.check("not json")[1]["allowed_for_roles"], [])
+
+    def test_an_agent_of_another_workspace_is_not_allowed(self):
+        with patch("shared.utils.database_client.get_database_client"), \
+                patch("shared.utils.workspaces.agent_workspace", return_value=2):
+            self.assertFalse(mcp_auth.agent_allowed("dev", "helper", 1))
 
 
 if __name__ == "__main__":

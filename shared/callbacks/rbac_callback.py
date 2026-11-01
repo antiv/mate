@@ -91,25 +91,10 @@ def rbac_before_model_callback(callback_context: CallbackContext, llm_request: L
             logger.debug(f"Skipping RBAC check for agent: {agent_name}")
             return None
         
-        # Get user service and RBAC middleware
+        # Get user service and RBAC middleware. check_agent_access creates a new user,
+        # in the agent's workspace (shared/utils/workspaces.py)
         user_service = get_user_service()
         rbac_middleware = get_rbac_middleware()
-        
-        # Get or create user (this will create user with default 'user' role if not exists)
-        user = user_service.get_or_create_user(user_id)
-        if not user:
-            if span:
-                try:
-                    span.set_attribute("mate.rbac.allowed", False)
-                    logger.debug("trace: mate.rbac_check span ended allowed=False")
-                    span.end()
-                except Exception:
-                    pass
-            logger.error(f"Failed to get/create user {user_id}")
-            return _create_access_denied_response(
-                "Authentication failed. Please try again.",
-                user_id, agent_name
-            )
         
         # Get agent configuration to check allowed roles
         from ..utils.agent_manager import get_agent_manager
@@ -169,7 +154,7 @@ def rbac_before_model_callback(callback_context: CallbackContext, llm_request: L
                 except Exception:
                     pass
             try:
-                user_roles = user.get_roles()
+                user_roles = user_service.get_user_roles(user_id)
             except Exception:
                 user_roles = []
             required_roles = config_dict.get('allowed_for_roles', [])

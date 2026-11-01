@@ -410,7 +410,7 @@ Image generation MCP server endpoints (DALL-E, Stable Diffusion, etc.).
 | Method | Path | Summary | Implemented in |
 |---|---|---|---|
 | `POST` | `/v1/chat/completions` | Execute a MATE agent using the OpenAI completions schema | server/openai_routes.py · chat_completions |
-| `GET` | `/v1/models` | List active root agents that have expose_as_model = True | server/openai_routes.py · list_models |
+| `GET` | `/v1/models` | List the active root agents of the caller's workspace that have expose_as_model = True | server/openai_routes.py · list_models |
 
 ### Proxy - ADK API
 
