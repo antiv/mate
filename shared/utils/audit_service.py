@@ -108,12 +108,14 @@ def log(
     details: Optional[Dict[str, Any]] = None,
     request: Any = None,
     project_id: Optional[int] = None,
+    workspace_id: Optional[int] = None,
 ) -> None:
     """
     Append a single audit log entry. Never raises; logs and swallows errors.
 
     project_id is the project the entry is about. Left out, it is taken from the
     agent or project named by resource_id; pass it when that is already gone.
+    workspace_id is taken from the project; pass it when the project is gone.
     """
     ip = _client_ip(request) if request is not None else None
     db = get_database_client()
@@ -136,7 +138,7 @@ def log(
             resource_id=str(resource_id) if resource_id is not None else None,
             ip_address=ip,
             project_id=project_id,
-            workspace_id=workspace_of_project(session, project_id),
+            workspace_id=workspace_id or workspace_of_project(session, project_id),
         )
         entry.set_details(details)
         session.add(entry)

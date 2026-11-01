@@ -23,6 +23,8 @@ from fastapi.staticfiles import StaticFiles
 from shared.utils import audit_service
 from ..ai_disclosure import resolve_disclosure, validate_waiver
 from shared.utils.path_safety import resolve_within_base
+from shared.utils.models import DEFAULT_WORKSPACE_ID
+from shared.utils.workspaces import project_in_workspace
 from server.request_context import RequestContext, get_request_context
 
 logger = logging.getLogger(__name__)
@@ -739,8 +741,8 @@ class DashboardServer:
         finally:
             session.close()
     
-    def _get_all_projects(self) -> List[Dict[str, Any]]:
-        """Get all projects from database."""
+    def _get_all_projects(self, workspace_id: int) -> List[Dict[str, Any]]:
+        """The workspace's projects."""
         if not self.db_client:
             return []
         
@@ -749,7 +751,8 @@ class DashboardServer:
             return []
         
         try:
-            projects = session.query(self.Project).order_by(self.Project.name.asc()).all()
+            projects = session.query(self.Project).filter(
+                self.Project.workspace_id == workspace_id).order_by(self.Project.name.asc()).all()
             return [project.to_dict() for project in projects]
         except Exception as exc:
             print(f"Error getting projects: {exc}")
@@ -757,8 +760,8 @@ class DashboardServer:
         finally:
             session.close()
     
-    def _create_project(self, name: str, description: Optional[str]) -> Dict[str, Any]:
-        """Create a new project."""
+    def _create_project(self, name: str, description: Optional[str], workspace_id: int) -> Dict[str, Any]:
+        """Create a new project in the workspace."""
         if not self.db_client:
             raise HTTPException(status_code=500, detail="Database connection failed")
         
@@ -767,7 +770,8 @@ class DashboardServer:
             raise HTTPException(status_code=500, detail="Database connection failed")
         
         try:
-            project = self.Project(name=name.strip(), description=(description or "").strip() or None)
+            project = self.Project(name=name.strip(), description=(description or "").strip() or None,
+                                   workspace_id=workspace_id)
             session.add(project)
             session.commit()
             session.refresh(project)
@@ -781,8 +785,9 @@ class DashboardServer:
         finally:
             session.close()
     
-    def _update_project(self, project_id: int, name: str, description: Optional[str]) -> Dict[str, Any]:
-        """Update an existing project."""
+    def _update_project(self, project_id: int, name: str, description: Optional[str],
+                        workspace_id: int) -> Dict[str, Any]:
+        """Update a project of the workspace."""
         if not self.db_client:
             raise HTTPException(status_code=500, detail="Database connection failed")
         
@@ -791,7 +796,7 @@ class DashboardServer:
             raise HTTPException(status_code=500, detail="Database connection failed")
         
         try:
-            project = session.query(self.Project).filter(self.Project.id == project_id).first()
+            project = project_in_workspace(session, workspace_id, project_id)
             if not project:
                 raise HTTPException(status_code=404, detail="Project not found")
             
@@ -812,9 +817,9 @@ class DashboardServer:
         finally:
             session.close()
     
-    def _delete_project(self, project_id: int) -> Dict[str, Any]:
-        """Delete a project and associated agents, stores, triggers, memory blocks, keys,
-        integrations, rate limits and eval test cases."""
+    def _delete_project(self, project_id: int, workspace_id: int) -> Dict[str, Any]:
+        """Delete a project of the workspace and associated agents, stores, triggers,
+        memory blocks, keys, integrations, rate limits and eval test cases."""
         if not self.db_client:
             raise HTTPException(status_code=500, detail="Database connection failed")
 
@@ -823,7 +828,7 @@ class DashboardServer:
             raise HTTPException(status_code=500, detail="Database connection failed")
 
         try:
-            project = session.query(self.Project).filter(self.Project.id == project_id).first()
+            project = project_in_workspace(session, workspace_id, project_id)
             if not project:
                 raise HTTPException(status_code=404, detail="Project not found")
 
@@ -2395,7 +2400,8 @@ class DashboardServer:
         
         # Create project
         try:
-            project = self._create_project(proj_name, project_data.get("description"))
+            # Templates are scoped in phase 2c; until then imports land in the default workspace
+            project = self._create_project(proj_name, project_data.get("description"), DEFAULT_WORKSPACE_ID)
         except HTTPException as e:
             return {"error": str(e.detail)}
         
@@ -3381,7 +3387,7 @@ class DashboardServer:
             except (TypeError, ValueError):
                 selected_project_id = None
 
-            projects = self._get_all_projects()
+            projects = self._get_all_projects(ctx.workspace_id)
             configs = self._get_all_agent_configs(selected_project_id) if selected_project_id else []
             return self.templates.TemplateResponse(request, "dashboard/agents.html", {
                 "request": request,
@@ -3404,7 +3410,7 @@ class DashboardServer:
             except (TypeError, ValueError):
                 selected_project_id = None
 
-            projects = self._get_all_projects()
+            projects = self._get_all_projects(ctx.workspace_id)
             configs = self._get_all_agent_configs(selected_project_id) if selected_project_id else []
             return self.templates.TemplateResponse(request, "dashboard/agents_visual.html", {
                 "request": request,
@@ -4110,8 +4116,8 @@ class DashboardServer:
 
         @self.app.get("/dashboard/api/projects", tags=["Dashboard - Projects"])
         async def get_projects_api(request: Request, ctx: RequestContext = Depends(get_request_context)):
-            """Get all projects."""
-            return {"projects": self._get_all_projects()}
+            """The current workspace's projects."""
+            return {"projects": self._get_all_projects(ctx.workspace_id)}
 
         @self.app.post("/dashboard/api/projects", tags=["Dashboard - Projects"])
         async def create_project_api(
@@ -4120,8 +4126,11 @@ class DashboardServer:
             name: str = Form(...),
             description: str = Form("")
         ):
-            """Create a new project."""
-            project = self._create_project(name, description)
+            """Create a project in the current workspace."""
+            project = self._create_project(name, description, ctx.workspace_id)
+            audit_service.log(ctx.user_id, audit_service.ACTION_PROJECT_CREATE,
+                              audit_service.RESOURCE_PROJECT, resource_id=project["id"],
+                              details={"name": project["name"]}, request=request)
             return {"success": True, "project": project}
 
         @self.app.put("/dashboard/api/projects/{project_id}", tags=["Dashboard - Projects"])
@@ -4132,8 +4141,11 @@ class DashboardServer:
             name: str = Form(...),
             description: str = Form("")
         ):
-            """Update an existing project."""
-            project = self._update_project(project_id, name, description)
+            """Update a project of the current workspace."""
+            project = self._update_project(project_id, name, description, ctx.workspace_id)
+            audit_service.log(ctx.user_id, audit_service.ACTION_PROJECT_UPDATE,
+                              audit_service.RESOURCE_PROJECT, resource_id=project_id,
+                              details={"name": project["name"]}, request=request)
             return {"success": True, "project": project}
 
         @self.app.delete("/dashboard/api/projects/{project_id}", tags=["Dashboard - Projects"])
@@ -4142,8 +4154,12 @@ class DashboardServer:
             request: Request,
             ctx: RequestContext = Depends(get_request_context)
         ):
-            """Delete a project."""
-            result = self._delete_project(project_id)
+            """Delete a project of the current workspace."""
+            result = self._delete_project(project_id, ctx.workspace_id)
+            # The project is gone, so the entry can't find its workspace through it
+            audit_service.log(ctx.user_id, audit_service.ACTION_PROJECT_DELETE,
+                              audit_service.RESOURCE_PROJECT, resource_id=project_id,
+                              request=request, workspace_id=ctx.workspace_id)
             return {"success": True, **result}
 
         @self.app.post("/dashboard/api/users", tags=["Dashboard - Users"])
@@ -7186,7 +7202,7 @@ class DashboardServer:
         async def dashboard_triggers(request: Request, ctx: RequestContext = Depends(get_request_context)):
             if not ctx.is_admin:
                 return RedirectResponse(url="/dashboard/workroom", status_code=302)
-            projects = self._get_all_projects()
+            projects = self._get_all_projects(ctx.workspace_id)
             agents = self._get_all_agent_configs()
             return self.templates.TemplateResponse(request, "dashboard/triggers.html", {
                 "request": request,
@@ -7203,7 +7219,7 @@ class DashboardServer:
         async def dashboard_integrations(request: Request, ctx: RequestContext = Depends(get_request_context)):
             if not ctx.is_admin:
                 return RedirectResponse(url="/dashboard/workroom", status_code=302)
-            projects = self._get_all_projects()
+            projects = self._get_all_projects(ctx.workspace_id)
             agents = self._get_all_agent_configs()
             return self.templates.TemplateResponse(request, "dashboard/integrations.html", {
                 "request": request,
@@ -7764,7 +7780,7 @@ class DashboardServer:
                 "request": request,
                 "page_title": "Alerts",
                 "username": ctx.user_id,
-                "projects": self._get_all_projects(),
+                "projects": self._get_all_projects(ctx.workspace_id),
                 "agents": [{"name": a.get("name", "")} for a in agents],
                 "is_admin": True,
             })

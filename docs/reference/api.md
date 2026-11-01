@@ -218,10 +218,10 @@ Web interface pages for system management.
 
 | Method | Path | Summary | Implemented in |
 |---|---|---|---|
-| `GET` | `/dashboard/api/projects` | Get all projects | shared/utils/dashboard/dashboard_server.py · get_projects_api |
-| `POST` | `/dashboard/api/projects` | Create a new project | shared/utils/dashboard/dashboard_server.py · create_project_api |
-| `DELETE` | `/dashboard/api/projects/{project_id}` | Delete a project | shared/utils/dashboard/dashboard_server.py · delete_project_api |
-| `PUT` | `/dashboard/api/projects/{project_id}` | Update an existing project | shared/utils/dashboard/dashboard_server.py · update_project_api |
+| `GET` | `/dashboard/api/projects` | The current workspace's projects | shared/utils/dashboard/dashboard_server.py · get_projects_api |
+| `POST` | `/dashboard/api/projects` | Create a project in the current workspace | shared/utils/dashboard/dashboard_server.py · create_project_api |
+| `DELETE` | `/dashboard/api/projects/{project_id}` | Delete a project of the current workspace | shared/utils/dashboard/dashboard_server.py · delete_project_api |
+| `PUT` | `/dashboard/api/projects/{project_id}` | Update a project of the current workspace | shared/utils/dashboard/dashboard_server.py · update_project_api |
 
 ### Dashboard - Rate Limits
 

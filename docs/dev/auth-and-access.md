@@ -113,9 +113,40 @@ A dashboard route learns who is calling from one dependency,
   says whether it is `admin`. It is read the first time a route asks, since for a
   single sign-on user it is a database lookup.
 
-In 2.0 the context also carries the caller's workspace, so scoping is added in one
-function rather than in every route. Every `/dashboard` route takes it, and the
-route inventory test fails on one that does not.
+Every `/dashboard` route takes it, and the route inventory test fails on one that
+does not.
+
+### The workspace of a request
+
+The context also carries the workspace the caller works in, and a route filters by
+it, never by a workspace id from the query (`documents/design/workspaces.md`, D6):
+
+- `ctx.workspace_id` is the workspace named by the `X-MATE-Workspace` header, or
+  else the caller's default: workspace 1 for a platform administrator, else the
+  open workspace with the lowest id they are a member of. A user with no membership
+  at all, a pending sign-up, gets workspace 1 with no role.
+- `ctx.workspace_role` is the caller's role there (`owner`, `admin`, `member`), or
+  `None` for a platform administrator who isn't a member.
+- `ctx.is_platform_admin` is what `ctx.is_admin` means today: `get_user_role`
+  answers `admin`. Platform administrators may open every workspace.
+- A header naming a workspace that doesn't exist, is deleted, or that the caller is
+  not a member of is a 404, so the answer doesn't confirm the workspace exists.
+
+The workspace is resolved the first time a route reads it, as `ctx.role` is.
+`shared/utils/workspaces.py` has the lookups a route needs, such as
+`project_in_workspace`, which returns `None` for another workspace's project, and
+the route answers 404.
+
+Until every route is scoped, `ctx.is_admin` stays the platform administrator only,
+so a workspace's own owner or admin can't reach a route that doesn't filter yet.
+
+`shared/test/test_cross_workspace.py` proves the scoping on the real app, with two
+workspaces. A platform administrator in workspace A calls every `/dashboard/api/`
+GET route, and none may answer with B's data. Every route that names a row in its
+path is called with B's ids, and must answer 404. A write that names no row needs a
+test of its own, named in `COVERED_BY_TEST`. Routes listed in `NOT_YET_SCOPED`
+(phase 2 empties it) and `PLATFORM_ONLY` (installation-wide) are left out, so a new
+route is checked as soon as it is added.
 
 An API route that is for admins and is reachable by others, because it is on an
 allowlist or outside `/dashboard/api/`, checks `ctx.is_admin` itself and answers
@@ -190,7 +221,7 @@ accepts an empty password.
 | The route is | Use |
 |---|---|
 | A dashboard page | Take `ctx: RequestContext = Depends(get_request_context)`; redirect to the Work Room unless `ctx.is_admin`, if it is for admins. |
-| Dashboard JSON for admins | Put it under `/dashboard/api/` and take `ctx: RequestContext = Depends(get_request_context)`. The middleware does the rest. |
+| Dashboard JSON for admins | Put it under `/dashboard/api/` and take `ctx: RequestContext = Depends(get_request_context)`. The middleware does the rest. Filter by `ctx.workspace_id`, and answer 404 for a row of another workspace; the cross-workspace test checks it. |
 | Dashboard JSON for every signed-in user | The same, plus an allowlist entry and its `USER_ROUTES` line in the route inventory test, plus scoping to the caller in the handler. |
 | For external programs | Depend on `get_pat_user` (PAT with role check) or `get_auth_user` (bearer or Basic). |
 | Public | No dependency. Think about rate limiting, and about what the response reveals. |
