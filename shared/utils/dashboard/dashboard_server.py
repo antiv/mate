@@ -24,7 +24,11 @@ from shared.utils import audit_service
 from ..ai_disclosure import resolve_disclosure, validate_waiver
 from shared.utils.path_safety import resolve_within_base
 from shared.utils.models import DEFAULT_WORKSPACE_ID
-from shared.utils.workspaces import caller_access, project_in_workspace, roles_allow
+from shared.utils.workspaces import (
+    agent_names_of, agent_workspace, agents_outside, caller_access, config_workspace,
+    project_in_workspace, roles_allow, store_workspace, test_case_workspace, version_workspace,
+    workspace_of_project,
+)
 from server.request_context import RequestContext, get_request_context
 
 logger = logging.getLogger(__name__)
@@ -936,8 +940,63 @@ class DashboardServer:
         finally:
             session.close()
 
-    def _get_all_agent_configs(self, project_id: Optional[int] = None) -> List[Dict[str, Any]]:
-        """Get agent configurations from database, optionally filtered by project."""
+    def _require_in_workspace(self, ctx: RequestContext, *, agent_name: Optional[str] = None,
+                              config_id: Optional[int] = None, project_id: Optional[int] = None,
+                              version_id: Optional[int] = None, store_name: Optional[str] = None,
+                              test_case_id: Optional[int] = None) -> None:
+        """404 unless each row named belongs to the caller's workspace, so the answer
+        doesn't confirm that another workspace's row exists. An agent name with no
+        config (a hardcoded agent) belongs to the installation: it is reached from the
+        default workspace, by a platform administrator."""
+        session = self.db_client.get_session() if self.db_client else None
+        if not session:
+            raise HTTPException(status_code=503, detail="Database unavailable")
+        try:
+            found = []
+            if agent_name is not None:
+                workspace_id = agent_workspace(session, agent_name)
+                if workspace_id is None and ctx.is_platform_admin:
+                    workspace_id = DEFAULT_WORKSPACE_ID
+                found.append(("Agent", workspace_id))
+            if config_id is not None:
+                found.append(("Agent", config_workspace(session, config_id)))
+            if project_id is not None:
+                found.append(("Project", workspace_of_project(session, project_id)))
+            if version_id is not None:
+                found.append(("Version", version_workspace(session, version_id)))
+            if store_name is not None:
+                found.append(("Store", store_workspace(session, store_name)))
+            if test_case_id is not None:
+                found.append(("Test case", test_case_workspace(session, test_case_id)))
+        finally:
+            session.close()
+        for what, workspace_id in found:
+            if workspace_id != ctx.workspace_id:
+                raise HTTPException(status_code=404, detail=f"{what} not found")
+
+    def _check_agent_names(self, ctx: RequestContext, name: str, parents: List[str],
+                           config_id: Optional[int] = None) -> None:
+        """D1: an agent name is unique across the installation, and parent_agents name
+        agents of the same workspace. 409 or 400; neither says which workspace."""
+        session = self.db_client.get_session() if self.db_client else None
+        if not session:
+            raise HTTPException(status_code=503, detail="Database unavailable")
+        try:
+            taken = session.query(self.AgentConfig.id).filter(
+                self.AgentConfig.name == name, self.AgentConfig.id != config_id).first()
+            outside = agents_outside(session, ctx.workspace_id, parents)
+        finally:
+            session.close()
+        if taken:
+            raise HTTPException(status_code=409, detail="This name is taken")
+        if outside:
+            raise HTTPException(status_code=400,
+                                detail=f"Not an agent of this workspace: {', '.join(outside)}")
+
+    def _get_all_agent_configs(self, project_id: Optional[int] = None,
+                               workspace_id: Optional[int] = None) -> List[Dict[str, Any]]:
+        """Get agent configurations from database, optionally filtered by project and
+        workspace."""
         if not self.db_client:
             return []
         
@@ -947,6 +1006,9 @@ class DashboardServer:
         
         try:
             query = session.query(self.AgentConfig)
+            if workspace_id is not None:
+                query = query.join(self.Project, self.AgentConfig.project_id == self.Project.id).filter(
+                    self.Project.workspace_id == workspace_id)
             if project_id is not None:
                 query = query.filter(self.AgentConfig.project_id == project_id)
             configs = query.all()
@@ -1807,7 +1869,8 @@ class DashboardServer:
         finally:
             session.close()
 
-    def _export_agent_configs(self, search: str = None, root_agent: str = None, project_id: Optional[int] = None) -> Dict[str, Any]:
+    def _export_agent_configs(self, search: str = None, root_agent: str = None, project_id: Optional[int] = None,
+                              workspace_id: Optional[int] = None) -> Dict[str, Any]:
         """Export agent configurations to JSON format with optional filtering."""
         if not self.db_client:
             return {"error": "Database connection failed"}
@@ -1820,6 +1883,9 @@ class DashboardServer:
             from datetime import datetime
             # Get all configs first
             query = session.query(self.AgentConfig)
+            if workspace_id is not None:
+                query = query.join(self.Project, self.AgentConfig.project_id == self.Project.id).filter(
+                    self.Project.workspace_id == workspace_id)
             if project_id is not None:
                 query = query.filter(self.AgentConfig.project_id == project_id)
             all_configs = query.all()
@@ -2010,8 +2076,13 @@ class DashboardServer:
         )
         return service.restart_adk_server()
     
-    def _import_agent_configs(self, import_data: Dict[str, Any], overwrite: bool = False) -> Dict[str, Any]:
-        """Import agent configurations from JSON format."""
+    def _import_agent_configs(self, import_data: Dict[str, Any], overwrite: bool = False,
+                              workspace_id: int = DEFAULT_WORKSPACE_ID) -> Dict[str, Any]:
+        """Import agent configurations from JSON format into the workspace's projects.
+
+        An agent, block or trigger naming a project of another workspace is skipped,
+        and so is an agent whose name another workspace uses (D1), overwrite or not.
+        """
         if not self.db_client:
             return {"error": "Database connection failed"}
         
@@ -2030,11 +2101,33 @@ class DashboardServer:
             imported_count = 0
             skipped_count = 0
             errors = []
+            projects = {pid for (pid,) in session.query(self.Project.id).filter(
+                self.Project.workspace_id == workspace_id)}
+            names = [a.get("name") for a in import_data["agents"] if isinstance(a, dict)]
+            existing = {n for (n,) in session.query(self.AgentConfig.name).filter(self.AgentConfig.name.in_(names))}
+            new_names = set(names) - existing
             
             for agent_data in import_data["agents"]:
                 try:
+                    project_id = int(agent_data.get("project_id") or 1)
+                    if project_id not in projects:
+                        skipped_count += 1
+                        errors.append(f"Agent '{agent_data['name']}': project {project_id} not found")
+                        continue
+                    # A parent this file creates is checked as it stands in the file
+                    outside = [p for p in agents_outside(session, workspace_id, agent_data.get("parent_agents") or [])
+                               if p not in new_names]
+                    if outside:
+                        skipped_count += 1
+                        errors.append(f"Agent '{agent_data['name']}': not an agent of this workspace: "
+                                      f"{', '.join(outside)}")
+                        continue
                     # Check if agent already exists
                     existing_agent = session.query(self.AgentConfig).filter_by(name=agent_data["name"]).first()
+                    if existing_agent and existing_agent.project_id not in projects:
+                        skipped_count += 1
+                        errors.append(f"Agent '{agent_data['name']}': this name is taken")
+                        continue
                     
                     if existing_agent and not overwrite:
                         skipped_count += 1
@@ -2049,10 +2142,7 @@ class DashboardServer:
                                 if key == "parent_agents" and isinstance(value, list):
                                     setattr(existing_agent, key, json.dumps(value) if value else None)
                                 elif key == "project_id":
-                                    try:
-                                        setattr(existing_agent, key, int(value) if value is not None else 1)
-                                    except (TypeError, ValueError):
-                                        setattr(existing_agent, key, 1)
+                                    setattr(existing_agent, key, project_id)
                                 else:
                                     if key in ["description", "instruction"]:
                                         value = sanitize_agent_text(value)
@@ -2074,7 +2164,7 @@ class DashboardServer:
                             allowed_for_roles=agent_data.get("allowed_for_roles"),
                             tool_config=agent_data.get("tool_config"),
                             guardrail_config=agent_data.get("guardrail_config"),
-                            project_id=int(agent_data.get("project_id") or 1),
+                            project_id=project_id,
                             disabled=agent_data.get("disabled", False),
                             hardcoded=agent_data.get("hardcoded", False)
                         )
@@ -2097,6 +2187,9 @@ class DashboardServer:
                             block_project_id = int(block_data.get("project_id") or 1)
                             block_label = block_data.get("label", "").strip()
                             if not block_label:
+                                continue
+                            if block_project_id not in projects:
+                                errors.append(f"Memory block '{block_label}': project {block_project_id} not found")
                                 continue
                             
                             existing = session.query(MemoryBlock).filter(
@@ -2144,12 +2237,19 @@ class DashboardServer:
                 try:
                     for tdata in import_data["triggers"]:
                         try:
+                            # The trigger's agent decides its project
+                            agent = session.query(self.AgentConfig).filter_by(
+                                name=tdata.get("agent_name", "")).first()
+                            if not agent or agent.project_id not in projects:
+                                errors.append(f"Trigger '{tdata.get('name', 'Unknown')}': "
+                                              f"agent '{tdata.get('agent_name', '')}' not found")
+                                continue
                             trigger = self.AgentTrigger(
                                 name=tdata.get("name", "imported_trigger"),
                                 description=tdata.get("description"),
                                 trigger_type=tdata.get("trigger_type", "cron"),
                                 agent_name=tdata.get("agent_name", ""),
-                                project_id=1,  # will be overridden below if project mapping exists
+                                project_id=agent.project_id,
                                 prompt=tdata.get("prompt", ""),
                                 cron_expression=tdata.get("cron_expression"),
                                 webhook_path=None,    # regenerate — never carry over old path
@@ -2377,8 +2477,10 @@ class DashboardServer:
 
     def _import_template(self, template_id: Optional[str] = None, project_name: Optional[str] = None,
                          changed_by: str = None, template_dict: Optional[Dict[str, Any]] = None,
-                         substitutions: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        """Import a template: create project, agents, memory blocks. Apply name prefix to avoid collisions.
+                         substitutions: Optional[Dict[str, Any]] = None,
+                         workspace_id: int = DEFAULT_WORKSPACE_ID) -> Dict[str, Any]:
+        """Import a template: create a project in the workspace, its agents and memory
+        blocks. Apply name prefix to avoid collisions.
 
         Either ``template_id`` (loaded from the template library) or a pre-loaded ``template_dict``
         must be provided. ``substitutions`` is an optional map applied to every ``{{KEY}}`` placeholder
@@ -2413,8 +2515,7 @@ class DashboardServer:
         
         # Create project
         try:
-            # Templates are scoped in phase 2c; until then imports land in the default workspace
-            project = self._create_project(proj_name, project_data.get("description"), DEFAULT_WORKSPACE_ID)
+            project = self._create_project(proj_name, project_data.get("description"), workspace_id)
         except HTTPException as e:
             return {"error": str(e.detail)}
         
@@ -3401,7 +3502,7 @@ class DashboardServer:
                 selected_project_id = None
 
             projects = self._get_all_projects(ctx.workspace_id)
-            configs = self._get_all_agent_configs(selected_project_id) if selected_project_id else []
+            configs = self._get_all_agent_configs(selected_project_id, ctx.workspace_id) if selected_project_id else []
             return self.templates.TemplateResponse(request, "dashboard/agents.html", {
                 "request": request,
                 "page_title": "Agent Management",
@@ -3424,7 +3525,7 @@ class DashboardServer:
                 selected_project_id = None
 
             projects = self._get_all_projects(ctx.workspace_id)
-            configs = self._get_all_agent_configs(selected_project_id) if selected_project_id else []
+            configs = self._get_all_agent_configs(selected_project_id, ctx.workspace_id) if selected_project_id else []
             return self.templates.TemplateResponse(request, "dashboard/agents_visual.html", {
                 "request": request,
                 "page_title": "Agent Visual Builder",
@@ -4406,6 +4507,7 @@ class DashboardServer:
             ctx: RequestContext = Depends(get_request_context)
         ):
             """Toggle or set agent's expose_as_model flag."""
+            self._require_in_workspace(ctx, config_id=config_id)
             body = await request.json()
             expose = body.get("expose", False)
             db = self.db_client
@@ -4446,7 +4548,7 @@ class DashboardServer:
             project_id: Optional[int] = None
         ):
             """Get all agent configurations."""
-            return {"configs": self._get_all_agent_configs(project_id)}
+            return {"configs": self._get_all_agent_configs(project_id, ctx.workspace_id)}
 
         @self.app.get("/dashboard/api/agents/export", tags=["Dashboard - Agents"])
         async def export_agents(
@@ -4457,7 +4559,8 @@ class DashboardServer:
             project_id: Optional[int] = None
         ):
             """Export agent configurations as JSON with optional filtering."""
-            export_data = self._export_agent_configs(search=search, root_agent=root_agent, project_id=project_id)
+            export_data = self._export_agent_configs(search=search, root_agent=root_agent, project_id=project_id,
+                                                     workspace_id=ctx.workspace_id)
             
             if "error" in export_data:
                 raise HTTPException(status_code=500, detail=export_data["error"])
@@ -4610,6 +4713,11 @@ class DashboardServer:
 
             if not project_id:
                 raise HTTPException(status_code=400, detail="project_id is required")
+            try:
+                project_id = int(project_id)
+            except (TypeError, ValueError):
+                raise HTTPException(status_code=400, detail="project_id must be an integer")
+            self._require_in_workspace(ctx, project_id=project_id)
 
             export_data = self._export_agent_configs(root_agent=root_agent, project_id=project_id)
             if "error" in export_data:
@@ -4635,6 +4743,7 @@ class DashboardServer:
                 "file_size": None,
                 "root_agent": root_agent,
                 "app_name": app_name,
+                "workspace_id": ctx.workspace_id,
             }
 
             thread = threading.Thread(
@@ -4655,7 +4764,7 @@ class DashboardServer:
         ):
             """Poll the status of a background binary build."""
             entry = _active_builds.get(build_id)
-            if not entry:
+            if not entry or entry["workspace_id"] != ctx.workspace_id:
                 raise HTTPException(status_code=404, detail="Build not found")
 
             return {
@@ -4677,7 +4786,7 @@ class DashboardServer:
             from fastapi.responses import FileResponse
 
             entry = _active_builds.get(build_id)
-            if not entry:
+            if not entry or entry["workspace_id"] != ctx.workspace_id:
                 raise HTTPException(status_code=404, detail="Build not found")
             if entry["status"] != "completed":
                 raise HTTPException(status_code=400, detail=f"Build is not complete (status: {entry['status']})")
@@ -4703,11 +4812,13 @@ class DashboardServer:
             """Deep-copy a root agent and its sub-agent tree into another project."""
             if not ctx.is_admin:
                 raise HTTPException(status_code=403, detail="Forbidden")
+            self._require_in_workspace(ctx, agent_name=agent_name)
             body = await request.json()
             try:
                 target_project_id = int(body.get("target_project_id"))
             except (TypeError, ValueError):
                 raise HTTPException(status_code=400, detail="target_project_id is required")
+            self._require_in_workspace(ctx, project_id=target_project_id)
             result = self._clone_agent_tree(
                 root_name=agent_name,
                 target_project_id=target_project_id,
@@ -4730,7 +4841,7 @@ class DashboardServer:
             """Import agent configurations from JSON."""
             try:
                 import_data = await request.json()
-                result = self._import_agent_configs(import_data, overwrite)
+                result = self._import_agent_configs(import_data, overwrite, ctx.workspace_id)
                 
                 if "error" in result:
                     raise HTTPException(status_code=400, detail=result["error"])
@@ -4816,7 +4927,8 @@ class DashboardServer:
                 project_name = body.get("project_name")
                 if not template_id:
                     raise HTTPException(status_code=400, detail="template_id is required")
-                result = self._import_template(template_id, project_name=project_name, changed_by=ctx.user_id)
+                result = self._import_template(template_id, project_name=project_name, changed_by=ctx.user_id,
+                                               workspace_id=ctx.workspace_id)
                 if "error" in result:
                     raise HTTPException(status_code=400, detail=result["error"])
                 audit_service.log(
@@ -4858,6 +4970,7 @@ class DashboardServer:
                         status_code=400,
                         detail="project_id, root_agent, and template_id are required",
                     )
+                self._require_in_workspace(ctx, project_id=int(project_id))
                 result = self._create_template_from_agents(
                     project_id=int(project_id),
                     root_agent=str(root_agent).strip(),
@@ -4895,6 +5008,7 @@ class DashboardServer:
             ctx: RequestContext = Depends(get_request_context),
         ):
             """Get sync status: what changes would be applied if syncing with the source template."""
+            self._require_in_workspace(ctx, project_id=project_id)
             result = self._get_template_sync_status(project_id)
             if "error" in result:
                 raise HTTPException(status_code=400, detail=result["error"])
@@ -4911,6 +5025,7 @@ class DashboardServer:
                 project_id = body.get("project_id")
                 if not project_id:
                     raise HTTPException(status_code=400, detail="project_id is required")
+                self._require_in_workspace(ctx, project_id=int(project_id))
                 result = self._sync_template(int(project_id), changed_by=ctx.user_id)
                 if "error" in result:
                     raise HTTPException(status_code=400, detail=result["error"])
@@ -5093,6 +5208,8 @@ class DashboardServer:
                 "expose_as_model": expose_as_model,
                 "debug_mode": debug_mode
             }
+            self._require_in_workspace(ctx, project_id=config_data["project_id"] or 1)
+            self._check_agent_names(ctx, name, parent_agents_list)
             success = self._create_agent_config(config_data, changed_by=ctx.user_id)
             if success:
                 audit_service.log(ctx.user_id, audit_service.ACTION_AGENT_CREATE, audit_service.RESOURCE_AGENT, resource_id=name, details={"project_id": config_data.get("project_id")}, request=request)
@@ -5132,6 +5249,7 @@ class DashboardServer:
             debug_mode: bool = Form(False)
         ):
             """Update an agent configuration."""
+            self._require_in_workspace(ctx, config_id=config_id)
             if not description or not description.strip():
                 raise HTTPException(status_code=400, detail="Description is required")
             if not instruction or not instruction.strip():
@@ -5177,6 +5295,9 @@ class DashboardServer:
             # Anything else — including an empty field, which clears it — is a change.
             if model_api_key != STORED_SECRET_SENTINEL:
                 config_data["model_api_key"] = model_api_key or None
+            if config_data["project_id"] is not None:
+                self._require_in_workspace(ctx, project_id=config_data["project_id"])
+            self._check_agent_names(ctx, name, parent_agents_list, config_id)
             # Read before writing: switching the Art. 50 notice off, or back on, is
             # a compliance decision and gets its own entry rather than hiding
             # inside a generic agent.update.
@@ -5206,6 +5327,7 @@ class DashboardServer:
             delete_folder: bool = False
         ):
             """Delete an agent configuration and optionally its folder if not hardcoded."""
+            self._require_in_workspace(ctx, config_id=config_id)
             # Fetch config to know name and hardcoded flag
             agent_name = None
             agent_hardcoded = False
@@ -5256,6 +5378,7 @@ class DashboardServer:
         @self.app.post("/dashboard/api/agents/{agent_name}/create-folder", tags=["Dashboard - Agents"])
         async def create_agent_folder(agent_name: str, request: Request, ctx: RequestContext = Depends(get_request_context)):
             """Create agent folder from template for a specific agent."""
+            self._require_in_workspace(ctx, agent_name=agent_name)
             result = self._copy_template_agent(agent_name)
             
             if not result["success"] and not result["skipped"]:
@@ -5266,6 +5389,7 @@ class DashboardServer:
         @self.app.delete("/dashboard/api/agents/{agent_name}/delete-folder", tags=["Dashboard - Agents"])
         async def delete_agent_folder(agent_name: str, request: Request, ctx: RequestContext = Depends(get_request_context)):
             """Delete agent folder for a specific agent."""
+            self._require_in_workspace(ctx, agent_name=agent_name)
             result = self._delete_agent_folder(agent_name)
             
             if not result["success"] and result.get("error"):
@@ -5276,6 +5400,7 @@ class DashboardServer:
         @self.app.post("/dashboard/api/agents/{agent_name}/reinitialize", tags=["Dashboard - Agents"])
         async def reinitialize_agent(agent_name: str, request: Request, ctx: RequestContext = Depends(get_request_context)):
             """Reinitialize a specific agent with fresh configuration from database by proxying to ADK server."""
+            self._require_in_workspace(ctx, agent_name=agent_name)
             import httpx
             from shared.utils.utils import get_adk_config
             
@@ -5307,12 +5432,14 @@ class DashboardServer:
         @self.app.get("/dashboard/api/agents/{config_id}/versions", tags=["Dashboard - Agent Versions"])
         async def get_agent_versions(config_id: int, request: Request, ctx: RequestContext = Depends(get_request_context)):
             """Return all version snapshots for an agent config."""
+            self._require_in_workspace(ctx, config_id=config_id)
             versions = self._get_agent_versions(config_id)
             return {"success": True, "versions": versions}
 
         @self.app.post("/dashboard/api/agents/{config_id}/rollback/{version_id}", tags=["Dashboard - Agent Versions"])
         async def rollback_agent(config_id: int, version_id: int, request: Request, ctx: RequestContext = Depends(get_request_context)):
             """Rollback an agent config to a previous version snapshot."""
+            self._require_in_workspace(ctx, config_id=config_id)
             result = self._rollback_agent_config(config_id, version_id, changed_by=ctx.user_id)
             if result:
                 return {"success": True, "message": "Agent rolled back successfully", "config": result}
@@ -5321,6 +5448,7 @@ class DashboardServer:
         @self.app.put("/dashboard/api/agents/versions/{version_id}/tag", tags=["Dashboard - Agent Versions"])
         async def tag_agent_version(version_id: int, request: Request, ctx: RequestContext = Depends(get_request_context)):
             """Set or clear a tag on a specific version."""
+            self._require_in_workspace(ctx, version_id=version_id)
             body = await request.json()
             tag = body.get("tag", "")
             success = self._tag_agent_version(version_id, tag)
@@ -5337,6 +5465,7 @@ class DashboardServer:
             ctx: RequestContext = Depends(get_request_context)
         ):
             """Get File Search configuration for an agent (diagnostic endpoint)."""
+            self._require_in_workspace(ctx, agent_name=agent_name)
             if not self.db_client:
                 return {"success": False, "error": "Database not available"}
             
@@ -5388,6 +5517,7 @@ class DashboardServer:
             ctx: RequestContext = Depends(get_request_context)
         ):
             """Get all file search stores assigned to an agent."""
+            self._require_in_workspace(ctx, agent_name=agent_name)
             from shared.utils.file_search_service import FileSearchService
             service = FileSearchService(self.db_client)
             stores = service.get_stores_for_agent(agent_name)
@@ -5400,6 +5530,7 @@ class DashboardServer:
             ctx: RequestContext = Depends(get_request_context)
         ):
             """Get all files accessible to an agent from all its stores."""
+            self._require_in_workspace(ctx, agent_name=agent_name)
             from shared.utils.file_search_service import FileSearchService
             service = FileSearchService(self.db_client)
             files = service.list_files_for_agent(agent_name)
@@ -5414,6 +5545,7 @@ class DashboardServer:
             is_primary: bool = Form(False)
         ):
             """Assign a file search store to an agent."""
+            self._require_in_workspace(ctx, agent_name=agent_name, store_name=store_name)
             from shared.utils.file_search_service import FileSearchService
             service = FileSearchService(self.db_client)
             success = service.assign_store_to_agent(
@@ -5434,6 +5566,7 @@ class DashboardServer:
             store_name: str = Form(...)
         ):
             """Unassign a file search store from an agent."""
+            self._require_in_workspace(ctx, agent_name=agent_name, store_name=store_name)
             from shared.utils.file_search_service import FileSearchService
             service = FileSearchService(self.db_client)
             success = service.unassign_store_from_agent(
@@ -5468,8 +5601,11 @@ class DashboardServer:
                     return {"success": False, "error": "display_name is required"}
                 if not project_id:
                     return {"success": False, "error": "project_id is required"}
+                project_id = int(project_id)
             except Exception as e:
                 return {"success": False, "error": f"Invalid JSON: {str(e)}"}
+            # Before the store is created in the Gemini API
+            self._require_in_workspace(ctx, project_id=project_id, agent_name=agent_name or None)
             
             # First create the store in Gemini API
             gemini_result = create_file_search_store(display_name=display_name)
@@ -5510,6 +5646,7 @@ class DashboardServer:
             agent_name: str = Form(None)
         ):
             """Upload a file to a file search store."""
+            self._require_in_workspace(ctx, store_name=store_name, agent_name=agent_name or None)
             import tempfile
             from shared.utils.tools.file_search_tools import upload_file_to_store
             from shared.utils.file_search_service import FileSearchService
@@ -5577,6 +5714,7 @@ class DashboardServer:
             ctx: RequestContext = Depends(get_request_context)
         ):
             """List all files in a file search store."""
+            self._require_in_workspace(ctx, store_name=store_name)
             from shared.utils.file_search_service import FileSearchService
             service = FileSearchService(self.db_client)
             files = service.list_files_in_store(store_name)
@@ -5592,6 +5730,7 @@ class DashboardServer:
             value_search: Optional[str] = None
         ):
             """List memory blocks for an agent."""
+            self._require_in_workspace(ctx, agent_name=agent_name)
             if not self.db_client:
                 return {"success": False, "error": "Database not available"}
             
@@ -5641,6 +5780,7 @@ class DashboardServer:
             ctx: RequestContext = Depends(get_request_context)
         ):
             """Get a specific memory block."""
+            self._require_in_workspace(ctx, agent_name=agent_name)
             if not self.db_client:
                 return {"success": False, "error": "Database not available"}
             
@@ -5689,6 +5829,7 @@ class DashboardServer:
             preserve_on_migration: bool = Form(False)
         ):
             """Create a new memory block."""
+            self._require_in_workspace(ctx, agent_name=agent_name)
             if not self.db_client:
                 return {"success": False, "error": "Database not available"}
             
@@ -5753,6 +5894,7 @@ class DashboardServer:
             preserve_on_migration: Optional[bool] = Form(None)
         ):
             """Update a memory block."""
+            self._require_in_workspace(ctx, agent_name=agent_name)
             if not self.db_client:
                 return {"success": False, "error": "Database not available"}
             
@@ -5817,6 +5959,7 @@ class DashboardServer:
             ctx: RequestContext = Depends(get_request_context)
         ):
             """Delete a memory block."""
+            self._require_in_workspace(ctx, agent_name=agent_name)
             if not self.db_client:
                 return {"success": False, "error": "Database not available"}
             
@@ -5861,6 +6004,7 @@ class DashboardServer:
             ctx: RequestContext = Depends(get_request_context)
         ):
             """A memory block's history, newest first. Works for a deleted block by its id."""
+            self._require_in_workspace(ctx, agent_name=agent_name)
             project_id, error = self._memory_blocks_project(agent_name)
             if error:
                 return error
@@ -5876,6 +6020,7 @@ class DashboardServer:
             ctx: RequestContext = Depends(get_request_context)
         ):
             """Deleted blocks of the agent's project that can still be restored."""
+            self._require_in_workspace(ctx, agent_name=agent_name)
             project_id, error = self._memory_blocks_project(agent_name)
             if error:
                 return error
@@ -5894,6 +6039,7 @@ class DashboardServer:
             ctx: RequestContext = Depends(get_request_context)
         ):
             """Put a block back as it was in a version, recreating it if it was deleted."""
+            self._require_in_workspace(ctx, agent_name=agent_name)
             project_id, error = self._memory_blocks_project(agent_name)
             if error:
                 return error
@@ -5927,6 +6073,7 @@ class DashboardServer:
             
             if not store_name:
                 return {"success": False, "error": "store_name parameter is required"}
+            self._require_in_workspace(ctx, store_name=store_name)
             
             from shared.utils.file_search_service import FileSearchService
             service = FileSearchService(self.db_client)
@@ -5940,6 +6087,7 @@ class DashboardServer:
             ctx: RequestContext = Depends(get_request_context)
         ):
             """Get all file search stores in a project."""
+            self._require_in_workspace(ctx, project_id=project_id)
             from shared.utils.file_search_service import FileSearchService
             service = FileSearchService(self.db_client)
             stores = service.get_all_stores_for_project(project_id)
@@ -5953,6 +6101,7 @@ class DashboardServer:
             document_name: str = Form(...)
         ):
             """Delete a file from a file search store."""
+            self._require_in_workspace(ctx, store_name=store_name)
             from shared.utils.file_search_service import FileSearchService
             service = FileSearchService(self.db_client)
             success = service.delete_document(store_name, document_name)
@@ -5968,6 +6117,7 @@ class DashboardServer:
             store_name: str = Form(...)
         ):
             """Delete a file search store and remove it from all agents."""
+            self._require_in_workspace(ctx, store_name=store_name)
             from shared.utils.file_search_service import FileSearchService
             service = FileSearchService(self.db_client)
             result = service.delete_store(store_name)
@@ -6220,6 +6370,7 @@ class DashboardServer:
         @self.app.get("/dashboard/api/evals/agent/{agent_name}/versions-list", tags=["Dashboard - Evals"])
         async def list_agent_versions_for_eval(agent_name: str, request: Request, ctx: RequestContext = Depends(get_request_context)):
             """Return available config versions for an agent — used to populate the run modal dropdown."""
+            self._require_in_workspace(ctx, agent_name=agent_name)
             if not self.db_client:
                 return {"versions": []}
             session = self.db_client.get_session()
@@ -6268,7 +6419,8 @@ class DashboardServer:
                         self.TestCase.agent_name,
                         func.count(self.TestCase.id).label("test_case_count"),
                     )
-                    .filter(self.TestCase.is_active.is_(True))
+                    .filter(self.TestCase.is_active.is_(True),
+                            self.TestCase.workspace_id == ctx.workspace_id)
                     .group_by(self.TestCase.agent_name)
                     .all()
                 )
@@ -6299,6 +6451,7 @@ class DashboardServer:
         @self.app.get("/dashboard/api/evals/agent/{agent_name}/history", tags=["Dashboard - Evals"])
         async def get_eval_history(agent_name: str, request: Request, ctx: RequestContext = Depends(get_request_context)):
             """Score history per version for Chart.js: [{version_number, version_id, avg_score, pass_rate, run_at}]"""
+            self._require_in_workspace(ctx, agent_name=agent_name)
             if not self.db_client:
                 return {"history": []}
             session = self.db_client.get_session()
@@ -6343,6 +6496,7 @@ class DashboardServer:
         @self.app.get("/dashboard/api/evals/agent/{agent_name}", tags=["Dashboard - Evals"])
         async def get_agent_test_cases(agent_name: str, request: Request, ctx: RequestContext = Depends(get_request_context)):
             """Return all active test cases for an agent with each case's latest eval result."""
+            self._require_in_workspace(ctx, agent_name=agent_name)
             if not self.db_client:
                 return {"test_cases": []}
             session = self.db_client.get_session()
@@ -6395,7 +6549,7 @@ class DashboardServer:
             from shared.utils.feedback_service import extract_exchange, get_feedback_service
 
             service = get_feedback_service()
-            rows = service.list_rated_down(agent_name=agent_name.strip() or None)
+            rows = service.list_rated_down(ctx.workspace_id, agent_name=agent_name.strip() or None)
             events_by_session: Dict[str, Optional[List[Dict[str, Any]]]] = {}
             for row in rows:
                 sid = row["session_id"]
@@ -6412,18 +6566,19 @@ class DashboardServer:
                 row["question"] = question
                 row["answer"] = answer
                 row["session_available"] = events is not None
-            return {"responses": rows, "agents": service.rated_down_agents()}
+            return {"responses": rows, "agents": service.rated_down_agents(ctx.workspace_id)}
 
         # ── Suggested fixes: propose an instruction change, check it, apply it ──
         # Only the instruction is ever changed here. The request bodies carry no
         # other config field, and apply writes nothing else.
 
-        def _improve_context(session, body: Dict[str, Any]) -> Dict[str, Any]:
+        def _improve_context(session, body: Dict[str, Any], workspace_id: int) -> Dict[str, Any]:
             """The agent and the bad exchange a suggestion is for."""
             from shared.utils.models import EvalResult, ResponseFeedback
             test_case_id, feedback_id = body.get("test_case_id"), body.get("feedback_id")
             if isinstance(test_case_id, int) and not isinstance(test_case_id, bool):
-                tc = session.query(self.TestCase).filter(self.TestCase.id == test_case_id).first()
+                tc = session.query(self.TestCase).filter(
+                    self.TestCase.id == test_case_id, self.TestCase.workspace_id == workspace_id).first()
                 if not tc:
                     raise HTTPException(status_code=404, detail="Test case not found")
                 latest = (session.query(EvalResult).filter(EvalResult.test_case_id == tc.id)
@@ -6434,7 +6589,9 @@ class DashboardServer:
                         "source": {"test_case_id": tc.id}, "blocks_read": None}
             if isinstance(feedback_id, int) and not isinstance(feedback_id, bool):
                 from shared.utils.feedback_service import extract_exchange
-                fb = session.query(ResponseFeedback).filter(ResponseFeedback.id == feedback_id).first()
+                fb = session.query(ResponseFeedback).filter(
+                    ResponseFeedback.id == feedback_id,
+                    ResponseFeedback.agent_name.in_(agent_names_of(workspace_id))).first()
                 if not fb or not fb.agent_name:
                     raise HTTPException(status_code=404, detail="Rating not found")
                 from shared.utils.agent_improver import blocks_read
@@ -6451,8 +6608,10 @@ class DashboardServer:
                         "blocks_read": blocks_read(events, fb.message_id), "reported": reported}
             raise HTTPException(status_code=400, detail="test_case_id or feedback_id is required")
 
-        def _agent_row(session, agent_name: str):
-            config = session.query(self.AgentConfig).filter(self.AgentConfig.name == agent_name).first()
+        def _agent_row(session, agent_name: str, workspace_id: int):
+            config = session.query(self.AgentConfig).join(
+                self.Project, self.AgentConfig.project_id == self.Project.id).filter(
+                self.AgentConfig.name == agent_name, self.Project.workspace_id == workspace_id).first()
             if not config:
                 raise HTTPException(status_code=404, detail=f"Agent '{agent_name}' not found")
             return config
@@ -6507,8 +6666,8 @@ class DashboardServer:
             if not session:
                 raise HTTPException(status_code=503, detail="Database not available")
             try:
-                ctx = _improve_context(session, body)
-                config = _agent_row(session, ctx["agent_name"])
+                found = _improve_context(session, body, ctx.workspace_id)
+                config = _agent_row(session, found["agent_name"], ctx.workspace_id)
                 current = config.instruction or ""
                 description = config.description or ""
                 project_id = config.project_id
@@ -6530,17 +6689,17 @@ class DashboardServer:
                 session.close()
 
             requested = body.get("block_labels")
-            labels = ctx["blocks_read"] or []
+            labels = found["blocks_read"] or []
             if isinstance(requested, list):
                 # A second suggestion with other blocks ticked: the admin picks among
                 # the candidates the first one listed, so the test case is not rerun.
                 labels = [label for label in requested if isinstance(label, str)]
-            elif ctx["blocks_read"] is None and uses_blocks:
+            elif found["blocks_read"] is None and uses_blocks:
                 from shared.utils.eval_agent_runner import SnapshotAgent
                 events: List[Dict[str, Any]] = []
                 try:
                     async with SnapshotAgent(snapshot) as agent:
-                        await agent.ask(ctx["question"], events=events)
+                        await agent.ask(found["question"], events=events)
                 except Exception as e:
                     logger.info("Could not rerun the test case to find the blocks it reads: %s", e)
                 labels = blocks_read(events)
@@ -6552,13 +6711,13 @@ class DashboardServer:
 
             try:
                 proposal = await asyncio.to_thread(
-                    propose_instruction, current, description, ctx["question"], ctx["answer"],
-                    ctx["expected"], ctx["comment"], None, selected)
+                    propose_instruction, current, description, found["question"], found["answer"],
+                    found["expected"], found["comment"], None, selected)
             except ImproveError as e:
                 raise HTTPException(status_code=400, detail=str(e))
-            return {"agent_name": ctx["agent_name"], "source": ctx["source"],
-                    "question": ctx["question"], "answer": ctx["answer"],
-                    "reported": ctx.get("reported", False),
+            return {"agent_name": found["agent_name"], "source": found["source"],
+                    "question": found["question"], "answer": found["answer"],
+                    "reported": found.get("reported", False),
                     "current_instruction": current, **proposal,
                     "candidate_blocks": [{"label": k, "value": v, "selected": k in selected}
                                          for k, v in candidates.items()],
@@ -6581,7 +6740,7 @@ class DashboardServer:
             if not session:
                 raise HTTPException(status_code=503, detail="Database not available")
             try:
-                config = _agent_row(session, agent_name if isinstance(agent_name, str) else "")
+                config = _agent_row(session, agent_name if isinstance(agent_name, str) else "", ctx.workspace_id)
                 project_id = config.project_id
                 before = self._build_config_snapshot(config)
                 cases = (session.query(self.TestCase)
@@ -6643,10 +6802,13 @@ class DashboardServer:
             try:
                 from sqlalchemy import func
                 counts = dict(session.query(self.TestCase.agent_name, func.count(self.TestCase.id))
-                              .filter(self.TestCase.is_active.is_(True))
+                              .filter(self.TestCase.is_active.is_(True),
+                                      self.TestCase.workspace_id == ctx.workspace_id)
                               .group_by(self.TestCase.agent_name).all())
                 agents = session.query(self.AgentConfig.name, self.AgentConfig.model_name) \
-                    .filter(self.AgentConfig.type == "llm").order_by(self.AgentConfig.name).all()
+                    .join(self.Project, self.AgentConfig.project_id == self.Project.id) \
+                    .filter(self.AgentConfig.type == "llm", self.Project.workspace_id == ctx.workspace_id) \
+                    .order_by(self.AgentConfig.name).all()
                 return {"agents": [{"name": name, "model_name": model, "active_cases": counts.get(name, 0)}
                                    for name, model in agents]}
             finally:
@@ -6660,7 +6822,7 @@ class DashboardServer:
             if not session:
                 raise HTTPException(status_code=503, detail="Database not available")
             try:
-                config = _agent_row(session, agent_name)
+                config = _agent_row(session, agent_name, ctx.workspace_id)
                 versions = (session.query(self.AgentConfigVersion)
                             .filter(self.AgentConfigVersion.agent_config_id == config.id)
                             .order_by(self.AgentConfigVersion.version_number.desc()).limit(50).all())
@@ -6701,7 +6863,7 @@ class DashboardServer:
             if not session:
                 raise HTTPException(status_code=503, detail="Database not available")
             try:
-                config = _agent_row(session, agent_name if isinstance(agent_name, str) else "")
+                config = _agent_row(session, agent_name if isinstance(agent_name, str) else "", ctx.workspace_id)
                 current = self._build_config_snapshot(config)
                 variants = []
                 for i, raw in enumerate(raw_variants):
@@ -6817,7 +6979,7 @@ class DashboardServer:
             if not session:
                 raise HTTPException(status_code=503, detail="Database not available")
             try:
-                config = _agent_row(session, agent_name if isinstance(agent_name, str) else "")
+                config = _agent_row(session, agent_name if isinstance(agent_name, str) else "", ctx.workspace_id)
                 config_id, name, current = config.id, config.name, config.instruction or ""
                 project_id = config.project_id
             finally:
@@ -6890,10 +7052,16 @@ class DashboardServer:
             if not session:
                 raise HTTPException(status_code=503, detail="Database session not available")
             try:
+                workspace_id = agent_workspace(session, agent_name)
+                if workspace_id is None and ctx.is_platform_admin:
+                    workspace_id = DEFAULT_WORKSPACE_ID  # a hardcoded agent, as _require_in_workspace
+                if workspace_id != ctx.workspace_id:
+                    raise HTTPException(status_code=404, detail="Agent not found")
                 if source_feedback_id is not None:
                     from shared.utils.models import ResponseFeedback
                     if not session.query(ResponseFeedback.id).filter(
-                            ResponseFeedback.id == source_feedback_id).first():
+                            ResponseFeedback.id == source_feedback_id,
+                            ResponseFeedback.agent_name.in_(agent_names_of(workspace_id))).first():
                         raise HTTPException(status_code=400, detail="source_feedback_id does not exist")
                     existing = session.query(self.TestCase.id).filter(
                         self.TestCase.source_feedback_id == source_feedback_id,
@@ -6912,6 +7080,7 @@ class DashboardServer:
                     threshold=float(body.get("threshold", 0.7)),
                     created_by=ctx.user_id,
                     source_feedback_id=source_feedback_id,
+                    workspace_id=workspace_id,
                 )
                 session.add(tc)
                 session.commit()
@@ -6929,6 +7098,7 @@ class DashboardServer:
         @self.app.put("/dashboard/api/evals/{test_case_id}", tags=["Dashboard - Evals"])
         async def update_test_case(test_case_id: int, request: Request, ctx: RequestContext = Depends(get_request_context)):
             """Update a test case's fields."""
+            self._require_in_workspace(ctx, test_case_id=test_case_id)
             body = await request.json()
             if not self.db_client:
                 raise HTTPException(status_code=503, detail="Database not available")
@@ -6960,6 +7130,7 @@ class DashboardServer:
         @self.app.delete("/dashboard/api/evals/{test_case_id}", tags=["Dashboard - Evals"])
         async def delete_test_case(test_case_id: int, request: Request, ctx: RequestContext = Depends(get_request_context)):
             """Soft-delete a test case (sets is_active=False)."""
+            self._require_in_workspace(ctx, test_case_id=test_case_id)
             if not self.db_client:
                 raise HTTPException(status_code=503, detail="Database not available")
             session = self.db_client.get_session()
@@ -6991,6 +7162,7 @@ class DashboardServer:
             If results is empty, returns a dry-run response with the list of inputs
             that need to be evaluated (for the version history modal "Run Evals" flow).
             """
+            self._require_in_workspace(ctx, version_id=version_id)
             body = await request.json()
             # submitted is optional — if absent or empty, agent is invoked automatically
             submitted = body.get("results", [])
@@ -7017,7 +7189,8 @@ class DashboardServer:
                 # Fetch active test cases for this agent
                 test_cases = (
                     session.query(self.TestCase)
-                    .filter(self.TestCase.agent_name == agent_name, self.TestCase.is_active.is_(True))
+                    .filter(self.TestCase.agent_name == agent_name, self.TestCase.is_active.is_(True),
+                            self.TestCase.workspace_id == ctx.workspace_id)
                     .all()
                 )
 
@@ -7150,6 +7323,7 @@ class DashboardServer:
             Body: {"version_id": int, "actual_output"?: str}
             If actual_output is omitted the agent is invoked automatically.
             """
+            self._require_in_workspace(ctx, test_case_id=test_case_id)
             body = await request.json()
             actual_output = (body.get("actual_output") or "").strip()
             version_id = body.get("version_id")
@@ -7169,6 +7343,7 @@ class DashboardServer:
 
                 if not actual_output:
                     from shared.utils.eval_agent_runner import SnapshotAgent
+                    self._require_in_workspace(ctx, version_id=version_id)
                     version = session.query(self.AgentConfigVersion).filter(
                         self.AgentConfigVersion.id == version_id).first()
                     if not version:
@@ -7216,7 +7391,7 @@ class DashboardServer:
             if not ctx.is_admin:
                 return RedirectResponse(url="/dashboard/workroom", status_code=302)
             projects = self._get_all_projects(ctx.workspace_id)
-            agents = self._get_all_agent_configs()
+            agents = self._get_all_agent_configs(workspace_id=ctx.workspace_id)
             return self.templates.TemplateResponse(request, "dashboard/triggers.html", {
                 "request": request,
                 "page_title": "Triggers",
@@ -7233,7 +7408,7 @@ class DashboardServer:
             if not ctx.is_admin:
                 return RedirectResponse(url="/dashboard/workroom", status_code=302)
             projects = self._get_all_projects(ctx.workspace_id)
-            agents = self._get_all_agent_configs()
+            agents = self._get_all_agent_configs(workspace_id=ctx.workspace_id)
             return self.templates.TemplateResponse(request, "dashboard/integrations.html", {
                 "request": request,
                 "page_title": "Integrations",
@@ -7263,7 +7438,7 @@ class DashboardServer:
         @self.app.get("/dashboard/workroom", response_class=HTMLResponse, tags=["Dashboard - Pages"])
         async def dashboard_workroom(request: Request, agent: Optional[str] = None, session: Optional[str] = None, ctx: RequestContext = Depends(get_request_context)):
             is_admin = ctx.is_admin
-            all_agents = self._get_all_agent_configs()
+            all_agents = self._get_all_agent_configs(workspace_id=ctx.workspace_id)
             # The root agents (no parent_agents) of the current workspace the caller
             # may use; the RBAC check refuses the others at the model call anyway
             project_ids = {p["id"] for p in self._get_all_projects(ctx.workspace_id)}
@@ -7307,6 +7482,11 @@ class DashboardServer:
             session_id = body.get("session_id", "").strip()
             if not agent or not user_id or not session_id:
                 raise HTTPException(status_code=400, detail="agent, user_id, session_id required")
+            # The session is read with the server's rights: only one of the caller's
+            # own, as the proxy allows, on an agent of their workspace
+            if user_id != ctx.user_id and not ctx.is_admin:
+                raise HTTPException(status_code=404, detail="Session not found")
+            self._require_in_workspace(ctx, agent_name=agent)
 
             adk_session_url = f"http://{self.adk_host}:{self.adk_port}/apps/{agent}/users/{user_id}/sessions/{session_id}"
             try:
@@ -7793,7 +7973,7 @@ class DashboardServer:
         async def dashboard_alerts(request: Request, ctx: RequestContext = Depends(get_request_context)):
             if not ctx.is_admin:
                 return RedirectResponse(url="/dashboard/workroom", status_code=302)
-            agents = self._get_all_agent_configs()
+            agents = self._get_all_agent_configs(workspace_id=ctx.workspace_id)
             return self.templates.TemplateResponse(request, "dashboard/alerts.html", {
                 "request": request,
                 "page_title": "Alerts",

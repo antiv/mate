@@ -13,8 +13,9 @@ import logging
 from typing import Dict, Any, Optional
 from google.adk.tools.tool_context import ToolContext
 from ..database_client import get_database_client
-from ..models import AgentConfig
+from ..models import DEFAULT_WORKSPACE_ID, AgentConfig
 from ..user_service import get_user_service
+from ..workspaces import agent_workspace
 from ...utils.utils import mask_config_secrets, reload_agent_cache
 
 logger = logging.getLogger(__name__)
@@ -71,6 +72,15 @@ def _is_admin_user(tool_context: ToolContext) -> bool:
     user_service = get_user_service()
     roles = user_service.get_user_roles(user_id)
     return 'admin' in roles
+
+
+def _same_workspace(session, agent_name: str, current_agent_name: Optional[str]) -> bool:
+    """True if agent_name is an agent of the calling agent's workspace (D1). The tools
+    reach no other workspace's agents, by name or as a parent. A caller with no config
+    (a hardcoded agent) is in the default workspace."""
+    current = (agent_workspace(session, current_agent_name) if current_agent_name else None) \
+        or DEFAULT_WORKSPACE_ID
+    return agent_workspace(session, agent_name) == current
 
 
 def _get_current_agent_config(agent_name: str) -> Optional[Dict[str, Any]]:
@@ -278,6 +288,8 @@ def create_agent(
                 parent_exists = session.query(AgentConfig).filter(
                     AgentConfig.name == requested_parent
                 ).first()
+                if parent_exists and not _same_workspace(session, requested_parent, current_agent_name):
+                    parent_exists = None
 
                 if not parent_exists:
                     if parent_agent and parent_agent.strip():
@@ -417,6 +429,8 @@ def delete_agent(
             agent_config = session.query(AgentConfig).filter(
                 AgentConfig.name == agent_name
             ).first()
+            if agent_config and not _same_workspace(session, agent_name, current_agent_name):
+                agent_config = None
             
             if not agent_config:
                 return {
@@ -545,6 +559,8 @@ def update_agent(
             agent_config = session.query(AgentConfig).filter(
                 AgentConfig.name == agent_name
             ).first()
+            if agent_config and not _same_workspace(session, agent_name, current_agent_name):
+                agent_config = None
             
             if not agent_config:
                 return {
@@ -583,6 +599,8 @@ def update_agent(
                     parent_exists = session.query(AgentConfig).filter(
                         AgentConfig.name == parent_agent.strip()
                     ).first()
+                    if parent_exists and not _same_workspace(session, parent_agent.strip(), current_agent_name):
+                        parent_exists = None
                     
                     if not parent_exists:
                         return {

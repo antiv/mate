@@ -26,7 +26,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 
 from shared.utils.agent_improver import blocks_read, propose_instruction
 from shared.utils.memory_blocks_service import MemoryBlocksService, block_overrides
-from shared.utils.models import (AgentConfig, AgentConfigVersion, Base, MemoryBlock, ResponseFeedback,
+from shared.utils.models import (AgentConfig, AgentConfigVersion, Base, MemoryBlock, Project, ResponseFeedback,
                                  TestCase)
 from shared.test.request_context_helpers import as_caller
 
@@ -211,6 +211,7 @@ class TestImproveBlockEndpoints(unittest.TestCase):
         self.audit = patch("shared.utils.audit_service.log").start()
 
         session = db.get_session()
+        session.add_all([Project(id=1, name="p1"), Project(id=2, name="p2")])
         session.add_all([
             AgentConfig(name="bot", type="llm", instruction="Be helpful.", project_id=1,
                         tool_config='{"memory_blocks": true}'),

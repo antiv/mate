@@ -99,15 +99,15 @@ class TestAgentManagerSimple(unittest.TestCase):
         # Use lambda to ensure it returns a list when called
         mock_subagent2.get_parent_agents = lambda: ["parent_agent"]
         
-        # Mock query filter chain - filter() is called with two arguments
+        # Mock query chain: join() to the project, then one filter() with the conditions
         mock_filter_result = Mock()
         mock_filter_result.all.return_value = [mock_subagent1, mock_subagent2]
         mock_query = Mock()
-        # filter() is called once with two filter conditions
-        mock_query.filter.return_value = mock_filter_result
+        mock_query.join.return_value.filter.return_value = mock_filter_result
         self.mock_session.query.return_value = mock_query
         
-        result = self.agent_manager.get_subagents("parent_agent")
+        with patch("shared.utils.agent_manager.agent_workspace", return_value=1):
+            result = self.agent_manager.get_subagents("parent_agent")
         
         self.assertEqual(len(result), 2)
         self.assertEqual(result[0], mock_subagent1)

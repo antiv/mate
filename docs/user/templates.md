@@ -27,7 +27,8 @@ instead of an empty page.
    Code, Content, Demo).
 3. Import it.
 
-The import creates a new project with the template's agents and memory blocks.
+The import creates a new project in the current workspace, with the template's
+agents and memory blocks.
 Agent names are derived from the project name, so the same template can be imported
 more than once without the copies colliding.
 
@@ -65,9 +66,11 @@ block (see [Memory blocks](memory-blocks.md)) and apply the updates again.
 3. Enter a **Template ID** (letters, numbers, hyphens and underscores; it becomes the
    file name), a display name, a description and a category.
 
-The template then appears in the Template Library on this installation. It is saved
-as a file in the server's `templates/agent_templates/` folder, so it can be copied
-to another installation or contributed to the project.
+The template then appears in the Template Library on this installation, for every
+workspace. It is saved as a file in the server's `templates/agent_templates/`
+folder, so it can be copied to another installation or contributed to the project.
+Because the library is shared, only a platform administrator can save or delete a
+template.
 
 ## Templates or export?
 

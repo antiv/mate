@@ -30,7 +30,7 @@ the next message already uses the new configuration.
 
 | Field | What to enter |
 |---|---|
-| **Name** | A unique identifier. Other agents and triggers refer to the agent by this name. |
+| **Name** | A unique identifier on the whole installation. Other agents and triggers refer to the agent by this name. A name already in use, in any workspace, is refused with "This name is taken". |
 | **Type** | **LLM** for an ordinary agent. **Loop** repeats its sub-agents up to **Max Iterations** times. **Graph** runs its sub-agents as a workflow with routing. |
 | **Project** | The project the agent belongs to. |
 | **Model Name** | Which model answers. See [Choosing a model](#choosing-a-model). |
@@ -70,7 +70,7 @@ Three optional fields change where the model comes from:
 
 **Parent Agents** lists the agents this one works under, as a JSON list of names.
 Click the field to pick them. An agent with no parents is a root; an agent can have
-more than one parent.
+more than one parent. Parents must be agents of the same workspace.
 
 A parent hands a request to the sub-agent whose description fits it best. Build a
 tree by giving the root a broad instruction ("route each request to the right
@@ -138,6 +138,11 @@ EU AI Act requires the notice unless it is already obvious to the person.
   project, optionally with the project's memory blocks and file-search stores. The
   source is not changed.
 - **Export** and **Import** move a project's agents between installations as a file.
+  An import only writes to projects of the current workspace: an agent, memory block
+  or trigger naming another project is skipped and listed in the result, and so is
+  an agent whose name another workspace uses, even with overwriting on. An imported
+  trigger goes to the project of its agent, and is skipped when that agent is not in
+  the workspace.
 - **Save as Template** turns a root agent and its tree into a reusable template.
 - **Download Binary** builds a standalone executable of an agent.
 - **Reload All** makes every agent pick up its configuration again, for the rare

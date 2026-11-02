@@ -27,7 +27,7 @@ from sqlalchemy.pool import StaticPool
 
 from shared.utils.eval_playground import Case, Variant, add_costs, run_variant, summarize
 from shared.utils.eval_runner import EvalRunner
-from shared.utils.models import AgentConfig, AgentConfigVersion, Base, TestCase, TokenUsageLog
+from shared.utils.models import AgentConfig, AgentConfigVersion, Base, Project, TestCase, TokenUsageLog
 from shared.test.request_context_helpers import as_caller
 
 PROJECT_ROOT = Path(__file__).parent.parent.parent
@@ -167,6 +167,7 @@ class TestEndpoints(_Db):
         self.client = TestClient(app)
 
         session = self.Session()
+        session.add(Project(id=1, name="p"))
         bot = AgentConfig(name="bot", type="llm", model_name="m-current", instruction="CURRENT", project_id=1)
         other = AgentConfig(name="other", type="llm", model_name="m", instruction="O", project_id=1)
         session.add_all([bot, other])

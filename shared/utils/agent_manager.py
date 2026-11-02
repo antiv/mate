@@ -17,7 +17,8 @@ from google.genai import types
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, create_model
 from .database_client import get_database_client
-from .models import AgentConfig, Project
+from .models import DEFAULT_WORKSPACE_ID, AgentConfig, Project
+from .workspaces import agent_workspace
 
 logger = logging.getLogger(__name__)
 
@@ -150,18 +151,23 @@ class AgentManager:
             session.close()
     
     def get_subagents(self, parent_name: str) -> List[AgentConfig]:
-        """Get all subagents for a given parent agent."""
+        """Get all subagents for a given parent agent, in the parent's workspace (D1):
+        a name can't link two workspaces. A parent with no config (a hardcoded agent)
+        belongs to the default workspace."""
         session = self.get_session()
         if not session:
             logger.error("Failed to get database session")
             return []
         
         try:
+            workspace_id = agent_workspace(session, parent_name) or DEFAULT_WORKSPACE_ID
             # Query for agents that have the parent_name in their parent_agents JSON array
             # This works for SQLite, PostgreSQL, and MySQL with JSON support
-            subagents = session.query(AgentConfig).filter(
+            subagents = session.query(AgentConfig).join(
+                Project, AgentConfig.project_id == Project.id).filter(
                 AgentConfig.parent_agents.like(f'%"{parent_name}"%'),
-                AgentConfig.disabled.is_(False)
+                AgentConfig.disabled.is_(False),
+                Project.workspace_id == workspace_id,
             ).all()
             
             # Filter to ensure exact matches (in case of partial string matches)

@@ -25,7 +25,7 @@ from sqlalchemy.pool import StaticPool
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from shared.utils.agent_improver import ImproveError, propose_instruction
-from shared.utils.models import (AgentConfig, AgentConfigVersion, Base, EvalResult,
+from shared.utils.models import (AgentConfig, AgentConfigVersion, Base, EvalResult, Project,
                                  ResponseFeedback, TestCase)
 from shared.test.request_context_helpers import as_caller
 
@@ -112,6 +112,7 @@ class TestImproveEndpoints(unittest.TestCase):
         self.client = TestClient(app)
 
         session = self.Session()
+        session.add(Project(id=1, name="p"))
         session.add(AgentConfig(name="bot", type="llm", instruction="OLD", description="d",
                                 tool_config='{"google_search": true}', project_id=1))
         session.flush()

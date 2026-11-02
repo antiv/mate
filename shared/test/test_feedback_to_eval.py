@@ -27,7 +27,7 @@ from sqlalchemy.pool import StaticPool
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from shared.utils.feedback_service import FeedbackService, extract_exchange
-from shared.utils.models import (Base, LangGraphEvent, LangGraphSession,
+from shared.utils.models import (AgentConfig, Base, LangGraphEvent, LangGraphSession, Project,
                                  ResponseFeedback, TestCase)
 from shared.test.request_context_helpers import as_caller
 
@@ -104,6 +104,10 @@ class _DbTestCase(unittest.TestCase):
         with patch("shared.utils.feedback_service.get_database_client",
                    return_value=self.db_client):
             self.service = FeedbackService()
+        # The ratings' agents, in the default workspace
+        self._add(Project(id=1, name="p"))
+        self._add(AgentConfig(name="a", type="llm", project_id=1),
+                  AgentConfig(name="b", type="llm", project_id=1))
 
     def tearDown(self):
         self.engine.dispose()
@@ -123,30 +127,30 @@ class TestListRatedDown(_DbTestCase):
     def test_lists_only_thumbs_down(self):
         self._add(ResponseFeedback(session_id="s", message_id="m1", rating="up", agent_name="a"),
                   ResponseFeedback(session_id="s", message_id="m2", rating="down", agent_name="a"))
-        rows = self.service.list_rated_down()
+        rows = self.service.list_rated_down(1)
         self.assertEqual([r["message_id"] for r in rows], ["m2"])
         self.assertIsNone(rows[0]["test_case_id"])
 
     def test_filters_by_agent(self):
         self._add(ResponseFeedback(session_id="s", message_id="m1", rating="down", agent_name="a"),
                   ResponseFeedback(session_id="s", message_id="m2", rating="down", agent_name="b"))
-        self.assertEqual([r["message_id"] for r in self.service.list_rated_down(agent_name="b")],
+        self.assertEqual([r["message_id"] for r in self.service.list_rated_down(1, agent_name="b")],
                          ["m2"])
-        self.assertEqual(self.service.rated_down_agents(), ["a", "b"])
+        self.assertEqual(self.service.rated_down_agents(1), ["a", "b"])
 
     def test_links_the_active_test_case_made_from_it(self):
         fb_id, = self._add(ResponseFeedback(session_id="s", message_id="m", rating="down",
                                             agent_name="a"))
         tc_id, = self._add(TestCase(agent_name="a", input="q", expected_output="e",
                                     source_feedback_id=fb_id))
-        self.assertEqual(self.service.list_rated_down()[0]["test_case_id"], tc_id)
+        self.assertEqual(self.service.list_rated_down(1)[0]["test_case_id"], tc_id)
 
     def test_a_deactivated_test_case_frees_the_response(self):
         fb_id, = self._add(ResponseFeedback(session_id="s", message_id="m", rating="down",
                                             agent_name="a"))
         self._add(TestCase(agent_name="a", input="q", expected_output="e",
                            source_feedback_id=fb_id, is_active=False))
-        self.assertIsNone(self.service.list_rated_down()[0]["test_case_id"])
+        self.assertIsNone(self.service.list_rated_down(1)[0]["test_case_id"])
 
 
 class TestLangGraphEventsById(_DbTestCase):
@@ -242,7 +246,7 @@ class TestDashboardEndpoints(_DbTestCase):
         resp = self._create(source_feedback_id=fb_id)
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.json()["test_case"]["source_feedback_id"], fb_id)
-        self.assertEqual(self.service.list_rated_down()[0]["test_case_id"],
+        self.assertEqual(self.service.list_rated_down(1)[0]["test_case_id"],
                          resp.json()["test_case"]["id"])
 
     def test_the_same_rating_cannot_become_two_test_cases(self):

@@ -38,8 +38,8 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.orm import Mapper, Session, attributes
 
 from .models import (
-    DEFAULT_WORKSPACE_ID, AgentConfig, Project, User, WidgetApiKey, Workspace, WorkspaceMember,
-    parse_roles,
+    DEFAULT_WORKSPACE_ID, AgentConfig, AgentConfigVersion, FileSearchStore, Project, TestCase,
+    User, WidgetApiKey, Workspace, WorkspaceMember, parse_roles,
 )
 
 if TYPE_CHECKING:
@@ -221,6 +221,50 @@ def agent_workspace(session: Session, agent_name: str) -> Optional[int]:
     return session.query(Project.workspace_id).join(
         AgentConfig, AgentConfig.project_id == Project.id).filter(
         AgentConfig.name == agent_name).limit(1).scalar()
+
+
+def config_workspace(session: Session, config_id: int) -> Optional[int]:
+    """The workspace of the agent config, or None for no such config."""
+    return session.query(Project.workspace_id).join(
+        AgentConfig, AgentConfig.project_id == Project.id).filter(
+        AgentConfig.id == config_id).scalar()
+
+
+def version_workspace(session: Session, version_id: int) -> Optional[int]:
+    """The workspace of the agent a config version belongs to, or None."""
+    return session.query(Project.workspace_id).join(
+        AgentConfig, AgentConfig.project_id == Project.id).join(
+        AgentConfigVersion, AgentConfigVersion.agent_config_id == AgentConfig.id).filter(
+        AgentConfigVersion.id == version_id).scalar()
+
+
+def store_workspace(session: Session, store_name: str) -> Optional[int]:
+    """The workspace of a file search store's project, or None for an unknown store."""
+    return session.query(Project.workspace_id).join(
+        FileSearchStore, FileSearchStore.project_id == Project.id).filter(
+        FileSearchStore.store_name == store_name).scalar()
+
+
+def test_case_workspace(session: Session, test_case_id: int) -> Optional[int]:
+    """The workspace of an eval test case, or None for no such case."""
+    return session.query(TestCase.workspace_id).filter(TestCase.id == test_case_id).scalar()
+
+
+def agent_names_of(workspace_id: int):
+    """A subquery of the names of the workspace's agents, for an IN filter."""
+    return select(AgentConfig.name).join(Project, AgentConfig.project_id == Project.id).where(
+        Project.workspace_id == workspace_id).scalar_subquery()
+
+
+def agents_outside(session: Session, workspace_id: int, names: List[str]) -> List[str]:
+    """Those of the names that aren't agents of the workspace (D1: parent_agents stay
+    within it). A name with no config counts as the default workspace's: hardcoded
+    agents belong to the installation, and 1.x lets parent_agents name anything."""
+    found = dict(session.query(AgentConfig.name, Project.workspace_id).join(
+        Project, AgentConfig.project_id == Project.id).filter(
+        AgentConfig.name.in_(names)).all()) if names else {}
+    return [name for name in names
+            if found.get(name, DEFAULT_WORKSPACE_ID) != workspace_id]
 
 
 # Callers that run an agent on their own: the trigger runner, for the trigger's agent.

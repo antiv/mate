@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from .database_client import get_database_client
 from .models import ResponseFeedback, TestCase
+from .workspaces import agent_names_of
 
 logger = logging.getLogger(__name__)
 
@@ -146,17 +147,19 @@ class FeedbackService:
             session.close()
 
 
-    def list_rated_down(self, agent_name: Optional[str] = None,
+    def list_rated_down(self, workspace_id: int, agent_name: Optional[str] = None,
                         limit: int = 50) -> List[Dict[str, Any]]:
         """
-        Most recent thumbs-down ratings, each with the active test case made from
-        it, if any, as `test_case_id`.
+        Most recent thumbs-down ratings of the workspace's agents, each with the
+        active test case made from it, if any, as `test_case_id`.
         """
         session = self._get_session()
         if not session:
             return []
         try:
-            query = session.query(ResponseFeedback).filter(ResponseFeedback.rating == 'down')
+            query = session.query(ResponseFeedback).filter(
+                ResponseFeedback.rating == 'down',
+                ResponseFeedback.agent_name.in_(agent_names_of(workspace_id)))
             if agent_name:
                 query = query.filter(ResponseFeedback.agent_name == agent_name)
             rows = query.order_by(ResponseFeedback.updated_at.desc()).limit(limit).all()
@@ -184,15 +187,15 @@ class FeedbackService:
         finally:
             session.close()
 
-    def rated_down_agents(self) -> List[str]:
-        """Agents with at least one thumbs-down, for the filter."""
+    def rated_down_agents(self, workspace_id: int) -> List[str]:
+        """The workspace's agents with at least one thumbs-down, for the filter."""
         session = self._get_session()
         if not session:
             return []
         try:
             rows = session.query(ResponseFeedback.agent_name).filter(
                 ResponseFeedback.rating == 'down',
-                ResponseFeedback.agent_name.isnot(None),
+                ResponseFeedback.agent_name.in_(agent_names_of(workspace_id)),
             ).distinct().all()
             return sorted(r[0] for r in rows)
         except Exception as e:
