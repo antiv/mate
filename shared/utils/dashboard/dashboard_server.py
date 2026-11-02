@@ -23,7 +23,7 @@ from fastapi.staticfiles import StaticFiles
 from shared.utils import audit_service
 from ..ai_disclosure import resolve_disclosure, validate_waiver
 from shared.utils.path_safety import resolve_within_base
-from shared.utils.platform_only import features_added, features_of, has_code_folder
+from shared.utils.platform_only import features_added, features_of, has_code_folder, is_agent_name
 from shared.utils.models import DEFAULT_WORKSPACE_ID
 from shared.utils.workspaces import (
     agent_names_of, agent_workspace, agents_outside, caller_access, config_workspace,
@@ -1019,16 +1019,23 @@ class DashboardServer:
         """D1: an agent name is unique across the installation, and parent_agents name
         agents of the same workspace. 409 or 400; neither says which workspace. For a
         caller who is no platform administrator, a name with a folder in agents/ is
-        taken too: the agent would run that folder's code (platform_only.py)."""
+        taken too: the agent would run that folder's code (platform_only.py).
+
+        A new name must be one ADK accepts (is_agent_name), 400 otherwise: the name
+        becomes a folder under agents/ and a LIKE pattern. An agent keeps the name it has."""
         session = self.db_client.get_session() if self.db_client else None
         if not session:
             raise HTTPException(status_code=503, detail="Database unavailable")
         try:
+            current = session.query(self.AgentConfig.name).filter(
+                self.AgentConfig.id == config_id).scalar() if config_id else None
+            if name != current and not is_agent_name(name):
+                raise HTTPException(status_code=400, detail=(
+                    "An agent name starts with a letter or an underscore and holds only "
+                    "letters, digits and underscores"))
             taken = session.query(self.AgentConfig.id).filter(
                 self.AgentConfig.name == name, self.AgentConfig.id != config_id).first()
             if not taken and not ctx.is_platform_admin:
-                current = session.query(self.AgentConfig.name).filter(
-                    self.AgentConfig.id == config_id).scalar() if config_id else None
                 taken = name != current and has_code_folder(self.project_root / "agents", name)
             outside = agents_outside(session, ctx.workspace_id, parents)
         finally:
@@ -1656,7 +1663,8 @@ class DashboardServer:
         # Outside the try so a traversal attempt surfaces as 403, not a 500.
         agents_dir = self.project_root / "agents"
         folder_path = resolve_within_base(agents_dir, agent_name)
-        if folder_path == agents_dir.resolve():
+        # Only a folder right under agents/: 'x/.' or '../agents/x' is another agent's
+        if folder_path.parent != agents_dir.resolve() or folder_path.name != agent_name:
             raise HTTPException(status_code=403, detail="Invalid path")
         try:
             # Check if folder exists
@@ -1803,6 +1811,9 @@ class DashboardServer:
             if config:
                 original_parents = config.get_parent_agents() if hasattr(config, 'get_parent_agents') else []
                 original_project_id = config.project_id
+                # The children name the agent as it was called before this update
+                original_name = config.name
+                original_workspace = workspace_of_project(session, original_project_id) or DEFAULT_WORKSPACE_ID
                 updated_project_id = config_data.get('project_id', original_project_id)
 
                 for key, value in config_data.items():
@@ -1831,12 +1842,17 @@ class DashboardServer:
                         return
                     visited.add(parent_name)
 
+                    # The agent's own workspace only, and a parent named exactly: the
+                    # LIKE is a coarse filter, with _ and % escaped
                     child_agents = session.query(self.AgentConfig).filter(
                         self.AgentConfig.parent_agents.isnot(None),
-                        self.AgentConfig.parent_agents.like(f'%"{parent_name}"%')
+                        self.AgentConfig.parent_agents.contains(f'"{parent_name}"', autoescape=True),
+                        *in_projects_of(self.AgentConfig.project_id, original_workspace)
                     ).all()
 
                     for child in child_agents:
+                        if parent_name not in child.get_parent_agents():
+                            continue
                         child.project_id = new_project_id
                         session.flush()
                         _propagate_project_to_descendants(child.name, new_project_id, visited)
@@ -1850,7 +1866,7 @@ class DashboardServer:
                 is_root_agent = len(updated_parents) == 0
 
                 if project_changed and is_root_agent:
-                    _propagate_project_to_descendants(config.name, config.project_id)
+                    _propagate_project_to_descendants(original_name, config.project_id)
 
                 session.commit()
                 self._snapshot_agent_config(session, config, change_type='update', changed_by=changed_by)
@@ -2267,6 +2283,10 @@ class DashboardServer:
                     if existing_agent and existing_agent.project_id not in projects:
                         skipped_count += 1
                         errors.append(f"Agent '{agent_data['name']}': this name is taken")
+                        continue
+                    if not existing_agent and not is_agent_name(agent_data.get("name")):
+                        skipped_count += 1
+                        errors.append(f"Agent '{agent_data['name']}': not a valid agent name")
                         continue
                     if not platform_admin:
                         if not existing_agent and has_code_folder(self.project_root / "agents",
@@ -5625,12 +5645,9 @@ class DashboardServer:
             folder_path = None
             if success and delete_folder and agent_name and not agent_hardcoded:
                 try:
-                    agents_dir = self.project_root / "agents"
-                    dest_path = agents_dir / agent_name
-                    folder_path = str(dest_path)
-                    if dest_path.exists() and dest_path.is_dir():
-                        shutil.rmtree(dest_path)
-                        folder_deleted = True
+                    result = self._delete_agent_folder(agent_name)
+                    folder_deleted = result.get("folder_deleted", False)
+                    folder_path = result.get("folder_path")
                 except Exception as e:
                     print(f"Error deleting agent folder '{agent_name}': {e}")
 

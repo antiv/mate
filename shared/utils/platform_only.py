@@ -13,7 +13,8 @@ the platform's (documents/design/workspaces.md, "What stays platform-only"):
 Two checks:
 - On save, features_added() lists what a config gives an agent that it didn't have,
   or changes: a new command for an existing stdio server runs new code, and a new
-  base URL beside a ${VAR} key sends the variable there. The dashboard routes refuse
+  base URL beside a ${VAR} key sends the variable there, as it would a stored key the
+  config keeps without naming it. The dashboard routes refuse
   it to a caller who is no platform administrator, so a workspace admin keeps what a
   platform administrator set up as it is, and can't add more.
 - At run time, may_run_code() refuses the code executor and stdio MCP servers to an
@@ -34,6 +35,7 @@ CODE_EXECUTOR = "the code executor"
 STDIO_MCP = "an MCP server started as a command"
 ENV_REFERENCE = "a ${VAR} reference"
 HARDCODED = "a hardcoded agent"
+KEPT_KEY = "a new base URL for its stored API key (enter the key again)"
 
 _ENV_FIELDS = ("model_api_key", "model_base_url", "mcp_servers_config")
 
@@ -45,6 +47,24 @@ def _parsed(value: Any) -> Any:
         except ValueError:
             return None
     return value
+
+
+def _as_run(servers: Any) -> Any:
+    """mcp_servers_config as the runtimes read it before resolving ${VAR}: they decode
+    an entry's headers, args and env once more when it is a string (_parse_json_field
+    in tools/mcp_tools.py, _parse_json_maybe in langgraph/mcp_client.py), so a
+    placeholder spelled with JSON escapes there is only a placeholder after that."""
+    entries = servers.get("mcpServers") if isinstance(servers, dict) else None
+    if not isinstance(entries, dict):
+        return servers
+    decoded = {}
+    for name, entry in entries.items():
+        if isinstance(entry, dict):
+            # Text that isn't JSON stays as it is, so a literal ${VAR} in it is seen
+            entry = {key: (_parsed(value) or value) if key in ("headers", "args", "env") else value
+                     for key, value in entry.items()}
+        decoded[name] = entry
+    return {**servers, "mcpServers": decoded}
 
 
 def _defining(config: Optional[Dict[str, Any]]) -> Dict[str, Any]:
@@ -64,7 +84,7 @@ def _defining(config: Optional[Dict[str, Any]]) -> Dict[str, Any]:
                  if not isinstance(entry, dict) or not entry.get("url")}
         if stdio:
             found[STDIO_MCP] = stdio
-    env_fields = tuple(_parsed(config.get(field)) if field == "mcp_servers_config"
+    env_fields = tuple(_as_run(servers) if field == "mcp_servers_config"
                        else config.get(field) for field in _ENV_FIELDS)
     if ENV_PLACEHOLDER.search(json.dumps(env_fields)):
         found[ENV_REFERENCE] = env_fields
@@ -81,9 +101,23 @@ def features_of(config: Optional[Dict[str, Any]]) -> Set[str]:
 def features_added(config: Dict[str, Any], before: Optional[Dict[str, Any]] = None) -> Set[str]:
     """The features that saving `config` over `before` (None for a new agent) adds or
     changes. A field the config leaves out keeps its value from before."""
-    after, earlier = _defining({**(before or {}), **config}), _defining(before)
-    return {feature for feature, value in after.items()
-            if feature not in earlier or earlier[feature] != value}
+    merged = {**(before or {}), **config}
+    after, earlier = _defining(merged), _defining(before)
+    added = {feature for feature, value in after.items()
+             if feature not in earlier or earlier[feature] != value}
+    # A key the config keeps without naming it, sent to a base URL of the caller's
+    # choosing, would reach that host: changing the URL takes the key again
+    if (before and before.get("model_api_key") and "model_api_key" not in config
+            and merged.get("model_base_url")
+            and merged["model_base_url"] != before.get("model_base_url")):
+        added.add(KEPT_KEY)
+    return added
+
+
+def is_agent_name(name: Optional[str]) -> bool:
+    """True for a name ADK accepts: an identifier, at most 255 characters. Such a name
+    is one folder under agents/, never '..' or a path, and holds no LIKE wildcard but _."""
+    return bool(name) and name.isidentifier() and len(name) <= 255
 
 
 def has_code_folder(agents_dir: Path, name: Optional[str]) -> bool:

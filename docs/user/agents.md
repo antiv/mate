@@ -30,7 +30,7 @@ the next message already uses the new configuration.
 
 | Field | What to enter |
 |---|---|
-| **Name** | A unique identifier on the whole installation. Other agents and triggers refer to the agent by this name. A name already in use, in any workspace, is refused with "This name is taken". |
+| **Name** | A unique identifier on the whole installation. Other agents and triggers refer to the agent by this name. It starts with a letter or an underscore and holds only letters, digits and underscores, for example `support_root`; another name is refused. A name already in use, in any workspace, is refused with "This name is taken". |
 | **Type** | **LLM** for an ordinary agent. **Loop** repeats its sub-agents up to **Max Iterations** times. **Graph** runs its sub-agents as a workflow with routing. |
 | **Project** | The project the agent belongs to. |
 | **Model Name** | Which model answers. See [Choosing a model](#choosing-a-model). |
@@ -115,6 +115,10 @@ to an agent, or change them on one: saving is refused with "Only a platform
 administrator can give an agent ...". What a platform administrator set up keeps
 working, and the rest of the agent can still be edited. While doing so, leave these
 fields as they are, and **Model Base URL** too when the key is a `${NAME}`.
+
+To give an agent with a stored **Model API Key** a new **Model Base URL**, type the
+key again: otherwise the stored key would be sent to the new address, and saving is
+refused.
 
 Outside the Default workspace, the code executor and MCP servers with a command don't
 run at all for now: the agent answers without them.

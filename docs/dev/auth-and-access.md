@@ -246,7 +246,13 @@ Some agent settings run code with the server's rights or read its environment, a
 On save, `DashboardServer._refuse_platform_only` answers 403 when a caller who is no
 platform administrator adds one of these, or changes the part of the config that
 defines it (`features_added`): a new command for an existing stdio server runs new
-code, and a new base URL beside a `${VAR}` key sends the variable there. So a
+code, and a new base URL beside a `${VAR}` key sends the variable there. The check
+reads `mcp_servers_config` as the runtimes do: they decode an entry's `headers`,
+`args` and `env` once more when it is a string and only then resolve `${VAR}`, so a
+placeholder spelled with JSON escapes (`${VAR}`) there is seen too. A new base
+URL beside a stored key the request keeps without naming it (the `__stored__`
+sentinel) is refused as well, as the key would go to that host: the caller types
+the key again. So a
 workspace admin keeps what a platform administrator set up, as it is. Agent create,
 update, rollback and template import refuse; an agent import and a template sync skip
 the agent and say why (`errors`, `agents_skipped`). `_check_agent_names` answers 409
@@ -254,6 +260,17 @@ for a name with a folder in `agents/`, and deleting a hardcoded agent's folder i
 platform-only.
 
 Every path that makes agent names keeps to the same rules:
+
+- **A new name** must be one ADK accepts, an identifier (`platform_only.is_agent_name`):
+  `_check_agent_names` answers 400 otherwise on create and rename, and an import skips
+  the agent. The name becomes a folder under `agents/` and a LIKE pattern, so `..`,
+  `/srv` or `%` would reach outside the agent. An agent keeps a name it already has.
+  Deleting an agent with `delete_folder=true` goes through `_delete_agent_folder`,
+  which deletes only a folder right under `agents/` named exactly like the agent, and
+  the agent server's start creates folders for valid names only.
+- **Moving a root agent** to another project moves its sub-agents along: those of its
+  own workspace whose `parent_agents` names it exactly, by the name it had before
+  the update.
 
 - **A clone** renames each agent to `name + suffix` and writes the new names into
   the cloned `instruction`, `mcp_servers_config`, `tool_config` and
