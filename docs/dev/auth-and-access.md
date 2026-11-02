@@ -253,6 +253,20 @@ the agent and say why (`errors`, `agents_skipped`). `_check_agent_names` answers
 for a name with a folder in `agents/`, and deleting a hardcoded agent's folder is
 platform-only.
 
+Every path that makes agent names keeps to the same rules:
+
+- **A clone** renames each agent to `name + suffix` and writes the new names into
+  the cloned `instruction`, `mcp_servers_config`, `tool_config` and
+  `guardrail_config`. So the suffix may hold only letters, digits and underscores
+  (400 otherwise), or it could write `${VAR}` or JSON into the config. For a caller
+  who is no platform administrator, a name with a folder in `agents/` counts as
+  taken and is bumped (`_2`). A clone whose rename changes a platform-only feature of
+  its source, such as a stdio server whose arguments name the agent, is refused with
+  403 before any agent is written.
+- **A template import** builds the names from the project name, so it computes them
+  before creating the project. One with a folder in `agents/` refuses the import
+  with 409. A template sync skips such a new agent ("this name is taken").
+
 At run time, `may_run_code` refuses the code executor and stdio MCP servers to an
 agent outside the default workspace, in the tool factory, `mcp_tools.py` and
 LangGraph's `mcp_client.py`, until phase 3 lets a platform administrator enable them

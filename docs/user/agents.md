@@ -119,6 +119,12 @@ fields as they are, and **Model Base URL** too when the key is a `${NAME}`.
 Outside the Default workspace, the code executor and MCP servers with a command don't
 run at all for now: the agent answers without them.
 
+The same holds for a copy. A clone's **Name suffix** may hold only letters, digits
+and underscores. A clone, template import or template update can't create an agent
+whose name has a folder in `agents/`: a clone adds `_2` to the name, and a template
+import asks for another project name. A clone that would change one of the settings
+above, for example an MCP server whose command names the agent, is refused.
+
 ## Who can use an agent
 
 **Allowed Roles** is compared with the roles on the user record of the person

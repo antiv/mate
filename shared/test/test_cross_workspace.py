@@ -1100,6 +1100,69 @@ class TestWorkspaceAdmins(_TwoWorkspaces):
         self.assertEqual(response.json()["agents_added"], 0)
         self.assertEqual(len(response.json()["agents_skipped"]), 1)
 
+    def test_a_clone_by_an_owner_brings_no_code_and_no_secret(self):
+        bob = self._as(BOB)
+        project = self.ids["project_b"]
+
+        def clone(client: TestClient, suffix: str, **headers) -> httpx.Response:
+            return client.post(f"/dashboard/api/agents/{B_ROOT}/clone", headers=headers,
+                               json={"target_project_id": project, "suffix": suffix})
+
+        # The rename writes the suffix into the config, so it holds a name's characters only
+        session = self.Session()
+        session.query(AgentConfig).filter_by(name=B_ROOT).update({"mcp_servers_config": json.dumps(
+            {"mcpServers": {"s": {"url": f"https://example.com/{B_ROOT}"}}})})
+        session.commit()
+        for suffix in ("${MATE_SECRET_KEY}", '"x', "a-b"):
+            self.assertEqual(clone(bob, suffix).status_code, 400, suffix)
+        # A stdio server naming the agent: the rename would change its arguments
+        session.query(AgentConfig).filter_by(name=B_ROOT).update({"mcp_servers_config": json.dumps(
+            {"mcpServers": {"s": {"command": "npx", "args": ["server", B_ROOT]}}})})
+        session.commit()
+        session.close()
+        response = clone(bob, "_copy")
+        self.assertEqual(response.status_code, 403, response.text)
+        self.assertEqual(self.Session().query(AgentConfig).filter(
+            AgentConfig.name.like(f"{B_ROOT}_copy%")).count(), 0)
+        self.assertEqual(clone(self.client, "_copy", **_platform_admin(B)).status_code, 200)
+
+    def test_a_clone_by_an_owner_takes_no_name_with_code_in_agents(self):
+        root = Path(tempfile.mkdtemp())
+        (root / "agents" / f"{B_ROOT}_x").mkdir(parents=True)
+        dashboard = auth_server.dashboard_server
+        with patch.object(dashboard, "project_root", root):
+            response = self._as(BOB).post(f"/dashboard/api/agents/{B_ROOT}/clone", json={
+                "target_project_id": self.ids["project_b"], "suffix": "_x"})
+        self.assertEqual(response.status_code, 200, response.text)
+        names = {c["new"] for c in response.json()["cloned"]}
+        self.assertNotIn(f"{B_ROOT}_x", names)
+        self.assertIn(f"{B_ROOT}_x_2", names)
+
+    def test_a_template_by_an_owner_takes_no_name_with_code_in_agents(self):
+        root = Path(tempfile.mkdtemp())
+        (root / "agents" / "coded_root").mkdir(parents=True)
+        dashboard = auth_server.dashboard_server
+        template = {"project": {"name": "p"}, "template_meta": {"agent_prefix": "tpl_"},
+                    "agents": [{"name": "tpl_root", "type": "llm", "description": "d",
+                                "instruction": "i"}]}
+        bob = self._as(BOB)
+        with patch.object(dashboard, "project_root", root), \
+                patch.object(dashboard.template_service, "get_template", return_value=template):
+            response = bob.post("/dashboard/api/templates/import",
+                                json={"template_id": "t", "project_name": "coded"})
+            self.assertEqual(response.status_code, 409, response.text)
+            self.assertEqual(self.Session().query(Project).filter_by(name="coded").count(), 0)
+            # A sync after renaming the project the same
+            session = self.Session()
+            session.query(Project).filter_by(id=self.ids["project_b"]).update(
+                {"name": "coded", "template_id": "t", "template_prefix": "tpl_"})
+            session.commit()
+            session.close()
+            response = bob.post("/dashboard/api/templates/sync", json={"project_id": self.ids["project_b"]})
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual((response.json()["agents_added"], response.json()["agents_skipped"]),
+                         (0, [{"name": "coded_root", "reason": "this name is taken"}]))
+
     def test_an_owner_cannot_delete_a_hardcoded_agent_s_folder(self):
         session = self.Session()
         session.query(AgentConfig).filter_by(name=B_ROOT).update({"hardcoded": True})

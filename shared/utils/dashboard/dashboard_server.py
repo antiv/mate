@@ -63,6 +63,10 @@ def sanitize_agent_text(text: Optional[str]) -> Optional[str]:
 from shared.utils.utils import STORED_SECRET_SENTINEL, mask_api_key, mask_config_secrets  # noqa: F401
 
 
+# What a clone's suffix may hold: an agent name's characters
+_CLONE_SUFFIX = re.compile(r"^[A-Za-z0-9_]+$")
+
+
 def make_name_substituter(name_map: Dict[str, str]):
     """Build a substituter that rewrites agent names in strings, lists and dicts.
 
@@ -2438,17 +2442,28 @@ class DashboardServer:
     def _clone_agent_tree(self, root_name: str, target_project_id: int, suffix: str,
                           include_memory_blocks: bool = False,
                           include_file_search: bool = False,
-                          changed_by: str = None) -> Dict[str, Any]:
+                          changed_by: str = None,
+                          platform_admin: bool = True) -> Dict[str, Any]:
         """Deep-copy a root agent and its sub-agent tree into another project.
 
         Insert-only by design: the "without corrupting the source" acceptance
         criterion of #19 holds because no source row is ever updated. Agent names
         are globally unique, so every clone gets `name + suffix` (bumped with _2/_3
         on collision), and in-tree name references in text fields follow the rename.
+        The suffix is letters, digits and underscores, as an agent name is, so the
+        rename can't write anything else into those fields.
+
+        Without platform_admin, a name with a folder in agents/ counts as taken, and a
+        clone whose rename changes a platform-only feature of its source (a stdio
+        server's arguments, a config holding a ${VAR}) is refused before anything is
+        written (platform_only.py).
         """
         suffix = (suffix or "").strip()
         if not suffix:
             return {"error": "suffix is required", "status_code": 400}
+        if not _CLONE_SUFFIX.match(suffix):
+            return {"error": "suffix may hold only letters, digits and underscores",
+                    "status_code": 400}
 
         if not self.db_client:
             return {"error": "Database connection failed", "status_code": 500}
@@ -2491,6 +2506,8 @@ class DashboardServer:
             # New names: suffix everyone, bump on collision against the DB and
             # against names assigned earlier in this very clone.
             def _name_taken(candidate: str) -> bool:
+                if not platform_admin and has_code_folder(self.project_root / "agents", candidate):
+                    return True
                 return session.query(self.AgentConfig.id).filter(
                     self.AgentConfig.name == candidate).first() is not None
 
@@ -2506,7 +2523,7 @@ class DashboardServer:
             # In-tree references inside text fields follow the rename.
             _substitute = make_name_substituter(name_map)
 
-            cloned = []
+            configs = []
             for old_name in tree_order:
                 source = by_name[old_name]
                 # Parents outside the cloned tree are dropped: the clone must form
@@ -2543,6 +2560,16 @@ class DashboardServer:
                     "debug_mode": source.debug_mode,
                     "project_id": target_project_id,
                 }
+                if not platform_admin:
+                    added = features_added(config_data, source.to_dict())
+                    if added:
+                        return {"error": (f"Only a platform administrator can give an agent "
+                                          f"{', '.join(sorted(added))}: cloning '{old_name}' "
+                                          f"would change it"), "status_code": 403}
+                configs.append((old_name, config_data))
+
+            cloned = []
+            for old_name, config_data in configs:
                 if not self._create_agent_config(config_data, changed_by=changed_by):
                     return {"error": f"Failed to create clone of '{old_name}'",
                             "status_code": 500,
@@ -2626,9 +2653,14 @@ class DashboardServer:
     def _import_template(self, template_id: Optional[str] = None, project_name: Optional[str] = None,
                          changed_by: str = None, template_dict: Optional[Dict[str, Any]] = None,
                          substitutions: Optional[Dict[str, Any]] = None,
-                         workspace_id: int = DEFAULT_WORKSPACE_ID) -> Dict[str, Any]:
+                         workspace_id: int = DEFAULT_WORKSPACE_ID,
+                         platform_admin: bool = True) -> Dict[str, Any]:
         """Import a template: create a project in the workspace, its agents and memory
         blocks. Apply name prefix to avoid collisions.
+
+        Without platform_admin, an agent name the project name would make that has a
+        folder in agents/ refuses the import before anything is created
+        (platform_only.py): the agent would run that folder's code.
 
         Either ``template_id`` (loaded from the template library) or a pre-loaded ``template_dict``
         must be provided. ``substitutions`` is an optional map applied to every ``{{KEY}}`` placeholder
@@ -2660,7 +2692,26 @@ class DashboardServer:
         proj_name = (project_name or project_data.get("name") or "Imported Project").strip()
         if not proj_name:
             return {"error": "Project name is required"}
-        
+
+        slug = self.template_service.slugify_project_name(proj_name)
+        template_meta = template.get("template_meta") or {}
+        agent_prefix = template_meta.get("agent_prefix") or "tpl"
+        replace_with = f"{slug}_" if agent_prefix.endswith("_") else slug
+
+        # Build replacement map: old_agent_name -> new_agent_name
+        agents_data = template.get("agents") or []
+        name_map = {}
+        for a in agents_data:
+            old_name = a.get("name", "")
+            if old_name:
+                new_name = old_name.replace(agent_prefix, replace_with, 1) if agent_prefix in old_name else f"{slug}_{old_name}"
+                name_map[old_name] = new_name
+        if not platform_admin:
+            coded = [n for n in name_map.values() if has_code_folder(self.project_root / "agents", n)]
+            if coded:
+                return {"error": f"This name is taken: {', '.join(sorted(coded))}. "
+                                 f"Choose another project name.", "status_code": 409}
+
         # Create project
         try:
             project = self._create_project(proj_name, project_data.get("description"), workspace_id)
@@ -2668,10 +2719,6 @@ class DashboardServer:
             return {"error": str(e.detail)}
         
         project_id = project["id"]
-        slug = self.template_service.slugify_project_name(proj_name)
-        template_meta = template.get("template_meta") or {}
-        agent_prefix = template_meta.get("agent_prefix") or "tpl"
-        replace_with = f"{slug}_" if agent_prefix.endswith("_") else slug
         
         # Store template provenance on the project for future sync/upgrade
         try:
@@ -2685,15 +2732,6 @@ class DashboardServer:
             session.close()
         except Exception as e:
             logger.warning(f"Failed to store template provenance for project {project_id}: {e}")
-        
-        # Build replacement map: old_agent_name -> new_agent_name
-        agents_data = template.get("agents") or []
-        name_map = {}
-        for a in agents_data:
-            old_name = a.get("name", "")
-            if old_name:
-                new_name = old_name.replace(agent_prefix, replace_with, 1) if agent_prefix in old_name else f"{slug}_{old_name}"
-                name_map[old_name] = new_name
 
         # Resolve the mapped root agent name (entry point for widget keys / ADK)
         root_agent_raw = template_meta.get("root_agent")
@@ -3007,7 +3045,8 @@ class DashboardServer:
         """Sync a project with its source template: add new agents, update changed agents, add/update memory blocks.
 
         Without platform_admin, an agent the sync would give a platform-only feature,
-        or change one of, is left as it is and listed in agents_skipped (platform_only.py).
+        or change one of, is left as it is and listed in agents_skipped, and so is a new
+        agent whose name has a folder in agents/ (platform_only.py).
         """
         if not self.db_client:
             return {"error": "Database connection failed"}
@@ -3067,6 +3106,9 @@ class DashboardServer:
                         "tool_config", "mcp_servers_config", "model_base_url", "hardcoded")
                         if field in tpl_agent}
                     existing = db_agent_map.get(proj_name)
+                    if not existing and has_code_folder(self.project_root / "agents", proj_name):
+                        agents_skipped.append({"name": proj_name, "reason": "this name is taken"})
+                        continue
                     added = features_added(synced, existing.to_dict() if existing else None)
                     if added:
                         agents_skipped.append({"name": proj_name, "reason": (
@@ -5044,6 +5086,7 @@ class DashboardServer:
                 include_memory_blocks=bool(body.get("include_memory_blocks")),
                 include_file_search=bool(body.get("include_file_search")),
                 changed_by=ctx.user_id,
+                platform_admin=ctx.is_platform_admin,
             )
             if "error" in result:
                 raise HTTPException(status_code=result.get("status_code", 500),
@@ -5150,9 +5193,10 @@ class DashboardServer:
                 for agent in (template or {}).get("agents") or []:
                     self._refuse_platform_only(ctx, agent)
                 result = self._import_template(template_id, project_name=project_name, changed_by=ctx.user_id,
-                                               workspace_id=ctx.workspace_id)
+                                               workspace_id=ctx.workspace_id,
+                                               platform_admin=ctx.is_platform_admin)
                 if "error" in result:
-                    raise HTTPException(status_code=400, detail=result["error"])
+                    raise HTTPException(status_code=result.get("status_code", 400), detail=result["error"])
                 audit_service.log(
                     ctx.user_id,
                     audit_service.ACTION_TEMPLATE_IMPORT,
