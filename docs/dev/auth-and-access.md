@@ -14,6 +14,8 @@ covers:
   - server/proxy_routes.py::_non_admin_refusal
   - shared/utils/dashboard/dashboard_server.py::_require_in_workspace
   - shared/utils/dashboard/dashboard_server.py::_check_agent_names
+  - shared/utils/dashboard/dashboard_server.py::_traces_in_workspace
+  - shared/utils/dashboard/dashboard_server.py::_require_scope_in_workspace
 ---
 
 # Authentication and access control
@@ -174,6 +176,33 @@ listing and reading it is open, and importing creates the project in the current
 workspace. Creating a template from agents and deleting one are platform-only, so
 the catalogue holds no workspace's agents.
 
+Logs and operations filter the same way, with two helpers in `workspaces.py`:
+`rows_of(model, workspace_id)` on a table's own `workspace_id`, and
+`in_projects_of(column, workspace_id)` on a `project_id`. Both count a row with
+none as the default workspace's: an agent with no config, or an audit entry about
+the installation (a sign-in, a user change). Through them:
+
+- the usage figures and pages, the usage, guardrail and audit logs, rated answers,
+  personal access tokens (`POST` writes `ctx.workspace_id`), rate limits and alert
+  rules read the workspace's rows, and a route naming another workspace's rule,
+  trigger, widget key, token or integration answers 404;
+- a session belongs to the workspace of its `app_name`, its root agent; detail and
+  delete answer 404 for another's;
+- a trace belongs to a workspace when every agent its spans name
+  (`gen_ai.agent.name`, `mate.agent.name`) is one of its agents, and a trace naming
+  none to the default workspace (`DashboardServer._traces_in_workspace`);
+- a budget, alert rule, trigger, widget key or Slack integration may name only the
+  workspace's agents and projects. `workspaces.missing_from` answers which of the
+  two is another workspace's;
+- `rate_limit_config` is looked up by scope, scope id and workspace, so a user has
+  a limit in each workspace. The request check takes the configs of the agent's
+  workspace, and counts a user's tokens and spend there only. Alert rules measure
+  their own workspace (`docs/dev/alerts.md`).
+
+A Slack team connects to one integration on the installation (`UNIQUE (team_id)`,
+V047): an event names only its team. Creating or editing an integration onto a team
+that is taken answers 409 without saying whose it is.
+
 Until every route is scoped, `ctx.is_admin` stays the platform administrator only,
 so a workspace's own owner or admin can't reach a route that doesn't filter yet.
 
@@ -183,9 +212,8 @@ GET route, and none may answer with B's data. Every route that names a row in it
 path is called with B's ids, and must answer 404. A write that names no row needs a
 test of its own, named in `COVERED_BY_TEST`; one that names a row in its body is
 listed in `BODIES_NAMING_B`, with a body naming B's row, and must answer 404. Routes
-listed in `NOT_YET_SCOPED` (phase 2 empties it), `PLATFORM_ONLY` (installation-wide)
-and `SHARED` (the template catalogue) are left out, so a new route is checked as
-soon as it is added.
+listed in `PLATFORM_ONLY` (installation-wide) and `SHARED` (the template catalogue)
+are left out, so a new route is checked as soon as it is added.
 
 An API route that is for admins and is reachable by others, because it is on an
 allowlist or outside `/dashboard/api/`, checks `ctx.is_admin` itself and answers

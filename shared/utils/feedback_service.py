@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from .database_client import get_database_client
 from .models import ResponseFeedback, TestCase
-from .workspaces import agent_names_of
+from .workspaces import agent_names_of, in_projects_of
 
 logger = logging.getLogger(__name__)
 
@@ -130,15 +130,18 @@ class FeedbackService:
         finally:
             session.close()
 
-    def get_for_session(self, session_id: str) -> Dict[str, str]:
-        """message_id -> rating for one session, so a reloaded chat shows its ratings."""
+    def get_for_session(self, session_id: str,
+                        workspace_id: Optional[int] = None) -> Dict[str, str]:
+        """message_id -> rating for one session, so a reloaded chat shows its ratings;
+        only the ratings of `workspace_id`'s agents when it is given."""
         session = self._get_session()
         if not session:
             return {}
         try:
             rows = session.query(
                 ResponseFeedback.message_id, ResponseFeedback.rating
-            ).filter(ResponseFeedback.session_id == session_id).all()
+            ).filter(ResponseFeedback.session_id == session_id,
+                     *in_projects_of(ResponseFeedback.project_id, workspace_id)).all()
             return {r[0]: r[1] for r in rows}
         except Exception as e:
             logger.error("Failed to read feedback for session %s: %s", session_id, e)

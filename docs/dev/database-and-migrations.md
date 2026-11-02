@@ -193,6 +193,14 @@ request context (`docs/dev/auth-and-access.md`, "The workspace of a request"):
   dashboard creates the case. The other lookups in `workspaces.py`
   (`config_workspace`, `version_workspace`, `store_workspace`, `agents_outside`)
   find a row's workspace through its project.
+- Queries keep to a workspace with `rows_of(model, workspace_id)`, on the table's
+  `workspace_id`, and `in_projects_of(column, workspace_id)`, on a `project_id`. A
+  log row with no workspace, including one the backfill hasn't reached, counts as the
+  default workspace's, so a 1.x installation sees all of its rows.
+- `channel_integrations.team_id` is unique (V047), as an inbound Slack event is
+  looked up by its team. NULLs are allowed. On a database that has two rows for one
+  team the migration fails: the server logs it, starts without it, and tries again
+  on the next start. The migration file has the query that finds them.
 
 ## Undoing a migration
 

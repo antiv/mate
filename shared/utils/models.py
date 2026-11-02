@@ -843,7 +843,8 @@ class ChannelIntegration(Base):
     project_id = Column(Integer, ForeignKey('projects.id'), nullable=False)
     agent_name = Column(String(255), nullable=False)
     label = Column(String(255), nullable=True)
-    team_id = Column(String(64), nullable=True, index=True)  # Slack team/workspace id
+    # Slack team/workspace id; one integration per team (V047)
+    team_id = Column(String(64), nullable=True, unique=True, index=True)
     bot_token = Column(EncryptedText, nullable=True)  # xoxb-... token used to post replies; encrypted
     signing_secret = Column(EncryptedText, nullable=True)  # verifies inbound request signatures; encrypted
     config = Column(Text, nullable=True)  # JSON per-integration options; nothing reads it yet

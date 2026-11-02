@@ -36,7 +36,8 @@ Check the agent on the **Agents** page:
 2. Optionally enter a **Label** and the **Allowed Origins**: the addresses of the
    sites that may embed the widget, separated by commas, such as
    `https://example.com, https://www.example.com`.
-3. Click **Generate Key**.
+3. Click **Generate Key**. The key is for an agent and a project of the workspace you
+   are working in, and the key list shows only that workspace's keys.
 4. Copy the **Embed Code** and paste it into the site's HTML, just before `</body>`:
 
 ```html

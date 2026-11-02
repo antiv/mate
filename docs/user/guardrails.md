@@ -61,8 +61,9 @@ affects anyone.
 ## See what fired
 
 **Control Room → Guardrail Logs** lists every hit: when, which agent and user, which
-guardrail, whether it was on the way in or out, the action taken and what matched.
-Filter by agent, guardrail type, phase or action.
+guardrail, whether it was on the way in or out, the action taken and what matched,
+for the agents of the workspace you are working in. Filter by agent, guardrail type,
+phase or action.
 
 Use it to tune. Many **Log** hits on harmless messages mean a rule is too broad; no
 hits at all on a public agent may mean a rule is not doing anything.

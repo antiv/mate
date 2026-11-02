@@ -23,6 +23,11 @@ covers:
 Three pages in the Control Room answer three different questions: is the
 installation healthy, how are the agents being used, and who changed what.
 
+The figures, the request list and the audit log are those of the workspace you are
+working in. Usage of an agent with no configuration in the database (one defined in
+code), and audit entries about the installation rather than a project, such as
+sign-ins and user changes, are in the default workspace.
+
 ## Platform Overview
 
 The landing page of the Control Room. It shows the last seven days at a glance

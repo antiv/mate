@@ -32,7 +32,7 @@ Click **New Trigger** and fill in:
 |---|---|
 | **Name** | A label for the list. |
 | **Type** | **Cron (schedule)** or **Webhook (HTTP POST)**. File Watch and Event Bus are listed but not implemented and cannot be selected. |
-| **Project**, **Agent** | The agent to run. Choose the project first; the agent list follows it. |
+| **Project**, **Agent** | The agent to run. Choose the project first; the agent list follows it. Both must be of the workspace you are working in, which is also the only one whose triggers the page lists. |
 | **Prompt** | The message the agent receives each time the trigger fires. |
 | **Output Destination** | Where the answer goes. See [Where the answer goes](#where-the-answer-goes). |
 

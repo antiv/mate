@@ -33,7 +33,7 @@ import logging
 import re
 from typing import TYPE_CHECKING, Dict, List, Optional, Set, Tuple
 
-from sqlalchemy import delete, event, insert, select, update
+from sqlalchemy import delete, event, insert, or_, select, update
 from sqlalchemy.engine import Connection
 from sqlalchemy.orm import Mapper, Session, attributes
 
@@ -256,6 +256,30 @@ def agent_names_of(workspace_id: int):
         Project.workspace_id == workspace_id).scalar_subquery()
 
 
+def rows_of(model, workspace_id: Optional[int]) -> tuple:
+    """Filters keeping a table with a workspace_id column to the workspace's rows, or
+    none for None (every workspace). On a log table a row with no workspace is about an
+    agent with no config or about the installation, or the backfill hasn't reached it;
+    it counts as the default workspace's, as a hardcoded agent does."""
+    if workspace_id is None:
+        return ()
+    if workspace_id == DEFAULT_WORKSPACE_ID:
+        return (or_(model.workspace_id == workspace_id, model.workspace_id.is_(None)),)
+    return (model.workspace_id == workspace_id,)
+
+
+def in_projects_of(column, workspace_id: Optional[int]) -> tuple:
+    """Filters keeping rows whose project_id `column` is one of the workspace's
+    projects, or none for None. A row with no project counts as the default
+    workspace's."""
+    if workspace_id is None:
+        return ()
+    projects = column.in_(select(Project.id).where(Project.workspace_id == workspace_id))
+    if workspace_id == DEFAULT_WORKSPACE_ID:
+        return (or_(projects, column.is_(None)),)
+    return (projects,)
+
+
 def agents_outside(session: Session, workspace_id: int, names: List[str]) -> List[str]:
     """Those of the names that aren't agents of the workspace (D1: parent_agents stay
     within it). A name with no config counts as the default workspace's: hardcoded
@@ -265,6 +289,23 @@ def agents_outside(session: Session, workspace_id: int, names: List[str]) -> Lis
         AgentConfig.name.in_(names)).all()) if names else {}
     return [name for name in names
             if found.get(name, DEFAULT_WORKSPACE_ID) != workspace_id]
+
+
+def missing_from(session: Session, workspace_id: int, *, project_id=None,
+                 agent_name: Optional[str] = None) -> Optional[str]:
+    """"Project" or "Agent" when the one named isn't the workspace's, for the caller to
+    404 on; None when both are. An agent with no config counts as the default
+    workspace's."""
+    if project_id is not None:
+        try:
+            project_id = int(project_id)
+        except (TypeError, ValueError):
+            return "Project"
+        if workspace_of_project(session, project_id) != workspace_id:
+            return "Project"
+    if agent_name is not None and agents_outside(session, workspace_id, [agent_name]):
+        return "Agent"
+    return None
 
 
 # Callers that run an agent on their own: the trigger runner, for the trigger's agent.

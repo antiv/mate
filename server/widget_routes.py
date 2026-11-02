@@ -28,6 +28,7 @@ from shared.utils.models import WidgetApiKey, AgentConfig, Project
 from shared.utils.ai_disclosure import DEFAULT_DISCLOSURE, resolve_disclosure
 from server.csp import set_csp_header, widget_frame_ancestors
 from server.request_context import RequestContext, get_api_request_context
+from shared.utils.workspaces import in_projects_of, missing_from
 
 logger = logging.getLogger(__name__)
 
@@ -994,6 +995,23 @@ async def delete_widget_file(file_id: int, wk: WidgetApiKey = Depends(verify_wid
 # Dashboard API — widget key management
 # ---------------------------------------------------------------------------
 
+def _workspace_key(session, ctx: RequestContext, key_id: int) -> WidgetApiKey:
+    """The widget key, if its project is the caller's workspace's; 404 otherwise."""
+    wk = session.query(WidgetApiKey).filter(
+        WidgetApiKey.id == key_id, *in_projects_of(WidgetApiKey.project_id, ctx.workspace_id)).first()
+    if not wk:
+        raise HTTPException(status_code=404, detail="Widget key not found")
+    return wk
+
+
+def _require_target(session, ctx: RequestContext, project_id=None,
+                    agent_name: Optional[str] = None) -> None:
+    """404 unless the key's project and agent are the caller's workspace's."""
+    missing = missing_from(session, ctx.workspace_id, project_id=project_id, agent_name=agent_name)
+    if missing:
+        raise HTTPException(status_code=404, detail=f"{missing} not found")
+
+
 @dashboard_widget_router.get("/widget-keys", tags=["Dashboard - Widget Keys"])
 async def list_widget_keys(
     request: Request,
@@ -1005,7 +1023,8 @@ async def list_widget_keys(
     if not session:
         raise HTTPException(status_code=500, detail="Database unavailable")
     try:
-        query = session.query(WidgetApiKey)
+        query = session.query(WidgetApiKey).filter(
+            *in_projects_of(WidgetApiKey.project_id, ctx.workspace_id))
         if project_id is not None:
             query = query.filter_by(project_id=project_id)
         keys = [k.to_dict() for k in query.order_by(WidgetApiKey.created_at.desc()).all()]
@@ -1038,6 +1057,7 @@ async def create_widget_key(
     if not session:
         raise HTTPException(status_code=500, detail="Database unavailable")
     try:
+        _require_target(session, ctx, project_id, agent_name)
         wk = WidgetApiKey(
             api_key=api_key,
             admin_key=admin_key,
@@ -1054,10 +1074,13 @@ async def create_widget_key(
         session.refresh(wk)
         try:
             from shared.utils.audit_service import log, ACTION_KEY_CREATE, RESOURCE_WIDGET_KEY
-            log(ctx.user_id, ACTION_KEY_CREATE, RESOURCE_WIDGET_KEY, resource_id=str(wk.id), details={"agent_name": agent_name, "project_id": project_id}, request=request)
+            log(ctx.user_id, ACTION_KEY_CREATE, RESOURCE_WIDGET_KEY, resource_id=str(wk.id), details={"agent_name": agent_name, "project_id": project_id}, request=request,
+                project_id=wk.project_id)
         except Exception as e:
             logger.debug("Audit log widget key create: %s", e)
         return {"success": True, "key": wk.to_dict()}
+    except HTTPException:
+        raise
     except Exception as e:
         session.rollback()
         raise HTTPException(status_code=500, detail=str(e))
@@ -1077,9 +1100,9 @@ async def update_widget_key(
     if not session:
         raise HTTPException(status_code=500, detail="Database unavailable")
     try:
-        wk = session.query(WidgetApiKey).filter_by(id=key_id).first()
-        if not wk:
-            raise HTTPException(status_code=404, detail="Widget key not found")
+        wk = _workspace_key(session, ctx, key_id)
+        if isinstance(data.get("agent_name"), str):
+            _require_target(session, ctx, agent_name=data["agent_name"].strip())
         for field in ("label", "is_active", "allowed_origins", "widget_config", "agent_name"):
             if field in data:
                 val = data[field]
@@ -1092,10 +1115,13 @@ async def update_widget_key(
         session.refresh(wk)
         try:
             from shared.utils.audit_service import log, ACTION_KEY_UPDATE, RESOURCE_WIDGET_KEY
-            log(ctx.user_id, ACTION_KEY_UPDATE, RESOURCE_WIDGET_KEY, resource_id=str(key_id), details={"agent_name": wk.agent_name}, request=request)
+            log(ctx.user_id, ACTION_KEY_UPDATE, RESOURCE_WIDGET_KEY, resource_id=str(key_id), details={"agent_name": wk.agent_name}, request=request,
+                project_id=wk.project_id)
         except Exception as e:
             logger.debug("Audit log widget key update: %s", e)
         return {"success": True, "key": wk.to_dict()}
+    except HTTPException:
+        raise
     except Exception as e:
         session.rollback()
         raise HTTPException(status_code=500, detail=str(e))
@@ -1114,18 +1140,19 @@ async def delete_widget_key(
     if not session:
         raise HTTPException(status_code=500, detail="Database unavailable")
     try:
-        wk = session.query(WidgetApiKey).filter_by(id=key_id).first()
-        if not wk:
-            raise HTTPException(status_code=404, detail="Widget key not found")
-        agent_name = wk.agent_name
+        wk = _workspace_key(session, ctx, key_id)
+        agent_name, key_project = wk.agent_name, wk.project_id
         session.delete(wk)
         session.commit()
         try:
             from shared.utils.audit_service import log, ACTION_KEY_DELETE, RESOURCE_WIDGET_KEY
-            log(ctx.user_id, ACTION_KEY_DELETE, RESOURCE_WIDGET_KEY, resource_id=str(key_id), details={"agent_name": agent_name}, request=request)
+            log(ctx.user_id, ACTION_KEY_DELETE, RESOURCE_WIDGET_KEY, resource_id=str(key_id), details={"agent_name": agent_name}, request=request,
+                project_id=key_project)
         except Exception as e:
             logger.debug("Audit log widget key delete: %s", e)
         return {"success": True}
+    except HTTPException:
+        raise
     except Exception as e:
         session.rollback()
         raise HTTPException(status_code=500, detail=str(e))
@@ -1144,9 +1171,7 @@ async def get_embed_code(
     if not session:
         raise HTTPException(status_code=500, detail="Database unavailable")
     try:
-        wk = session.query(WidgetApiKey).filter_by(id=key_id).first()
-        if not wk:
-            raise HTTPException(status_code=404, detail="Widget key not found")
+        wk = _workspace_key(session, ctx, key_id)
 
         base_url = str(request.base_url).rstrip("/")
         embed_code = (

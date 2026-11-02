@@ -11,10 +11,9 @@ platform administrator working in A (X-MATE-Workspace: 1) calls:
   each must answer 404.
 
 The routes are listed from the app's router, so a route is covered the day it is
-added. Phase 2 scopes them group by group: NOT_YET_SCOPED lists the routes still to
-do, and is empty when phase 2 is done. PLATFORM_ONLY lists the routes that act on the
-whole installation; they stay for platform administrators. SHARED lists the routes
-that read what every workspace shares, the template catalogue.
+added. PLATFORM_ONLY lists the routes that act on the whole installation; they stay
+for platform administrators. SHARED lists the routes that read what every workspace
+shares, the template catalogue.
 
 The agent runtime is checked the same way: the RBAC check, the proxy and
 /list-apps, the OpenAI API, MCP and the Work Room, called with A's credentials on
@@ -26,6 +25,7 @@ import json
 import os
 import sys
 import unittest
+from datetime import datetime, timezone
 from typing import Dict, List, Set, Tuple
 from unittest.mock import MagicMock, patch
 
@@ -33,7 +33,7 @@ from fastapi import HTTPException, params
 from fastapi.routing import APIRoute, iter_route_contexts
 from fastapi.testclient import TestClient
 import httpx
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 from starlette.requests import Request
@@ -47,12 +47,16 @@ from server import auth, proxy_routes
 from server.dashboard_authz import PROTECTED_PREFIX, WRITE_METHODS
 from server.request_context import WORKSPACE_HEADER, resolve_workspace
 from server.pat_auth import verify_pat_hash
-from shared.utils import database_client
+from shared.utils import (
+    alert_service, database_client, feedback_service, guardrail_log_service, rate_limit_service,
+    token_usage_service,
+)
 from shared.utils.mcp.mcp_auth import agent_allowed
 from shared.utils.models import (
-    AgentConfig, AgentConfigVersion, AuditLog, Base, FileSearchStore, MemoryBlock,
-    PersonalAccessToken, Project, ResponseFeedback, TestCase, User, WidgetApiKey, Workspace,
-    WorkspaceMember,
+    AgentConfig, AgentConfigVersion, AgentResponse, AgentTrigger, AlertRule, AuditLog, Base,
+    ChannelIntegration, FileSearchStore, GuardrailLog, LangGraphSession, MemoryBlock,
+    PersonalAccessToken, Project, RateLimitConfig, ResponseFeedback, TestCase, TokenUsageLog, User,
+    WidgetApiKey, Workspace, WorkspaceMember,
 )
 from shared.utils.rbac_middleware import RBACMiddleware
 from shared.utils.user_service import UserService
@@ -125,50 +129,6 @@ SHARED: Set[Route] = _routes("""
 GET /dashboard/api/templates/{template_id}
 """)
 
-# Routes phase 2 has yet to scope; each PR of the phase takes its group off
-NOT_YET_SCOPED: Set[Route] = _routes("""
-GET /dashboard/api/sessions
-GET /dashboard/api/sessions/detail
-DELETE /dashboard/api/sessions
-GET /dashboard/api/stats
-GET /dashboard/api/usage/logs
-GET /dashboard/api/rate-limits
-GET /dashboard/api/rate-limits/usage
-POST /dashboard/api/rate-limits
-DELETE /dashboard/api/rate-limits/{scope}/{scope_id:path}
-GET /dashboard/api/traces
-GET /dashboard/api/traces/sessions
-GET /dashboard/api/traces/replay
-POST /dashboard/api/feedback
-GET /dashboard/api/feedback
-GET /dashboard/api/tokens
-POST /dashboard/api/tokens
-DELETE /dashboard/api/tokens/{token_id}
-GET /dashboard/api/guardrail-logs
-GET /dashboard/api/audit-logs
-GET /dashboard/api/audit-logs/export
-GET /dashboard/api/triggers
-POST /dashboard/api/triggers
-PUT /dashboard/api/triggers/{trigger_id}
-DELETE /dashboard/api/triggers/{trigger_id}
-POST /dashboard/api/triggers/{trigger_id}/toggle
-POST /dashboard/api/triggers/{trigger_id}/test-fire
-GET /dashboard/api/alert-rules
-POST /dashboard/api/alert-rules
-PUT /dashboard/api/alert-rules/{rule_id}
-DELETE /dashboard/api/alert-rules/{rule_id}
-POST /dashboard/api/alert-rules/{rule_id}/test
-GET /dashboard/api/widget-keys
-POST /dashboard/api/widget-keys
-PUT /dashboard/api/widget-keys/{key_id}
-DELETE /dashboard/api/widget-keys/{key_id}
-GET /dashboard/api/widget-keys/{key_id}/embed-code
-GET /dashboard/api/channel-integrations
-POST /dashboard/api/channel-integrations
-PUT /dashboard/api/channel-integrations/{integration_id}
-DELETE /dashboard/api/channel-integrations/{integration_id}
-""")
-
 # Writes that name a row in their body, each with a body that names one of workspace
 # B's; called from workspace A, every one must answer 404. Values are format strings
 # over _TwoWorkspaces.b_ids(): {"json": ...}, {"data": ...} or {"data": ..., "files": ...}.
@@ -196,6 +156,24 @@ BODIES_NAMING_B: Dict[Route, dict] = {
         "agent_name": "{agent_name}", "mode": "prompt", "prompt": "p", "variants": [{}, {}]}},
     ("POST", "/dashboard/api/workroom/title"): {"json": {
         "agent": "{agent_name}", "user_id": "{admin}", "session_id": "s"}},
+    ("DELETE", "/dashboard/api/sessions"): {"params": {
+        "session_id": "{lg_session_id}", "app_name": "{agent_name}", "user_id": "{bob}",
+        "runtime": "langgraph"}},
+    ("POST", "/dashboard/api/rate-limits"): {"json": {
+        "scope": "agent", "scope_id": "{agent_name}", "tokens_per_day": 1}},
+    ("POST", "/dashboard/api/alert-rules"): {"json": {
+        "name": "r", "scope": "agent", "scope_id": "{agent_name}",
+        "condition_type": "agent_error_count", "destination_type": "http",
+        "destination_config": {"url": "https://example.com/hook"}}},
+    ("POST", "/dashboard/api/triggers"): {"json": {
+        "name": "t", "agent_name": "{agent_name}", "project_id": "{project_id}",
+        "trigger_type": "webhook", "prompt": "p"}},
+    ("POST", "/dashboard/api/feedback"): {"json": {
+        "session_id": "s", "message_id": "m2", "rating": "up", "agent_name": "{agent_name}"}},
+    ("POST", "/dashboard/api/widget-keys"): {"json": {
+        "project_id": "{project_id}", "agent_name": "{agent_name}"}},
+    ("POST", "/dashboard/api/channel-integrations"): {"json": {
+        "project_id": "{project_id}", "agent_name": "{agent_name}"}},
 }
 
 # Writes that name no row, and the test of this module that covers each
@@ -203,11 +181,13 @@ COVERED_BY_TEST: Dict[Route, str] = {
     ("POST", "/dashboard/api/projects"): "test_a_project_is_created_in_the_current_workspace",
     ("POST", "/dashboard/api/agents/import"): "test_an_import_keeps_to_the_current_workspace",
     ("POST", "/dashboard/api/templates/import"): "test_a_template_is_imported_into_the_current_workspace",
+    ("POST", "/dashboard/api/tokens"): "test_a_token_acts_in_the_current_workspace",
     **{route: "test_every_body_naming_a_row_of_b_is_a_404" for route in BODIES_NAMING_B},
 }
 
 # A row of workspace B for each path parameter of a scoped route, set by the fixture
-B_IDS: Dict[str, str] = {"agent_name": B_ROOT, "build_id": "build-of-b"}
+B_IDS: Dict[str, str] = {"agent_name": B_ROOT, "build_id": "build-of-b",
+                         "scope": "agent", "scope_id": B_ROOT}
 
 
 def _api_routes() -> List[APIRoute]:
@@ -308,16 +288,51 @@ class _TwoWorkspaces(unittest.TestCase):
                          ResponseFeedback(session_id="s", message_id="m", agent_name=B_ROOT,
                                           project_id=self.ids["project_b"], rating="down",
                                           question=B_MARKER, answer=B_MARKER)])
+        # B's logs, as its agent writes them, and its operations
+        session.add_all([
+            TokenUsageLog(request_id=f"{B_MARKER}-request", session_id=f"{B_MARKER}-session",
+                          user_id=BOB, agent_name=B_ROOT, model_name=B_MARKER, status="SUCCESS",
+                          prompt_tokens=1, response_tokens=1, workspace_id=B),
+            GuardrailLog(request_id=f"{B_MARKER}-request", agent_name=B_ROOT, guardrail_type=B_MARKER,
+                         action_taken="block", workspace_id=B),
+            AuditLog(actor=BOB, action=B_MARKER, resource_type="agent", resource_id=B_ROOT,
+                     workspace_id=B),
+            AgentResponse(invocation_id=f"{B_MARKER}-invocation", agent_name=B_ROOT, user_id=BOB,
+                          started_at=datetime.now(timezone.utc).replace(tzinfo=None), workspace_id=B),
+            LangGraphSession(id=f"{B_MARKER}-lg-session", app_name=B_ROOT, user_id=BOB),
+        ])
+        b_ops = {
+            "trigger_id": AgentTrigger(name=f"{B_MARKER}-trigger", agent_name=B_ROOT,
+                                       project_id=self.ids["project_b"], prompt=B_MARKER),
+            "rule_id": AlertRule(name=f"{B_MARKER}-rule", scope="agent", scope_id=B_ROOT,
+                                 condition_type="agent_error_count", destination_type="http",
+                                 workspace_id=B),
+            "key_id": WidgetApiKey(api_key="wk_b", project_id=self.ids["project_b"],
+                                   agent_name=B_ROOT, label=B_MARKER),
+            "integration_id": ChannelIntegration(project_id=self.ids["project_b"], agent_name=B_ROOT,
+                                                 label=B_MARKER, team_id="T_B"),
+            "rate_limit": RateLimitConfig(scope="agent", scope_id=B_ROOT, tokens_per_day=1,
+                                          workspace_id=B),
+        }
+        session.add_all(b_ops.values())
         session.commit()
         self.ids["widget_key_a"] = widget_key.id
         self.b_rows = {"config_id": b_root.id, "version_id": version.id, "block_id": block.id,
-                       "test_case_id": test_case.id, "store_name": store.store_name}
+                       "test_case_id": test_case.id, "store_name": store.store_name,
+                       "token_id": session.query(PersonalAccessToken.id).filter_by(user_id=BOB).scalar(),
+                       **{name: row.id for name, row in b_ops.items()}}
         session.close()
 
         dashboard = auth_server.dashboard_server
         for patcher in (
             patch.object(database_client, "_database_client", db),
             patch.object(dashboard, "db_client", db),
+            # The services keep the database client they were made with
+            patch.object(rate_limit_service, "_rate_limit_service", None),
+            patch.object(alert_service, "_alert_service", None),
+            patch.object(token_usage_service, "_token_usage_service", None),
+            patch.object(guardrail_log_service, "_guardrail_log_service", None),
+            patch.object(feedback_service, "_feedback_service", None),
         ):
             patcher.start()
             self.addCleanup(patcher.stop)
@@ -325,7 +340,8 @@ class _TwoWorkspaces(unittest.TestCase):
 
     def b_ids(self) -> Dict[str, str]:
         return {**B_IDS, **{k: str(v) for k, v in self.b_rows.items()},
-                "project_id": str(self.ids["project_b"]), "admin": auth.AUTH_USERNAME}
+                "project_id": str(self.ids["project_b"]), "admin": auth.AUTH_USERNAME,
+                "bob": BOB, "lg_session_id": f"{B_MARKER}-lg-session"}
 
 
 class TestEveryRoute(_TwoWorkspaces):
@@ -333,7 +349,7 @@ class TestEveryRoute(_TwoWorkspaces):
     def test_every_route_is_classified_or_checked(self):
         # Both lists name only routes the app serves
         served = {pair for route in _api_routes() for pair in _pairs(route)}
-        for name, routes in (("PLATFORM_ONLY", PLATFORM_ONLY), ("NOT_YET_SCOPED", NOT_YET_SCOPED),
+        for name, routes in (("PLATFORM_ONLY", PLATFORM_ONLY),
                              ("SHARED", SHARED), ("COVERED_BY_TEST", set(COVERED_BY_TEST))):
             self.assertFalse(routes - served, f"{name} names routes the app does not serve")
         for test_name in COVERED_BY_TEST.values():
@@ -342,7 +358,7 @@ class TestEveryRoute(_TwoWorkspaces):
     def test_no_get_route_shows_workspace_b(self):
         leaks = []
         for route in _api_routes():
-            if "GET" not in route.methods or ("GET", route.path) in PLATFORM_ONLY | NOT_YET_SCOPED:
+            if "GET" not in route.methods or ("GET", route.path) in PLATFORM_ONLY:
                 continue
             if route.param_convertors:
                 continue  # called with B's ids below
@@ -357,7 +373,7 @@ class TestEveryRoute(_TwoWorkspaces):
         failures = []
         for route in _api_routes():
             for method, path in _pairs(route):
-                if (method, path) in PLATFORM_ONLY | NOT_YET_SCOPED | SHARED or not route.param_convertors:
+                if (method, path) in PLATFORM_ONLY | SHARED or not route.param_convertors:
                     continue
                 missing = set(route.param_convertors) - set(b_ids)
                 if missing:
@@ -390,10 +406,127 @@ class TestEveryRoute(_TwoWorkspaces):
             for route in _api_routes() if not route.param_convertors
             for method, path in _pairs(route)
             if method in WRITE_METHODS
-            and (method, path) not in PLATFORM_ONLY | NOT_YET_SCOPED | set(COVERED_BY_TEST)
+            and (method, path) not in PLATFORM_ONLY | set(COVERED_BY_TEST)
         )
         self.assertFalse(uncovered, "Add a test that these writes act in the caller's workspace, "
                          "and name it in COVERED_BY_TEST:\n" + "\n".join(uncovered))
+
+
+class TestLogsAndOperations(_TwoWorkspaces):
+    """Logs, traces, sessions, budgets, alert rules, keys and integrations (phase 2d)."""
+
+    def _get(self, path: str, workspace_id: int, **params) -> httpx.Response:
+        response = self.client.get(path, headers=_platform_admin(workspace_id), params=params)
+        self.assertEqual(response.status_code, 200, f"{path}: {response.text[:200]}")
+        return response
+
+    def test_each_workspace_sees_its_own_rows(self):
+        for path in ("/dashboard/api/usage/logs", "/dashboard/api/guardrail-logs",
+                     "/dashboard/api/audit-logs", "/dashboard/api/sessions",
+                     "/dashboard/api/rate-limits", "/dashboard/api/alert-rules",
+                     "/dashboard/api/triggers", "/dashboard/api/widget-keys",
+                     "/dashboard/api/channel-integrations"):
+            self.assertIn(B_ROOT, self._get(path, B).text, path)
+            self.assertNotIn(B_ROOT, self._get(path, A).text, path)
+        stats = self._get("/dashboard/api/stats", B).json()
+        self.assertEqual([row["agent"] for row in stats["top_agents"]], [B_ROOT])
+        self.assertEqual(self._get("/dashboard/api/stats", A).json()["top_agents"], [])
+        # The pages that render the same figures
+        for page in ("/dashboard/usage?view=logs", "/dashboard/overview"):
+            self.assertIn(B_ROOT, self._get(page, B).text, page)
+            self.assertNotIn(B_ROOT, self._get(page, A).text, page)
+
+    def test_another_workspace_s_session_is_left_alone(self):
+        params = {"session_id": f"{B_MARKER}-lg-session", "app_name": B_ROOT, "user_id": BOB,
+                  "runtime": "langgraph"}
+        from shared.utils.langgraph import session_store
+        with patch.object(session_store, "_session_store", None):
+            response = self.client.get("/dashboard/api/sessions/detail", params=params,
+                                       headers=_platform_admin(A))
+            self.assertEqual(response.status_code, 404)
+            self.client.delete("/dashboard/api/sessions", params=params, headers=_platform_admin(A))
+            self._get("/dashboard/api/sessions/detail", B, **params)
+
+    def test_traces_keep_to_their_workspace(self):
+        session = self.Session()
+        session.execute(text(
+            "CREATE TABLE trace_spans (id INTEGER PRIMARY KEY, trace_id TEXT, span_id TEXT, "
+            "parent_span_id TEXT, name TEXT, kind TEXT, start_time DATETIME, end_time DATETIME, "
+            "duration_ms INTEGER, attributes TEXT, status TEXT, error_message TEXT)"))
+        now = datetime.now()
+        for trace, agent in (("trace-a", A_ROOT), ("trace-b", B_ROOT), ("trace-none", None)):
+            attributes = {"gen_ai.operation.name": "invoke_agent",
+                          "gen_ai.conversation.id": f"session-{trace}"}
+            if agent:
+                attributes["gen_ai.agent.name"] = agent
+            session.execute(text(
+                "INSERT INTO trace_spans (trace_id, span_id, name, start_time, end_time, attributes) "
+                "VALUES (:t, 's', 'invoke_agent', :st, :st, :a)"),
+                {"t": trace, "st": now, "a": json.dumps(attributes)})
+        session.commit()
+        session.close()
+
+        def traces(workspace_id: int) -> List[str]:
+            return [t["trace_id"] for t in self._get("/dashboard/api/traces", workspace_id).json()["traces"]]
+
+        self.assertEqual(sorted(traces(A)), ["trace-a", "trace-none"])
+        self.assertEqual(traces(B), ["trace-b"])
+        sessions = self._get("/dashboard/api/traces/sessions", B).json()["sessions"]
+        self.assertEqual([s["session_id"] for s in sessions], ["session-trace-b"])
+        replay = "/dashboard/api/traces/replay"
+        self.assertEqual(self._get(replay, A, session_id="session-trace-b").json()["turns"], [])
+        self.assertTrue(self._get(replay, B, session_id="session-trace-b").json()["turns"])
+
+    def test_a_budget_counts_a_user_in_its_own_workspace(self):
+        import asyncio
+        service = rate_limit_service.get_rate_limit_service()
+        check = lambda agent: asyncio.run(service.check_request_limit(BOB, agent_name=agent))[0]  # noqa: E731
+        service.delete_config("agent", B_ROOT, workspace_id=B)
+        # bob's two tokens were used in B; a budget on him in A doesn't count them,
+        # and doesn't apply in B
+        service.upsert_config("user", BOB, workspace_id=A, tokens_per_day=1)
+        self.assertTrue(check(A_ROOT).allowed)
+        self.assertTrue(check(B_ROOT).allowed)
+        service.upsert_config("user", BOB, workspace_id=B, tokens_per_day=1)
+        self.assertFalse(check(B_ROOT).allowed)
+        usage = "/dashboard/api/rate-limits/usage"
+        self.assertEqual(self._get(usage, A, user_id=BOB).json()["tokens_last_day"], 0)
+        self.assertEqual(self._get(usage, B, user_id=BOB).json()["tokens_last_day"], 2)
+        self.assertEqual(self.client.get(usage, params={"agent_name": B_ROOT},
+                                         headers=_platform_admin(A)).status_code, 404)
+
+    def test_an_alert_rule_measures_its_own_workspace(self):
+        session = self.Session()
+        session.add(TokenUsageLog(request_id="r", agent_name=B_ROOT, status="ERROR", workspace_id=B))
+        session.commit()
+        session.close()
+        service = alert_service.get_alert_service()
+        values = {}
+        for workspace_id in (A, B):
+            rule = service.create_rule(name="all", scope="global", condition_type="agent_error_count",
+                                       destination_type="http", workspace_id=workspace_id)
+            values[workspace_id] = service.evaluate_rule(rule["id"])["value"]
+        self.assertEqual(values, {A: 0, B: 1})
+
+    def test_a_slack_team_connects_to_one_integration(self):
+        response = self.client.post("/dashboard/api/channel-integrations", headers=_platform_admin(A),
+                                    json={"project_id": self.ids["project_a"], "agent_name": A_ROOT,
+                                          "team_id": "T_B"})
+        self.assertEqual((response.status_code, response.json()["detail"]),
+                         (409, "This Slack team is already connected"))
+
+    def test_a_token_acts_in_the_current_workspace(self):
+        with patch("shared.utils.audit_service.log"):
+            response = self.client.post("/dashboard/api/tokens", headers=_platform_admin(B),
+                                        json={"name": "in b"})
+        self.assertEqual(response.status_code, 200, response.text)
+        session = self.Session()
+        token = session.query(PersonalAccessToken).filter_by(name="in b").one()
+        session.close()
+        self.assertEqual(token.workspace_id, B)
+        listed = lambda w: [t["name"] for t in self._get("/dashboard/api/tokens", w).json()["tokens"]]  # noqa: E731
+        self.assertEqual(listed(B), ["in b"])
+        self.assertEqual(listed(A), [])
 
 
 class TestProjects(_TwoWorkspaces):
@@ -484,7 +617,7 @@ class TestAgents(_TwoWorkspaces):
         self.assertEqual(self._agent("into_a").project_id, self.ids["project_a"])
         session = self.Session()
         self.assertIsNone(session.query(MemoryBlock).filter_by(label="x").first())
-        self.assertEqual(session.query(auth_server.dashboard_server.AgentTrigger).count(), 0)
+        self.assertIsNone(session.query(AgentTrigger).filter_by(name="t").first())
         session.close()
 
     def test_a_template_is_imported_into_the_current_workspace(self):

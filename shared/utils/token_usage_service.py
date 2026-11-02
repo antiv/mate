@@ -14,6 +14,7 @@ from sqlalchemy import case, func
 from sqlalchemy.exc import SQLAlchemyError
 from .database_client import get_database_client
 from .models import TokenUsageLog
+from .workspaces import rows_of
 
 logger = logging.getLogger(__name__)
 
@@ -335,8 +336,10 @@ class TokenUsageService:
             
         return self.insert_token_usage(token_data)
 
-    def get_user_tokens_since(self, user_id: str, since: datetime) -> int:
-        """Total tokens (prompt+response) for user since given datetime."""
+    def get_user_tokens_since(self, user_id: str, since: datetime,
+                              workspace_id: Optional[int] = None) -> int:
+        """Total tokens (prompt+response) for user since given datetime, only in
+        `workspace_id` when it is given."""
         session = self._get_session()
         if not session:
             return 0
@@ -348,7 +351,8 @@ class TokenUsageService:
                 ), 0)
             ).filter(
                 TokenUsageLog.user_id == user_id,
-                TokenUsageLog.timestamp >= since
+                TokenUsageLog.timestamp >= since,
+                *rows_of(TokenUsageLog, workspace_id),
             ).scalar()
             return int(row or 0)
         except SQLAlchemyError as e:
@@ -412,11 +416,13 @@ class TokenUsageService:
             session.close()
 
     def get_spend_since(self, scope: str, scope_id: str, since: datetime,
-                        include_sub_agents: bool = False) -> Optional[Tuple[float, int]]:
+                        include_sub_agents: bool = False,
+                        workspace_id: Optional[int] = None) -> Optional[Tuple[float, int]]:
         """(US dollars spent, calls without a price) for a scope since the given datetime.
 
         None when the database could not be read, so a caller can tell an error
         from no spend. include_sub_agents widens an agent scope to its sub-agents.
+        workspace_id narrows a user scope to what the user spent in that workspace.
         """
         session = self._get_session()
         if not session:
@@ -429,7 +435,8 @@ class TokenUsageService:
                     else_=0)), 0),
             ).filter(TokenUsageLog.timestamp >= since)
             if scope == "user":
-                query = query.filter(TokenUsageLog.user_id == scope_id)
+                query = query.filter(TokenUsageLog.user_id == scope_id,
+                                     *rows_of(TokenUsageLog, workspace_id))
             elif scope == "agent":
                 names = _agent_tree(session, scope_id) if include_sub_agents else [scope_id]
                 query = query.filter(TokenUsageLog.agent_name.in_(names))
@@ -456,8 +463,10 @@ class TokenUsageService:
 
     def get_error_count_since(self, since: datetime, agent_name: Optional[str] = None,
                               user_id: Optional[str] = None,
-                              project_id: Optional[int] = None) -> int:
-        """Count failed agent calls since given datetime.
+                              project_id: Optional[int] = None,
+                              workspace_id: Optional[int] = None) -> int:
+        """Count failed agent calls since given datetime, only in `workspace_id` when
+        it is given.
 
         Filters status == 'ERROR' only, so RBAC denials (ACCESS_DENIED) never read
         as model failures. Exactly one scope argument is expected; passing none
@@ -469,7 +478,8 @@ class TokenUsageService:
         try:
             query = session.query(func.count(TokenUsageLog.id)).filter(
                 TokenUsageLog.status == 'ERROR',
-                TokenUsageLog.timestamp >= since
+                TokenUsageLog.timestamp >= since,
+                *rows_of(TokenUsageLog, workspace_id),
             )
             if agent_name:
                 query = query.filter(TokenUsageLog.agent_name == agent_name)
