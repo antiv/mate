@@ -13,7 +13,7 @@ import sys
 import shutil
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, List, Optional, Set, Tuple
 from sqlalchemy.exc import IntegrityError
 from fastapi import Body, FastAPI, Request, HTTPException, Depends, Form, File, UploadFile, Query
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
@@ -26,8 +26,8 @@ from shared.utils.path_safety import resolve_within_base
 from shared.utils.models import DEFAULT_WORKSPACE_ID
 from shared.utils.workspaces import (
     agent_names_of, agent_workspace, agents_outside, caller_access, config_workspace,
-    project_in_workspace, roles_allow, store_workspace, test_case_workspace, version_workspace,
-    workspace_of_project,
+    in_projects_of, project_in_workspace, roles_allow, rows_of, store_workspace,
+    test_case_workspace, version_workspace, workspace_of_project,
 )
 from server.request_context import RequestContext, get_request_context
 
@@ -192,12 +192,14 @@ class DashboardServer:
 
     def _get_usage_stats(self, days: int = 7,
                          origins: Optional[tuple] = None,
-                         user_id: Optional[str] = None) -> Dict[str, Any]:
+                         user_id: Optional[str] = None,
+                         workspace_id: Optional[int] = None) -> Dict[str, Any]:
         """Get usage statistics from database.
 
         `origins` narrows the latency panel only; None keeps the interactive default.
         `user_id` narrows every panel to that user's own traffic (what a non-admin
-        sees); None is everyone's.
+        sees); None is everyone's. `workspace_id` narrows every panel to that
+        workspace's; None is every workspace's.
         """
         if not self.db_client:
             return {
@@ -240,6 +242,7 @@ class DashboardServer:
             succeeded = self.TokenUsageLog.status == 'SUCCESS'
             if user_id is not None:
                 succeeded = and_(succeeded, self.TokenUsageLog.user_id == user_id)
+            succeeded = and_(succeeded, *rows_of(self.TokenUsageLog, workspace_id))
 
             # Get token usage statistics
             stats = session.query(
@@ -296,7 +299,8 @@ class DashboardServer:
             # records per-LLM-call cost with no duration, and its rows are already
             # filtered to successes, so a success rate is not derivable from them.
             perf = self._get_agent_perf(
-                session, [a.agent_name for a in top_agents], start_date, end_date, user_id)
+                session, [a.agent_name for a in top_agents], start_date, end_date, user_id,
+                workspace_id)
 
             result = {
                 'total_requests': stats.total_requests or 0,
@@ -309,9 +313,11 @@ class DashboardServer:
                 'hourly_usage': hourly_data,
                 'database_info': self._get_database_info()
             }
-            result.update(self._get_quality_stats(session, start_date, end_date, origins, user_id))
+            result.update(self._get_quality_stats(session, start_date, end_date, origins, user_id,
+                                                  workspace_id))
             try:
-                result['cost'] = self._get_cost_stats(session, start_date, end_date, user_id)
+                result['cost'] = self._get_cost_stats(session, start_date, end_date, user_id,
+                                                      workspace_id)
             except Exception as e:
                 # Like the quality panels: a failure here must not blank the page
                 logger.warning(f"Cost stats failed: {e}")
@@ -362,7 +368,8 @@ class DashboardServer:
 
     def _get_agent_perf(self, session, agent_names: List[str],
                         start_date: datetime, end_date: datetime,
-                        user_id: Optional[str] = None) -> Dict[str, dict]:
+                        user_id: Optional[str] = None,
+                        workspace_id: Optional[int] = None) -> Dict[str, dict]:
         """Mean duration and success rate per agent, from agent_responses.
 
         Separate from the token panels for the same reason as _get_quality_stats:
@@ -382,6 +389,7 @@ class DashboardServer:
             from shared.utils.models import AgentResponse
 
             mine = (AgentResponse.user_id == user_id,) if user_id is not None else ()
+            mine += rows_of(AgentResponse, workspace_id)
             rows = session.query(
                 AgentResponse.agent_name,
                 func.count(AgentResponse.id).label('invocations'),
@@ -456,7 +464,8 @@ class DashboardServer:
                                       cls.INTERACTIVE_ORIGINS)
 
     def _get_cost_stats(self, session, start_date, end_date,
-                        user_id: Optional[str] = None) -> Dict[str, Any]:
+                        user_id: Optional[str] = None,
+                        workspace_id: Optional[int] = None) -> Dict[str, Any]:
         """What the period's successful calls cost in US dollars, by agent and project.
 
         A call whose model has no known price has no cost (NULL), so totals cover
@@ -471,6 +480,7 @@ class DashboardServer:
         in_period = (log.status == 'SUCCESS', log.timestamp >= start_date, log.timestamp <= end_date)
         if user_id is not None:
             in_period += (log.user_id == user_id,)
+        in_period += rows_of(log, workspace_id)
 
         totals = session.query(
             func.sum(log.cost_usd),
@@ -571,7 +581,8 @@ class DashboardServer:
 
     def _get_quality_stats(self, session, start_date, end_date,
                            origins: Optional[tuple] = None,
-                           user_id: Optional[str] = None) -> Dict[str, Any]:
+                           user_id: Optional[str] = None,
+                           workspace_id: Optional[int] = None) -> Dict[str, Any]:
         """Satisfaction, response latency and tokens per conversation.
 
         Kept apart from the token panels above: these read agent_responses and
@@ -605,6 +616,10 @@ class DashboardServer:
         rated_mine = (ResponseFeedback.session_id.in_(
             select(AgentResponse.session_id).where(*mine)),) if user_id is not None else ()
         tokens_mine = (self.TokenUsageLog.user_id == user_id,) if user_id is not None else ()
+        # The workspace's: ratings by the project they were given in
+        mine += rows_of(AgentResponse, workspace_id)
+        rated_mine += in_projects_of(ResponseFeedback.project_id, workspace_id)
+        tokens_mine += rows_of(self.TokenUsageLog, workspace_id)
 
         # --- Satisfaction -------------------------------------------------
         try:
@@ -974,6 +989,26 @@ class DashboardServer:
             if workspace_id != ctx.workspace_id:
                 raise HTTPException(status_code=404, detail=f"{what} not found")
 
+    def _require_scope_in_workspace(self, ctx: RequestContext, scope: str, scope_id: str) -> None:
+        """404 unless a budget's or an alert rule's agent or project is the workspace's.
+        A user scope names a person, who may belong to several workspaces; a rule on
+        them counts only what they do in this one."""
+        if scope == "agent":
+            self._require_in_workspace(ctx, agent_name=scope_id)
+        elif scope == "project":
+            if not scope_id.isdigit():
+                raise HTTPException(status_code=404, detail="Project not found")
+            self._require_in_workspace(ctx, project_id=int(scope_id))
+
+    def _workspace_trigger(self, session, ctx: RequestContext, trigger_id: int):
+        """The trigger, if its project is the caller's workspace's; 404 otherwise."""
+        trigger = session.query(self.AgentTrigger).filter(
+            self.AgentTrigger.id == trigger_id,
+            *in_projects_of(self.AgentTrigger.project_id, ctx.workspace_id)).first()
+        if not trigger:
+            raise HTTPException(status_code=404, detail="Trigger not found")
+        return trigger
+
     def _check_agent_names(self, ctx: RequestContext, name: str, parents: List[str],
                            config_id: Optional[int] = None) -> None:
         """D1: an agent name is unique across the installation, and parent_agents name
@@ -1085,8 +1120,10 @@ class DashboardServer:
             session.close()
     
     def _get_token_usage_logs(self, hours: int = 24, limit: int = 100, page: int = 1,
-                              user_id: Optional[str] = None) -> Dict[str, Any]:
-        """Get paginated token usage logs, only `user_id`'s when it is given."""
+                              user_id: Optional[str] = None,
+                              workspace_id: Optional[int] = None) -> Dict[str, Any]:
+        """Get paginated token usage logs, only `user_id`'s and `workspace_id`'s when
+        they are given."""
         if not self.db_client:
             return {"error": "Database connection failed"}
         
@@ -1104,6 +1141,7 @@ class DashboardServer:
             in_window = [self.TokenUsageLog.timestamp >= time_threshold]
             if user_id is not None:
                 in_window.append(self.TokenUsageLog.user_id == user_id)
+            in_window.extend(rows_of(self.TokenUsageLog, workspace_id))
 
             # Get total count
             total_count = session.query(func.count(self.TokenUsageLog.id)).filter(
@@ -1148,8 +1186,27 @@ class DashboardServer:
         finally:
             session.close()
 
-    def _get_traces(self, hours: int = 24, limit: int = 50, trace_id: Optional[str] = None) -> Dict[str, Any]:
-        """Get traces from trace_spans table. Returns list of traces with span trees."""
+    def _traces_in_workspace(self, session, spans: List[Dict[str, Any]],
+                             workspace_id: Optional[int]) -> Set[str]:
+        """The ids of the traces among `spans` that are the workspace's: every agent a
+        trace names is one of its agents. An agent with no config counts as the default
+        workspace's, and so does a trace that names none. None keeps every trace."""
+        from shared.utils.tracing.replay import AGENT_ATTRS
+        named: Dict[str, Set[str]] = {}
+        for span in spans:
+            agents = named.setdefault(span["trace_id"], set())
+            agents.update(str(span["attributes"][key]) for key in AGENT_ATTRS
+                          if span["attributes"].get(key))
+        if workspace_id is None:
+            return set(named)
+        outside = set(agents_outside(session, workspace_id, sorted(set().union(*named.values()))))
+        return {trace for trace, agents in named.items()
+                if not agents & outside and (agents or workspace_id == DEFAULT_WORKSPACE_ID)}
+
+    def _get_traces(self, hours: int = 24, limit: int = 50, trace_id: Optional[str] = None,
+                    workspace_id: Optional[int] = None) -> Dict[str, Any]:
+        """Get traces from trace_spans table. Returns list of traces with span trees,
+        only `workspace_id`'s when it is given."""
         if not self.db_client:
             return {"traces": [], "error": "Database connection failed"}
 
@@ -1163,6 +1220,23 @@ class DashboardServer:
 
             time_threshold = datetime.now() - timedelta(hours=hours)
 
+            def _parse_attrs(attrs):
+                if not attrs:
+                    return {}
+                if isinstance(attrs, dict):  # PostgreSQL's driver returns JSONB already parsed
+                    return attrs
+                try:
+                    return json.loads(attrs)
+                except (json.JSONDecodeError, TypeError):
+                    return {}
+
+            def _in_workspace(rows):
+                if workspace_id is None:
+                    return rows
+                keep = self._traces_in_workspace(session, [
+                    {"trace_id": r[0], "attributes": _parse_attrs(r[8])} for r in rows], workspace_id)
+                return [r for r in rows if r[0] in keep]
+
             if trace_id:
                 rows = session.execute(
                     text("""
@@ -1172,6 +1246,7 @@ class DashboardServer:
                     """),
                     {"tid": trace_id, "threshold": time_threshold},
                 ).fetchall()
+                rows = _in_workspace(rows)
             else:
                 # Fetch all spans in time range, group by trace_id, take top N traces by most recent
                 rows = session.execute(
@@ -1183,6 +1258,7 @@ class DashboardServer:
                     """),
                     {"threshold": time_threshold},
                 ).fetchall()
+                rows = _in_workspace(rows)
                 # Build trace_id -> max(start_time) to sort traces, keep top N
                 trace_max_time = {}
                 for r in rows:
@@ -1204,16 +1280,6 @@ class DashboardServer:
                 if hasattr(val, "isoformat"):
                     return val.isoformat()
                 return str(val)
-
-            def _parse_attrs(attrs):
-                if not attrs:
-                    return {}
-                if isinstance(attrs, dict):  # PostgreSQL's driver returns JSONB already parsed
-                    return attrs
-                try:
-                    return json.loads(attrs)
-                except (json.JSONDecodeError, TypeError):
-                    return {}
 
             traces = {}
             for row in rows:
@@ -1304,11 +1370,13 @@ class DashboardServer:
         return spans
 
     def _list_replay_sessions(self, hours: int = 24, limit: int = 50,
-                              project_id: Optional[int] = None) -> Dict[str, Any]:
+                              project_id: Optional[int] = None,
+                              workspace_id: Optional[int] = None) -> Dict[str, Any]:
         """Sessions with traced turns in the last `hours`, most recent first.
 
         With `project_id`, only sessions in which an agent of that project ran, so the
-        Visual Builder offers only what it can draw.
+        Visual Builder offers only what it can draw. With `workspace_id`, only the
+        workspace's traces.
         """
         from datetime import timedelta
         from shared.utils.tracing.replay import AGENT_ATTRS, session_of, to_datetime
@@ -1325,6 +1393,9 @@ class DashboardServer:
                 session, "start_time >= :threshold AND {attributes_text} LIKE :pat",
                 {"threshold": datetime.now() - timedelta(hours=hours), "pat": "%gen_ai.conversation.id%"},
             )
+            if workspace_id is not None:
+                keep = self._traces_in_workspace(session, spans, workspace_id)
+                spans = [s for s in spans if s["trace_id"] in keep]
             found: Dict[str, Dict[str, Any]] = {}
             for s in spans:
                 sid = session_of(s)
@@ -1371,8 +1442,10 @@ class DashboardServer:
         return {name: {"config_id": config_id, "latest_version": latest.get(config_id)}
                 for name, config_id in ids.items()}
 
-    def _get_session_replay(self, session_id: str, hours: int = 168) -> Dict[str, Any]:
-        """Every traced turn of one session, built into a replay timeline."""
+    def _get_session_replay(self, session_id: str, hours: int = 168,
+                            workspace_id: Optional[int] = None) -> Dict[str, Any]:
+        """Every traced turn of one session, built into a replay timeline; only the
+        workspace's turns when `workspace_id` is given."""
         from datetime import timedelta
         from shared.utils.tracing.replay import build_replay, session_of
         if not self._REPLAY_SESSION_ID.match(session_id or ""):
@@ -1390,6 +1463,11 @@ class DashboardServer:
             if not trace_ids:
                 return {"session_id": session_id, "turns": []}
             spans = self._replay_spans(session, "trace_id IN :tids", {"tids": trace_ids})
+            if workspace_id is not None:
+                keep = self._traces_in_workspace(session, spans, workspace_id)
+                spans = [s for s in spans if s["trace_id"] in keep]
+                if not spans:
+                    return {"session_id": session_id, "turns": []}
             replay = build_replay(session_id, spans)
             try:
                 replay["agent_configs"] = self._replay_agent_configs(session, replay["timeline"]["agents"])
@@ -3117,8 +3195,13 @@ class DashboardServer:
 
     def _get_sessions(self, runtime: str = "all", app_name: Optional[str] = None,
                       user_id: Optional[str] = None, search: Optional[str] = None,
-                      page: int = 1, limit: int = 50) -> Dict[str, Any]:
-        """Fetch and aggregate active and historical sessions from LangGraph and ADK stores with optimized pagination."""
+                      page: int = 1, limit: int = 50,
+                      workspace_id: Optional[int] = None) -> Dict[str, Any]:
+        """Fetch and aggregate active and historical sessions from LangGraph and ADK stores with optimized pagination.
+
+        With `workspace_id`, only the sessions of the workspace's agents (app_name is the
+        root agent); a session of an agent with no config counts as the default
+        workspace's."""
         import json
         from datetime import datetime, timezone
 
@@ -3222,6 +3305,15 @@ class DashboardServer:
                         })
             except Exception as e:
                 pass
+
+        if workspace_id is not None and raw_items and self.db_client:
+            db_session = self.db_client.get_session()
+            try:
+                outside = set(agents_outside(db_session, workspace_id,
+                                             sorted({item["app_name"] for item in raw_items})))
+            finally:
+                db_session.close()
+            raw_items = [item for item in raw_items if item["app_name"] not in outside]
 
         # Sort all session metadata by last updated timestamp descending
         raw_items.sort(key=lambda x: x.get("sort_ts") or 0, reverse=True)
@@ -3398,6 +3490,14 @@ class DashboardServer:
 
         return None
 
+    def _session_in_workspace(self, ctx: RequestContext, detail: Dict[str, Any]) -> bool:
+        """True if the session's agent (its app_name) is one of the caller's workspace."""
+        try:
+            self._require_in_workspace(ctx, agent_name=detail.get("app_name") or "")
+        except HTTPException:
+            return False
+        return True
+
     def _get_session_events(self, session_id: str) -> Optional[List[Dict[str, Any]]]:
         """
         A session's events by id alone, from whichever runtime holds it; None when
@@ -3467,7 +3567,7 @@ class DashboardServer:
             """Platform Overview — Control Room landing page."""
             if not ctx.is_admin:
                 return RedirectResponse(url="/dashboard/workroom", status_code=302)
-            stats = self._get_usage_stats(7)
+            stats = self._get_usage_stats(7, workspace_id=ctx.workspace_id)
             return self.templates.TemplateResponse(request, "dashboard/index.html", {
                 "request": request,
                 "page_title": "Platform Overview",
@@ -3569,8 +3669,10 @@ class DashboardServer:
             # Non-admin users see only their own usage
             current_user_id = ctx.user_id
             scope = None if is_admin else current_user_id
-            stats = self._get_usage_stats(days, self.resolve_origins(origin), user_id=scope)
-            logs = (self._get_token_usage_logs(24, limit=1000, user_id=scope)
+            stats = self._get_usage_stats(days, self.resolve_origins(origin), user_id=scope,
+                                          workspace_id=ctx.workspace_id)
+            logs = (self._get_token_usage_logs(24, limit=1000, user_id=scope,
+                                               workspace_id=ctx.workspace_id)
                     if view == "logs" else {"logs": []})
             return self.templates.TemplateResponse(request, "dashboard/usage.html", {
                 "request": request,
@@ -3678,7 +3780,8 @@ class DashboardServer:
                 user_id=user_id,
                 search=search,
                 page=page,
-                limit=limit
+                limit=limit,
+                workspace_id=ctx.workspace_id,
             )
 
         @self.app.get("/dashboard/api/sessions/detail", tags=["Dashboard - Sessions"])
@@ -3692,7 +3795,7 @@ class DashboardServer:
         ):
             """Get complete history of prompts, responses, thoughts, tool calls, and state for a session."""
             detail = self._get_session_detail(runtime=runtime, app_name=app_name, user_id=user_id, session_id=session_id)
-            if not detail:
+            if not detail or not self._session_in_workspace(ctx, detail):
                 raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
             return detail
 
@@ -3706,6 +3809,9 @@ class DashboardServer:
             ctx: RequestContext = Depends(get_request_context)
         ):
             """Delete a specific session and its associated events."""
+            detail = self._get_session_detail(runtime=runtime, app_name=app_name, user_id=user_id, session_id=session_id)
+            if not detail or not self._session_in_workspace(ctx, detail):
+                raise HTTPException(status_code=404, detail=f"Could not delete session {session_id}")
             deleted = self._delete_session(runtime=runtime, app_name=app_name, user_id=user_id, session_id=session_id)
             if not deleted:
                 raise HTTPException(status_code=404, detail=f"Could not delete session {session_id}")
@@ -4071,7 +4177,8 @@ class DashboardServer:
         @self.app.get("/dashboard/api/stats", tags=["Dashboard - Usage Analytics"])
         async def get_stats(request: Request, ctx: RequestContext = Depends(get_request_context), days: int = 7, origin: str = "interactive"):
             """Get usage statistics. `origin` narrows the latency panel only."""
-            return self._get_usage_stats(days, self.resolve_origins(origin))
+            return self._get_usage_stats(days, self.resolve_origins(origin),
+                                         workspace_id=ctx.workspace_id)
 
         @self.app.get("/dashboard/api/usage/logs", tags=["Dashboard - Usage Analytics"])
         async def get_usage_logs_api(
@@ -4082,14 +4189,14 @@ class DashboardServer:
             page: int = 1
         ):
             """Get paginated token usage logs."""
-            return self._get_token_usage_logs(hours, limit, page)
+            return self._get_token_usage_logs(hours, limit, page, workspace_id=ctx.workspace_id)
 
         @self.app.get("/dashboard/api/rate-limits", tags=["Dashboard - Rate Limits"])
         async def get_rate_limits_api(request: Request, ctx: RequestContext = Depends(get_request_context), scope: Optional[str] = None):
             """Get rate limit configs, optionally filtered by scope (user, agent, project)."""
             from shared.utils.rate_limit_service import get_rate_limit_service
             svc = get_rate_limit_service()
-            configs = svc.get_configs(scope=scope)
+            configs = svc.get_configs(scope=scope, workspace_id=ctx.workspace_id)
             return {"configs": configs}
 
         @self.app.get("/dashboard/api/rate-limits/usage", tags=["Dashboard - Rate Limits"])
@@ -4101,14 +4208,16 @@ class DashboardServer:
             project_id: Optional[int] = None,
             include_sub_agents: bool = False,
         ):
-            """Get current usage vs limits for user/agent/project."""
+            """Get current usage vs limits for user/agent/project; a user's in this workspace."""
             from shared.utils.rate_limit_service import get_rate_limit_service
+            self._require_in_workspace(ctx, agent_name=agent_name, project_id=project_id)
             svc = get_rate_limit_service()
             usage = svc.get_usage_snapshot(
                 user_id=user_id,
                 agent_name=agent_name,
                 project_id=project_id,
                 include_sub_agents=include_sub_agents,
+                workspace_id=ctx.workspace_id,
             )
             return {
                 "requests_last_min": usage.requests_last_min,
@@ -4135,6 +4244,7 @@ class DashboardServer:
                 raise HTTPException(status_code=400, detail="scope and scope_id required")
             if scope not in ("user", "agent", "project"):
                 raise HTTPException(status_code=400, detail="scope must be user, agent, or project")
+            self._require_scope_in_workspace(ctx, scope, str(scope_id))
             import math
             budgets = {}
             for key in ("usd_per_day", "usd_per_month"):
@@ -4158,6 +4268,7 @@ class DashboardServer:
             result = svc.upsert_config(
                 scope=scope,
                 scope_id=str(scope_id),
+                workspace_id=ctx.workspace_id,
                 requests_per_minute=body.get("requests_per_minute"),
                 tokens_per_hour=body.get("tokens_per_hour"),
                 tokens_per_day=body.get("tokens_per_day"),
@@ -4187,7 +4298,7 @@ class DashboardServer:
             if scope not in ("user", "agent", "project"):
                 raise HTTPException(status_code=400, detail="scope must be user, agent, or project")
             svc = get_rate_limit_service()
-            if not svc.delete_config(scope=scope, scope_id=scope_id):
+            if not svc.delete_config(scope=scope, scope_id=scope_id, workspace_id=ctx.workspace_id):
                 raise HTTPException(status_code=404, detail="Config not found")
             return {"deleted": True}
 
@@ -4200,7 +4311,7 @@ class DashboardServer:
             trace_id: Optional[str] = None,
         ):
             """Get traces from trace_spans table for dashboard viewer."""
-            return self._get_traces(hours, limit, trace_id)
+            return self._get_traces(hours, limit, trace_id, workspace_id=ctx.workspace_id)
 
         @self.app.get("/dashboard/api/traces/sessions", tags=["Dashboard - Traces"])
         async def get_replay_sessions_api(
@@ -4211,7 +4322,7 @@ class DashboardServer:
             project_id: Optional[int] = None,
         ):
             """Sessions with traced turns, for the Visual Builder's replay picker; a project's only with project_id."""
-            return self._list_replay_sessions(hours, limit, project_id)
+            return self._list_replay_sessions(hours, limit, project_id, workspace_id=ctx.workspace_id)
 
         @self.app.get("/dashboard/api/traces/replay", tags=["Dashboard - Traces"])
         async def get_session_replay_api(
@@ -4221,7 +4332,7 @@ class DashboardServer:
             hours: int = Query(168, ge=1, le=24 * 90),
         ):
             """One session's traced turns as replay timelines: agents, model calls, tools, fallbacks."""
-            return self._get_session_replay(session_id, hours)
+            return self._get_session_replay(session_id, hours, workspace_id=ctx.workspace_id)
 
         @self.app.get("/dashboard/api/users", tags=["Dashboard - Users"])
         async def get_users(request: Request, ctx: RequestContext = Depends(get_request_context)):
@@ -4354,6 +4465,14 @@ class DashboardServer:
                 db = self.db_client.get_session()
                 if db:
                     try:
+                        outside = agents_outside(db, ctx.workspace_id, [agent_name])
+                    finally:
+                        db.close()
+                    if outside:
+                        raise HTTPException(status_code=404, detail="Agent not found")
+                db = self.db_client.get_session()
+                if db:
+                    try:
                         row = db.query(self.AgentConfig.project_id).filter(
                             self.AgentConfig.name == agent_name).first()
                         project_id = row[0] if row else None
@@ -4381,7 +4500,8 @@ class DashboardServer:
         ):
             """Ratings already given in a session, so a reloaded chat shows them."""
             from shared.utils.feedback_service import get_feedback_service
-            return {"ratings": get_feedback_service().get_for_session(session_id)}
+            return {"ratings": get_feedback_service().get_for_session(
+                session_id, workspace_id=ctx.workspace_id)}
 
         @self.app.get("/dashboard/api/tokens", tags=["Dashboard - Users"])
         async def list_user_tokens(
@@ -4395,7 +4515,8 @@ class DashboardServer:
             if not session:
                 raise HTTPException(status_code=500, detail="Database unavailable")
             try:
-                tokens = session.query(PersonalAccessToken).filter_by(user_id=ctx.user_id).all()
+                tokens = session.query(PersonalAccessToken).filter_by(
+                    user_id=ctx.user_id, workspace_id=ctx.workspace_id).all()
                 return {"success": True, "tokens": [t.to_dict() for t in tokens]}
             finally:
                 session.close()
@@ -4452,12 +4573,14 @@ class DashboardServer:
                     token_prefix=token_prefix,
                     name=name,
                     user_id=ctx.user_id,
+                    workspace_id=ctx.workspace_id,
                     expires_at=expires_at
                 )
                 session.add(pat)
                 session.commit()
                 
-                audit_service.log(ctx.user_id, "pat_create", "personal_access_token", resource_id=str(pat.id), details={"name": name}, request=request)
+                audit_service.log(ctx.user_id, "pat_create", "personal_access_token", resource_id=str(pat.id), details={"name": name}, request=request,
+                                  workspace_id=ctx.workspace_id)
                 
                 return {
                     "success": True,
@@ -4483,14 +4606,16 @@ class DashboardServer:
             if not session:
                 raise HTTPException(status_code=500, detail="Database unavailable")
             try:
-                pat = session.query(PersonalAccessToken).filter_by(id=token_id, user_id=ctx.user_id).first()
+                pat = session.query(PersonalAccessToken).filter_by(
+                    id=token_id, user_id=ctx.user_id, workspace_id=ctx.workspace_id).first()
                 if not pat:
                     raise HTTPException(status_code=404, detail="Token not found")
                 
                 session.delete(pat)
                 session.commit()
                 
-                audit_service.log(ctx.user_id, "pat_revoke", "personal_access_token", resource_id=str(token_id), request=request)
+                audit_service.log(ctx.user_id, "pat_revoke", "personal_access_token", resource_id=str(token_id), request=request,
+                                  workspace_id=ctx.workspace_id)
                 return {"success": True, "message": "Token revoked successfully"}
             except HTTPException:
                 raise
@@ -4944,6 +5069,7 @@ class DashboardServer:
                         "memory_blocks_created": result.get("memory_blocks_created", 0),
                     },
                     request=request,
+                    project_id=result.get("project_id"),
                 )
                 return result
             except HTTPException:
@@ -5043,6 +5169,7 @@ class DashboardServer:
                         "memory_blocks_updated": result.get("memory_blocks_updated", 0),
                         "memory_blocks_skipped": [b["label"] for b in result.get("memory_blocks_skipped", [])],
                     },
+                    project_id=int(project_id),
                     request=request,
                 )
                 return result
@@ -6056,6 +6183,7 @@ class DashboardServer:
                     details={"project_id": project_id, "label": result["label"],
                              "restored_from": result["restored_from"], "recreated": result["recreated"]},
                     request=request,
+                    project_id=project_id,
                 )
             return {"success": True, "block": result}
 
@@ -6193,7 +6321,8 @@ class DashboardServer:
                 return {"logs": [], "total": 0}
             try:
                 from sqlalchemy import func
-                query = session.query(self.GuardrailLog)
+                query = session.query(self.GuardrailLog).filter(
+                    *rows_of(self.GuardrailLog, ctx.workspace_id))
                 if agent_name:
                     query = query.filter(self.GuardrailLog.agent_name == agent_name)
                 if guardrail_type:
@@ -6239,7 +6368,7 @@ class DashboardServer:
                 return {"logs": [], "total": 0}
             try:
                 from datetime import datetime as dt
-                query = session.query(self.AuditLog)
+                query = session.query(self.AuditLog).filter(*rows_of(self.AuditLog, ctx.workspace_id))
                 if actor:
                     query = query.filter(self.AuditLog.actor == actor)
                 if action:
@@ -6293,7 +6422,7 @@ class DashboardServer:
                 raise HTTPException(status_code=503, detail="Database unavailable")
             try:
                 from datetime import datetime as dt
-                query = session.query(self.AuditLog)
+                query = session.query(self.AuditLog).filter(*rows_of(self.AuditLog, ctx.workspace_id))
                 if actor:
                     query = query.filter(self.AuditLog.actor == actor)
                 if action:
@@ -7565,7 +7694,8 @@ class DashboardServer:
             if not session:
                 return {"triggers": []}
             try:
-                q = session.query(self.AgentTrigger)
+                q = session.query(self.AgentTrigger).filter(
+                    *in_projects_of(self.AgentTrigger.project_id, ctx.workspace_id))
                 if project_id is not None:
                     q = q.filter(self.AgentTrigger.project_id == project_id)
                 if agent_name:
@@ -7719,6 +7849,8 @@ class DashboardServer:
             )
             if config_error:
                 raise HTTPException(status_code=400, detail=config_error)
+            self._require_in_workspace(ctx, agent_name=body.get("agent_name", ""),
+                                       project_id=int(body.get("project_id", 0)))
             session = self.db_client.get_session()
             if not session:
                 raise HTTPException(status_code=500, detail="Database unavailable")
@@ -7800,11 +7932,11 @@ class DashboardServer:
             if not session:
                 raise HTTPException(status_code=500, detail="Database unavailable")
             try:
-                trigger = session.query(self.AgentTrigger).filter(
-                    self.AgentTrigger.id == trigger_id
-                ).first()
-                if not trigger:
-                    raise HTTPException(status_code=404, detail="Trigger not found")
+                trigger = self._workspace_trigger(session, ctx, trigger_id)
+                if "agent_name" in body or "project_id" in body:
+                    self._require_in_workspace(
+                        ctx, agent_name=body.get("agent_name", trigger.agent_name),
+                        project_id=int(body.get("project_id", trigger.project_id)))
 
                 # Block converting a working trigger into an unfireable type. A row
                 # already stored as one may still be saved unchanged, so a legacy
@@ -7893,11 +8025,7 @@ class DashboardServer:
             if not session:
                 raise HTTPException(status_code=500, detail="Database unavailable")
             try:
-                trigger = session.query(self.AgentTrigger).filter(
-                    self.AgentTrigger.id == trigger_id
-                ).first()
-                if not trigger:
-                    raise HTTPException(status_code=404, detail="Trigger not found")
+                trigger = self._workspace_trigger(session, ctx, trigger_id)
                 session.delete(trigger)
                 session.commit()
                 get_trigger_runner().sync_cron_jobs()
@@ -7925,11 +8053,7 @@ class DashboardServer:
             if not session:
                 raise HTTPException(status_code=500, detail="Database unavailable")
             try:
-                trigger = session.query(self.AgentTrigger).filter(
-                    self.AgentTrigger.id == trigger_id
-                ).first()
-                if not trigger:
-                    raise HTTPException(status_code=404, detail="Trigger not found")
+                trigger = self._workspace_trigger(session, ctx, trigger_id)
                 trigger.is_enabled = not trigger.is_enabled
                 session.commit()
                 session.refresh(trigger)
@@ -7956,6 +8080,13 @@ class DashboardServer:
             would be to fire the real webhook.
             """
             from shared.utils.trigger_runner import get_trigger_runner
+            session = self.db_client.get_session() if self.db_client else None
+            if not session:
+                raise HTTPException(status_code=503, detail="Database unavailable")
+            try:
+                self._workspace_trigger(session, ctx, trigger_id)
+            finally:
+                session.close()
             try:
                 payload = await request.json()
             except Exception:
@@ -8234,7 +8365,7 @@ class DashboardServer:
             """List alert rules with optional filters."""
             from shared.utils.alert_service import get_alert_service
             return {"alert_rules": get_alert_service().get_rules(
-                scope=scope, condition_type=condition_type)}
+                scope=scope, condition_type=condition_type, workspace_id=ctx.workspace_id)}
 
         @self.app.post("/dashboard/api/alert-rules", tags=["Dashboard - Alerts"])
         async def create_alert_rule(
@@ -8248,6 +8379,8 @@ class DashboardServer:
             body = await request.json()
             fields = _validate_alert_rule(body)
             fields.setdefault("created_by", ctx.user_id)
+            self._require_scope_in_workspace(ctx, fields["scope"], str(fields.get("scope_id") or ""))
+            fields["workspace_id"] = ctx.workspace_id
             rule = get_alert_service().create_rule(**fields)
             if not rule:
                 raise HTTPException(status_code=500, detail="Failed to create alert rule")
@@ -8265,7 +8398,13 @@ class DashboardServer:
             from shared.utils.alert_service import get_alert_service
             body = await request.json()
             fields = _validate_alert_rule(body, partial=True)
-            rule = get_alert_service().update_rule(rule_id, **fields)
+            service = get_alert_service()
+            current = service.get_rule(rule_id, workspace_id=ctx.workspace_id)
+            if not current:
+                raise HTTPException(status_code=404, detail="Alert rule not found")
+            self._require_scope_in_workspace(ctx, fields.get("scope", current["scope"]),
+                                             str(fields.get("scope_id", current["scope_id"]) or ""))
+            rule = service.update_rule(rule_id, workspace_id=ctx.workspace_id, **fields)
             if not rule:
                 raise HTTPException(status_code=404, detail="Alert rule not found")
             return {"alert_rule": rule}
@@ -8280,7 +8419,7 @@ class DashboardServer:
             if not ctx.is_admin:
                 raise HTTPException(status_code=403, detail="Forbidden")
             from shared.utils.alert_service import get_alert_service
-            if not get_alert_service().delete_rule(rule_id):
+            if not get_alert_service().delete_rule(rule_id, workspace_id=ctx.workspace_id):
                 raise HTTPException(status_code=404, detail="Alert rule not found")
             return {"deleted": True}
 
@@ -8298,7 +8437,10 @@ class DashboardServer:
             if not ctx.is_admin:
                 raise HTTPException(status_code=403, detail="Forbidden")
             from shared.utils.alert_service import get_alert_service
-            result = get_alert_service().evaluate_rule(rule_id, force=True)
+            result = get_alert_service().evaluate_rule(rule_id, force=True,
+                                                       workspace_id=ctx.workspace_id)
+            if result.get("status") == "not_found":
+                raise HTTPException(status_code=404, detail="Alert rule not found")
             if result.get("status") == "error":
                 raise HTTPException(status_code=500, detail=result.get("error", "Evaluation failed"))
             return {"result": result}

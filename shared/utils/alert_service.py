@@ -23,6 +23,7 @@ from sqlalchemy import func
 from .database_client import get_database_client
 from .models import AgentConfig, AlertRule, AuditLog, RateLimitConfig
 from .notify import post_json, send_email
+from .workspaces import rows_of
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +35,10 @@ SCOPES = ('user', 'agent', 'project', 'global')
 # Chat incoming webhooks take a fixed body, not MATE's payload: Slack rejects a
 # post without `text` and Discord one without `content`.
 _CHAT_MESSAGE_KEYS = {'slack': 'text', 'discord': 'content'}
+
+# What update_rule may set; the workspace and the bookkeeping stay as they are
+_RULE_FIELDS = {'name', 'description', 'scope', 'scope_id', 'condition_type',
+                'destination_type', 'created_by', 'cooldown_seconds', 'is_enabled'}
 
 # Periods a budget in US dollars can have: those Rate Limits sets dollar budgets for
 USD_PERIODS = ('day', 'month')
@@ -70,13 +75,23 @@ class AlertService:
     # CRUD                                                                #
     # ------------------------------------------------------------------ #
 
+    def _rule(self, session, rule_id: int, workspace_id: Optional[int]) -> Optional[AlertRule]:
+        """The rule, if it is the workspace's; any workspace's for None."""
+        query = session.query(AlertRule).filter(AlertRule.id == rule_id)
+        if workspace_id is not None:
+            query = query.filter(AlertRule.workspace_id == workspace_id)
+        return query.first()
+
     def get_rules(self, scope: Optional[str] = None, condition_type: Optional[str] = None,
-                  enabled_only: bool = False) -> List[Dict[str, Any]]:
+                  enabled_only: bool = False,
+                  workspace_id: Optional[int] = None) -> List[Dict[str, Any]]:
         session = self._get_session()
         if not session:
             return []
         try:
             query = session.query(AlertRule)
+            if workspace_id is not None:
+                query = query.filter(AlertRule.workspace_id == workspace_id)
             if scope:
                 query = query.filter(AlertRule.scope == scope)
             if condition_type:
@@ -90,12 +105,12 @@ class AlertService:
         finally:
             session.close()
 
-    def get_rule(self, rule_id: int) -> Optional[Dict[str, Any]]:
+    def get_rule(self, rule_id: int, workspace_id: Optional[int] = None) -> Optional[Dict[str, Any]]:
         session = self._get_session()
         if not session:
             return None
         try:
-            rule = session.query(AlertRule).filter(AlertRule.id == rule_id).first()
+            rule = self._rule(session, rule_id, workspace_id)
             return rule.to_dict() if rule else None
         except Exception as e:
             logger.error("Failed to get alert rule %s: %s", rule_id, e)
@@ -124,18 +139,19 @@ class AlertService:
         finally:
             session.close()
 
-    def update_rule(self, rule_id: int, **kwargs) -> Optional[Dict[str, Any]]:
+    def update_rule(self, rule_id: int, workspace_id: Optional[int] = None,
+                    **kwargs) -> Optional[Dict[str, Any]]:
         session = self._get_session()
         if not session:
             return None
         try:
-            rule = session.query(AlertRule).filter(AlertRule.id == rule_id).first()
+            rule = self._rule(session, rule_id, workspace_id)
             if not rule:
                 return None
             condition_config = kwargs.pop('condition_config', None)
             destination_config = kwargs.pop('destination_config', None)
             for key, value in kwargs.items():
-                if hasattr(rule, key):
+                if key in _RULE_FIELDS:
                     setattr(rule, key, value)
             if condition_config is not None:
                 rule.set_condition_config(condition_config)
@@ -151,12 +167,12 @@ class AlertService:
         finally:
             session.close()
 
-    def delete_rule(self, rule_id: int) -> bool:
+    def delete_rule(self, rule_id: int, workspace_id: Optional[int] = None) -> bool:
         session = self._get_session()
         if not session:
             return False
         try:
-            rule = session.query(AlertRule).filter(AlertRule.id == rule_id).first()
+            rule = self._rule(session, rule_id, workspace_id)
             if not rule:
                 return False
             session.delete(rule)
@@ -224,7 +240,8 @@ class AlertService:
                 kwargs['project_id'] = int(rule.scope_id)
             except (TypeError, ValueError):
                 return None
-        value = get_token_usage_service().get_error_count_since(since, **kwargs)
+        value = get_token_usage_service().get_error_count_since(
+            since, workspace_id=rule.workspace_id, **kwargs)
         return {'value': value, 'threshold': threshold,
                 'detail': {'window_minutes': window_minutes}}
 
@@ -240,6 +257,7 @@ class AlertService:
             agent_names=self._agent_names_for_scope(session, rule),
             guardrail_type=config.get('guardrail_type') or None,
             action_taken=config.get('action_taken') or None,
+            workspace_id=rule.workspace_id,
         )
         return {'value': value, 'threshold': threshold,
                 'detail': {'window_minutes': window_minutes}}
@@ -259,7 +277,8 @@ class AlertService:
         threshold = int(config.get('threshold', 5))
         since = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
         query = session.query(func.count(AuditLog.id)).filter(
-            AuditLog.action == ACTION_MODEL_FALLBACK, AuditLog.timestamp >= since)
+            AuditLog.action == ACTION_MODEL_FALLBACK, AuditLog.timestamp >= since,
+            *rows_of(AuditLog, rule.workspace_id))
         if rule.scope == 'user':
             query = query.filter(AuditLog.actor == rule.scope_id)
         else:
@@ -291,7 +310,7 @@ class AlertService:
         since = datetime.now(timezone.utc) - _PERIOD_WINDOWS[period]
         service = get_token_usage_service()
         if rule.scope == 'user':
-            used = service.get_user_tokens_since(rule.scope_id, since)
+            used = service.get_user_tokens_since(rule.scope_id, since, rule.workspace_id)
         elif rule.scope == 'agent':
             used = service.get_agent_tokens_since(rule.scope_id, since)
         elif rule.scope == 'project':
@@ -328,7 +347,8 @@ class AlertService:
             # No limit anywhere, or 0, of which every cent would be "over 100%"
             return None
         since = datetime.now(timezone.utc) - _PERIOD_WINDOWS[period]
-        spend = get_token_usage_service().get_spend_since(rule.scope, rule.scope_id, since)
+        spend = get_token_usage_service().get_spend_since(rule.scope, rule.scope_id, since,
+                                                          workspace_id=rule.workspace_id)
         if spend is None:
             return None
         used, unpriced = spend
@@ -351,7 +371,8 @@ class AlertService:
         try:
             row = session.query(column).filter(
                 RateLimitConfig.scope == rule.scope,
-                RateLimitConfig.scope_id == rule.scope_id
+                RateLimitConfig.scope_id == rule.scope_id,
+                RateLimitConfig.workspace_id == rule.workspace_id,
             ).first()
             if not row or not row[0]:
                 return None
@@ -468,7 +489,8 @@ class AlertService:
             return post_json(config.get('url', ''), body, timeout=float(config.get('timeout', 30)))
         return False, f"unknown destination_type '{rule.destination_type}'"
 
-    def evaluate_rule(self, rule_id: int, force: bool = False) -> Dict[str, Any]:
+    def evaluate_rule(self, rule_id: int, force: bool = False,
+                      workspace_id: Optional[int] = None) -> Dict[str, Any]:
         """Evaluate one rule. force=True measures and delivers without touching cooldown.
 
         The dashboard test button uses force so a trial run cannot consume the
@@ -478,9 +500,9 @@ class AlertService:
         if not session:
             return {'status': 'error', 'error': 'database unavailable'}
         try:
-            rule = session.query(AlertRule).filter(AlertRule.id == rule_id).first()
+            rule = self._rule(session, rule_id, workspace_id)
             if not rule:
-                return {'status': 'error', 'error': 'rule not found'}
+                return {'status': 'not_found', 'error': 'rule not found'}
             measurement = self._measure(session, rule)
             if measurement is None:
                 return {'status': 'skipped', 'reason': 'not measurable',

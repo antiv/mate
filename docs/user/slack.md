@@ -38,6 +38,13 @@ from Slack: the **Team ID**, a **Bot User OAuth Token** and the **Signing Secret
    enter the Team ID, the bot token and the signing secret.
 4. Leave **Active** ticked and click **Create**.
 
+A Slack team connects to one integration on the whole installation, because Slack
+names only the team when it delivers a message. A Team ID that is already connected,
+in any workspace, is refused with "This Slack team is already connected"; to move the
+team to another agent, edit the existing integration. The project and agent must be
+of the workspace you are working in, and the list shows only that workspace's
+integrations.
+
 When you edit the integration later, leave the two secret fields empty to keep the
 stored values.
 

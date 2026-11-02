@@ -28,6 +28,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request,
 from shared.utils.agent_invoke import run_agent_message
 from shared.utils.database_client import get_database_client
 from shared.utils.models import ChannelIntegration, User
+from shared.utils.workspaces import in_projects_of, missing_from
 from server.request_context import RequestContext, get_api_request_context
 
 logger = logging.getLogger(__name__)
@@ -482,6 +483,29 @@ _EDITABLE_FIELDS = (
 )
 
 
+def _workspace_integration(session, ctx: RequestContext, integration_id: int) -> ChannelIntegration:
+    """The integration, if its project is the caller's workspace's; 404 otherwise."""
+    integration = session.query(ChannelIntegration).filter(
+        ChannelIntegration.id == integration_id,
+        *in_projects_of(ChannelIntegration.project_id, ctx.workspace_id)).first()
+    if not integration:
+        raise HTTPException(status_code=404, detail="Integration not found")
+    return integration
+
+
+def _check_target(session, ctx: RequestContext, project_id, agent_name: str,
+                  team_id: Optional[str], integration_id: Optional[int] = None) -> None:
+    """404 unless the project and agent are the workspace's; 409 when another
+    integration, of any workspace, has the Slack team (V047). Neither says whose."""
+    missing = missing_from(session, ctx.workspace_id, project_id=project_id, agent_name=agent_name)
+    if missing:
+        raise HTTPException(status_code=404, detail=f"{missing} not found")
+    if team_id and session.query(ChannelIntegration.id).filter(
+            ChannelIntegration.team_id == team_id,
+            ChannelIntegration.id != integration_id).first():
+        raise HTTPException(status_code=409, detail="This Slack team is already connected")
+
+
 @dashboard_router.get("/channel-integrations")
 async def list_integrations(ctx: RequestContext = Depends(get_api_request_context)):
     db = get_database_client()
@@ -489,7 +513,8 @@ async def list_integrations(ctx: RequestContext = Depends(get_api_request_contex
     if not session:
         raise HTTPException(status_code=500, detail="Database unavailable")
     try:
-        rows = session.query(ChannelIntegration).order_by(
+        rows = session.query(ChannelIntegration).filter(
+            *in_projects_of(ChannelIntegration.project_id, ctx.workspace_id)).order_by(
             ChannelIntegration.created_at.desc()
         ).all()
         return {"success": True, "integrations": [r.to_dict() for r in rows]}
@@ -510,6 +535,7 @@ async def create_integration(request: Request, ctx: RequestContext = Depends(get
     if not session:
         raise HTTPException(status_code=500, detail="Database unavailable")
     try:
+        _check_target(session, ctx, project_id, agent_name, data.get("team_id") or None)
         integration = ChannelIntegration(
             platform=(data.get("platform") or "slack").strip(),
             project_id=project_id,
@@ -526,6 +552,8 @@ async def create_integration(request: Request, ctx: RequestContext = Depends(get
         session.commit()
         session.refresh(integration)
         return {"success": True, "integration": integration.to_dict()}
+    except HTTPException:
+        raise
     except Exception as exc:
         session.rollback()
         raise HTTPException(status_code=500, detail=str(exc))
@@ -542,9 +570,12 @@ async def update_integration(integration_id: int, request: Request,
     if not session:
         raise HTTPException(status_code=500, detail="Database unavailable")
     try:
-        integration = session.query(ChannelIntegration).filter_by(id=integration_id).first()
-        if not integration:
-            raise HTTPException(status_code=404, detail="Integration not found")
+        integration = _workspace_integration(session, ctx, integration_id)
+        if any(field in data for field in ("project_id", "agent_name", "team_id")):
+            agent_name = data.get("agent_name", integration.agent_name)
+            _check_target(session, ctx, data.get("project_id", integration.project_id),
+                          agent_name.strip() if isinstance(agent_name, str) else agent_name,
+                          data.get("team_id", integration.team_id) or None, integration.id)
         for field in _EDITABLE_FIELDS:
             if field in data:
                 val = data[field]
@@ -572,9 +603,7 @@ async def delete_integration(integration_id: int, ctx: RequestContext = Depends(
     if not session:
         raise HTTPException(status_code=500, detail="Database unavailable")
     try:
-        integration = session.query(ChannelIntegration).filter_by(id=integration_id).first()
-        if not integration:
-            raise HTTPException(status_code=404, detail="Integration not found")
+        integration = _workspace_integration(session, ctx, integration_id)
         session.delete(integration)
         session.commit()
         return {"success": True}

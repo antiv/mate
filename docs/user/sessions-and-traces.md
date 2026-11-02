@@ -22,7 +22,9 @@ every step.
 ## Session Tracking
 
 **Control Room → Session Tracking** lists conversations from every source: the Work
-Room, widgets, Slack, the API and triggers.
+Room, widgets, Slack, the API and triggers. It shows the conversations with the agents
+of the workspace you are working in; another workspace's session is not found, and
+cannot be deleted from here.
 
 Filter by agent, by user, or search for words that appeared in the conversation or
 for a session id. Open a session to see the **Session Inspector**: each turn in
@@ -49,7 +51,8 @@ between agents, with how long each took. Use it when the question is "why was th
 slow" rather than "why was this wrong".
 
 **Studio → Traces** lists recent traces with their total duration and number of
-steps. Open one to see the steps nested inside each other; the long bar is your
+steps, those of the workspace's agents only: a trace is shown when every agent it
+names is one of them. Open one to see the steps nested inside each other; the long bar is your
 answer. A model call's step also names the version of the agent's configuration that
 answered (`mate.agent.config_version`). A trace recorded for a chat session also has
 **Replay on canvas**, which plays it back on the agent graph: see

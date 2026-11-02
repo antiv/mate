@@ -10,6 +10,7 @@ from sqlalchemy import func
 
 from .database_client import get_database_client
 from .models import GuardrailLog
+from .workspaces import rows_of
 
 logger = logging.getLogger(__name__)
 
@@ -67,8 +68,10 @@ class GuardrailLogService:
         agent_names: Optional[List[str]] = None,
         guardrail_type: Optional[str] = None,
         action_taken: Optional[str] = None,
+        workspace_id: Optional[int] = None,
     ) -> int:
-        """Count guardrail hits since a datetime. Used by the alert engine.
+        """Count guardrail hits since a datetime, only in `workspace_id` when it is
+        given. Used by the alert engine.
 
         agent_names is a list so a project-scoped rule can pass all of its agents —
         guardrail_logs has no project_id.
@@ -78,7 +81,7 @@ class GuardrailLogService:
             return 0
         try:
             query = session.query(func.count(GuardrailLog.id)).filter(
-                GuardrailLog.timestamp >= since)
+                GuardrailLog.timestamp >= since, *rows_of(GuardrailLog, workspace_id))
             if agent_names is not None:
                 if not agent_names:
                     return 0

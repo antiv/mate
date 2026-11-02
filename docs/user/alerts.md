@@ -62,7 +62,11 @@ answers.
    | **Agent** | the agent's name | that agent |
    | **Project** | the project id | every agent in the project |
    | **User** | the user id | that person's requests |
-   | **Global** | none | everything |
+   | **Global** | none | every agent of the workspace |
+
+   A rule belongs to the workspace it was made in and watches only what happens
+   there: an agent or project of another workspace is refused as not found, and a
+   user rule counts only the person's requests to this workspace's agents.
 
    Guardrail hits are recorded per agent, so a *Guardrail hits* rule cannot be scoped
    to a user.

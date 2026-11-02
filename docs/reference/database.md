@@ -10,7 +10,7 @@ generated: true
 
 # Database reference
 
-**36** tables defined in `shared/utils/models.py`; migrations are at **V046**. Migrations apply automatically on startup and are the source of truth for the schema: the models describe it, the migrations create it.
+**36** tables defined in `shared/utils/models.py`; migrations are at **V047**. Migrations apply automatically on startup and are the source of truth for the schema: the models describe it, the migrations create it.
 
 ## Migrations
 
@@ -64,6 +64,7 @@ A ✗ means that dialect has no file for that version. All dialects are in step.
 | V044 | log project id | ✓ | ✓ | ✓ |
 | V045 | encrypted secret columns | ✓ | ✓ | ✓ |
 | V046 | workspaces | ✓ | ✓ | ✓ |
+| V047 | channel team unique | ✓ | ✓ | ✓ |
 
 ## `users`
 
@@ -392,7 +393,7 @@ Model `ChannelIntegration`. Links an external chat platform (Slack, Discord, ...
 | `project_id` | `Integer` | FK → `projects.id`, not null | — | — |
 | `agent_name` | `String(255)` | not null | — | — |
 | `label` | `String(255)` | — | — | — |
-| `team_id` | `String(64)` | — | — | Slack team/workspace id |
+| `team_id` | `String(64)` | unique | — | Slack team/workspace id; one integration per team (V047) |
 | `bot_token` | `EncryptedText` | — | — | xoxb-... token used to post replies; encrypted |
 | `signing_secret` | `EncryptedText` | — | — | verifies inbound request signatures; encrypted |
 | `config` | `Text` | — | — | JSON per-integration options; nothing reads it yet |

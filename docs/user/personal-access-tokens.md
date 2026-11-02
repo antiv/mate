@@ -39,6 +39,9 @@ its **Allowed Roles**, as in the Work Room.
 The token starts with `mate_pat_`. **It is shown only once**: MATE keeps only a hash
 of it, so it cannot show it again. If you lose it, revoke it and create another.
 
+A token acts in the workspace you were working in when you created it, and reaches
+only that workspace's agents.
+
 ## Use it as a model
 
 An agent can be used this way when an admin has switched on **Expose as Model** for
@@ -68,8 +71,9 @@ agent allows, 403.
 
 ## Revoke a token
 
-Open **Personal Tokens** again. **Active Tokens** lists your tokens, with when each
-was created and when it expires; click **Revoke** on one. Tools using it lose access
+Open **Personal Tokens** again. **Active Tokens** lists your tokens of the workspace
+you are working in, with when each was created and when it expires; click **Revoke**
+on one. Tools using it lose access
 at once. An expired token stops working by itself.
 
 ## Good to know

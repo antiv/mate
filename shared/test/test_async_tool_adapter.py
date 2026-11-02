@@ -165,7 +165,7 @@ class TestRateLimitOffload(unittest.IsolatedAsyncioTestCase):
         db_client.get_session.return_value = session
         svc.db_client = db_client
 
-        def slow_tokens(user_id, since):
+        def slow_tokens(user_id, since, workspace_id=None):
             time.sleep(token_delay)
             return tokens
 

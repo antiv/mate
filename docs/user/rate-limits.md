@@ -33,6 +33,12 @@ Any scope can also have a budget in **US dollars per day** and **per month**.
 
 Leave a field empty to set no limit of that kind.
 
+A configuration belongs to the workspace it was made in, and the page lists only that
+workspace's. An agent or project scope names one of the workspace's agents or
+projects; any other is refused as not found. A user scope applies when the person
+chats with the workspace's agents, and counts only what they used in this workspace,
+so the same person can have a different limit in another one.
+
 ### Budgets in dollars
 
 A dollar budget is what the scope may spend over the last 24 hours (**USD/day**) or
@@ -95,7 +101,7 @@ dollars over the last day and 30 days, against its limits. For an agent config w
 scope had calls without a price, a warning under the spend gives their number and
 says whether this budget ignores them or treats them as over budget. To
 look up a scope that has no configuration, enter a user id, agent name or project id
-and click **Load**.
+and click **Load**. A user's usage is what they used in this workspace.
 
 ## Being told before the limit
 

@@ -26,8 +26,9 @@ from types import SimpleNamespace
 from typing import Optional, Dict, Any, List, Tuple
 
 from .database_client import get_database_client
-from .models import RateLimitConfig, AgentConfig
+from .models import DEFAULT_WORKSPACE_ID, RateLimitConfig, AgentConfig
 from .token_usage_service import get_token_usage_service
+from .workspaces import workspace_of_project
 
 logger = logging.getLogger(__name__)
 
@@ -112,11 +113,22 @@ async def _record_request(key: str):
         _request_timestamps[key].append(time.monotonic())
 
 
-def _get_config(session, scope: str, scope_id: str) -> Optional[RateLimitConfig]:
+def _get_config(session, scope: str, scope_id: str,
+                workspace_id: int = DEFAULT_WORKSPACE_ID) -> Optional[RateLimitConfig]:
+    """The workspace's config for the scope; a user has one in each workspace."""
     return session.query(RateLimitConfig).filter(
         RateLimitConfig.scope == scope,
-        RateLimitConfig.scope_id == scope_id
+        RateLimitConfig.scope_id == scope_id,
+        RateLimitConfig.workspace_id == workspace_id,
     ).first()
+
+
+# What upsert_config may set; the scope and the workspace stay as created
+_CONFIG_FIELDS = {
+    "requests_per_minute", "tokens_per_hour", "tokens_per_day", "tokens_per_month",
+    "max_tokens_per_request", "usd_per_day", "usd_per_month", "block_unpriced",
+    "include_sub_agents", "action_on_limit", "alert_webhook_url",
+}
 
 
 def _get_agent_project_id(session, agent_name: str) -> Optional[int]:
@@ -138,46 +150,52 @@ class RateLimitService:
             return None
         return self.db_client.get_session()
 
-    def get_configs(self, scope: Optional[str] = None) -> List[Dict[str, Any]]:
-        """Get all rate limit configs, optionally filtered by scope."""
+    def get_configs(self, scope: Optional[str] = None,
+                    workspace_id: Optional[int] = None) -> List[Dict[str, Any]]:
+        """Get all rate limit configs, optionally filtered by scope and workspace."""
         session = self._get_session()
         if not session:
             return []
         try:
             q = session.query(RateLimitConfig)
+            if workspace_id is not None:
+                q = q.filter(RateLimitConfig.workspace_id == workspace_id)
             if scope:
                 q = q.filter(RateLimitConfig.scope == scope)
             return [r.to_dict() for r in q.all()]
         finally:
             session.close()
 
-    def get_config(self, scope: str, scope_id: str) -> Optional[Dict[str, Any]]:
-        """Get config for a scope/scope_id."""
+    def get_config(self, scope: str, scope_id: str,
+                   workspace_id: int = DEFAULT_WORKSPACE_ID) -> Optional[Dict[str, Any]]:
+        """Get config for a scope/scope_id in the workspace."""
         session = self._get_session()
         if not session:
             return None
         try:
-            cfg = _get_config(session, scope, scope_id)
+            cfg = _get_config(session, scope, scope_id, workspace_id)
             return cfg.to_dict() if cfg else None
         finally:
             session.close()
 
-    def upsert_config(self, scope: str, scope_id: str, **kwargs) -> Optional[Dict[str, Any]]:
-        """Create or update rate limit config."""
+    def upsert_config(self, scope: str, scope_id: str,
+                      workspace_id: int = DEFAULT_WORKSPACE_ID, **kwargs) -> Optional[Dict[str, Any]]:
+        """Create or update the workspace's rate limit config."""
         session = self._get_session()
         if not session:
             return None
         try:
             alert_thresholds = kwargs.pop("alert_thresholds", None)
-            cfg = _get_config(session, scope, scope_id)
+            kwargs = {k: v for k, v in kwargs.items() if k in _CONFIG_FIELDS}
+            cfg = _get_config(session, scope, scope_id, workspace_id)
             if cfg:
                 for k, v in kwargs.items():
-                    if hasattr(cfg, k):
-                        setattr(cfg, k, v)
+                    setattr(cfg, k, v)
                 if alert_thresholds is not None:
                     cfg.set_alert_thresholds(alert_thresholds)
             else:
-                cfg = RateLimitConfig(scope=scope, scope_id=scope_id, **kwargs)
+                cfg = RateLimitConfig(scope=scope, scope_id=scope_id, workspace_id=workspace_id,
+                                      **kwargs)
                 if alert_thresholds is not None:
                     cfg.set_alert_thresholds(alert_thresholds)
                 session.add(cfg)
@@ -191,13 +209,14 @@ class RateLimitService:
         finally:
             session.close()
 
-    def delete_config(self, scope: str, scope_id: str) -> bool:
-        """Delete rate limit config."""
+    def delete_config(self, scope: str, scope_id: str,
+                      workspace_id: int = DEFAULT_WORKSPACE_ID) -> bool:
+        """Delete the workspace's rate limit config."""
         session = self._get_session()
         if not session:
             return False
         try:
-            cfg = _get_config(session, scope, scope_id)
+            cfg = _get_config(session, scope, scope_id, workspace_id)
             if cfg:
                 session.delete(cfg)
                 session.commit()
@@ -217,8 +236,10 @@ class RateLimitService:
         project_id: Optional[int] = None,
         tokens_this_request: Optional[int] = None,
         include_sub_agents: bool = False,
+        workspace_id: Optional[int] = None,
     ) -> UsageSnapshot:
-        """Get current usage for user/agent/project."""
+        """Get current usage for user/agent/project; a user's in `workspace_id` only
+        when it is given."""
         now = datetime.now(timezone.utc)
         requests_last_min = _request_count_last_minute_sync(user_id or "", agent_name) if user_id else 0
         tokens_last_hour = 0
@@ -227,13 +248,13 @@ class RateLimitService:
 
         if user_id:
             tokens_last_hour = self.token_service.get_user_tokens_since(
-                user_id, now - timedelta(hours=1)
+                user_id, now - timedelta(hours=1), workspace_id
             )
             tokens_last_day = self.token_service.get_user_tokens_since(
-                user_id, now - timedelta(days=1)
+                user_id, now - timedelta(days=1), workspace_id
             )
             tokens_last_month = self.token_service.get_user_tokens_since(
-                user_id, now - timedelta(days=30)
+                user_id, now - timedelta(days=30), workspace_id
             )
 
         if agent_name:
@@ -259,9 +280,11 @@ class RateLimitService:
         if scope:
             sub_agents = include_sub_agents and scope[0] == "agent"
             spend_day = self.token_service.get_spend_since(
-                *scope, now - timedelta(days=1), include_sub_agents=sub_agents)
+                *scope, now - timedelta(days=1), include_sub_agents=sub_agents,
+                workspace_id=workspace_id)
             spend_month = self.token_service.get_spend_since(
-                *scope, now - timedelta(days=30), include_sub_agents=sub_agents)
+                *scope, now - timedelta(days=30), include_sub_agents=sub_agents,
+                workspace_id=workspace_id)
         usd_last_day, unpriced_day = spend_day or (0.0, 0)
         usd_last_month, unpriced_month = spend_month or (0.0, 0)
 
@@ -299,6 +322,12 @@ class RateLimitService:
 
             now = datetime.now(timezone.utc)
 
+            # The configs of the agent's workspace; an agent with no config runs in
+            # the default one
+            if project_id is None and agent_name:
+                project_id = _get_agent_project_id(session, agent_name)
+            workspace_id = workspace_of_project(session, project_id) or DEFAULT_WORKSPACE_ID
+
             def _plain(cfg: RateLimitConfig) -> SimpleNamespace:
                 # A dollar budget is measured in its own scope, so its spend is
                 # read here, only when the config has one: (dollars, unpriced
@@ -308,11 +337,11 @@ class RateLimitService:
                 if cfg.usd_per_day is not None:
                     spent_day = self.token_service.get_spend_since(
                         cfg.scope, cfg.scope_id, now - timedelta(days=1),
-                        include_sub_agents=sub_agents)
+                        include_sub_agents=sub_agents, workspace_id=workspace_id)
                 if cfg.usd_per_month is not None:
                     spent_month = self.token_service.get_spend_since(
                         cfg.scope, cfg.scope_id, now - timedelta(days=30),
-                        include_sub_agents=sub_agents)
+                        include_sub_agents=sub_agents, workspace_id=workspace_id)
                 return SimpleNamespace(
                     requests_per_minute=cfg.requests_per_minute,
                     tokens_per_hour=cfg.tokens_per_hour,
@@ -326,27 +355,25 @@ class RateLimitService:
                     action_on_limit=cfg.action_on_limit,
                 )
 
-            user_cfg = _get_config(session, "user", user_id)
+            user_cfg = _get_config(session, "user", user_id, workspace_id)
             if user_cfg:
                 configs.append(("user", user_id, _plain(user_cfg)))
 
             agent_sub_agents = False
             if agent_name:
-                agent_cfg = _get_config(session, "agent", agent_name)
+                agent_cfg = _get_config(session, "agent", agent_name, workspace_id)
                 if agent_cfg:
                     configs.append(("agent", agent_name, _plain(agent_cfg)))
                     agent_sub_agents = bool(agent_cfg.include_sub_agents)
 
-            if project_id is None and agent_name:
-                project_id = _get_agent_project_id(session, agent_name)
             if project_id is not None:
-                proj_cfg = _get_config(session, "project", str(project_id))
+                proj_cfg = _get_config(session, "project", str(project_id), workspace_id)
                 if proj_cfg:
                     configs.append(("project", str(project_id), _plain(proj_cfg)))
 
             # Fallback: rate limit by auth user if no user-specific config
             if not configs and auth_username:
-                auth_cfg = _get_config(session, "user", auth_username)
+                auth_cfg = _get_config(session, "user", auth_username, workspace_id)
                 if auth_cfg:
                     configs.append(("user", auth_username, _plain(auth_cfg)))
 
@@ -354,13 +381,13 @@ class RateLimitService:
                 return ([], (0, 0, 0))
 
             tokens_last_hour = self.token_service.get_user_tokens_since(
-                user_id, now - timedelta(hours=1)
+                user_id, now - timedelta(hours=1), workspace_id
             ) if user_id else 0
             tokens_last_day = self.token_service.get_user_tokens_since(
-                user_id, now - timedelta(days=1)
+                user_id, now - timedelta(days=1), workspace_id
             ) if user_id else 0
             tokens_last_month = self.token_service.get_user_tokens_since(
-                user_id, now - timedelta(days=30)
+                user_id, now - timedelta(days=30), workspace_id
             ) if user_id else 0
 
             if agent_name:

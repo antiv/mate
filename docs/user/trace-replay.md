@@ -30,7 +30,9 @@ runtime; an installation on the LangGraph runtime has nothing to replay.
 1. Open **Studio → Visual Builder** and choose the project the agents belong to.
 2. Click **Replay** in the canvas toolbar. A bar opens above the canvas.
 3. Pick a session. The list shows the traced sessions of the last week in which an
-   agent of this project took part, with those agents and the number of turns.
+   agent of this project took part, with those agents and the number of turns. Only
+   turns whose agents are all of the workspace you are working in are listed and
+   played.
 4. Press ▶. Change the speed (0.5× to 10×), or drag the slider to any moment.
 
 The whole session plays as one run, turn after turn. The time a person spent typing
