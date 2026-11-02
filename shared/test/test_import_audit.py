@@ -147,6 +147,8 @@ class TestTemplateCreateAudit(ImportAuditTestCase):
 
     def setUp(self):
         super().setUp()
+        # The workspace check is test_cross_workspace's
+        self.server._require_in_workspace = MagicMock()
         self.server._create_template_from_agents = MagicMock(return_value={
             "success": True, "template_id": "my_template", "path": "/tmp/my_template.json",
         })
@@ -177,6 +179,8 @@ class TestTemplateSyncAudit(ImportAuditTestCase):
 
     def setUp(self):
         super().setUp()
+        # The workspace check is test_cross_workspace's
+        self.server._require_in_workspace = MagicMock()
         self.server._sync_template = MagicMock(return_value={
             "success": True, "project_id": 4, "template_id": "jira-worklog",
             "synced_to_version": "3.0", "agents_added": 1, "agents_updated": 2,

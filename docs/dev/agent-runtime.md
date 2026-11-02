@@ -20,8 +20,9 @@ agent, and then through one model call.
 `AgentManager` (`shared/utils/agent_manager.py`) does the building.
 
 1. `initialize_agent_hierarchy(root_name)` loads the root's row and builds the tree
-   under it. Children are the rows whose `parent_agents` JSON list contains the
-   parent's name.
+   under it. Children are the rows of the parent's workspace whose `parent_agents`
+   JSON list contains the parent's name (`get_subagents`; a parent with no row is the
+   default workspace's). LangGraph's `_load_child_configs` looks them up the same way.
 2. For each row, `initialize_agent_from_config` turns the columns into a plain dict
    and `_initialize_agent` constructs the object for its `type`:
 

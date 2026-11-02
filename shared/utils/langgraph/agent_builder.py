@@ -91,16 +91,20 @@ def _load_agent_config(agent_name: str) -> Optional[Dict[str, Any]]:
 
 
 def _load_child_configs(parent_name: str) -> List[Dict[str, Any]]:
-    """All enabled agents that list parent_name among their parent_agents."""
+    """All enabled agents of the parent's workspace that list parent_name among their
+    parent_agents (D1, as AgentManager.get_subagents)."""
     from shared.utils.database_client import get_database_client
-    from shared.utils.models import AgentConfig
+    from shared.utils.models import DEFAULT_WORKSPACE_ID, AgentConfig, Project
+    from shared.utils.workspaces import agent_workspace
 
     db_client = get_database_client()
     session = db_client.get_session() if db_client else None
     if not session:
         return []
     try:
-        rows = session.query(AgentConfig).filter(AgentConfig.disabled == False).all()
+        workspace_id = agent_workspace(session, parent_name) or DEFAULT_WORKSPACE_ID
+        rows = session.query(AgentConfig).join(Project, AgentConfig.project_id == Project.id).filter(
+            AgentConfig.disabled == False, Project.workspace_id == workspace_id).all()
         return [row.to_dict() for row in rows if parent_name in row.get_parent_agents()]
     finally:
         session.close()

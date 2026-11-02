@@ -26,7 +26,7 @@ from sqlalchemy.pool import StaticPool
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from shared.utils.models import AgentConfig, AgentConfigVersion, Base
+from shared.utils.models import AgentConfig, AgentConfigVersion, Base, Project
 from shared.utils.utils import STORED_SECRET_SENTINEL, mask_config_secrets
 from shared.test.request_context_helpers import as_caller
 
@@ -60,6 +60,7 @@ class _Db(unittest.TestCase):
         self.addCleanup(self.engine.dispose)
 
         session = self.Session()
+        session.add(Project(id=1, name="p"))
         agent = AgentConfig(name="ext_bot", type="llm", model_name="openai/x", instruction="v1",
                             model_base_url="http://127.0.0.1:9/v1", model_api_key=KEY, project_id=1)
         session.add(agent)

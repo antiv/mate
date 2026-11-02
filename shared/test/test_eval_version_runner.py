@@ -36,7 +36,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 from shared.utils.eval_agent_runner import (AdkSnapshotAgent, ReplyCollector, SnapshotAgent,
                                             config_from_snapshot, is_eval_run)
 from shared.utils.langgraph.snapshot_agent import LangGraphSnapshotAgent
-from shared.utils.models import (AgentConfig, AgentConfigVersion, Base, EvalResult,
+from shared.utils.models import (AgentConfig, AgentConfigVersion, Base, EvalResult, Project,
                                  TestCase)
 from shared.test.request_context_helpers import as_caller
 
@@ -331,6 +331,7 @@ class TestEvalEndpoints(unittest.TestCase):
 
         import json
         session = self.Session()
+        session.add(Project(id=1, name="p"))
         agent = AgentConfig(name="support_bot", type="llm", model_name="echo",
                             instruction="VERSION TWO", project_id=1)
         other = AgentConfig(name="other_bot", type="llm", model_name="echo",

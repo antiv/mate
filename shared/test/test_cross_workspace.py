@@ -13,7 +13,8 @@ platform administrator working in A (X-MATE-Workspace: 1) calls:
 The routes are listed from the app's router, so a route is covered the day it is
 added. Phase 2 scopes them group by group: NOT_YET_SCOPED lists the routes still to
 do, and is empty when phase 2 is done. PLATFORM_ONLY lists the routes that act on the
-whole installation; they stay for platform administrators.
+whole installation; they stay for platform administrators. SHARED lists the routes
+that read what every workspace shares, the template catalogue.
 
 The agent runtime is checked the same way: the RBAC check, the proxy and
 /list-apps, the OpenAI API, MCP and the Work Room, called with A's credentials on
@@ -49,7 +50,8 @@ from server.pat_auth import verify_pat_hash
 from shared.utils import database_client
 from shared.utils.mcp.mcp_auth import agent_allowed
 from shared.utils.models import (
-    AgentConfig, AuditLog, Base, PersonalAccessToken, Project, User, WidgetApiKey, Workspace,
+    AgentConfig, AgentConfigVersion, AuditLog, Base, FileSearchStore, MemoryBlock,
+    PersonalAccessToken, Project, ResponseFeedback, TestCase, User, WidgetApiKey, Workspace,
     WorkspaceMember,
 )
 from shared.utils.rbac_middleware import RBACMiddleware
@@ -57,6 +59,8 @@ from shared.utils.user_service import UserService
 from shared.utils.workspaces import sync_default_members
 
 B_MARKER = "zz-ws-b"
+# Agent names can't hold a hyphen, so B's carry the marker with underscores
+B_MARKERS = (B_MARKER, B_MARKER.replace("-", "_"))
 A, B = 1, 2
 ALICE, BOB = "alice@a.example", "bob@b.example"
 A_ROOT, B_ROOT = "ws_a_root", "zz_ws_b_root"
@@ -110,6 +114,15 @@ DELETE /dashboard/api/users/{user_id}
 POST /dashboard/api/users/cleanup
 POST /dashboard/api/audit-logs/retention
 GET /dashboard/api/audit-logs/retention-config
+DELETE /dashboard/api/templates/{template_id}
+POST /dashboard/api/templates/create-from-agents
+POST /dashboard/api/agents/reinitialize-all
+""")
+
+# The template catalogue: files every workspace imports from. Writing to it is
+# platform-only above, so it holds no workspace's agents.
+SHARED: Set[Route] = _routes("""
+GET /dashboard/api/templates/{template_id}
 """)
 
 # Routes phase 2 has yet to scope; each PR of the phase takes its group off
@@ -131,71 +144,9 @@ GET /dashboard/api/feedback
 GET /dashboard/api/tokens
 POST /dashboard/api/tokens
 DELETE /dashboard/api/tokens/{token_id}
-PUT /dashboard/api/agents/{config_id}/expose
-GET /dashboard/api/agents
-GET /dashboard/api/agents/export
-POST /dashboard/api/agents/build-binary
-GET /dashboard/api/agents/build-binary/{build_id}/status
-GET /dashboard/api/agents/build-binary/{build_id}/download
-POST /dashboard/api/agents/{agent_name}/clone
-POST /dashboard/api/agents/import
-GET /dashboard/api/templates
-GET /dashboard/api/templates/{template_id}
-DELETE /dashboard/api/templates/{template_id}
-POST /dashboard/api/templates/import
-POST /dashboard/api/templates/create-from-agents
-GET /dashboard/api/templates/sync-status/{project_id}
-POST /dashboard/api/templates/sync
-POST /dashboard/api/agents
-PUT /dashboard/api/agents/{config_id}
-DELETE /dashboard/api/agents/{config_id}
-POST /dashboard/api/agents/{agent_name}/create-folder
-DELETE /dashboard/api/agents/{agent_name}/delete-folder
-POST /dashboard/api/agents/{agent_name}/reinitialize
-GET /dashboard/api/agents/{config_id}/versions
-POST /dashboard/api/agents/{config_id}/rollback/{version_id}
-PUT /dashboard/api/agents/versions/{version_id}/tag
-GET /dashboard/api/agents/{agent_name}/file-search/config
-GET /dashboard/api/agents/{agent_name}/file-search/stores
-GET /dashboard/api/agents/{agent_name}/file-search/files
-POST /dashboard/api/agents/{agent_name}/file-search/stores/assign
-POST /dashboard/api/agents/{agent_name}/file-search/stores/unassign
-POST /dashboard/api/file-search/stores/create
-POST /dashboard/api/file-search/stores/upload
-GET /dashboard/api/file-search/stores/{store_name}/files
-GET /dashboard/api/agents/{agent_name}/memory-blocks
-GET /dashboard/api/agents/{agent_name}/memory-blocks/{block_id}
-POST /dashboard/api/agents/{agent_name}/memory-blocks
-PUT /dashboard/api/agents/{agent_name}/memory-blocks/{block_id}
-DELETE /dashboard/api/agents/{agent_name}/memory-blocks/{block_id}
-GET /dashboard/api/agents/{agent_name}/memory-blocks/{block_id}/versions
-GET /dashboard/api/agents/{agent_name}/memory-blocks-deleted
-POST /dashboard/api/agents/{agent_name}/memory-block-versions/{version_id}/restore
-GET /dashboard/api/file-search/stores/agents
-GET /dashboard/api/projects/{project_id}/file-search/stores
-POST /dashboard/api/file-search/stores/files/delete
-POST /dashboard/api/file-search/stores/delete
-POST /dashboard/api/agents/reinitialize-all
 GET /dashboard/api/guardrail-logs
 GET /dashboard/api/audit-logs
 GET /dashboard/api/audit-logs/export
-GET /dashboard/api/evals/agent/{agent_name}/versions-list
-GET /dashboard/api/evals
-GET /dashboard/api/evals/agent/{agent_name}/history
-GET /dashboard/api/evals/agent/{agent_name}
-GET /dashboard/api/evals/feedback
-POST /dashboard/api/evals/improve/propose
-POST /dashboard/api/evals/improve/check
-GET /dashboard/api/evals/playground/agents
-GET /dashboard/api/evals/playground/agent/{agent_name}
-POST /dashboard/api/evals/playground/run
-POST /dashboard/api/evals/improve/apply
-POST /dashboard/api/evals
-PUT /dashboard/api/evals/{test_case_id}
-DELETE /dashboard/api/evals/{test_case_id}
-POST /dashboard/api/evals/version/{version_id}/run
-POST /dashboard/api/evals/{test_case_id}/run
-POST /dashboard/api/workroom/title
 GET /dashboard/api/triggers
 POST /dashboard/api/triggers
 PUT /dashboard/api/triggers/{trigger_id}
@@ -218,13 +169,45 @@ PUT /dashboard/api/channel-integrations/{integration_id}
 DELETE /dashboard/api/channel-integrations/{integration_id}
 """)
 
-# Writes that name no row in their path, and the test of this module that covers each
-COVERED_BY_TEST: Dict[Route, str] = {
-    ("POST", "/dashboard/api/projects"): "test_a_project_is_created_in_the_current_workspace",
+# Writes that name a row in their body, each with a body that names one of workspace
+# B's; called from workspace A, every one must answer 404. Values are format strings
+# over _TwoWorkspaces.b_ids(): {"json": ...}, {"data": ...} or {"data": ..., "files": ...}.
+BODIES_NAMING_B: Dict[Route, dict] = {
+    ("POST", "/dashboard/api/agents"): {"data": {
+        "name": "new_agent", "type": "llm", "project_id": "{project_id}",
+        "description": "d", "instruction": "i"}},
+    ("POST", "/dashboard/api/agents/build-binary"): {"json": {"project_id": "{project_id}"}},
+    ("POST", "/dashboard/api/templates/sync"): {"json": {"project_id": "{project_id}"}},
+    ("POST", "/dashboard/api/file-search/stores/create"): {"json": {
+        "display_name": "s", "project_id": "{project_id}"}},
+    ("POST", "/dashboard/api/file-search/stores/upload"): {
+        "data": {"store_name": "{store_name}"}, "files": {"file": ("a.txt", b"a")}},
+    ("POST", "/dashboard/api/file-search/stores/files/delete"): {"data": {
+        "store_name": "{store_name}", "document_name": "d"}},
+    ("POST", "/dashboard/api/file-search/stores/delete"): {"data": {"store_name": "{store_name}"}},
+    ("POST", "/dashboard/api/evals"): {"json": {
+        "agent_name": "{agent_name}", "input": "q", "expected_output": "a"}},
+    ("POST", "/dashboard/api/evals/improve/propose"): {"json": {"test_case_id": "{test_case_id}"}},
+    ("POST", "/dashboard/api/evals/improve/check"): {"json": {
+        "agent_name": "{agent_name}", "instruction": "i"}},
+    ("POST", "/dashboard/api/evals/improve/apply"): {"json": {
+        "agent_name": "{agent_name}", "instruction": "i", "base_instruction": ""}},
+    ("POST", "/dashboard/api/evals/playground/run"): {"json": {
+        "agent_name": "{agent_name}", "mode": "prompt", "prompt": "p", "variants": [{}, {}]}},
+    ("POST", "/dashboard/api/workroom/title"): {"json": {
+        "agent": "{agent_name}", "user_id": "{admin}", "session_id": "s"}},
 }
 
-# A row of workspace B for each path parameter of a scoped route
-B_IDS: Dict[str, str] = {}
+# Writes that name no row, and the test of this module that covers each
+COVERED_BY_TEST: Dict[Route, str] = {
+    ("POST", "/dashboard/api/projects"): "test_a_project_is_created_in_the_current_workspace",
+    ("POST", "/dashboard/api/agents/import"): "test_an_import_keeps_to_the_current_workspace",
+    ("POST", "/dashboard/api/templates/import"): "test_a_template_is_imported_into_the_current_workspace",
+    **{route: "test_every_body_naming_a_row_of_b_is_a_404" for route in BODIES_NAMING_B},
+}
+
+# A row of workspace B for each path parameter of a scoped route, set by the fixture
+B_IDS: Dict[str, str] = {"agent_name": B_ROOT, "build_id": "build-of-b"}
 
 
 def _api_routes() -> List[APIRoute]:
@@ -240,6 +223,24 @@ def _pairs(route: APIRoute) -> List[Route]:
 def _platform_admin(workspace_id: int = A) -> dict:
     credentials = base64.b64encode(f"{auth.AUTH_USERNAME}:{auth.AUTH_PASSWORD}".encode()).decode()
     return {"Authorization": f"Basic {credentials}", WORKSPACE_HEADER: str(workspace_id)}
+
+
+def _fill(value, ids: Dict[str, str]):
+    """BODIES_NAMING_B's value with B's ids put in; an id alone stays an int."""
+    if isinstance(value, dict):
+        return {k: _fill(v, ids) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_fill(v, ids) for v in value]
+    if isinstance(value, str) and value.startswith("{") and value.endswith("}") \
+            and value[1:-1] in ids:
+        filled = ids[value[1:-1]]
+        return int(filled) if filled.isdigit() else filled
+    return value
+
+
+def _test_names() -> Set[str]:
+    return {name for cls in globals().values()
+            if isinstance(cls, type) and issubclass(cls, unittest.TestCase) for name in dir(cls)}
 
 
 def _body(route: APIRoute) -> dict:
@@ -294,8 +295,23 @@ class _TwoWorkspaces(unittest.TestCase):
         }
         widget_key = WidgetApiKey(api_key="wk_a", project_id=self.ids["project_a"], agent_name=A_ROOT)
         session.add(widget_key)
+        # B's agent, its config history, memory, file search store, eval case and rating
+        b_root = session.query(AgentConfig).filter_by(name=B_ROOT).one()
+        version = AgentConfigVersion(agent_config_id=b_root.id, version_number=1,
+                                     config_snapshot=json.dumps({"name": B_ROOT}))
+        block = MemoryBlock(project_id=self.ids["project_b"], label=f"{B_MARKER}-block", value=B_MARKER)
+        store = FileSearchStore(store_name=f"{B_MARKER}-store", display_name=B_MARKER,
+                                project_id=self.ids["project_b"])
+        test_case = TestCase(agent_name=B_ROOT, input=B_MARKER, expected_output=B_MARKER,
+                             workspace_id=B)
+        session.add_all([version, block, store, test_case,
+                         ResponseFeedback(session_id="s", message_id="m", agent_name=B_ROOT,
+                                          project_id=self.ids["project_b"], rating="down",
+                                          question=B_MARKER, answer=B_MARKER)])
         session.commit()
         self.ids["widget_key_a"] = widget_key.id
+        self.b_rows = {"config_id": b_root.id, "version_id": version.id, "block_id": block.id,
+                       "test_case_id": test_case.id, "store_name": store.store_name}
         session.close()
 
         dashboard = auth_server.dashboard_server
@@ -308,7 +324,8 @@ class _TwoWorkspaces(unittest.TestCase):
         self.client = TestClient(auth_server.app)
 
     def b_ids(self) -> Dict[str, str]:
-        return {**B_IDS, "project_id": str(self.ids["project_b"])}
+        return {**B_IDS, **{k: str(v) for k, v in self.b_rows.items()},
+                "project_id": str(self.ids["project_b"]), "admin": auth.AUTH_USERNAME}
 
 
 class TestEveryRoute(_TwoWorkspaces):
@@ -317,10 +334,10 @@ class TestEveryRoute(_TwoWorkspaces):
         # Both lists name only routes the app serves
         served = {pair for route in _api_routes() for pair in _pairs(route)}
         for name, routes in (("PLATFORM_ONLY", PLATFORM_ONLY), ("NOT_YET_SCOPED", NOT_YET_SCOPED),
-                             ("COVERED_BY_TEST", set(COVERED_BY_TEST))):
+                             ("SHARED", SHARED), ("COVERED_BY_TEST", set(COVERED_BY_TEST))):
             self.assertFalse(routes - served, f"{name} names routes the app does not serve")
         for test_name in COVERED_BY_TEST.values():
-            self.assertTrue(hasattr(TestProjects, test_name), test_name)
+            self.assertIn(test_name, _test_names())
 
     def test_no_get_route_shows_workspace_b(self):
         leaks = []
@@ -330,7 +347,7 @@ class TestEveryRoute(_TwoWorkspaces):
             if route.param_convertors:
                 continue  # called with B's ids below
             response = self.client.get(route.path, headers=_platform_admin(A))
-            if response.status_code >= 500 or B_MARKER in response.text:
+            if response.status_code >= 500 or any(m in response.text for m in B_MARKERS):
                 leaks.append(f"GET {route.path} -> {response.status_code}")
         self.assertFalse(leaks, "These routes answer workspace A with workspace B's data:\n"
                          + "\n".join(leaks))
@@ -340,7 +357,7 @@ class TestEveryRoute(_TwoWorkspaces):
         failures = []
         for route in _api_routes():
             for method, path in _pairs(route):
-                if (method, path) in PLATFORM_ONLY | NOT_YET_SCOPED or not route.param_convertors:
+                if (method, path) in PLATFORM_ONLY | NOT_YET_SCOPED | SHARED or not route.param_convertors:
                     continue
                 missing = set(route.param_convertors) - set(b_ids)
                 if missing:
@@ -355,6 +372,17 @@ class TestEveryRoute(_TwoWorkspaces):
                     failures.append(f"{method} {path} -> {response.status_code}")
         self.assertFalse(failures, "Called with workspace B's ids from workspace A, these routes "
                          "did not answer 404:\n" + "\n".join(failures))
+
+    def test_every_body_naming_a_row_of_b_is_a_404(self):
+        b_ids = self.b_ids()
+        failures = []
+        for (method, path), body in BODIES_NAMING_B.items():
+            response = self.client.request(method, path, headers=_platform_admin(A),
+                                           **_fill(body, b_ids))
+            if response.status_code != 404:
+                failures.append(f"{method} {path} -> {response.status_code} {response.text[:200]}")
+        self.assertFalse(failures, "Naming a row of workspace B in the body from workspace A, "
+                         "these routes did not answer 404:\n" + "\n".join(failures))
 
     def test_every_write_naming_no_row_is_covered(self):
         uncovered = sorted(
@@ -402,6 +430,117 @@ class TestProjects(_TwoWorkspaces):
                         headers=_platform_admin(A))
         self.client.delete(f"/dashboard/api/projects/{project_b}", headers=_platform_admin(A))
         self.assertEqual(self._names(B), [f"{B_MARKER}-project"])
+
+
+class TestAgents(_TwoWorkspaces):
+    """Agent writes, imports and the agent tree (D1)."""
+
+    def _agent(self, name: str) -> AgentConfig:
+        session = self.Session()
+        try:
+            return session.query(AgentConfig).filter_by(name=name).first()
+        finally:
+            session.close()
+
+    def _create(self, name: str, parents: str = "[]") -> httpx.Response:
+        with patch("shared.utils.audit_service.log"):
+            return self.client.post("/dashboard/api/agents", headers=_platform_admin(A), data={
+                "name": name, "type": "llm", "project_id": str(self.ids["project_a"]),
+                "description": "d", "instruction": "i", "parent_agents": parents})
+
+    def test_agent_names_are_checked_across_workspaces(self):
+        response = self._create(B_ROOT)
+        self.assertEqual((response.status_code, response.json()["detail"]), (409, "This name is taken"))
+        response = self._create("new_agent", json.dumps([B_ROOT]))
+        self.assertEqual(response.status_code, 400)
+        self.assertIsNone(self._agent("new_agent"))
+        self.assertEqual(self._create("new_agent", json.dumps([A_ROOT])).status_code, 200)
+        self.assertEqual(self._agent("new_agent").get_parent_agents(), [A_ROOT])
+
+    def test_an_import_keeps_to_the_current_workspace(self):
+        with patch("shared.utils.audit_service.log"):
+            response = self.client.post(
+                "/dashboard/api/agents/import?overwrite=true", headers=_platform_admin(A), json={
+                    "agents": [
+                        # B's agent, overwritten from A
+                        {"name": B_ROOT, "type": "llm", "project_id": self.ids["project_a"],
+                         "instruction": "taken"},
+                        # into B's project
+                        {"name": "into_b", "type": "llm", "project_id": self.ids["project_b"]},
+                        # under B's agent
+                        {"name": "under_b", "type": "llm", "project_id": self.ids["project_a"],
+                         "parent_agents": [B_ROOT]},
+                        {"name": "into_a", "type": "llm", "project_id": self.ids["project_a"]},
+                    ],
+                    "memory_blocks": [{"project_id": self.ids["project_b"], "label": "x", "value": "x"}],
+                    "triggers": [{"name": "t", "agent_name": B_ROOT}],
+                })
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual((response.json()["imported_count"], response.json()["skipped_count"]), (1, 3))
+        self.assertIsNone(self._agent(B_ROOT).instruction)
+        self.assertEqual(self._agent(B_ROOT).project_id, self.ids["project_b"])
+        self.assertIsNone(self._agent("into_b"))
+        self.assertIsNone(self._agent("under_b"))
+        self.assertEqual(self._agent("into_a").project_id, self.ids["project_a"])
+        session = self.Session()
+        self.assertIsNone(session.query(MemoryBlock).filter_by(label="x").first())
+        self.assertEqual(session.query(auth_server.dashboard_server.AgentTrigger).count(), 0)
+        session.close()
+
+    def test_a_template_is_imported_into_the_current_workspace(self):
+        template = {"project": {"name": "from template"},
+                    "template_meta": {"agent_prefix": "tpl_", "root_agent": "tpl_root"},
+                    "agents": [{"name": "tpl_root", "type": "llm"}]}
+        dashboard = auth_server.dashboard_server
+        with patch.object(dashboard.template_service, "get_template", return_value=template), \
+                patch.object(dashboard, "_copy_template_agent"), patch("shared.utils.audit_service.log"):
+            response = self.client.post("/dashboard/api/templates/import", headers=_platform_admin(B),
+                                        json={"template_id": "t"})
+        self.assertEqual(response.status_code, 200, response.text)
+        session = self.Session()
+        project = session.get(Project, response.json()["project_id"])
+        self.assertEqual(project.workspace_id, B)
+        session.close()
+        self.assertEqual(self._agent(response.json()["root_agent_name"]).project_id, project.id)
+
+    def test_the_agent_tree_keeps_to_a_workspace(self):
+        from shared.utils.agent_manager import AgentManager
+        # A sub-agent of B that names A's root, as no save allows any more
+        session = self.Session()
+        session.query(AgentConfig).filter_by(name="zz_ws_b_sub").update(
+            {"parent_agents": json.dumps([B_ROOT, A_ROOT])})
+        session.commit()
+        session.close()
+        manager = AgentManager.__new__(AgentManager)
+        manager.get_session = self.Session
+        self.assertEqual([a.name for a in manager.get_subagents(A_ROOT)], ["ws_a_sub"])
+        self.assertEqual([a.name for a in manager.get_subagents(B_ROOT)], ["zz_ws_b_sub"])
+        from shared.utils.langgraph.agent_builder import _load_child_configs
+        self.assertEqual([a["name"] for a in _load_child_configs(A_ROOT)], ["ws_a_sub"])
+
+    def test_the_agent_tools_keep_to_the_calling_agent_s_workspace(self):
+        from types import SimpleNamespace
+        from shared.utils.tools import create_agent_tool as tools
+        context = SimpleNamespace(agent_name=A_ROOT)
+        with patch.object(tools, "_is_admin_user", return_value=True), \
+                patch.object(tools, "reload_agent_cache", return_value={"success": True}):
+            self.assertEqual(tools.update_agent(B_ROOT, instruction="x", tool_context=context)["status"],
+                             "error")
+            self.assertEqual(tools.update_agent("ws_a_sub", parent_agent=B_ROOT,
+                                                tool_context=context)["status"], "error")
+            self.assertEqual(tools.delete_agent(B_ROOT, tool_context=context)["status"], "error")
+        self.assertIsNone(self._agent(B_ROOT).instruction)
+        self.assertEqual(self._agent("ws_a_sub").get_parent_agents(), [A_ROOT])
+
+    def test_the_lists_hold_the_current_workspace(self):
+        for path, key in (("/dashboard/api/agents", "configs"), ("/dashboard/api/evals", "suites"),
+                          ("/dashboard/api/evals/playground/agents", "agents")):
+            with self.subTest(path=path):
+                response = self.client.get(path, headers=_platform_admin(B))
+                self.assertEqual(response.status_code, 200)
+                names = {row.get("name") or row.get("agent_name") for row in response.json()[key]}
+                self.assertIn(B_ROOT, names)
+                self.assertNotIn(A_ROOT, names)
 
 
 class TestResolveWorkspace(_TwoWorkspaces):

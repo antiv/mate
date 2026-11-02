@@ -189,6 +189,10 @@ request context (`docs/dev/auth-and-access.md`, "The workspace of a request"):
     default one.
   - When a user's roles change, every membership's `agent_roles` follow them. Only
     the default workspace's `role` is derived.
+- `test_cases.workspace_id` is the workspace of the case's agent, set when the
+  dashboard creates the case. The other lookups in `workspaces.py`
+  (`config_workspace`, `version_workspace`, `store_workspace`, `agents_outside`)
+  find a row's workspace through its project.
 
 ## Undoing a migration
 

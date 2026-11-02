@@ -25,7 +25,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 
 from shared.utils import memory_blocks_service
 from shared.utils.memory_blocks_service import MAX_VERSIONS_PER_BLOCK, MemoryBlocksService
-from shared.utils.models import AgentConfig, Base, MemoryBlock, MemoryBlockVersion
+from shared.utils.models import AgentConfig, Base, MemoryBlock, MemoryBlockVersion, Project
 from shared.test.request_context_helpers import as_caller
 
 PROJECT_ROOT = Path(__file__).parent.parent.parent
@@ -213,6 +213,7 @@ class TestRestoreRoute(unittest.TestCase):
         self.db = FakeDbClient()
         self.addCleanup(self.db.engine.dispose)
         session = self.db.get_session()
+        session.add(Project(id=1, name="p"))
         session.add(AgentConfig(name="desk", type="llm", project_id=1, tool_config='{"memory_blocks": true}'))
         session.add(AgentConfig(name="plain", type="llm", project_id=1, tool_config='{}'))
         session.commit()

@@ -12,6 +12,8 @@ covers:
   - server/request_context.py
   - shared/utils/auth_utils.py
   - server/proxy_routes.py::_non_admin_refusal
+  - shared/utils/dashboard/dashboard_server.py::_require_in_workspace
+  - shared/utils/dashboard/dashboard_server.py::_check_agent_names
 ---
 
 # Authentication and access control
@@ -146,6 +148,32 @@ The workspace is resolved the first time a route reads it, as `ctx.role` is.
 `project_in_workspace`, which returns `None` for another workspace's project, and
 the route answers 404.
 
+A dashboard route that names a row, in its path or its body, calls
+`DashboardServer._require_in_workspace(ctx, agent_name=..., config_id=...,
+project_id=..., version_id=..., store_name=..., test_case_id=...)` before it acts.
+It answers 404 unless every row named is the current workspace's. An agent name
+with no `agents_config` row is a hardcoded agent, which belongs to the installation:
+only a platform administrator reaches it, from the default workspace. Lists join to
+the project and filter on `projects.workspace_id`. Test cases carry their own
+`workspace_id`, and ratings are matched through their agent.
+
+Agent names stay unique across the installation (`documents/design/workspaces.md`,
+D1). Creating or renaming an agent to a name in use anywhere answers 409, "This
+name is taken", without saying where. `parent_agents` may only name agents of the
+same workspace (400), and `AgentManager.get_subagents` and LangGraph's
+`_load_child_configs` look for children in the parent's workspace only, so a name
+can't link two workspaces. A name with no config counts as the default workspace's.
+An import (`POST /dashboard/api/agents/import`) skips an agent, block or trigger
+that names another workspace's project, and an agent whose name another workspace
+uses, even with `overwrite=true`. An imported trigger takes the project of its
+agent. The agent tools of `create_agent_tool.py` (create, update, delete) reach
+only agents of the calling agent's workspace.
+
+The template catalogue (`templates/agent_templates/`) is shared by every workspace:
+listing and reading it is open, and importing creates the project in the current
+workspace. Creating a template from agents and deleting one are platform-only, so
+the catalogue holds no workspace's agents.
+
 Until every route is scoped, `ctx.is_admin` stays the platform administrator only,
 so a workspace's own owner or admin can't reach a route that doesn't filter yet.
 
@@ -153,9 +181,11 @@ so a workspace's own owner or admin can't reach a route that doesn't filter yet.
 workspaces. A platform administrator in workspace A calls every `/dashboard/api/`
 GET route, and none may answer with B's data. Every route that names a row in its
 path is called with B's ids, and must answer 404. A write that names no row needs a
-test of its own, named in `COVERED_BY_TEST`. Routes listed in `NOT_YET_SCOPED`
-(phase 2 empties it) and `PLATFORM_ONLY` (installation-wide) are left out, so a new
-route is checked as soon as it is added.
+test of its own, named in `COVERED_BY_TEST`; one that names a row in its body is
+listed in `BODIES_NAMING_B`, with a body naming B's row, and must answer 404. Routes
+listed in `NOT_YET_SCOPED` (phase 2 empties it), `PLATFORM_ONLY` (installation-wide)
+and `SHARED` (the template catalogue) are left out, so a new route is checked as
+soon as it is added.
 
 An API route that is for admins and is reachable by others, because it is on an
 allowlist or outside `/dashboard/api/`, checks `ctx.is_admin` itself and answers
