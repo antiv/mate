@@ -19,6 +19,8 @@ from unittest.mock import patch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
+from unittest.mock import PropertyMock
+
 from fastapi import FastAPI
 from fastapi.routing import APIRoute, iter_route_contexts
 from fastapi.testclient import TestClient
@@ -27,9 +29,9 @@ from fastapi.testclient import TestClient
 with patch.dict(os.environ):
     import auth_server
 from server.dashboard_authz import (
-    PROTECTED_PREFIX, WRITE_METHODS, _is_user_readable, _is_user_writable,
+    PROTECTED_PREFIX, WRITE_METHODS, _is_user_readable, _is_user_writable, is_platform_only,
 )
-from server.request_context import get_api_request_context, get_request_context
+from server.request_context import RequestContext, get_api_request_context, get_request_context
 
 # Routes a non-admin may call. Each was decided on and is scoped to the caller
 # in its handler; see USER_WRITABLE_PATHS and USER_READABLE_PATHS.
@@ -40,6 +42,8 @@ USER_ROUTES = {
     ("POST", "/dashboard/api/tokens"),
     ("DELETE", "/dashboard/api/tokens/{token_id}"),
     ("POST", "/dashboard/api/workroom/title"),
+    ("GET", "/dashboard/api/workspaces"),
+    ("PUT", "/dashboard/api/workspaces/current"),
 }
 
 _PARAM = re.compile(r"\{(\w+)(?::(\w+))?\}")
@@ -117,14 +121,18 @@ class TestRouteInventory(unittest.TestCase):
     def test_non_admin_is_refused_on_every_other_route(self):
         client = TestClient(auth_server.app)
         allowed = []
-        with patch("server.auth.is_admin_user", return_value=False), \
+        with patch.object(RequestContext, "is_admin", new_callable=PropertyMock, return_value=False), \
+                patch.object(RequestContext, "is_platform_admin", new_callable=PropertyMock,
+                             return_value=False), \
                 patch("server.auth.get_dashboard_auth_user", return_value="regular_user"), \
                 patch("shared.utils.audit_service.log"):
             for method, path in self.routes:
                 if (method, path) in USER_ROUTES:
                     continue
                 response = client.request(method, _concrete(path))
-                if response.status_code != 403 or response.json() != {"detail": "Admin access required"}:
+                detail = ("Platform administrator access required"
+                          if is_platform_only(method, _concrete(path)) else "Admin access required")
+                if response.status_code != 403 or response.json() != {"detail": detail}:
                     allowed.append(f"{method} {path} -> {response.status_code}")
         self.assertFalse(
             allowed,

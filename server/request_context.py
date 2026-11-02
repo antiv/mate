@@ -8,11 +8,18 @@ also carries the caller's workspace, so a route filters by ``ctx.workspace_id``
 and never takes the workspace from a query parameter
 (documents/design/workspaces.md, D6).
 
-The workspace is the one named by the X-MATE-Workspace header, else the caller's
-default: workspace 1 for a platform administrator, else their first membership.
-A workspace that doesn't exist, or that the caller is not a member of, is a 404,
-so the answer doesn't confirm that it exists. Platform administrators may open
-any workspace.
+The workspace is the one named by the X-MATE-Workspace header, else the one the
+dashboard session switched to (PUT /dashboard/api/workspaces/current), else the
+caller's default: workspace 1 for a platform administrator, else their first
+membership. A workspace that doesn't exist, or that the caller is not a member of,
+is a 404 when the header names it, so the answer doesn't confirm that it exists; a
+session's choice the caller has since lost access to falls back to the default.
+Platform administrators may open any workspace.
+
+ctx.is_admin is a platform administrator or an owner or admin of the workspace: the
+dashboard of that workspace. ctx.is_platform_admin is the installation's own
+administrator, for what covers every workspace (server/dashboard_authz.py,
+PLATFORM_ONLY_PATHS).
 """
 
 from functools import cached_property
@@ -23,6 +30,17 @@ from fastapi import HTTPException, Request
 from server.auth import get_dashboard_auth_user, get_user_role, require_dashboard_auth
 
 WORKSPACE_HEADER = "X-MATE-Workspace"
+# The key in the dashboard session holding the workspace it switched to
+SESSION_WORKSPACE_KEY = "workspace_id"
+
+
+def session_workspace(request: Request) -> Optional[int]:
+    """The workspace the dashboard session switched to, or None."""
+    try:
+        value = request.session.get(SESSION_WORKSPACE_KEY)
+    except AssertionError:  # no SessionMiddleware in front of this app
+        return None
+    return value if isinstance(value, int) else None
 
 
 def resolve_workspace(request: Request, user_id: str,
@@ -47,6 +65,11 @@ def resolve_workspace(request: Request, user_id: str,
             if role is None and not is_platform_admin:
                 raise HTTPException(status_code=404, detail="Workspace not found")
             return workspace_id, role
+        chosen = session_workspace(request)
+        if chosen is not None and workspace_is_open(session, chosen):
+            role = member_role(session, chosen, user_id)
+            if role is not None or is_platform_admin:
+                return chosen, role
         workspace_id = None if is_platform_admin else first_workspace_of(session, user_id)
         # No membership at all (a pending sign-up): the default workspace, as no member
         workspace_id = workspace_id or DEFAULT_WORKSPACE_ID
@@ -79,8 +102,9 @@ class RequestContext:
 
     @property
     def is_admin(self) -> bool:
-        # Workspace owners and admins join in phase 2e, once every route is scoped
-        return self.is_platform_admin
+        """A platform administrator, or an owner or admin of the current workspace."""
+        from shared.utils.workspaces import ROLE_ADMIN, ROLE_OWNER
+        return self.is_platform_admin or self.workspace_role in (ROLE_OWNER, ROLE_ADMIN)
 
     @cached_property
     def _workspace(self) -> Tuple[int, Optional[str]]:

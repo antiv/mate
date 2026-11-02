@@ -98,6 +98,27 @@ The code executor runs commands on the server and is not a sandbox. MATE refuses
 load it on an agent that has a widget key, because anonymous visitors could then run
 commands on the host.
 
+### What only a platform administrator can set
+
+Some settings run code on the MATE server, or read its configuration, so they belong
+to the people who run the whole installation, the platform administrators (the
+built-in account, and anyone with the `admin` role):
+
+- the **code executor** tool;
+- an MCP server with `command` and `args`, started on the server;
+- `${NAME}` in **Model API Key**, **Model Base URL** or the MCP servers configuration;
+- **Hardcoded**, and a name that already has a folder in the server's `agents/`
+  folder.
+
+An owner or admin of a workspace who is not a platform administrator can't add these
+to an agent, or change them on one: saving is refused with "Only a platform
+administrator can give an agent ...". What a platform administrator set up keeps
+working, and the rest of the agent can still be edited. While doing so, leave these
+fields as they are, and **Model Base URL** too when the key is a `${NAME}`.
+
+Outside the Default workspace, the code executor and MCP servers with a command don't
+run at all for now: the agent answers without them.
+
 ## Who can use an agent
 
 **Allowed Roles** is compared with the roles on the user record of the person
@@ -119,7 +140,7 @@ admits it.
 | Switch | Effect |
 |---|---|
 | **Disabled** | Takes the agent out of service without deleting it. |
-| **Hardcoded** | Marks an agent whose code lives in the repository rather than in the database. |
+| **Hardcoded** | Marks an agent whose code lives in the repository rather than in the database. Only a platform administrator can set it. |
 | **Expose as Model** | Makes the agent callable as a model through the OpenAI-compatible API. |
 | **Debug Mode** | Shows detailed error messages in the chat instead of a generic one. |
 

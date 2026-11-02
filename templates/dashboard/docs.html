@@ -97,7 +97,10 @@
         <button type="button" class="docs-tab pb-2 whitespace-nowrap" role="tab" data-tab="user" aria-selected="false">User guide</button>
         <button type="button" class="docs-tab pb-2 whitespace-nowrap" role="tab" data-tab="dev" aria-selected="false">Developer guide</button>
         <button type="button" class="docs-tab pb-2 whitespace-nowrap" role="tab" data-tab="reference" aria-selected="false">Reference</button>
+        {# The agent server's own API: platform administrators only (server/proxy_routes.py) #}
+        {% if is_platform_admin(request) %}
         <button type="button" class="docs-tab pb-2 whitespace-nowrap" role="tab" data-tab="api" aria-selected="false">API explorer</button>
+        {% endif %}
     </div>
 
     <!-- Guides and reference -->

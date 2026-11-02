@@ -419,6 +419,7 @@ from server.widget_routes import (
 from server.wizard_routes import router as wizard_router
 from server.slack_routes import router as slack_router, dashboard_router as slack_dashboard_router
 from server.docs_routes import router as docs_router
+from server.workspace_routes import router as workspace_router
 
 configure_widget_proxy(ADK_HOST, ADK_PORT)
 
@@ -432,6 +433,7 @@ app.include_router(wizard_router)
 app.include_router(slack_router)
 app.include_router(slack_dashboard_router)
 app.include_router(docs_router)
+app.include_router(workspace_router)
 app.include_router(public_artifacts_router)
 app.include_router(csp_report_router)
 app.include_router(proxy_router)

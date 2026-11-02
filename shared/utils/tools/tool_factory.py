@@ -10,6 +10,8 @@ import logging
 import os
 from typing import Dict, List, Any, Optional
 
+from ..platform_only import may_run_code
+
 logger = logging.getLogger(__name__)
 
 
@@ -240,6 +242,8 @@ class ToolFactory:
     def _create_code_executor_tools(self, config: Dict[str, Any]) -> List[Any]:
         """Create code executor tools (Python & shell execution).
 
+        Refused to an agent outside the default workspace, which a platform
+        administrator can't enable per workspace yet (shared/utils/platform_only.py).
         Refused when the agent is reachable through a widget key: the executor is
         not a sandbox, so handing it to an agent anonymous site visitors can prompt
         grants them shell access to the host. A key counts whether or not it is
@@ -248,6 +252,11 @@ class ToolFactory:
         happen. Delete the key, or set MATE_ALLOW_CODE_EXECUTOR_ON_WIDGET=true.
         """
         agent_name = config.get('name')
+        if not may_run_code(agent_name):
+            logger.error(
+                "Refusing code_executor for agent '%s': outside the default workspace "
+                "it is platform-only (shared/utils/platform_only.py).", agent_name)
+            return []
         if agent_name and self._agent_has_widget_key(agent_name):
             logger.error(
                 "Refusing code_executor for agent '%s': it has a widget API key, which "

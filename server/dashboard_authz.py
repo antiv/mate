@@ -11,13 +11,18 @@ Reads were once open to any signed-in user, which handed a regular SSO user the
 user list, the audit log, every conversation and the widget admin keys. New
 routes are protected automatically — add them here only after deciding a
 non-admin may call them.
+
+Admin is ctx.is_admin (server/request_context.py): a platform administrator, or an
+owner or admin of the request's workspace, whose routes keep to that workspace.
+PLATFORM_ONLY_PATHS act on the whole installation and need a platform
+administrator (documents/design/workspaces.md, "What stays platform-only").
 """
 
 import logging
 import re
 from typing import Callable
 
-from fastapi import Request, Response
+from fastapi import HTTPException, Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 
@@ -33,6 +38,7 @@ PROTECTED_PREFIX = "/dashboard/api/"
 # creating one also needs a role in ALLOWED_API_ROLES, checked in the handler.
 USER_WRITABLE_PATHS = [
     re.compile(r"^/dashboard/api/workroom/title/?$"),
+    re.compile(r"^/dashboard/api/workspaces/current/?$"),
     re.compile(r"^/dashboard/api/feedback/?$"),
     re.compile(r"^/dashboard/api/tokens/?$"),
     re.compile(r"^/dashboard/api/tokens/\d+/?$"),
@@ -42,8 +48,29 @@ USER_WRITABLE_PATHS = [
 # account menu their own personal access tokens; both are scoped to the caller.
 USER_READABLE_PATHS = [
     re.compile(r"^/dashboard/api/feedback/?$"),
+    re.compile(r"^/dashboard/api/workspaces/?$"),
     re.compile(r"^/dashboard/api/tokens/?$"),
 ]
+
+
+# (methods, or None for every method; path). Migrations, server control, installation
+# settings and system jobs, the wizard and shop, users, audit retention, the template
+# catalogue, and binary builds, which pack the installation's agents/ folder.
+PLATFORM_ONLY_PATHS = [
+    (None, re.compile(
+        r"^/dashboard/api/(migrations|server|settings|system-jobs|wizard|shop|users)(/.*)?$")),
+    (None, re.compile(r"^/dashboard/api/audit-logs/retention(-config)?/?$")),
+    (None, re.compile(r"^/dashboard/api/agents/build-binary(/.*)?$")),
+    ({"POST"}, re.compile(r"^/dashboard/api/agents/reinitialize-all/?$")),
+    ({"POST"}, re.compile(r"^/dashboard/api/templates/create-from-agents/?$")),
+    ({"DELETE"}, re.compile(r"^/dashboard/api/templates/[^/]+/?$")),
+]
+
+
+def is_platform_only(method: str, path: str) -> bool:
+    """True for a route only a platform administrator may call."""
+    return any((methods is None or method in methods) and pattern.match(path)
+               for methods, pattern in PLATFORM_ONLY_PATHS)
 
 
 def _is_user_writable(path: str) -> bool:
@@ -67,13 +94,22 @@ class DashboardAuthzMiddleware(BaseHTTPMiddleware):
         ):
             return await call_next(request)
 
-        from server.auth import is_admin_user
+        from server.auth import get_dashboard_auth_user
+        from server.request_context import RequestContext
 
-        if is_admin_user(request):
+        actor = get_dashboard_auth_user(request)
+        if not actor:
+            # Nobody signed in: the route's own dependency answers 401 or redirects
+            return await call_next(request)
+        ctx = RequestContext(request, actor)
+        platform_only = is_platform_only(request.method, path)
+        try:
+            allowed = ctx.is_platform_admin if platform_only else ctx.is_admin
+        except HTTPException as exc:  # a workspace the caller can't open: 404
+            return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
+        if allowed:
             return await call_next(request)
 
-        from server.auth import get_dashboard_auth_user
-        actor = get_dashboard_auth_user(request) or "anonymous"
         logger.warning("Dashboard authz: denied %s %s for non-admin %s", request.method, path, actor)
         try:
             from shared.utils import audit_service
@@ -84,4 +120,5 @@ class DashboardAuthzMiddleware(BaseHTTPMiddleware):
         except Exception as exc:
             logger.debug("Audit log for denied dashboard write failed: %s", exc)
 
-        return JSONResponse({"detail": "Admin access required"}, status_code=403)
+        detail = "Platform administrator access required" if platform_only else "Admin access required"
+        return JSONResponse({"detail": detail}, status_code=403)

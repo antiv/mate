@@ -231,8 +231,10 @@
             icon.style.animation = 'mate-spin 0.7s linear';
             setTimeout(() => { icon.style.animation = ''; }, 700);
         }
-        refreshSystemStatus();
-        refreshServerHealth();
+        if (document.body.dataset.platformAdmin === 'true') {
+            refreshSystemStatus();
+            refreshServerHealth();
+        }
         loadRecentActivity();
     }
 
@@ -314,7 +316,7 @@
 
     document.addEventListener('DOMContentLoaded', function () {
         initCharts();
-        refreshServerHealth();
+        if (document.body.dataset.platformAdmin === 'true') refreshServerHealth();
         loadRecentActivity();
     });
 </script>
