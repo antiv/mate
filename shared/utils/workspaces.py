@@ -315,6 +315,14 @@ SYSTEM_CALLERS = {"trigger_runner"}
 _WIDGET_USER = re.compile(r"^widget_(\d+)_")
 
 
+def is_reserved_user_id(user_id: str) -> bool:
+    """True for an id the server gives out on its own: a system caller, or a widget
+    visitor's widget_<key id>_<uid> (any id starting widget_, which
+    UserService.get_or_create_user gives the widget role). A sign-in or a new account
+    can't take one."""
+    return user_id in SYSTEM_CALLERS or user_id.startswith("widget_")
+
+
 def caller_access(session: Session, user: User,
                   workspace_id: Optional[int]) -> Optional[Tuple[bool, List[str]]]:
     """Whether the user may use the workspace's agents: None when not, else
@@ -324,8 +332,10 @@ def caller_access(session: Session, user: User,
       workspace pass allowed_for_roles: a user whose only role is admin has no
       agent_roles at all.
     - A member is matched on their agent_roles.
-    - A widget visitor (widget_<key id>_...) reaches the workspace of their key's
-      project, and a system caller any workspace, both on users.roles.
+    - A widget visitor (widget_<key id>_..., with the widget role only the server
+      gives out) reaches the workspace of their key's project, and a system caller
+      any workspace, both on users.roles. Neither id can be signed in with
+      (is_reserved_user_id).
     """
     roles = user.get_roles()
     if "admin" in roles:
@@ -333,7 +343,7 @@ def caller_access(session: Session, user: User,
     if workspace_id is None:
         return None
     widget = _WIDGET_USER.match(user.user_id)
-    if widget:
+    if widget and "widget" in roles:
         key_workspace = session.query(Project.workspace_id).join(
             WidgetApiKey, WidgetApiKey.project_id == Project.id).filter(
             WidgetApiKey.id == int(widget.group(1))).scalar()

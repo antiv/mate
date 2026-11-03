@@ -29,8 +29,11 @@ build is skipped and logged, and the others still mount. A missing dependency
 (`ImportError`) disables A2A for all agents, with a message at startup.
 
 Agents are exposed once, at ADK startup. An agent created or enabled later has no
-`/a2a` route until the ADK server restarts. Tasks live in one `InMemoryTaskStore`
-for the process, so `tasks/get` only finds tasks created since the last start.
+`/a2a` route until the ADK server restarts. Each agent's tasks live in an
+`InMemoryTaskStore` of its own, so `tasks/get` and `tasks/cancel` on `/a2a/<agent>`
+find only that agent's tasks, and only those created since the last start. The proxy
+checks the caller against the agent in the path, so a shared store would have let a
+caller of one agent read another's tasks.
 
 ## Enabling A2A Support
 

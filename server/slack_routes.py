@@ -496,14 +496,17 @@ def _workspace_integration(session, ctx: RequestContext, integration_id: int) ->
 def _check_target(session, ctx: RequestContext, project_id, agent_name: str,
                   team_id: Optional[str], integration_id: Optional[int] = None) -> None:
     """404 unless the project and agent are the workspace's; 409 when another
-    integration, of any workspace, has the Slack team (V047). Neither says whose."""
+    integration, of any workspace, has the Slack team (V047). Neither says whose: the
+    first to connect a team keeps it, and a platform administrator, who opens every
+    workspace, resolves a dispute."""
     missing = missing_from(session, ctx.workspace_id, project_id=project_id, agent_name=agent_name)
     if missing:
         raise HTTPException(status_code=404, detail=f"{missing} not found")
     if team_id and session.query(ChannelIntegration.id).filter(
             ChannelIntegration.team_id == team_id,
             ChannelIntegration.id != integration_id).first():
-        raise HTTPException(status_code=409, detail="This Slack team is already connected")
+        raise HTTPException(status_code=409, detail="This Slack team is already connected. "
+                            "If it is yours, ask a platform administrator.")
 
 
 @dashboard_router.get("/channel-integrations")

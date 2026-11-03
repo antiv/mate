@@ -77,7 +77,6 @@ def register_a2a_routes(app: Any, app_names: Iterable[str],
     from a2a.server.tasks import InMemoryTaskStore
     from google.adk.a2a import _compat
 
-    task_store = InMemoryTaskStore()
     mounted = 0
     for app_name in app_names:
         try:
@@ -86,7 +85,9 @@ def register_a2a_routes(app: Any, app_names: Iterable[str],
                 app,
                 agent_card=card,
                 agent_executor=executor_factory(app_name),
-                task_store=task_store,
+                # One store per agent: the proxy checks the caller against the agent
+                # in the path, so tasks/get on /a2a/<agent> must find only its tasks
+                task_store=InMemoryTaskStore(),
                 prefix=f"/a2a/{app_name}",
             )
             mounted += 1

@@ -37,8 +37,6 @@ ENV_REFERENCE = "a ${VAR} reference"
 HARDCODED = "a hardcoded agent"
 KEPT_KEY = "a new base URL for its stored API key (enter the key again)"
 
-_ENV_FIELDS = ("model_api_key", "model_base_url", "mcp_servers_config")
-
 
 def _parsed(value: Any) -> Any:
     if isinstance(value, str):
@@ -67,6 +65,29 @@ def _as_run(servers: Any) -> Any:
     return {**servers, "mcpServers": decoded}
 
 
+def _has_placeholder(value: Any) -> bool:
+    return bool(ENV_PLACEHOLDER.search(json.dumps(value)))
+
+
+def _env_references(config: Dict[str, Any], servers: Any) -> Dict[str, Any]:
+    """Each place that holds a ${VAR}, with where its value is sent: the model's key and
+    base URL together, and each MCP server entry whole. Editing a server or a field
+    without a placeholder changes none of them."""
+    references: Dict[str, Any] = {}
+    model = (config.get("model_api_key"), config.get("model_base_url"))
+    if _has_placeholder(model):
+        references["model"] = model
+    run = _as_run(servers)
+    if isinstance(run, dict) and isinstance(run.get("mcpServers"), dict):
+        for name, entry in run["mcpServers"].items():
+            if _has_placeholder(entry):
+                references[f"mcp:{name}"] = entry
+        run = {key: value for key, value in run.items() if key != "mcpServers"}
+    if run and _has_placeholder(run):
+        references["mcp"] = run
+    return references
+
+
 def _defining(config: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     """{feature: the part of the config that defines it} for each platform-only feature
     an agent config (a dict of its columns) has."""
@@ -84,10 +105,9 @@ def _defining(config: Optional[Dict[str, Any]]) -> Dict[str, Any]:
                  if not isinstance(entry, dict) or not entry.get("url")}
         if stdio:
             found[STDIO_MCP] = stdio
-    env_fields = tuple(_as_run(servers) if field == "mcp_servers_config"
-                       else config.get(field) for field in _ENV_FIELDS)
-    if ENV_PLACEHOLDER.search(json.dumps(env_fields)):
-        found[ENV_REFERENCE] = env_fields
+    references = _env_references(config, servers)
+    if references:
+        found[ENV_REFERENCE] = references
     if config.get("hardcoded") is True or config.get("hardcoded") == 1:
         found[HARDCODED] = True
     return found
@@ -128,15 +148,19 @@ def has_code_folder(agents_dir: Path, name: Optional[str]) -> bool:
     return (agents_dir / name).is_dir()
 
 
-def may_run_code(agent_name: Optional[str]) -> bool:
+def may_run_code(agent_name: Optional[str], project_id: Optional[int] = None) -> bool:
     """True if the agent may have the code executor and stdio MCP servers: an agent of
     the default workspace, or with no config (a hardcoded agent). False when the check
-    can't run, as the tools are refused rather than handed out by accident."""
+    can't run, as the tools are refused rather than handed out by accident.
+
+    A config that names its project_id is judged by that project's workspace, not by
+    its name: a subagent made by delegation has its parent's project and a name with
+    no row (tools/subagent_delegation_tool.py). A project that doesn't exist refuses."""
     from .database_client import get_database_client
     from .models import DEFAULT_WORKSPACE_ID
-    from .workspaces import agent_workspace
+    from .workspaces import agent_workspace, workspace_of_project
 
-    if not agent_name:
+    if not agent_name and project_id is None:
         return True
     try:
         session = get_database_client().get_session()
@@ -144,6 +168,8 @@ def may_run_code(agent_name: Optional[str]) -> bool:
             logger.error("Platform-only check for %s: no database session; refusing", agent_name)
             return False
         try:
+            if project_id is not None:
+                return workspace_of_project(session, project_id) == DEFAULT_WORKSPACE_ID
             workspace_id = agent_workspace(session, agent_name)
         finally:
             session.close()

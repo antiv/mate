@@ -252,7 +252,7 @@ class ToolFactory:
         happen. Delete the key, or set MATE_ALLOW_CODE_EXECUTOR_ON_WIDGET=true.
         """
         agent_name = config.get('name')
-        if not may_run_code(agent_name):
+        if not may_run_code(agent_name, config.get('project_id')):
             logger.error(
                 "Refusing code_executor for agent '%s': outside the default workspace "
                 "it is platform-only (shared/utils/platform_only.py).", agent_name)
