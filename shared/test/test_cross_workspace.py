@@ -66,7 +66,7 @@ from shared.utils.rbac_middleware import RBACMiddleware
 from shared.utils.tools import mcp_tools
 from shared.utils.tools.tool_factory import ToolFactory
 from shared.utils.user_service import UserService
-from shared.utils.workspaces import sync_default_members
+from shared.utils.workspaces import is_reserved_user_id, sync_default_members
 
 B_MARKER = "zz-ws-b"
 # Agent names can't hold a hyphen, so B's carry the marker with underscores
@@ -540,8 +540,10 @@ class TestLogsAndOperations(_TwoWorkspaces):
         response = self.client.post("/dashboard/api/channel-integrations", headers=_platform_admin(A),
                                     json={"project_id": self.ids["project_a"], "agent_name": A_ROOT,
                                           "team_id": "T_B"})
-        self.assertEqual((response.status_code, response.json()["detail"]),
-                         (409, "This Slack team is already connected"))
+        self.assertEqual(response.status_code, 409)
+        # Nor says in which workspace
+        self.assertEqual(response.json()["detail"], "This Slack team is already connected. "
+                         "If it is yours, ask a platform administrator.")
 
     def test_a_token_acts_in_the_current_workspace(self):
         with patch("shared.utils.audit_service.log"):
@@ -1385,6 +1387,142 @@ class TestWorkspaceSwitcher(_TwoWorkspaces):
         switcher = page(BOB)
         self.assertIn('id="workspaceSwitcher"', switcher)
         self.assertIn(f"{B_MARKER} workspace", switcher)
+
+
+class TestReviewOfPhase2(_TwoWorkspaces):
+    """The paths the security review of phase 2 found (#277, 2f)."""
+
+    def _as(self, user_id: str) -> TestClient:
+        return TestClient(auth_server.app, cookies=_signed_in(user_id))
+
+    def test_a_subagent_runs_code_only_where_its_parent_may(self):
+        # A subagent made by delegation has its parent's project and a name with no row
+        factory = ToolFactory()
+        subagent = "subagent_ab12cd"
+        with patch.object(ToolFactory, "_agent_has_widget_key", return_value=False), \
+                patch("shared.utils.tools.code_executor_tools.create_code_executor_tools_from_config",
+                      return_value=["executor"]):
+            self.assertEqual(factory._create_code_executor_tools(
+                {"name": subagent, "project_id": self.ids["project_a"]}), ["executor"])
+            self.assertEqual(factory._create_code_executor_tools(
+                {"name": subagent, "project_id": self.ids["project_b"]}), [])
+            self.assertEqual(factory._create_code_executor_tools(
+                {"name": subagent, "project_id": 999}), [])
+        stdio = {"mcpServers": {"x": {"command": "npx", "args": ["server"]}}}
+        with patch.object(mcp_tools, "create_mcp_toolset_command", return_value="toolset"):
+            self.assertEqual(mcp_tools.create_mcp_tools_from_config(
+                {"name": subagent, "project_id": self.ids["project_b"], "mcp_servers_config": stdio}), [])
+
+    def test_an_id_shaped_like_a_widget_visitor_s_is_no_visitor(self):
+        # A new user joins the default workspace, A: the key of B's agent is what she'd use
+        lookalike = f"widget_{self.b_rows['key_id']}_eve@example.com"
+        session = self.Session()
+        session.add(User(user_id=lookalike, roles='["user"]'))
+        session.commit()
+        session.close()
+        rbac = RBACMiddleware.__new__(RBACMiddleware)
+        rbac.user_service = UserService()
+        allowed = rbac.check_agent_access(lookalike, {"name": B_ROOT, "allowed_for_roles": ["user"]})[0]
+        self.assertFalse(allowed, "only the widget role the server gives out makes a visitor")
+        for user_id in (lookalike, "widget_1_x", "trigger_runner"):
+            self.assertTrue(is_reserved_user_id(user_id), user_id)
+        self.assertFalse(is_reserved_user_id(ALICE))
+        response = self.client.post("/dashboard/api/users", headers=_platform_admin(A),
+                                    data={"user_id": "trigger_runner", "roles": '["admin"]'})
+        self.assertFalse(response.json()["success"], response.text)
+
+    def test_the_work_room_title_reads_one_session_of_the_caller(self):
+        requested = []
+
+        async def fake_get(client, url, **kwargs):
+            requested.append(httpx.URL(url).raw_path)
+            return httpx.Response(200, json={"state": {"_title": "t"}})
+
+        escape = f"../../../../{B_ROOT}/users/{BOB}/sessions/s"
+        with patch("httpx.AsyncClient.get", new=fake_get):
+            response = self._as(ALICE).post("/dashboard/api/workroom/title", json={
+                "agent": A_ROOT, "user_id": ALICE, "session_id": escape})
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertTrue(requested[0].startswith(f"/apps/{A_ROOT}/users/".encode()), requested)
+
+    def test_a_rating_is_of_a_session_of_the_caller_with_the_agent(self):
+        session = self.Session()
+        session.add(LangGraphSession(id="alice-session", app_name=A_ROOT, user_id=ALICE))
+        session.commit()
+        session.close()
+        alice = self._as(ALICE)
+
+        def rate(**fields) -> int:
+            body = {"session_id": "alice-session", "message_id": "m1", "rating": "up",
+                    "agent_name": A_ROOT, "user_id": ALICE, **fields}
+            return alice.post("/dashboard/api/feedback", json=body).status_code
+
+        from shared.utils.langgraph import session_store
+        with patch.object(session_store, "_session_store", None):
+            self.assertEqual(rate(), 200)
+            # B's rating, rewritten with no agent or through one of A's
+            self.assertEqual(rate(session_id="s", message_id="m", agent_name=None), 400)
+            self.assertEqual(rate(session_id="s", message_id="m"), 404)
+            self.assertEqual(rate(session_id=f"{B_MARKER}-lg-session"), 404)
+            self.assertEqual(rate(user_id=BOB), 404)
+        session = self.Session()
+        self.assertEqual(session.query(ResponseFeedback).filter_by(session_id="s").one().rating, "down")
+        session.close()
+
+    def test_a_session_id_another_agent_also_has_is_not_mixed_up(self):
+        path = Path(tempfile.mkdtemp()) / "sessions.db"
+        engine = create_engine(f"sqlite:///{path}")
+        with engine.begin() as conn:
+            conn.execute(text("CREATE TABLE sessions (app_name TEXT, user_id TEXT, id TEXT, state TEXT, "
+                              "create_time REAL, update_time REAL)"))
+            conn.execute(text("CREATE TABLE events (id TEXT, app_name TEXT, user_id TEXT, "
+                              "session_id TEXT, event_data TEXT, timestamp REAL)"))
+            for app, user in ((A_ROOT, ALICE), (B_ROOT, BOB)):
+                conn.execute(text("INSERT INTO sessions VALUES (:a, :u, 'dup', '{}', 1, 1)"),
+                             {"a": app, "u": user})
+                conn.execute(text("INSERT INTO events VALUES (:i, :a, :u, 'dup', :d, 1)"),
+                             {"i": f"e-{app}", "a": app, "u": user,
+                              "d": json.dumps({"author": app})})
+        engine.dispose()
+        dashboard = auth_server.dashboard_server
+        params = {"session_id": "dup", "app_name": A_ROOT, "user_id": ALICE, "runtime": "adk"}
+        with patch.object(dashboard, "session_service_uri", f"sqlite:///{path}"):
+            detail = self.client.get("/dashboard/api/sessions/detail", params=params,
+                                     headers=_platform_admin(A)).json()
+            self.assertEqual(detail["events"], [{"author": A_ROOT}])
+            self.client.delete("/dashboard/api/sessions", params=params, headers=_platform_admin(A))
+            self.assertIsNone(dashboard._get_session_detail("adk", A_ROOT, ALICE, "dup"))
+            self.assertEqual(dashboard._get_session_detail("adk", B_ROOT, BOB, "dup")["events"],
+                             [{"author": B_ROOT}])
+
+    def test_a_workspace_header_of_other_digits_is_a_404(self):
+        # The byte a client sends, which Starlette reads as latin-1: '²'
+        request = Request({"type": "http", "method": "GET", "path": "/", "query_string": b"",
+                           "headers": [(WORKSPACE_HEADER.lower().encode(), b"\xb2")]})
+        with self.assertRaises(HTTPException) as raised:
+            resolve_workspace(request, auth.AUTH_USERNAME, True)
+        self.assertEqual(raised.exception.status_code, 404)
+
+    def test_an_owner_edits_mcp_servers_beside_a_var_set_up_for_them(self):
+        session = self.Session()
+        config = session.query(AgentConfig).filter_by(name=B_ROOT).one()
+        config.model_api_key = "${OPENAI_API_KEY}"
+        config_id = config.id
+        session.commit()
+        session.close()
+        form = {"name": B_ROOT, "type": "llm", "project_id": str(self.ids["project_b"]),
+                "description": "d", "instruction": "i", "model_api_key": "__stored__",
+                "mcp_servers_config": json.dumps({"mcpServers": {"h": {"url": "https://tools.example"}}})}
+        with patch("shared.utils.dashboard.dashboard_server.STORED_SECRET_SENTINEL", "__stored__"):
+            response = self._as(BOB).put(f"/dashboard/api/agents/{config_id}", data=form)
+        self.assertTrue(response.json()["success"], response.text)
+
+    def test_the_workspace_is_resolved_once_a_request(self):
+        # An owner: the middleware resolves the workspace to see that he is its admin
+        bob = self._as(BOB)
+        with patch("server.request_context.resolve_workspace", wraps=resolve_workspace) as resolved:
+            self.assertEqual(bob.get("/dashboard/api/agents").status_code, 200)
+        self.assertEqual(resolved.call_count, 1)
 
 
 if __name__ == "__main__":

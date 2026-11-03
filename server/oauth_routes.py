@@ -209,6 +209,12 @@ async def oauth_callback(provider: str, request: Request):
         logger.warning("OAuth login rejected by allowlist: %s (%s)", email or user_id, provider)
         return RedirectResponse(url="/login?error=not_allowed")
 
+    # An address such as widget_7_x@example.com would pass for a widget visitor
+    from shared.utils.workspaces import is_reserved_user_id
+    if is_reserved_user_id(user_id):
+        logger.warning("OAuth login rejected, reserved user id: %s (%s)", user_id, provider)
+        return RedirectResponse(url="/login?error=not_allowed")
+
     _upsert_oauth_user(user_id, email, display_name, provider)
 
     request.session["user"] = {

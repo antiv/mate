@@ -59,7 +59,11 @@ register with the provider are `/auth/callback/google` and `/auth/callback/githu
 On callback, `_upsert_oauth_user` creates or updates the `users` row. A new user gets
 `OAUTH_DEFAULT_ROLE`, which is `pending` unless changed. `OAUTH_ALLOWED_DOMAINS` and
 `OAUTH_ALLOWED_EMAILS` restrict who may sign in at all; with neither set, anyone with
-an account at the provider can create a session.
+an account at the provider can create a session. An id the server gives out on its
+own, one starting with `widget_` or `trigger_runner`
+(`shared/utils/workspaces.py::is_reserved_user_id`), is refused at sign-in, and
+**Users** refuses to create one: an address such as `widget_7_x@example.com` would
+otherwise pass for a widget visitor.
 
 The session cookie is signed with `SECRET_KEY`. Without one, a random key is
 generated at startup and every session dies on restart.
@@ -149,7 +153,9 @@ A dashboard route learns who is calling from one dependency,
   time a route asks, since for a single sign-on user it is a database lookup.
 
 Every `/dashboard` route takes it, and the route inventory test fails on one that
-does not.
+does not. The context is made once a request (`context_for`, kept on
+`request.state`): `DashboardAuthzMiddleware` makes it to check for an admin, and the
+route's dependency reuses it and the workspace it resolved.
 
 ### The workspace of a request
 
@@ -216,7 +222,13 @@ the installation (a sign-in, a user change). Through them:
   rules read the workspace's rows, and a route naming another workspace's rule,
   trigger, widget key, token or integration answers 404;
 - a session belongs to the workspace of its `app_name`, its root agent; detail and
-  delete answer 404 for another's;
+  delete answer 404 for another's. ADK keys a session by app, user and id, and a
+  client may choose the id, so the lookup narrows by the app and user the caller
+  names, reads only that session's events, and deletes by the whole key of the
+  session it checked;
+- a rating (`POST /dashboard/api/feedback`) names its agent, and is refused with 404
+  unless the session is the caller's (any of the workspace's for an admin) with that
+  agent; the rated-answer pages read a session's events by its id and agent;
 - a trace belongs to a workspace when every agent its spans name
   (`gen_ai.agent.name`, `mate.agent.name`) is one of its agents, and a trace naming
   none to the default workspace (`DashboardServer._traces_in_workspace`);
@@ -230,7 +242,9 @@ the installation (a sign-in, a user change). Through them:
 
 A Slack team connects to one integration on the installation (`UNIQUE (team_id)`,
 V047): an event names only its team. Creating or editing an integration onto a team
-that is taken answers 409 without saying whose it is.
+that is taken answers 409 without saying whose it is. The first workspace to connect
+a team keeps it; the 409 tells the caller to ask a platform administrator, who can
+switch to the workspace holding it and delete that integration.
 
 ### What only a platform administrator may give an agent
 
@@ -246,7 +260,10 @@ Some agent settings run code with the server's rights or read its environment, a
 On save, `DashboardServer._refuse_platform_only` answers 403 when a caller who is no
 platform administrator adds one of these, or changes the part of the config that
 defines it (`features_added`): a new command for an existing stdio server runs new
-code, and a new base URL beside a `${VAR}` key sends the variable there. The check
+code, and a new base URL beside a `${VAR}` key sends the variable there. For `${VAR}`
+the defining part is each place that holds one, with where it is sent: the model's
+key and base URL together, and each MCP server entry whole, so editing a server that
+holds none is no change. The check
 reads `mcp_servers_config` as the runtimes do: they decode an entry's `headers`,
 `args` and `env` once more when it is a string and only then resolve `${VAR}`, so a
 placeholder spelled with JSON escapes (`${VAR}`) there is seen too. A new base
@@ -287,8 +304,11 @@ Every path that makes agent names keeps to the same rules:
 At run time, `may_run_code` refuses the code executor and stdio MCP servers to an
 agent outside the default workspace, in the tool factory, `mcp_tools.py` and
 LangGraph's `mcp_client.py`, until phase 3 lets a platform administrator enable them
-per workspace. An agent with no config counts as the default workspace's. The check
-fails closed: without the database, the tools are refused.
+per workspace. A config that names its `project_id` is judged by that project's
+workspace: a subagent made by delegation has its parent's project and a name with no
+row. An agent with no config and no project counts as the default workspace's. The
+check fails closed: without the database, or with a project that doesn't exist, the
+tools are refused.
 
 `shared/test/test_cross_workspace.py` proves the scoping on the real app, with two
 workspaces. A platform administrator in workspace A calls every `/dashboard/api/`
@@ -349,8 +369,10 @@ caller may use that workspace's agents:
 - a platform administrator (the `admin` role) may, and passes `allowed_for_roles`;
 - an owner or admin of the workspace may, and passes `allowed_for_roles`;
 - a member may, matched on their membership's `agent_roles`;
-- a widget visitor (`widget_<key id>_...`) may only in the workspace of their key's
-  project, and `trigger_runner` in any, both matched on their `users.roles`;
+- a widget visitor (a `widget_<key id>_...` id with the `widget` role, which only the
+  server gives out) may only in the workspace of their key's project, and
+  `trigger_runner` in any, both matched on their `users.roles`. An id of that shape
+  without the role is matched as anyone else;
 - anyone else may not, and gets "This agent is not available", as for an unknown
   agent. So does a caller for an agent with no config, unless a platform
   administrator.

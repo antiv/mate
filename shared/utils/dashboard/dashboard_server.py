@@ -27,7 +27,7 @@ from shared.utils.platform_only import features_added, features_of, has_code_fol
 from shared.utils.models import DEFAULT_WORKSPACE_ID
 from shared.utils.workspaces import (
     agent_names_of, agent_workspace, agents_outside, caller_access, config_workspace,
-    in_projects_of, project_in_workspace, roles_allow, rows_of, store_workspace,
+    in_projects_of, is_reserved_user_id, project_in_workspace, roles_allow, rows_of, store_workspace,
     test_case_workspace, version_workspace, workspace_of_project,
 )
 from server.request_context import RequestContext, get_request_context
@@ -3597,9 +3597,18 @@ class DashboardServer:
 
                 engine = create_engine(uri)
                 with engine.connect() as conn:
+                    # ADK keys a session by (app_name, user_id, id), and a client may
+                    # choose the id: narrow by what the caller named, and read only
+                    # that session's events
+                    where, params = "id = :sid", {"sid": session_id}
+                    if app_name:
+                        where, params["app"] = where + " AND app_name = :app", app_name
+                    if user_id:
+                        where, params["uid"] = where + " AND user_id = :uid", user_id
                     s_row = conn.execute(
-                        text("SELECT id, app_name, user_id, state, create_time, update_time FROM sessions WHERE id = :sid"),
-                        {"sid": session_id}
+                        text("SELECT id, app_name, user_id, state, create_time, update_time "
+                             f"FROM sessions WHERE {where}"),
+                        params
                     ).fetchone()
 
                     if s_row:
@@ -3612,8 +3621,9 @@ class DashboardServer:
                                 pass
                         
                         e_rows = conn.execute(
-                            text("SELECT id, event_data, timestamp FROM events WHERE session_id = :sid ORDER BY timestamp ASC"),
-                            {"sid": session_id}
+                            text("SELECT id, event_data, timestamp FROM events WHERE session_id = :sid "
+                                 "AND app_name = :app AND user_id = :uid ORDER BY timestamp ASC"),
+                            {"sid": session_id, "app": s_row[1], "uid": s_row[2]}
                         ).fetchall()
 
                         events = []
@@ -3653,11 +3663,12 @@ class DashboardServer:
             return False
         return True
 
-    def _get_session_events(self, session_id: str) -> Optional[List[Dict[str, Any]]]:
+    def _get_session_events(self, session_id: str, app_name: str) -> Optional[List[Dict[str, Any]]]:
         """
-        A session's events by id alone, from whichever runtime holds it; None when
-        neither does. A feedback row knows the session but not its app or user,
-        which the LangGraph lookup in _get_session_detail requires.
+        A session's events by id and agent, from whichever runtime holds it; None when
+        neither does. A feedback row knows the session and agent but not the user,
+        which the LangGraph lookup in _get_session_detail requires; a LangGraph
+        session id is unique on its own.
         """
         try:
             from shared.utils.langgraph.session_store import get_session_store
@@ -3667,7 +3678,7 @@ class DashboardServer:
         except Exception as e:
             logger.debug(f"No LangGraph events for session {session_id}: {e}")
 
-        detail = self._get_session_detail(runtime="adk", app_name="", user_id="", session_id=session_id)
+        detail = self._get_session_detail(runtime="adk", app_name=app_name, user_id="", session_id=session_id)
         return detail["events"] if detail else None
 
     def _delete_session(self, runtime: str, app_name: str, user_id: str, session_id: str) -> bool:
@@ -3698,9 +3709,13 @@ class DashboardServer:
                     uri = f"sqlite:///{abs_path}"
 
                 engine = create_engine(uri)
+                key = {"sid": session_id, "app": app_name, "uid": user_id}
                 with engine.begin() as conn:
-                    conn.execute(text("DELETE FROM events WHERE session_id = :sid"), {"sid": session_id})
-                    res = conn.execute(text("DELETE FROM sessions WHERE id = :sid"), {"sid": session_id})
+                    # The whole key: another app or user may hold a session of this id
+                    conn.execute(text("DELETE FROM events WHERE session_id = :sid "
+                                      "AND app_name = :app AND user_id = :uid"), key)
+                    res = conn.execute(text("DELETE FROM sessions WHERE id = :sid "
+                                            "AND app_name = :app AND user_id = :uid"), key)
                     if res.rowcount > 0:
                         success = True
             except Exception as e:
@@ -3967,7 +3982,10 @@ class DashboardServer:
             detail = self._get_session_detail(runtime=runtime, app_name=app_name, user_id=user_id, session_id=session_id)
             if not detail or not self._session_in_workspace(ctx, detail):
                 raise HTTPException(status_code=404, detail=f"Could not delete session {session_id}")
-            deleted = self._delete_session(runtime=runtime, app_name=app_name, user_id=user_id, session_id=session_id)
+            # The session just checked, not whatever else the query matches
+            deleted = self._delete_session(runtime=detail.get("runtime", runtime),
+                                           app_name=detail["app_name"], user_id=detail["user_id"],
+                                           session_id=session_id)
             if not deleted:
                 raise HTTPException(status_code=404, detail=f"Could not delete session {session_id}")
             return {"success": True, "message": f"Session {session_id} deleted successfully"}
@@ -4547,6 +4565,9 @@ class DashboardServer:
             """Create a new user."""
             try:
                 import json
+                if is_reserved_user_id(user_id):
+                    return {"success": False,
+                            "message": "That user id is reserved for widget visitors and the trigger runner"}
                 roles_list = json.loads(roles) if roles else ["user"]
                 success = self._create_user(user_id, roles_list)
                 if success:
@@ -4613,18 +4634,21 @@ class DashboardServer:
             if rating not in ("up", "down"):
                 raise HTTPException(status_code=400, detail="rating must be 'up' or 'down'")
 
-            agent_name = (body.get("agent_name") or "").strip() or None
+            agent_name = (body.get("agent_name") or "").strip()
+            user_id = (body.get("user_id") or "").strip() or ctx.user_id
+            if not agent_name:
+                raise HTTPException(status_code=400, detail="agent_name is required")
+            # The rating is the caller's, on a session of theirs with an agent of their
+            # workspace: the eval pages later show its question and answer
+            if user_id != ctx.user_id and not ctx.is_admin:
+                raise HTTPException(status_code=404, detail="Session not found")
+            self._require_in_workspace(ctx, agent_name=agent_name)
+            if not self._get_session_detail(runtime="auto", app_name=agent_name,
+                                            user_id=user_id, session_id=session_id):
+                raise HTTPException(status_code=404, detail="Session not found")
             project_id = None
-            if agent_name and self.db_client:
+            if self.db_client:
                 # Resolved from the agent rather than trusted from the body
-                db = self.db_client.get_session()
-                if db:
-                    try:
-                        outside = agents_outside(db, ctx.workspace_id, [agent_name])
-                    finally:
-                        db.close()
-                    if outside:
-                        raise HTTPException(status_code=404, detail="Agent not found")
                 db = self.db_client.get_session()
                 if db:
                     try:
@@ -6847,12 +6871,12 @@ class DashboardServer:
 
             service = get_feedback_service()
             rows = service.list_rated_down(ctx.workspace_id, agent_name=agent_name.strip() or None)
-            events_by_session: Dict[str, Optional[List[Dict[str, Any]]]] = {}
+            events_by_session: Dict[Tuple[str, str], Optional[List[Dict[str, Any]]]] = {}
             for row in rows:
-                sid = row["session_id"]
-                if sid not in events_by_session:
-                    events_by_session[sid] = self._get_session_events(sid)
-                events = events_by_session[sid]
+                key = (row["session_id"], row["agent_name"])
+                if key not in events_by_session:
+                    events_by_session[key] = self._get_session_events(*key)
+                events = events_by_session[key]
                 question, answer = extract_exchange(events or [], row["message_id"])
                 reported_question = row.pop("reported_question", None)
                 reported_answer = row.pop("reported_answer", None)
@@ -6892,7 +6916,7 @@ class DashboardServer:
                 if not fb or not fb.agent_name:
                     raise HTTPException(status_code=404, detail="Rating not found")
                 from shared.utils.agent_improver import blocks_read
-                events = self._get_session_events(fb.session_id) or []
+                events = self._get_session_events(fb.session_id, fb.agent_name) or []
                 question, answer = extract_exchange(events, fb.message_id)
                 reported = not question and bool(fb.question)
                 if reported:
@@ -7785,7 +7809,11 @@ class DashboardServer:
                 raise HTTPException(status_code=404, detail="Session not found")
             self._require_in_workspace(ctx, agent_name=agent)
 
-            adk_session_url = f"http://{self.adk_host}:{self.adk_port}/apps/{agent}/users/{user_id}/sessions/{session_id}"
+            # Each part escaped whole: httpx resolves '..' in a path, so an unescaped
+            # session_id could name another agent's session
+            from urllib.parse import quote
+            adk_session_url = (f"http://{self.adk_host}:{self.adk_port}/apps/{quote(agent, safe='')}"
+                               f"/users/{quote(user_id, safe='')}/sessions/{quote(session_id, safe='')}")
             try:
                 async with httpx.AsyncClient(timeout=10.0) as client:
                     resp = await client.get(adk_session_url)

@@ -58,7 +58,9 @@ def resolve_workspace(request: Request, user_id: str,
         raise HTTPException(status_code=503, detail="Database unavailable")
     try:
         if requested is not None:
-            workspace_id = int(requested) if requested.strip().isdigit() else None
+            # isdigit() alone takes digits int() refuses, such as '²'
+            requested = requested.strip()
+            workspace_id = int(requested) if requested.isascii() and requested.isdigit() else None
             if workspace_id is None or not workspace_is_open(session, workspace_id):
                 raise HTTPException(status_code=404, detail="Workspace not found")
             role = member_role(session, workspace_id, user_id)
@@ -120,9 +122,19 @@ class RequestContext:
         return self._workspace[1]
 
 
+def context_for(request: Request, user_id: str) -> RequestContext:
+    """The request's context for the caller, made once: DashboardAuthzMiddleware makes
+    it first, and the route's dependency then reuses its resolved workspace."""
+    ctx = getattr(request.state, "request_context", None)
+    if not isinstance(ctx, RequestContext) or ctx.user_id != user_id:
+        ctx = RequestContext(request, user_id)
+        request.state.request_context = ctx
+    return ctx
+
+
 def get_request_context(request: Request) -> RequestContext:
     """FastAPI dependency: the caller, or a redirect to the login page."""
-    return RequestContext(request, require_dashboard_auth(request))
+    return context_for(request, require_dashboard_auth(request))
 
 
 def get_api_request_context(request: Request) -> RequestContext:
@@ -134,4 +146,4 @@ def get_api_request_context(request: Request) -> RequestContext:
     user_id = get_dashboard_auth_user(request)
     if not user_id:
         raise HTTPException(status_code=401, detail="Not authenticated")
-    return RequestContext(request, user_id)
+    return context_for(request, user_id)

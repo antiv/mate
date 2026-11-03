@@ -148,7 +148,7 @@ class TestImproveEndpoints(unittest.TestCase):
         self.assertEqual(args[2:5], ("Open Sunday?", "OLD", "NEW"))  # question, last answer, expected
 
     def test_propose_from_a_thumbs_down(self):
-        self.server._get_session_events = lambda sid: [
+        self.server._get_session_events = lambda sid, agent: [
             {"invocation_id": "inv", "author": "user", "content": {"parts": [{"text": "Open Sunday?"}]}},
             {"invocation_id": "inv", "author": "bot", "content": {"parts": [{"text": "Yes"}]}},
         ]
@@ -165,7 +165,7 @@ class TestImproveEndpoints(unittest.TestCase):
         fb.question, fb.answer = "Open Sunday?", "Yes"
         session.commit()
         session.close()
-        self.server._get_session_events = lambda sid: None
+        self.server._get_session_events = lambda sid, agent: None
         with patch("shared.utils.agent_improver.propose_instruction",
                    return_value={"instruction": "NEW", "reason": ""}) as propose:
             resp = self.client.post("/dashboard/api/evals/improve/propose", json={"feedback_id": self.fb_id})

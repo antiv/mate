@@ -182,7 +182,7 @@ class TestDashboardEndpoints(_DbTestCase):
         self.is_admin = True
         as_caller(self.app, "admin", lambda: self.is_admin)
         self.sessions = {}
-        self.server._get_session_events = lambda sid: self.sessions.get(sid)
+        self.server._get_session_events = lambda sid, agent: self.sessions.get(sid)
         patcher = patch("shared.utils.feedback_service.get_feedback_service",
                         return_value=self.service)
         patcher.start()
@@ -280,13 +280,14 @@ class TestAdkSessionEvents(unittest.TestCase):
         conn = sqlite3.connect(db_path)
         conn.execute("CREATE TABLE sessions (id TEXT, app_name TEXT, user_id TEXT, state TEXT, "
                      "create_time REAL, update_time REAL)")
-        conn.execute("CREATE TABLE events (id TEXT, session_id TEXT, event_data TEXT, timestamp REAL)")
+        conn.execute("CREATE TABLE events (id TEXT, app_name TEXT, user_id TEXT, session_id TEXT, "
+                     "event_data TEXT, timestamp REAL)")
         conn.execute("INSERT INTO sessions VALUES ('s1', 'app', 'u', '{}', 1.0, 2.0)")
         for i, (author, role, text) in enumerate([("user", "user", "2+2?"), ("root", "model", "5")]):
             event = Event(invocation_id="inv-1", author=author,
                           content=types.Content(role=role, parts=[types.Part(text=text)]))
             data = json.dumps(event.model_dump(exclude_none=True, mode="json"))
-            conn.execute("INSERT INTO events VALUES (?, 's1', ?, ?)", (f"e{i}", data, float(i)))
+            conn.execute("INSERT INTO events VALUES (?, 'app', 'u', 's1', ?, ?)", (f"e{i}", data, float(i)))
         conn.commit()
         conn.close()
 
@@ -295,11 +296,14 @@ class TestAdkSessionEvents(unittest.TestCase):
         server.session_service_uri = f"sqlite:///{db_path}"
         with patch("shared.utils.langgraph.session_store.get_session_store") as store:
             store.return_value.get_events.return_value = []
-            events = server._get_session_events("s1")
-            missing = server._get_session_events("nope")
+            events = server._get_session_events("s1", "app")
+            missing = server._get_session_events("nope", "app")
+            other_agent = server._get_session_events("s1", "other")
 
         self.assertEqual(extract_exchange(events, "inv-1"), ("2+2?", "5"))
         self.assertIsNone(missing)
+        # The session id alone isn't enough: another agent may hold a session of this id
+        self.assertIsNone(other_agent)
 
 
 if __name__ == "__main__":

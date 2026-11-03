@@ -87,6 +87,15 @@ class TestA2ARoutes(unittest.TestCase):
         self.assertNotIn("error", body, body)
         self.assertIn("bot: hello", json.dumps(body))
 
+    def test_an_agents_tasks_are_not_found_through_another_agent(self):
+        # The proxy checks the caller against the agent in the path only (#277)
+        r = self._rpc("bot", "message/send", {"message": {
+            "role": "user", "messageId": "m3", "kind": "message", "parts": [{"kind": "text", "text": "x"}]}})
+        task_id = r.json()["result"]["id"]
+        self.assertNotIn("error", self._rpc("bot", "tasks/get", {"id": task_id}).json())
+        other = self._rpc("custom", "tasks/get", {"id": task_id}).json()
+        self.assertIn("error", other, other)
+
     def test_send_message_the_1_x_method_name_works(self):
         from a2a.utils.constants import VERSION_HEADER
         r = self.client.post("/a2a/custom", headers={VERSION_HEADER: "1.0"}, json={

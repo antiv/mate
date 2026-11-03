@@ -40,8 +40,10 @@ from Slack: the **Team ID**, a **Bot User OAuth Token** and the **Signing Secret
 
 A Slack team connects to one integration on the whole installation, because Slack
 names only the team when it delivers a message. A Team ID that is already connected,
-in any workspace, is refused with "This Slack team is already connected"; to move the
-team to another agent, edit the existing integration. The project and agent must be
+in any workspace, is refused with "This Slack team is already connected", which doesn't
+say where. To move the team to another agent, edit the existing integration. The first
+workspace to connect a team keeps it; if another workspace connected yours, a platform
+administrator can switch to that workspace and delete its integration. The project and agent must be
 of the workspace you are working in, and the list shows only that workspace's
 integrations.
 

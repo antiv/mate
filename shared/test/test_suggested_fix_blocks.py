@@ -239,7 +239,7 @@ class TestImproveBlockEndpoints(unittest.TestCase):
                                              "blocks": [{"label": "notes"}, {"label": "locked"}]}),
             {"invocation_id": "inv", "author": "bot", "content": {"parts": [{"text": "Yes"}]}},
         ]
-        self.server._get_session_events = lambda sid: self.read_events
+        self.server._get_session_events = lambda sid, agent: self.read_events
 
     def _value(self, label):
         return self.svc.get_block(1, label)["value"]

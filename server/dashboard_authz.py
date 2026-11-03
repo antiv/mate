@@ -95,13 +95,13 @@ class DashboardAuthzMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         from server.auth import get_dashboard_auth_user
-        from server.request_context import RequestContext
+        from server.request_context import context_for
 
         actor = get_dashboard_auth_user(request)
         if not actor:
             # Nobody signed in: the route's own dependency answers 401 or redirects
             return await call_next(request)
-        ctx = RequestContext(request, actor)
+        ctx = context_for(request, actor)
         platform_only = is_platform_only(request.method, path)
         try:
             allowed = ctx.is_platform_admin if platform_only else ctx.is_admin
