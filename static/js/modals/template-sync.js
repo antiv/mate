@@ -159,8 +159,13 @@ function performTemplateSync() {
         .then(data => {
             hideTemplateSyncModal();
             const skipped = data.memory_blocks_skipped || [];
+            // Agents the template would give code on the server, for a workspace admin
+            const skippedAgents = data.agents_skipped || [];
             if (typeof showNotification === 'function') {
-                if (skipped.length) {
+                if (skippedAgents.length) {
+                    const names = skippedAgents.map(a => a.name).join(', ');
+                    showNotification(`Project synchronized, but these agents were not updated: ${names}: ${skippedAgents[0].reason}.`, 'warning');
+                } else if (skipped.length) {
                     // Read-only blocks, or values over a block's limit, are not overwritten.
                     const labels = skipped.map(b => b.label).join(', ');
                     showNotification(`Project synchronized, but these memory blocks were not updated: ${labels}. ${skipped[0].reason}`, 'warning');

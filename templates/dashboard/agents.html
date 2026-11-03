@@ -70,6 +70,7 @@
                         <i class="fas fa-upload mr-1.5"></i>
                         Import
                     </button>
+                    {% if is_platform_admin(request) %}
                     <button id="saveTemplateBtn"
                         class="bg-teal-600 hover:bg-teal-700 text-white px-3 py-2 text-xs rounded-lg flex items-center min-h-[44px] touch-target disabled:bg-gray-400 disabled:cursor-not-allowed"
                         {% if not selected_project_id %}disabled title="Select a project and root agent first" {% endif
@@ -83,6 +84,7 @@
                         <i class="fas fa-redo mr-1.5"></i>
                         Reload All
                     </button>
+                    {% endif %}
                     <button data-click="refreshAgentsPage"
                         class="bg-orange-600 hover:bg-orange-700 text-white px-3 py-2 text-xs rounded-lg flex items-center min-h-[44px] touch-target">
                         <i class="fas fa-sync-alt mr-1.5"></i>

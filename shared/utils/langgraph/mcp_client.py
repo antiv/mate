@@ -69,6 +69,11 @@ def _http_connection(server_name: str, server_config: Dict[str, Any],
 
 def _stdio_connection(server_name: str, server_config: Dict[str, Any],
                       agent_name: str) -> Optional[Dict[str, Any]]:
+    from shared.utils.platform_only import may_run_code
+    if not may_run_code(agent_name):
+        logger.error(f"Skipping MCP server '{server_name}' for agent '{agent_name}': a server "
+                     f"started as a command is platform-only outside the default workspace")
+        return None
     command = server_config.get("command")
     args = _parse_json_maybe(server_config.get("args", []), [])
     env = _parse_json_maybe(server_config.get("env", {}), {})

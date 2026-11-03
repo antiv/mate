@@ -100,6 +100,9 @@ JSON mapping with one entry per server:
 - Write a secret as `${NAME}` and MATE reads it from the server's environment
   instead of storing it with the agent. If that variable is not set, the server is
   skipped rather than called without its credential.
+- A server with `command` and a `${NAME}` reference can only be set by a platform
+  administrator, and a server with `command` runs only for agents of the Default
+  workspace (see [What only a platform administrator can set](agents.md#what-only-a-platform-administrator-can-set)).
 
 ## Use your agents from other tools
 

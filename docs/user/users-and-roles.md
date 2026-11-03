@@ -11,6 +11,8 @@ covers:
   - server/auth.py::get_user_role
   - server/auth.py::_is_session_oauth_user
   - shared/utils/dashboard/dashboard_server.py::*user*
+  - server/workspace_routes.py
+  - templates/base.html
 ---
 
 # Users and roles
@@ -31,6 +33,32 @@ Everyone else sees the Work Room and their own usage. People with a role in
 `ALLOWED_API_ROLES` (by default `admin` and `developer`) also get **Personal Tokens**
 in the account menu, for the OpenAI-compatible API and the agents' MCP servers; see
 [Personal access tokens](personal-access-tokens.md).
+
+### Platform administrators and workspace administrators
+
+Agents, projects and logs belong to a **workspace**. An installation starts with one,
+Default, and with one workspace nothing below changes what anyone sees.
+
+- A **platform administrator** (the built-in account, or anyone with the `admin`
+  role) has the whole dashboard of every workspace, and the pages that cover the
+  whole installation: **Users**, **Settings**, **Migrations**, the agent server's
+  start and stop controls, system jobs, audit-log retention, the wizard and shop
+  orders, saving and deleting templates, **Reload All** and binary builds.
+- An **owner** or **admin** of a workspace has the dashboard of that workspace, as a
+  platform administrator does, but not those installation pages: their links are
+  hidden, and the pages send them to the Work Room.
+- A **member** has the Work Room and their own usage.
+
+Until workspace members can be managed on their own, a person's role in the Default
+workspace follows their roles: `admin` makes them its owner, and anyone else a member.
+
+### Switching workspace
+
+A person who may open more than one workspace sees a workspace menu in the top bar,
+next to the theme switch. Choosing one reloads the page in that workspace, and the
+dashboard and Work Room stay in it until they choose another. With one workspace the
+menu is not shown. Scripts that use the API name a workspace with the
+`X-MATE-Workspace` header instead.
 
 ## Agent access
 

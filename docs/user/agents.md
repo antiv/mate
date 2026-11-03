@@ -30,7 +30,7 @@ the next message already uses the new configuration.
 
 | Field | What to enter |
 |---|---|
-| **Name** | A unique identifier on the whole installation. Other agents and triggers refer to the agent by this name. A name already in use, in any workspace, is refused with "This name is taken". |
+| **Name** | A unique identifier on the whole installation. Other agents and triggers refer to the agent by this name. It starts with a letter or an underscore and holds only letters, digits and underscores, for example `support_root`; another name is refused. A name already in use, in any workspace, is refused with "This name is taken". |
 | **Type** | **LLM** for an ordinary agent. **Loop** repeats its sub-agents up to **Max Iterations** times. **Graph** runs its sub-agents as a workflow with routing. |
 | **Project** | The project the agent belongs to. |
 | **Model Name** | Which model answers. See [Choosing a model](#choosing-a-model). |
@@ -98,6 +98,37 @@ The code executor runs commands on the server and is not a sandbox. MATE refuses
 load it on an agent that has a widget key, because anonymous visitors could then run
 commands on the host.
 
+### What only a platform administrator can set
+
+Some settings run code on the MATE server, or read its configuration, so they belong
+to the people who run the whole installation, the platform administrators (the
+built-in account, and anyone with the `admin` role):
+
+- the **code executor** tool;
+- an MCP server with `command` and `args`, started on the server;
+- `${NAME}` in **Model API Key**, **Model Base URL** or the MCP servers configuration;
+- **Hardcoded**, and a name that already has a folder in the server's `agents/`
+  folder.
+
+An owner or admin of a workspace who is not a platform administrator can't add these
+to an agent, or change them on one: saving is refused with "Only a platform
+administrator can give an agent ...". What a platform administrator set up keeps
+working, and the rest of the agent can still be edited. While doing so, leave these
+fields as they are, and **Model Base URL** too when the key is a `${NAME}`.
+
+To give an agent with a stored **Model API Key** a new **Model Base URL**, type the
+key again: otherwise the stored key would be sent to the new address, and saving is
+refused.
+
+Outside the Default workspace, the code executor and MCP servers with a command don't
+run at all for now: the agent answers without them.
+
+The same holds for a copy. A clone's **Name suffix** may hold only letters, digits
+and underscores. A clone, template import or template update can't create an agent
+whose name has a folder in `agents/`: a clone adds `_2` to the name, and a template
+import asks for another project name. A clone that would change one of the settings
+above, for example an MCP server whose command names the agent, is refused.
+
 ## Who can use an agent
 
 **Allowed Roles** is compared with the roles on the user record of the person
@@ -119,7 +150,7 @@ admits it.
 | Switch | Effect |
 |---|---|
 | **Disabled** | Takes the agent out of service without deleting it. |
-| **Hardcoded** | Marks an agent whose code lives in the repository rather than in the database. |
+| **Hardcoded** | Marks an agent whose code lives in the repository rather than in the database. Only a platform administrator can set it. |
 | **Expose as Model** | Makes the agent callable as a model through the OpenAI-compatible API. |
 | **Debug Mode** | Shows detailed error messages in the chat instead of a generic one. |
 

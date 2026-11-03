@@ -393,7 +393,10 @@
     <script src="/static/js/server-control.js"></script>
     <script src="/static/js/dashboard-nav.js"></script>
 </head>
-<body>
+{# The installation's own pages are for platform administrators only #}
+{% set platform_admin = is_platform_admin(request) if is_platform_admin is defined else true %}
+{% set ws_switcher = workspace_switcher(request) if workspace_switcher is defined else none %}
+<body data-platform-admin="{{ 'true' if platform_admin else 'false' }}">
     <!-- Sidebar backdrop (mobile) -->
     <div id="sidebarBackdrop" class="hidden fixed inset-0 z-40 md:hidden" style="background: rgba(20,15,10,0.45);" aria-hidden="true"></div>
 
@@ -431,8 +434,8 @@
             {% endif %}
         </div>
         <div class="flex items-center gap-2.5 flex-shrink-0">
-            <!-- ADK Server Control - admin only -->
-            {% if is_admin is not defined or is_admin %}
+            <!-- ADK Server Control - platform admin only -->
+            {% if (is_admin is not defined or is_admin) and platform_admin %}
             <div class="mate-status-pill hidden sm:flex">
                 <div id="adkStatusIndicator" class="w-2 h-2 bg-gray-400 rounded-full"></div>
                 <span id="adkStatusText" class="text-sm text-gray-600 dark:text-gray-400">Checking...</span>
@@ -448,6 +451,16 @@
                     </button>
                 </div>
             </div>
+            {% endif %}
+            <!-- Workspace switcher, with more than one workspace -->
+            {% if ws_switcher %}
+            <select id="workspaceSwitcher" data-change="switchWorkspace" data-args='["$value"]'
+                    aria-label="Workspace" title="Workspace"
+                    style="max-width: 180px; padding: 6px 10px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg-secondary, transparent); color: var(--text-primary); font-size: 12.5px; font-weight: 600;">
+                {% for w in ws_switcher.workspaces %}
+                <option value="{{ w.id }}" {% if w.id == ws_switcher.current %}selected{% endif %}>{{ w.name }}</option>
+                {% endfor %}
+            </select>
             {% endif %}
             <!-- Theme Switcher -->
             <div class="theme-switcher touch-target" data-click="toggleTheme" role="button" tabindex="0" aria-label="Toggle theme">
@@ -595,6 +608,7 @@
                         <span class="sidebar-text">Session Tracking</span>
                     </a>
                 </div>
+                {% if platform_admin %}
                 <p class="sidebar-section-header">Wizard &amp; Commerce</p>
                 <div class="space-y-0.5">
                     <a href="/dashboard/wizard-leads" class="mate-nav-item {% if request.url.path == '/dashboard/wizard-leads' %}sidebar-active{% endif %}" title="Wizard Leads">
@@ -610,12 +624,15 @@
                         <span class="sidebar-text">Shop Orders</span>
                     </a>
                 </div>
+                {% endif %}
                 <p class="sidebar-section-header">Governance &amp; Access</p>
                 <div class="space-y-0.5">
+                    {% if platform_admin %}
                     <a href="/dashboard/users" class="mate-nav-item {% if request.url.path == '/dashboard/users' %}sidebar-active{% endif %}" title="Users">
                         <i class="fas fa-users sidebar-icon"></i>
                         <span class="sidebar-text">Users</span>
                     </a>
+                    {% endif %}
                     <a href="/dashboard/rate-limits" class="mate-nav-item {% if request.url.path == '/dashboard/rate-limits' %}sidebar-active{% endif %}" title="Rate Limits">
                         <i class="fas fa-shield-alt sidebar-icon"></i>
                         <span class="sidebar-text">Rate Limits</span>
@@ -627,6 +644,7 @@
                 </div>
                 <p class="sidebar-section-header">System</p>
                 <div class="space-y-0.5">
+                    {% if platform_admin %}
                     <a href="/dashboard/settings" class="mate-nav-item {% if request.url.path == '/dashboard/settings' %}sidebar-active{% endif %}" title="Settings">
                         <i class="fas fa-sliders-h sidebar-icon"></i>
                         <span class="sidebar-text">Settings</span>
@@ -635,6 +653,7 @@
                         <i class="fas fa-database sidebar-icon"></i>
                         <span class="sidebar-text">Migrations</span>
                     </a>
+                    {% endif %}
                     <a href="/dashboard/docs" class="mate-nav-item {% if request.url.path == '/dashboard/docs' %}sidebar-active{% endif %}" title="Documentation">
                         <i class="fas fa-book sidebar-icon"></i>
                         <span class="sidebar-text">Documentation</span>
@@ -785,7 +804,23 @@
         mateActions.allow('controlAdkServer', 'toggleTheme', 'toggleUserMenu', 'showTokensModal',
                           'confirmLogout', 'closeMobileSidebar', 'toggleSidebar', 'closeTokensModal',
                           'generateToken', 'copyGeneratedToken', 'revokeToken',
-                          'handleVisualBuilderNav');
+                          'handleVisualBuilderNav', 'switchWorkspace');
+
+        // The workspace switcher: the session works in the chosen workspace from now on.
+        // The page reloads without its query, which may name a row of the old one.
+        async function switchWorkspace(value) {
+            const response = await fetch('/dashboard/api/workspaces/current', {
+                method: 'PUT',
+                credentials: 'same-origin',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({workspace_id: parseInt(value, 10)}),
+            });
+            if (response.ok) {
+                window.location.href = window.location.pathname;
+            } else if (typeof showNotification === 'function') {
+                showNotification('Could not switch the workspace', 'error');
+            }
+        }
 
         // Theme management
         function initTheme() {
@@ -827,7 +862,7 @@
 
         // Initialize server control when page loads
         document.addEventListener('DOMContentLoaded', function() {
-            initServerControl();
+            {% if platform_admin %}initServerControl();{% endif %}
             if ('serviceWorker' in navigator) {
                 navigator.serviceWorker.register('/sw.js').catch(function() {});
             }

@@ -116,6 +116,8 @@ This tool is not a sandbox. Enabling it on an agent grants host code execution t
 
 MATE enforces one strict protection against exposure: **an agent that has a widget API key does not receive the code executor tools.** A widget key makes the agent promptable by anonymous visitors on an embedding site, which would turn the executor into remote shell access for the public internet. The refusal is logged at load time, and the dashboard modal (`templates/dashboard/modals/config_modals.html` / `static/js/agent-tools.js`) warns when you tick the box on such an agent.
 
+With workspaces, the executor is also platform-only (`shared/utils/platform_only.py`): only a platform administrator can give it to an agent or change its configuration, and an agent outside the default workspace doesn't receive it at all, until a platform administrator can enable it per workspace. That refusal is logged at load time too. See [Authentication and access control](auth-and-access.md#what-only-a-platform-administrator-may-give-an-agent).
+
 A key counts whether or not it is currently active. Reactivating an inactive key is a dashboard toggle that does not touch the agent configuration, so an inactive key represents exposure waiting to happen. To use the executor on such an agent, delete the widget key.
 
 | Variable | Effect |

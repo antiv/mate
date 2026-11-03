@@ -74,6 +74,7 @@ class ServerControlService:
         try:
             from shared.utils.database_client import get_database_client
             from shared.utils.models import AgentConfig
+            from shared.utils.platform_only import is_agent_name
             
             db_client = get_database_client()
             if not db_client:
@@ -115,6 +116,11 @@ class ServerControlService:
                 
                 for agent in top_level_agents:
                     agent_name = agent.name
+                    # A name ADK refuses could be a path out of agents/ ('..', '/srv')
+                    if not is_agent_name(agent_name):
+                        print(f"   ⚠️  Skipping agent folder for '{agent_name}': not a valid agent name")
+                        skipped_count += 1
+                        continue
                     dest_path = agents_dir / agent_name
                     
                     # Check if folder already exists

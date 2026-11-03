@@ -285,6 +285,13 @@ def create_mcp_tools_from_config(config: Dict[str, Any]) -> List[Any]:
                             transport=transport,
                         )
                     else:
+                        from ..platform_only import may_run_code
+                        if not may_run_code(agent_name):
+                            logger.error(
+                                f"Skipping MCP server '{server_name}' for agent '{agent_name}': "
+                                f"a server started as a command is platform-only outside the "
+                                f"default workspace")
+                            continue
                         command = server_config.get('command')
                         args = _parse_json_field(
                             server_config.get('args', []), 'args', server_name, agent_name

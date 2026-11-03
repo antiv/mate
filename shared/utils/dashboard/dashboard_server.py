@@ -23,6 +23,7 @@ from fastapi.staticfiles import StaticFiles
 from shared.utils import audit_service
 from ..ai_disclosure import resolve_disclosure, validate_waiver
 from shared.utils.path_safety import resolve_within_base
+from shared.utils.platform_only import features_added, features_of, has_code_folder, is_agent_name
 from shared.utils.models import DEFAULT_WORKSPACE_ID
 from shared.utils.workspaces import (
     agent_names_of, agent_workspace, agents_outside, caller_access, config_workspace,
@@ -60,6 +61,10 @@ def sanitize_agent_text(text: Optional[str]) -> Optional[str]:
 # Defined with the other secret handling in shared.utils.utils, so tool code that
 # returns configs to a model can mask them without importing the dashboard
 from shared.utils.utils import STORED_SECRET_SENTINEL, mask_api_key, mask_config_secrets  # noqa: F401
+
+
+# What a clone's suffix may hold: an agent name's characters
+_CLONE_SUFFIX = re.compile(r"^[A-Za-z0-9_]+$")
 
 
 def make_name_substituter(name_map: Dict[str, str]):
@@ -1012,13 +1017,26 @@ class DashboardServer:
     def _check_agent_names(self, ctx: RequestContext, name: str, parents: List[str],
                            config_id: Optional[int] = None) -> None:
         """D1: an agent name is unique across the installation, and parent_agents name
-        agents of the same workspace. 409 or 400; neither says which workspace."""
+        agents of the same workspace. 409 or 400; neither says which workspace. For a
+        caller who is no platform administrator, a name with a folder in agents/ is
+        taken too: the agent would run that folder's code (platform_only.py).
+
+        A new name must be one ADK accepts (is_agent_name), 400 otherwise: the name
+        becomes a folder under agents/ and a LIKE pattern. An agent keeps the name it has."""
         session = self.db_client.get_session() if self.db_client else None
         if not session:
             raise HTTPException(status_code=503, detail="Database unavailable")
         try:
+            current = session.query(self.AgentConfig.name).filter(
+                self.AgentConfig.id == config_id).scalar() if config_id else None
+            if name != current and not is_agent_name(name):
+                raise HTTPException(status_code=400, detail=(
+                    "An agent name starts with a letter or an underscore and holds only "
+                    "letters, digits and underscores"))
             taken = session.query(self.AgentConfig.id).filter(
                 self.AgentConfig.name == name, self.AgentConfig.id != config_id).first()
+            if not taken and not ctx.is_platform_admin:
+                taken = name != current and has_code_folder(self.project_root / "agents", name)
             outside = agents_outside(session, ctx.workspace_id, parents)
         finally:
             session.close()
@@ -1027,6 +1045,54 @@ class DashboardServer:
         if outside:
             raise HTTPException(status_code=400,
                                 detail=f"Not an agent of this workspace: {', '.join(outside)}")
+
+    def _refuse_platform_only(self, ctx: RequestContext, config: Dict[str, Any],
+                              before: Optional[Dict[str, Any]] = None) -> None:
+        """403 when a caller who is no platform administrator gives an agent a feature
+        that runs code on the server or reads its environment, which it didn't have
+        (shared/utils/platform_only.py)."""
+        if ctx.is_platform_admin:
+            return
+        added = features_added(config, before)
+        if added:
+            raise HTTPException(status_code=403, detail=(
+                f"Only a platform administrator can give an agent {', '.join(sorted(added))}"))
+
+    def _is_hardcoded(self, agent_name: str) -> bool:
+        """True for an agent with no config, or one whose config is marked hardcoded."""
+        session = self.db_client.get_session() if self.db_client else None
+        if not session:
+            raise HTTPException(status_code=503, detail="Database unavailable")
+        try:
+            hardcoded = session.query(self.AgentConfig.hardcoded).filter(
+                self.AgentConfig.name == agent_name).first()
+            return hardcoded is None or bool(hardcoded[0])
+        finally:
+            session.close()
+
+    def _version_snapshot(self, config_id: int, version_id: int) -> Dict[str, Any]:
+        """The config a version of the agent holds; {} for no such version."""
+        session = self.db_client.get_session() if self.db_client else None
+        if not session:
+            raise HTTPException(status_code=503, detail="Database unavailable")
+        try:
+            version = session.query(self.AgentConfigVersion).filter(
+                self.AgentConfigVersion.id == version_id,
+                self.AgentConfigVersion.agent_config_id == config_id).first()
+            return version.get_snapshot() if version else {}
+        finally:
+            session.close()
+
+    def _agent_config_dict(self, config_id: int) -> Optional[Dict[str, Any]]:
+        """The agent config's columns, the key unmasked, or None."""
+        session = self.db_client.get_session() if self.db_client else None
+        if not session:
+            raise HTTPException(status_code=503, detail="Database unavailable")
+        try:
+            config = session.query(self.AgentConfig).filter(self.AgentConfig.id == config_id).first()
+            return config.to_dict() if config else None
+        finally:
+            session.close()
 
     def _get_all_agent_configs(self, project_id: Optional[int] = None,
                                workspace_id: Optional[int] = None) -> List[Dict[str, Any]]:
@@ -1597,7 +1663,8 @@ class DashboardServer:
         # Outside the try so a traversal attempt surfaces as 403, not a 500.
         agents_dir = self.project_root / "agents"
         folder_path = resolve_within_base(agents_dir, agent_name)
-        if folder_path == agents_dir.resolve():
+        # Only a folder right under agents/: 'x/.' or '../agents/x' is another agent's
+        if folder_path.parent != agents_dir.resolve() or folder_path.name != agent_name:
             raise HTTPException(status_code=403, detail="Invalid path")
         try:
             # Check if folder exists
@@ -1744,6 +1811,9 @@ class DashboardServer:
             if config:
                 original_parents = config.get_parent_agents() if hasattr(config, 'get_parent_agents') else []
                 original_project_id = config.project_id
+                # The children name the agent as it was called before this update
+                original_name = config.name
+                original_workspace = workspace_of_project(session, original_project_id) or DEFAULT_WORKSPACE_ID
                 updated_project_id = config_data.get('project_id', original_project_id)
 
                 for key, value in config_data.items():
@@ -1772,12 +1842,17 @@ class DashboardServer:
                         return
                     visited.add(parent_name)
 
+                    # The agent's own workspace only, and a parent named exactly: the
+                    # LIKE is a coarse filter, with _ and % escaped
                     child_agents = session.query(self.AgentConfig).filter(
                         self.AgentConfig.parent_agents.isnot(None),
-                        self.AgentConfig.parent_agents.like(f'%"{parent_name}"%')
+                        self.AgentConfig.parent_agents.contains(f'"{parent_name}"', autoescape=True),
+                        *in_projects_of(self.AgentConfig.project_id, original_workspace)
                     ).all()
 
                     for child in child_agents:
+                        if parent_name not in child.get_parent_agents():
+                            continue
                         child.project_id = new_project_id
                         session.flush()
                         _propagate_project_to_descendants(child.name, new_project_id, visited)
@@ -1791,7 +1866,7 @@ class DashboardServer:
                 is_root_agent = len(updated_parents) == 0
 
                 if project_changed and is_root_agent:
-                    _propagate_project_to_descendants(config.name, config.project_id)
+                    _propagate_project_to_descendants(original_name, config.project_id)
 
                 session.commit()
                 self._snapshot_agent_config(session, config, change_type='update', changed_by=changed_by)
@@ -2155,11 +2230,14 @@ class DashboardServer:
         return service.restart_adk_server()
     
     def _import_agent_configs(self, import_data: Dict[str, Any], overwrite: bool = False,
-                              workspace_id: int = DEFAULT_WORKSPACE_ID) -> Dict[str, Any]:
+                              workspace_id: int = DEFAULT_WORKSPACE_ID,
+                              platform_admin: bool = True) -> Dict[str, Any]:
         """Import agent configurations from JSON format into the workspace's projects.
 
         An agent, block or trigger naming a project of another workspace is skipped,
         and so is an agent whose name another workspace uses (D1), overwrite or not.
+        Without platform_admin, so is an agent the import would give a platform-only
+        feature, or a name with a folder in agents/ (platform_only.py).
         """
         if not self.db_client:
             return {"error": "Database connection failed"}
@@ -2206,6 +2284,22 @@ class DashboardServer:
                         skipped_count += 1
                         errors.append(f"Agent '{agent_data['name']}': this name is taken")
                         continue
+                    if not existing_agent and not is_agent_name(agent_data.get("name")):
+                        skipped_count += 1
+                        errors.append(f"Agent '{agent_data['name']}': not a valid agent name")
+                        continue
+                    if not platform_admin:
+                        if not existing_agent and has_code_folder(self.project_root / "agents",
+                                                                  agent_data.get("name")):
+                            skipped_count += 1
+                            errors.append(f"Agent '{agent_data['name']}': this name is taken")
+                            continue
+                        added = features_added(agent_data, existing_agent.to_dict() if existing_agent else None)
+                        if added:
+                            skipped_count += 1
+                            errors.append(f"Agent '{agent_data['name']}': only a platform administrator "
+                                          f"can give an agent {', '.join(sorted(added))}")
+                            continue
                     
                     if existing_agent and not overwrite:
                         skipped_count += 1
@@ -2368,17 +2462,28 @@ class DashboardServer:
     def _clone_agent_tree(self, root_name: str, target_project_id: int, suffix: str,
                           include_memory_blocks: bool = False,
                           include_file_search: bool = False,
-                          changed_by: str = None) -> Dict[str, Any]:
+                          changed_by: str = None,
+                          platform_admin: bool = True) -> Dict[str, Any]:
         """Deep-copy a root agent and its sub-agent tree into another project.
 
         Insert-only by design: the "without corrupting the source" acceptance
         criterion of #19 holds because no source row is ever updated. Agent names
         are globally unique, so every clone gets `name + suffix` (bumped with _2/_3
         on collision), and in-tree name references in text fields follow the rename.
+        The suffix is letters, digits and underscores, as an agent name is, so the
+        rename can't write anything else into those fields.
+
+        Without platform_admin, a name with a folder in agents/ counts as taken, and a
+        clone whose rename changes a platform-only feature of its source (a stdio
+        server's arguments, a config holding a ${VAR}) is refused before anything is
+        written (platform_only.py).
         """
         suffix = (suffix or "").strip()
         if not suffix:
             return {"error": "suffix is required", "status_code": 400}
+        if not _CLONE_SUFFIX.match(suffix):
+            return {"error": "suffix may hold only letters, digits and underscores",
+                    "status_code": 400}
 
         if not self.db_client:
             return {"error": "Database connection failed", "status_code": 500}
@@ -2421,6 +2526,8 @@ class DashboardServer:
             # New names: suffix everyone, bump on collision against the DB and
             # against names assigned earlier in this very clone.
             def _name_taken(candidate: str) -> bool:
+                if not platform_admin and has_code_folder(self.project_root / "agents", candidate):
+                    return True
                 return session.query(self.AgentConfig.id).filter(
                     self.AgentConfig.name == candidate).first() is not None
 
@@ -2436,7 +2543,7 @@ class DashboardServer:
             # In-tree references inside text fields follow the rename.
             _substitute = make_name_substituter(name_map)
 
-            cloned = []
+            configs = []
             for old_name in tree_order:
                 source = by_name[old_name]
                 # Parents outside the cloned tree are dropped: the clone must form
@@ -2473,6 +2580,16 @@ class DashboardServer:
                     "debug_mode": source.debug_mode,
                     "project_id": target_project_id,
                 }
+                if not platform_admin:
+                    added = features_added(config_data, source.to_dict())
+                    if added:
+                        return {"error": (f"Only a platform administrator can give an agent "
+                                          f"{', '.join(sorted(added))}: cloning '{old_name}' "
+                                          f"would change it"), "status_code": 403}
+                configs.append((old_name, config_data))
+
+            cloned = []
+            for old_name, config_data in configs:
                 if not self._create_agent_config(config_data, changed_by=changed_by):
                     return {"error": f"Failed to create clone of '{old_name}'",
                             "status_code": 500,
@@ -2556,9 +2673,14 @@ class DashboardServer:
     def _import_template(self, template_id: Optional[str] = None, project_name: Optional[str] = None,
                          changed_by: str = None, template_dict: Optional[Dict[str, Any]] = None,
                          substitutions: Optional[Dict[str, Any]] = None,
-                         workspace_id: int = DEFAULT_WORKSPACE_ID) -> Dict[str, Any]:
+                         workspace_id: int = DEFAULT_WORKSPACE_ID,
+                         platform_admin: bool = True) -> Dict[str, Any]:
         """Import a template: create a project in the workspace, its agents and memory
         blocks. Apply name prefix to avoid collisions.
+
+        Without platform_admin, an agent name the project name would make that has a
+        folder in agents/ refuses the import before anything is created
+        (platform_only.py): the agent would run that folder's code.
 
         Either ``template_id`` (loaded from the template library) or a pre-loaded ``template_dict``
         must be provided. ``substitutions`` is an optional map applied to every ``{{KEY}}`` placeholder
@@ -2590,7 +2712,26 @@ class DashboardServer:
         proj_name = (project_name or project_data.get("name") or "Imported Project").strip()
         if not proj_name:
             return {"error": "Project name is required"}
-        
+
+        slug = self.template_service.slugify_project_name(proj_name)
+        template_meta = template.get("template_meta") or {}
+        agent_prefix = template_meta.get("agent_prefix") or "tpl"
+        replace_with = f"{slug}_" if agent_prefix.endswith("_") else slug
+
+        # Build replacement map: old_agent_name -> new_agent_name
+        agents_data = template.get("agents") or []
+        name_map = {}
+        for a in agents_data:
+            old_name = a.get("name", "")
+            if old_name:
+                new_name = old_name.replace(agent_prefix, replace_with, 1) if agent_prefix in old_name else f"{slug}_{old_name}"
+                name_map[old_name] = new_name
+        if not platform_admin:
+            coded = [n for n in name_map.values() if has_code_folder(self.project_root / "agents", n)]
+            if coded:
+                return {"error": f"This name is taken: {', '.join(sorted(coded))}. "
+                                 f"Choose another project name.", "status_code": 409}
+
         # Create project
         try:
             project = self._create_project(proj_name, project_data.get("description"), workspace_id)
@@ -2598,10 +2739,6 @@ class DashboardServer:
             return {"error": str(e.detail)}
         
         project_id = project["id"]
-        slug = self.template_service.slugify_project_name(proj_name)
-        template_meta = template.get("template_meta") or {}
-        agent_prefix = template_meta.get("agent_prefix") or "tpl"
-        replace_with = f"{slug}_" if agent_prefix.endswith("_") else slug
         
         # Store template provenance on the project for future sync/upgrade
         try:
@@ -2615,15 +2752,6 @@ class DashboardServer:
             session.close()
         except Exception as e:
             logger.warning(f"Failed to store template provenance for project {project_id}: {e}")
-        
-        # Build replacement map: old_agent_name -> new_agent_name
-        agents_data = template.get("agents") or []
-        name_map = {}
-        for a in agents_data:
-            old_name = a.get("name", "")
-            if old_name:
-                new_name = old_name.replace(agent_prefix, replace_with, 1) if agent_prefix in old_name else f"{slug}_{old_name}"
-                name_map[old_name] = new_name
 
         # Resolve the mapped root agent name (entry point for widget keys / ADK)
         root_agent_raw = template_meta.get("root_agent")
@@ -2932,8 +3060,14 @@ class DashboardServer:
         finally:
             session.close()
     
-    def _sync_template(self, project_id: int, changed_by: str = None) -> Dict[str, Any]:
-        """Sync a project with its source template: add new agents, update changed agents, add/update memory blocks."""
+    def _sync_template(self, project_id: int, changed_by: str = None,
+                       platform_admin: bool = True) -> Dict[str, Any]:
+        """Sync a project with its source template: add new agents, update changed agents, add/update memory blocks.
+
+        Without platform_admin, an agent the sync would give a platform-only feature,
+        or change one of, is left as it is and listed in agents_skipped, and so is a new
+        agent whose name has a folder in agents/ (platform_only.py).
+        """
         if not self.db_client:
             return {"error": "Database connection failed"}
         
@@ -2979,6 +3113,7 @@ class DashboardServer:
             
             agents_added = 0
             agents_updated = 0
+            agents_skipped = []
             
             # Sort: root agents first
             ordered = sorted(template_agents, key=lambda a: (len(a.get("parent_agents") or []), a.get("name", "")))
@@ -2986,6 +3121,19 @@ class DashboardServer:
             for tpl_agent in ordered:
                 tpl_name = tpl_agent.get("name", "")
                 proj_name = name_map.get(tpl_name, tpl_name)
+                if not platform_admin:
+                    synced = {field: tpl_agent.get(field) for field in (
+                        "tool_config", "mcp_servers_config", "model_base_url", "hardcoded")
+                        if field in tpl_agent}
+                    existing = db_agent_map.get(proj_name)
+                    if not existing and has_code_folder(self.project_root / "agents", proj_name):
+                        agents_skipped.append({"name": proj_name, "reason": "this name is taken"})
+                        continue
+                    added = features_added(synced, existing.to_dict() if existing else None)
+                    if added:
+                        agents_skipped.append({"name": proj_name, "reason": (
+                            f"only a platform administrator can give an agent {', '.join(sorted(added))}")})
+                        continue
                 
                 if proj_name not in db_agent_map:
                     # Add new agent
@@ -3137,6 +3285,7 @@ class DashboardServer:
                 "synced_to_version": template_meta.get("version"),
                 "agents_added": agents_added,
                 "agents_updated": agents_updated,
+                "agents_skipped": agents_skipped,
                 "memory_blocks_added": memory_blocks_added,
                 "memory_blocks_updated": memory_blocks_updated,
                 "memory_blocks_skipped": memory_blocks_skipped,
@@ -3157,6 +3306,12 @@ class DashboardServer:
         # base.html offers Personal Tokens only to users the API would accept
         from server.pat_auth import dashboard_user_may_hold_token
         self.templates.env.globals["may_hold_api_token"] = dashboard_user_may_hold_token
+        # ...the installation's own pages only to platform administrators, and the
+        # workspace switcher to a user with more than one workspace
+        from server.auth import is_admin_user
+        from server.workspace_routes import switcher_for
+        self.templates.env.globals["is_platform_admin"] = is_admin_user
+        self.templates.env.globals["workspace_switcher"] = switcher_for
 
         # Mount static files
         self.app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
@@ -3579,7 +3734,7 @@ class DashboardServer:
         @self.app.get("/dashboard/users", response_class=HTMLResponse, tags=["Dashboard - Pages"])
         async def dashboard_users(request: Request, ctx: RequestContext = Depends(get_request_context)):
             """Dashboard users page"""
-            if not ctx.is_admin:
+            if not ctx.is_platform_admin:
                 return RedirectResponse(url="/dashboard/workroom", status_code=302)
             users = self._get_all_users()
             return self.templates.TemplateResponse(request, "dashboard/users.html", {
@@ -3651,7 +3806,7 @@ class DashboardServer:
         @self.app.get("/dashboard/migrations", response_class=HTMLResponse, tags=["Dashboard - Pages"])
         async def dashboard_migrations(request: Request, ctx: RequestContext = Depends(get_request_context)):
             """Dashboard migrations page"""
-            if not ctx.is_admin:
+            if not ctx.is_platform_admin:
                 return RedirectResponse(url="/dashboard/workroom", status_code=302)
             migrations = self._get_schema_migrations()
             return self.templates.TemplateResponse(request, "dashboard/migrations.html", {
@@ -3820,7 +3975,7 @@ class DashboardServer:
         @self.app.get("/dashboard/wizard-leads", response_class=HTMLResponse, tags=["Dashboard - Pages"])
         async def dashboard_wizard_leads(request: Request, ctx: RequestContext = Depends(get_request_context)):
             """Dashboard page listing leads captured by the public Agent Builder Wizard."""
-            if not ctx.is_admin:
+            if not ctx.is_platform_admin:
                 return RedirectResponse(url="/dashboard/workroom", status_code=302)
             return self.templates.TemplateResponse(request, "dashboard/wizard_leads.html", {
                 "request": request,
@@ -3931,7 +4086,7 @@ class DashboardServer:
         @self.app.get("/dashboard/wizard-pricing", response_class=HTMLResponse, tags=["Dashboard - Pages"])
         async def dashboard_wizard_pricing(request: Request, ctx: RequestContext = Depends(get_request_context)):
             """Dashboard page to edit Agent Builder Wizard tier prices and currencies."""
-            if not ctx.is_admin:
+            if not ctx.is_platform_admin:
                 return RedirectResponse(url="/dashboard/workroom", status_code=302)
             return self.templates.TemplateResponse(request, "dashboard/wizard_pricing.html", {
                 "request": request,
@@ -3950,7 +4105,7 @@ class DashboardServer:
         @self.app.put("/dashboard/api/wizard/pricing", tags=["Dashboard - Wizard"])
         async def update_wizard_pricing(request: Request, ctx: RequestContext = Depends(get_request_context)):
             """Save wizard tier prices + default currency, global or for a partner (admin only)."""
-            if not ctx.is_admin:
+            if not ctx.is_platform_admin:
                 raise HTTPException(status_code=403, detail="Admin only")
             from shared.utils.wizard import pricing
             body = await request.json()
@@ -3975,7 +4130,7 @@ class DashboardServer:
         @self.app.post("/dashboard/api/wizard/partners", tags=["Dashboard - Wizard"])
         async def upsert_wizard_partner(request: Request, ctx: RequestContext = Depends(get_request_context)):
             """Create or update a partner (admin only)."""
-            if not ctx.is_admin:
+            if not ctx.is_platform_admin:
                 raise HTTPException(status_code=403, detail="Admin only")
             from shared.utils.wizard import partners as partners_svc
             body = await request.json()
@@ -3995,7 +4150,7 @@ class DashboardServer:
         async def delete_wizard_partner(partner_key: str, request: Request,
                                         ctx: RequestContext = Depends(get_request_context)):
             """Delete a partner (admin only)."""
-            if not ctx.is_admin:
+            if not ctx.is_platform_admin:
                 raise HTTPException(status_code=403, detail="Admin only")
             from shared.utils.wizard import partners as partners_svc
             return partners_svc.delete_partner(partner_key)
@@ -4003,7 +4158,7 @@ class DashboardServer:
         @self.app.get("/dashboard/shop-orders", response_class=HTMLResponse, tags=["Dashboard - Pages"])
         async def dashboard_shop_orders(request: Request, ctx: RequestContext = Depends(get_request_context)):
             """Dashboard page listing orders placed through the e-commerce MCP, grouped by partner."""
-            if not ctx.is_admin:
+            if not ctx.is_platform_admin:
                 return RedirectResponse(url="/dashboard/workroom", status_code=302)
             return self.templates.TemplateResponse(request, "dashboard/wizard_orders.html", {
                 "request": request,
@@ -4063,7 +4218,7 @@ class DashboardServer:
         async def delete_shop_order(order_pk: int, request: Request,
                                     ctx: RequestContext = Depends(get_request_context)):
             """Delete an order (admin only)."""
-            if not ctx.is_admin:
+            if not ctx.is_platform_admin:
                 raise HTTPException(status_code=403, detail="Admin only")
             from shared.utils.models import ShopOrder
             session = self.db_client.get_session()
@@ -4081,7 +4236,7 @@ class DashboardServer:
         async def convert_wizard_lead(lead_id: int, request: Request,
                                       ctx: RequestContext = Depends(get_request_context)):
             """Convert a lead's live trial into a permanent agent (rename project + keep widget)."""
-            if not ctx.is_admin:
+            if not ctx.is_platform_admin:
                 raise HTTPException(status_code=403, detail="Admin only")
             from shared.utils.models import WizardLead
             from shared.utils.wizard.provisioning_service import WizardProvisioningService
@@ -4144,7 +4299,7 @@ class DashboardServer:
         async def delete_wizard_lead(lead_id: int, request: Request,
                                      ctx: RequestContext = Depends(get_request_context)):
             """Permanently delete an archived lead and any remaining trial assets (agent, project, memory blocks)."""
-            if not ctx.is_admin:
+            if not ctx.is_platform_admin:
                 raise HTTPException(status_code=403, detail="Admin only")
             from shared.utils.models import WizardLead
             session = self.db_client.get_session()
@@ -4425,7 +4580,7 @@ class DashboardServer:
         @self.app.post("/dashboard/api/users/cleanup", tags=["Dashboard - Users"])
         async def trigger_user_cleanup(request: Request, ctx: RequestContext = Depends(get_request_context)):
             """Manually trigger temporary user cleanup."""
-            if not ctx.is_admin:
+            if not ctx.is_platform_admin:
                 from fastapi import HTTPException
                 raise HTTPException(status_code=403, detail="Forbidden")
             from shared.utils.user_cleanup import cleanup_inactive_users
@@ -4951,6 +5106,7 @@ class DashboardServer:
                 include_memory_blocks=bool(body.get("include_memory_blocks")),
                 include_file_search=bool(body.get("include_file_search")),
                 changed_by=ctx.user_id,
+                platform_admin=ctx.is_platform_admin,
             )
             if "error" in result:
                 raise HTTPException(status_code=result.get("status_code", 500),
@@ -4966,7 +5122,8 @@ class DashboardServer:
             """Import agent configurations from JSON."""
             try:
                 import_data = await request.json()
-                result = self._import_agent_configs(import_data, overwrite, ctx.workspace_id)
+                result = self._import_agent_configs(import_data, overwrite, ctx.workspace_id,
+                                                    ctx.is_platform_admin)
                 
                 if "error" in result:
                     raise HTTPException(status_code=400, detail=result["error"])
@@ -5052,10 +5209,14 @@ class DashboardServer:
                 project_name = body.get("project_name")
                 if not template_id:
                     raise HTTPException(status_code=400, detail="template_id is required")
+                template = self.template_service.get_template(template_id)
+                for agent in (template or {}).get("agents") or []:
+                    self._refuse_platform_only(ctx, agent)
                 result = self._import_template(template_id, project_name=project_name, changed_by=ctx.user_id,
-                                               workspace_id=ctx.workspace_id)
+                                               workspace_id=ctx.workspace_id,
+                                               platform_admin=ctx.is_platform_admin)
                 if "error" in result:
-                    raise HTTPException(status_code=400, detail=result["error"])
+                    raise HTTPException(status_code=result.get("status_code", 400), detail=result["error"])
                 audit_service.log(
                     ctx.user_id,
                     audit_service.ACTION_TEMPLATE_IMPORT,
@@ -5152,7 +5313,8 @@ class DashboardServer:
                 if not project_id:
                     raise HTTPException(status_code=400, detail="project_id is required")
                 self._require_in_workspace(ctx, project_id=int(project_id))
-                result = self._sync_template(int(project_id), changed_by=ctx.user_id)
+                result = self._sync_template(int(project_id), changed_by=ctx.user_id,
+                                             platform_admin=ctx.is_platform_admin)
                 if "error" in result:
                     raise HTTPException(status_code=400, detail=result["error"])
                 audit_service.log(
@@ -5337,6 +5499,7 @@ class DashboardServer:
             }
             self._require_in_workspace(ctx, project_id=config_data["project_id"] or 1)
             self._check_agent_names(ctx, name, parent_agents_list)
+            self._refuse_platform_only(ctx, config_data)
             success = self._create_agent_config(config_data, changed_by=ctx.user_id)
             if success:
                 audit_service.log(ctx.user_id, audit_service.ACTION_AGENT_CREATE, audit_service.RESOURCE_AGENT, resource_id=name, details={"project_id": config_data.get("project_id")}, request=request)
@@ -5425,6 +5588,7 @@ class DashboardServer:
             if config_data["project_id"] is not None:
                 self._require_in_workspace(ctx, project_id=config_data["project_id"])
             self._check_agent_names(ctx, name, parent_agents_list, config_id)
+            self._refuse_platform_only(ctx, config_data, self._agent_config_dict(config_id))
             # Read before writing: switching the Art. 50 notice off, or back on, is
             # a compliance decision and gets its own entry rather than hiding
             # inside a generic agent.update.
@@ -5481,12 +5645,9 @@ class DashboardServer:
             folder_path = None
             if success and delete_folder and agent_name and not agent_hardcoded:
                 try:
-                    agents_dir = self.project_root / "agents"
-                    dest_path = agents_dir / agent_name
-                    folder_path = str(dest_path)
-                    if dest_path.exists() and dest_path.is_dir():
-                        shutil.rmtree(dest_path)
-                        folder_deleted = True
+                    result = self._delete_agent_folder(agent_name)
+                    folder_deleted = result.get("folder_deleted", False)
+                    folder_path = result.get("folder_path")
                 except Exception as e:
                     print(f"Error deleting agent folder '{agent_name}': {e}")
 
@@ -5517,6 +5678,10 @@ class DashboardServer:
         async def delete_agent_folder(agent_name: str, request: Request, ctx: RequestContext = Depends(get_request_context)):
             """Delete agent folder for a specific agent."""
             self._require_in_workspace(ctx, agent_name=agent_name)
+            # A hardcoded agent's folder is its code, the installation's
+            if not ctx.is_platform_admin and self._is_hardcoded(agent_name):
+                raise HTTPException(status_code=403, detail=(
+                    "Only a platform administrator can delete a hardcoded agent's folder"))
             result = self._delete_agent_folder(agent_name)
             
             if not result["success"] and result.get("error"):
@@ -5567,6 +5732,9 @@ class DashboardServer:
         async def rollback_agent(config_id: int, version_id: int, request: Request, ctx: RequestContext = Depends(get_request_context)):
             """Rollback an agent config to a previous version snapshot."""
             self._require_in_workspace(ctx, config_id=config_id)
+            if not ctx.is_platform_admin:
+                self._refuse_platform_only(ctx, self._version_snapshot(config_id, version_id),
+                                           self._agent_config_dict(config_id))
             result = self._rollback_agent_config(config_id, version_id, changed_by=ctx.user_id)
             if result:
                 return {"success": True, "message": "Agent rolled back successfully", "config": result}
@@ -7713,7 +7881,7 @@ class DashboardServer:
             ctx: RequestContext = Depends(get_request_context),
         ):
             """List all active programmatically-registered system cron jobs."""
-            if not ctx.is_admin:
+            if not ctx.is_platform_admin:
                 from fastapi import HTTPException
                 raise HTTPException(status_code=403, detail="Forbidden")
             
@@ -7744,7 +7912,7 @@ class DashboardServer:
             ctx: RequestContext = Depends(get_request_context)
         ):
             """Pause or resume a system background job."""
-            if not ctx.is_admin:
+            if not ctx.is_platform_admin:
                 from fastapi import HTTPException
                 raise HTTPException(status_code=403, detail="Forbidden")
             
@@ -7777,7 +7945,7 @@ class DashboardServer:
             ctx: RequestContext = Depends(get_request_context)
         ):
             """Reschedule a system background job using a standard cron expression."""
-            if not ctx.is_admin:
+            if not ctx.is_platform_admin:
                 from fastapi import HTTPException
                 raise HTTPException(status_code=403, detail="Forbidden")
             
@@ -8116,7 +8284,7 @@ class DashboardServer:
 
         @self.app.get("/dashboard/settings", response_class=HTMLResponse, tags=["Dashboard - Pages"])
         async def dashboard_settings(request: Request, ctx: RequestContext = Depends(get_request_context)):
-            if not ctx.is_admin:
+            if not ctx.is_platform_admin:
                 return RedirectResponse(url="/dashboard/workroom", status_code=302)
             return self.templates.TemplateResponse(request, "dashboard/settings.html", {
                 "request": request,
@@ -8142,7 +8310,7 @@ class DashboardServer:
         @self.app.get("/dashboard/api/settings/image-model", tags=["Dashboard - Settings"])
         async def get_image_model_setting(request: Request, ctx: RequestContext = Depends(get_request_context)):
             """The default image model for agents that name none, where it comes from, and whether its key is set."""
-            if not ctx.is_admin:
+            if not ctx.is_platform_admin:
                 raise HTTPException(status_code=403, detail="Forbidden")
             return _image_model_state()
 
@@ -8150,7 +8318,7 @@ class DashboardServer:
         async def put_image_model_setting(request: Request, ctx: RequestContext = Depends(get_request_context),
                                           body: Dict[str, Any] = Body(...)):
             """Set the default image model; an empty model falls back to IMAGE_MODEL, then dall-e-3."""
-            if not ctx.is_admin:
+            if not ctx.is_platform_admin:
                 raise HTTPException(status_code=403, detail="Forbidden")
             from shared.utils.system_settings import IMAGE_MODEL, get_setting, set_setting
             model = body.get("model")
@@ -8209,7 +8377,7 @@ class DashboardServer:
         @self.app.get("/dashboard/api/settings/model-prices", tags=["Dashboard - Settings"])
         async def get_model_prices(request: Request, ctx: RequestContext = Depends(get_request_context)):
             """Every model used or priced by hand: its price per million tokens, where it comes from, and calls without a cost."""
-            if not ctx.is_admin:
+            if not ctx.is_platform_admin:
                 raise HTTPException(status_code=403, detail="Forbidden")
             from starlette.concurrency import run_in_threadpool
             return await run_in_threadpool(_with_session, _price_rows)
@@ -8218,7 +8386,7 @@ class DashboardServer:
         async def put_model_price(request: Request, ctx: RequestContext = Depends(get_request_context),
                                   body: Dict[str, Any] = Body(...)):
             """Set a model's price by hand, in US dollars per million tokens, and price all its calls with it."""
-            if not ctx.is_admin:
+            if not ctx.is_platform_admin:
                 raise HTTPException(status_code=403, detail="Forbidden")
             import math
             model_name = body.get("model_name")
@@ -8257,7 +8425,7 @@ class DashboardServer:
         async def delete_model_price(request: Request, model: str = Query(...),
                                      ctx: RequestContext = Depends(get_request_context)):
             """Remove a manual price: the model's calls are priced from the published lists again, or have no cost."""
-            if not ctx.is_admin:
+            if not ctx.is_platform_admin:
                 raise HTTPException(status_code=403, detail="Forbidden")
 
             def work(session):
@@ -8279,7 +8447,7 @@ class DashboardServer:
         @self.app.post("/dashboard/api/settings/model-prices/fill-missing", tags=["Dashboard - Settings"])
         async def fill_missing_costs(request: Request, ctx: RequestContext = Depends(get_request_context)):
             """Price the calls logged without a cost whose model has a price now."""
-            if not ctx.is_admin:
+            if not ctx.is_platform_admin:
                 raise HTTPException(status_code=403, detail="Forbidden")
 
             def work(session):

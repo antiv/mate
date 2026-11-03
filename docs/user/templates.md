@@ -53,6 +53,12 @@ dialog shows what would change:
 Click **Apply Updates** to take them. Your own model choices and role settings on
 existing agents are kept.
 
+If you are an owner or admin of the workspace but not a platform administrator,
+agents the update would give something that runs on the server (see
+[What only a platform administrator can set](agents.md#what-only-a-platform-administrator-can-set))
+are left as they are, and a warning names them. Importing a template with such an
+agent is refused the same way.
+
 A memory block marked **Read-only** in your project keeps its value; so does one whose
 **Character Limit** the template's new value exceeds. After the update a warning names
 the blocks that were not updated and why. To take the template's value, unlock the

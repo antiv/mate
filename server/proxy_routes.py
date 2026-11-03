@@ -53,11 +53,14 @@ router = APIRouter()
 # browser sends. Everything else ADK serves is for admins.
 _USER_PATH = re.compile(r"^apps/[^/]+/users/([^/]+)(/.*)?$")
 _RUN_PATHS = ("run", "run_sse")
+# An agent's A2A endpoint and card (shared/utils/a2a_routes.py). The agent runs under an
+# id A2A makes up, so the caller's own roles are checked here, as for MCP.
+_A2A_PATH = re.compile(r"^a2a/([^/]+)(/.*)?$")
 
 
 def _non_admin_refusal(path: str, identity: str, body: Optional[bytes]) -> Optional[str]:
     """Why a non-admin request is refused, or None when it may go through."""
-    if path == "list-apps":
+    if path == "list-apps" or _A2A_PATH.match(path):
         return None
     match = _USER_PATH.match(path)
     if match:
@@ -82,6 +85,9 @@ def _app_name(path: str, body: Optional[bytes]) -> Optional[str]:
     match = _USER_PATH.match(path)
     if match:
         return path.split("/", 2)[1]
+    match = _A2A_PATH.match(path)
+    if match:
+        return match.group(1)
     if path in _RUN_PATHS:
         return run_field(json.loads(body or b"{}"), "app_name")
     return None
@@ -94,13 +100,18 @@ def _workspace_refusal(path: str, identity: str, body: Optional[bytes]) -> Optio
     if app_name is None:
         return None
     from shared.utils.database_client import get_database_client
-    from shared.utils.models import User
-    from shared.utils.workspaces import agent_workspace, caller_access
+    from shared.utils.models import AgentConfig, User
+    from shared.utils.workspaces import agent_workspace, caller_access, roles_allow
     session = get_database_client().get_session()
     try:
         user = session.query(User).filter_by(user_id=identity).first()
-        if user is None or caller_access(session, user, agent_workspace(session, app_name)) is None:
+        access = caller_access(session, user, agent_workspace(session, app_name)) if user else None
+        if access is None:
             return "not an agent of the user's workspaces"
+        if _A2A_PATH.match(path):
+            roles = session.query(AgentConfig.allowed_for_roles).filter_by(name=app_name).scalar()
+            if not roles_allow(access, roles):
+                return "the agent's roles don't allow the user"
         return None
     finally:
         session.close()

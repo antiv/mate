@@ -8,13 +8,15 @@
         <div class="min-w-0">
             <h2 class="text-xl font-bold text-gray-900 dark:text-white">Audit Logs</h2>
             <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                Immutable audit trail for compliance (EU AI Act). Append-only; who changed what, when. Retention: <span id="retentionInfo" class="font-medium">—</span>
+                Immutable audit trail for compliance (EU AI Act). Append-only; who changed what, when.{% if is_platform_admin(request) %} Retention: <span id="retentionInfo" class="font-medium">—</span>{% endif %}
             </p>
         </div>
         <div class="flex flex-wrap gap-2 items-center flex-shrink-0">
+            {% if is_platform_admin(request) %}
             <button type="button" data-click="runRetention" class="px-3 py-2 text-xs border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 min-h-[44px] touch-target">
                 <i class="fas fa-broom mr-1"></i>Run retention
             </button>
+            {% endif %}
             <a id="exportCsvLink" href="#" class="px-3 py-2 text-xs bg-gray-600 hover:bg-gray-700 text-white rounded-lg flex items-center min-h-[44px] touch-target">
                 <i class="fas fa-file-csv mr-1"></i>Export CSV
             </a>
@@ -235,7 +237,7 @@
     window.runRetention = runRetention;
     window.applyFilters = applyFilters;
     document.addEventListener('DOMContentLoaded', function() {
-        loadRetentionConfig();
+        if (document.getElementById('retentionInfo')) loadRetentionConfig();
         loadLogs();
     });
 })();
