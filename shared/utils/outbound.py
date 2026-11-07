@@ -11,14 +11,23 @@ OUTBOUND_ALLOW_PRIVATE_NETWORK=true says otherwise.
 
 The host is resolved when the check runs, not when the request is made, so a name
 whose address changes in between is not caught (DNS rebinding).
+
+A model endpoint is called by LiteLLM, whose HTTP clients follow redirects: a public
+base URL could answer 307 to an internal one. guard_model_client() wraps the model's
+completion calls so that, while one runs, every httpx request is checked the same way
+and no redirect is followed (_install_guard).
 """
 
+import asyncio
 import ipaddress
 import logging
 import os
 import socket
-from typing import Optional
+from contextvars import ContextVar
+from typing import Any, Optional
 from urllib.parse import urlparse
+
+import httpx
 
 from .models import DEFAULT_WORKSPACE_ID
 
@@ -30,7 +39,9 @@ def private_network_allowed() -> bool:
     return os.getenv("OUTBOUND_ALLOW_PRIVATE_NETWORK", "false").lower() in ("true", "1", "yes")
 
 
-def _is_internal(ip: str) -> bool:
+def is_internal_address(ip: str) -> bool:
+    """True for a private, loopback, link-local, reserved, multicast or unspecified
+    address: the server's own network. Also used by the browser and image tools."""
     addr = ipaddress.ip_address(ip.split("%", 1)[0])
     if getattr(addr, "ipv4_mapped", None):
         addr = addr.ipv4_mapped
@@ -49,7 +60,7 @@ def internal_address(url: str) -> Optional[str]:
     except (socket.gaierror, UnicodeError):
         return None
     for info in infos:
-        if _is_internal(info[4][0]):
+        if is_internal_address(info[4][0]):
             return f"{host} resolves to an internal address"
     return None
 
@@ -90,3 +101,87 @@ def outbound_refusal(url: str, *, workspace_id: Optional[int] = None,
         logger.warning("Outbound request to %s refused for workspace %s: %s",
                        url[:200], workspace_id, reason)
     return reason
+
+
+# The workspace whose model call is running in this context, when it is guarded
+_GUARDED: ContextVar[Optional[int]] = ContextVar("mate_outbound_guarded", default=None)
+_guard_installed = False
+
+
+def _install_guard() -> None:
+    """Make httpx's send() refuse an internal address and follow no redirect while a
+    guarded model call runs. Every request of LiteLLM and the OpenAI SDK, and each
+    redirect LiteLLM follows by hand, goes through it. Other requests are untouched."""
+    global _guard_installed
+    if _guard_installed:
+        return
+    _guard_installed = True
+    sync_send, async_send = httpx.Client.send, httpx.AsyncClient.send
+
+    def _refused(request: httpx.Request, reason: str) -> httpx.ConnectError:
+        logger.warning("Model request to %s refused for workspace %s: %s",
+                       str(request.url)[:200], _GUARDED.get(), reason)
+        return httpx.ConnectError(f"model endpoint refused: {reason}", request=request)
+
+    def send(self: httpx.Client, request: httpx.Request, **kwargs: Any) -> httpx.Response:
+        if _GUARDED.get() is not None:
+            reason = internal_address(str(request.url))
+            if reason:
+                raise _refused(request, reason)
+            kwargs["follow_redirects"] = False
+        return sync_send(self, request, **kwargs)
+
+    async def asend(self: httpx.AsyncClient, request: httpx.Request, **kwargs: Any) -> httpx.Response:
+        if _GUARDED.get() is not None:
+            reason = await asyncio.to_thread(internal_address, str(request.url))
+            if reason:
+                raise _refused(request, reason)
+            kwargs["follow_redirects"] = False
+        return await async_send(self, request, **kwargs)
+
+    httpx.Client.send = send
+    httpx.AsyncClient.send = asend
+
+
+class GuardedCompletions:
+    """An object with completion() and acompletion() (ADK's LiteLLMClient, or the
+    litellm module ChatLiteLLM calls), whose calls run guarded."""
+
+    def __init__(self, inner: Any, workspace_id: int):
+        self._inner = inner
+        self._workspace_id = workspace_id
+
+    def completion(self, *args: Any, **kwargs: Any) -> Any:
+        token = _GUARDED.set(self._workspace_id)
+        try:
+            return self._inner.completion(*args, **kwargs)
+        finally:
+            _GUARDED.reset(token)
+
+    async def acompletion(self, *args: Any, **kwargs: Any) -> Any:
+        # A streamed answer is requested here; only reading its body comes later
+        token = _GUARDED.set(self._workspace_id)
+        try:
+            return await self._inner.acompletion(*args, **kwargs)
+        finally:
+            _GUARDED.reset(token)
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._inner, name)
+
+
+def guard_model_client(model: Any, attribute: str, base_url: Optional[str],
+                       agent_name: Optional[str], project_id: Optional[int]) -> Any:
+    """The model, with its completion client (`attribute`) guarded when it is sent to
+    a base URL of an agent outside the default workspace. A provider's own endpoint,
+    with no base URL configured, is the installation's and stays as it is."""
+    if not base_url or private_network_allowed() or (not agent_name and project_id is None):
+        return model
+    workspace_id = _workspace_of(agent_name, project_id)
+    if workspace_id == DEFAULT_WORKSPACE_ID:
+        return model
+    _install_guard()
+    # 0 when the database couldn't say: guarded all the same
+    guarded = GuardedCompletions(getattr(model, attribute), workspace_id or 0)
+    object.__setattr__(model, attribute, guarded)
+    return model

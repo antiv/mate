@@ -52,6 +52,14 @@ def create_shop_tools_from_config(config: Dict[str, Any]) -> List[Any]:
     shop_name = (cfg.get("shop_name") or shop_service.DEFAULT_SHOP_NAME).strip()
     vendor_email = (cfg.get("vendor_email") or "").strip()
     partner_key = (cfg.get("partner_key") or "").strip()
+    if vendor_email or partner_key:
+        from shared.utils.platform_only import may_run_code
+        if not may_run_code(config.get("name"), config.get("project_id")):
+            # The server's mail account and the platform's Shop Orders are the default
+            # workspace's (shared/utils/platform_only.py); the cart still works
+            logger.error("Shop of agent %s: vendor_email and partner_key are refused "
+                         "outside the default workspace", config.get("name"))
+            vendor_email = partner_key = ""
     catalog = shop_service.normalize_catalog(cfg.get("catalog"))
     by_id = shop_service.index_by_id(catalog)
 

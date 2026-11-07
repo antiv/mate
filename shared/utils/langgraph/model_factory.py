@@ -103,4 +103,7 @@ def create_chat_model(model_name: Optional[str] = None,
         kwargs["top_p"] = gen_config["top_p"]
 
     logger.info(f"Creating ChatLiteLLM model: {effective_model_name} ({context.describe()})")
-    return ChatLiteLLM(model=effective_model_name, **kwargs)
+    from ..outbound import guard_model_client
+    # As create_model(): an agent's own base URL outside the default workspace
+    return guard_model_client(ChatLiteLLM(model=effective_model_name, **kwargs), "client",
+                              base_url, context.agent_name, context.project_id)

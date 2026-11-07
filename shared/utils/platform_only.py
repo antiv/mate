@@ -11,7 +11,9 @@ the platform's (documents/design/workspaces.md, "What stays platform-only"):
   already has, whose agent.py the agent server loads;
 - a tool that acts with the installation's own credentials, shared by every
   workspace: Google Drive, CV Tools (which read Drive) and Google Calendar (its
-  service account) and Supabase Storage (one key, one bucket).
+  service account) and Supabase Storage (one key, one bucket), and the shop tool's
+  vendor_email (sent with the server's SMTP account) and partner_key (orders in the
+  platform's Shop Orders). The shop itself, cart and catalog, is any workspace's.
 
 Two checks:
 - On save, features_added() lists what a config gives an agent that it didn't have,
@@ -21,8 +23,10 @@ Two checks:
   it to a caller who is no platform administrator, so a workspace admin keeps what a
   platform administrator set up as it is, and can't add more.
 - At run time, may_run_code() refuses the code executor, stdio MCP servers and the
-  server-credential tools to an agent outside the default workspace, until phase 3
-  lets a platform administrator enable them per workspace.
+  server-credential tools (the shop without its vendor_email and partner_key) to an
+  agent outside the default workspace, until phase 3 lets a platform administrator
+  enable them per workspace. A trigger's or alert rule's email goes out the same way,
+  from the default workspace only.
 """
 
 import json
@@ -41,6 +45,8 @@ HARDCODED = "a hardcoded agent"
 SERVER_CREDENTIALS = "a tool that uses the server's own credentials"
 # tool_config keys of the tools that act with the installation's credentials
 SERVER_CREDENTIAL_TOOLS = ("google_drive", "cv_tools", "google_calendar", "supabase_storage")
+# The shop tool's settings that do: mail from the server's SMTP account, orders in shop_orders
+SHOP_SERVER_PARTS = ("vendor_email", "partner_key")
 KEPT_KEY = "a new base URL for its stored API key (enter the key again)"
 
 
@@ -108,6 +114,11 @@ def _defining(config: Optional[Dict[str, Any]]) -> Dict[str, Any]:
         # Its value too: a calendar_id names which of the account's calendars
         credential_tools = {key: tools[key] for key in SERVER_CREDENTIAL_TOOLS
                             if tools.get(key) is not None}
+        shop = tools.get("shop")
+        if isinstance(shop, dict):
+            shop_parts = {key: shop[key] for key in SHOP_SERVER_PARTS if shop.get(key)}
+            if shop_parts:
+                credential_tools["shop"] = shop_parts
         if credential_tools:
             found[SERVER_CREDENTIALS] = credential_tools
     servers = _parsed(config.get("mcp_servers_config"))

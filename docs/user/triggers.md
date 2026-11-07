@@ -122,7 +122,7 @@ and they sign each request themselves. For your own callers, see the
 |---|---|---|
 | **Memory Block** | The answer replaces the contents of a memory block in the same project. The block is created if it does not exist. A read-only block, or an answer longer than the block's character limit, fails the run. | A label. Left empty, the block is named `trigger_<id>_output`. |
 | **HTTP Callback** | The answer is sent as JSON to a URL; outside the Default workspace, not to one on the server's own network. | The URL, and optional headers as JSON. |
-| **Email** | The answer is emailed as plain text. | The recipient and an optional subject. Your administrator must have configured outgoing mail on the server. |
+| **Email** | The answer is emailed as plain text. In the Default workspace only: elsewhere the run fails, as the mail goes out from the server's own account. | The recipient and an optional subject. Your administrator must have configured outgoing mail on the server. |
 
 A destination that is missing what it needs, such as an HTTP callback without a URL
 or an email on a server without outgoing mail, is refused when you save. If a

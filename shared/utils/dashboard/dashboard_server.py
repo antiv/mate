@@ -1256,18 +1256,26 @@ class DashboardServer:
                              workspace_id: Optional[int]) -> Set[str]:
         """The ids of the traces among `spans` that are the workspace's: every agent a
         trace names is one of its agents. An agent with no config counts as the default
-        workspace's, and so does a trace that names none. None keeps every trace."""
+        workspace's, and so does a trace that names none. A trace whose spans record
+        another workspace (mate.workspace.id) is not, though its agents' names are: an
+        agent deleted there may have left its name to one here. None keeps every trace."""
+        from shared.utils.tracing.genai_attributes import MATE_WORKSPACE_ID
         from shared.utils.tracing.replay import AGENT_ATTRS
         named: Dict[str, Set[str]] = {}
+        recorded: Dict[str, Set[str]] = {}
         for span in spans:
             agents = named.setdefault(span["trace_id"], set())
             agents.update(str(span["attributes"][key]) for key in AGENT_ATTRS
                           if span["attributes"].get(key))
+            if span["attributes"].get(MATE_WORKSPACE_ID) is not None:
+                recorded.setdefault(span["trace_id"], set()).add(
+                    str(span["attributes"][MATE_WORKSPACE_ID]))
         if workspace_id is None:
             return set(named)
         outside = set(agents_outside(session, workspace_id, sorted(set().union(*named.values()))))
         return {trace for trace, agents in named.items()
-                if not agents & outside and (agents or workspace_id == DEFAULT_WORKSPACE_ID)}
+                if not agents & outside and (agents or workspace_id == DEFAULT_WORKSPACE_ID)
+                and recorded.get(trace, set()) <= {str(workspace_id)}}
 
     def _get_traces(self, hours: int = 24, limit: int = 50, trace_id: Optional[str] = None,
                     workspace_id: Optional[int] = None) -> Dict[str, Any]:
@@ -6929,9 +6937,9 @@ class DashboardServer:
                         "source": {"test_case_id": tc.id}, "blocks_read": None}
             if isinstance(feedback_id, int) and not isinstance(feedback_id, bool):
                 from shared.utils.feedback_service import extract_exchange
+                from shared.utils.feedback_service import of_workspace
                 fb = session.query(ResponseFeedback).filter(
-                    ResponseFeedback.id == feedback_id,
-                    ResponseFeedback.agent_name.in_(agent_names_of(workspace_id))).first()
+                    ResponseFeedback.id == feedback_id, *of_workspace(workspace_id)).first()
                 if not fb or not fb.agent_name:
                     raise HTTPException(status_code=404, detail="Rating not found")
                 from shared.utils.agent_improver import blocks_read
@@ -7400,10 +7408,11 @@ class DashboardServer:
                 if workspace_id != ctx.workspace_id:
                     raise HTTPException(status_code=404, detail="Agent not found")
                 if source_feedback_id is not None:
+                    from shared.utils.feedback_service import of_workspace
                     from shared.utils.models import ResponseFeedback
                     if not session.query(ResponseFeedback.id).filter(
                             ResponseFeedback.id == source_feedback_id,
-                            ResponseFeedback.agent_name.in_(agent_names_of(workspace_id))).first():
+                            *of_workspace(workspace_id)).first():
                         raise HTTPException(status_code=400, detail="source_feedback_id does not exist")
                     existing = session.query(self.TestCase.id).filter(
                         self.TestCase.source_feedback_id == source_feedback_id,

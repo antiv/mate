@@ -519,7 +519,7 @@ class TriggerRunner:
         elif output_type == "http_callback":
             self._output_http_callback(cfg, agent_response, trigger.project_id, trigger.agent_name)
         elif output_type == "email":
-            self._output_email(cfg, agent_response)
+            self._output_email(cfg, agent_response, trigger.project_id, trigger.agent_name)
         else:
             logger.warning("Unknown output_type '%s' for trigger %s", output_type, trigger.id)
 
@@ -567,11 +567,17 @@ class TriggerRunner:
         if not ok:
             raise RuntimeError(f"http_callback delivery failed: {detail}")
 
-    def _output_email(self, cfg: dict, text: str) -> None:
-        """Send agent response via SMTP. Raises on delivery failure (see above)."""
+    def _output_email(self, cfg: dict, text: str, project_id: Optional[int] = None,
+                      agent_name: Optional[str] = None) -> None:
+        """Send agent response via SMTP. Raises on delivery failure (see above), and
+        outside the default workspace: the SMTP account is the installation's."""
         error = output_config_error("email", cfg)
         if error:
             raise RuntimeError(error)
+        from shared.utils.platform_only import may_run_code
+        if (project_id is not None or agent_name) and not may_run_code(agent_name, project_id):
+            raise RuntimeError("email output refused: the server's mail account is the "
+                               "default workspace's")
         to_addr = cfg["to"]
         ok, detail = send_email(to_addr, cfg.get("subject", "MATE Trigger Result"), text)
         if not ok:

@@ -82,6 +82,8 @@ sets only the fields in `_RULE_FIELDS`, never the workspace.
 
 - `http` — `{"url": "...", "headers": {...}, "timeout": 30}`, POSTs the alert payload as JSON.
 - `email` — `{"to": "ops@example.com", "subject": "..."}`, requires `SMTP_HOST` and friends.
+  A rule of a workspace other than the default one is not sent (`refused: ...`): the
+  SMTP account is the installation's.
 - `slack` — `{"url": "https://hooks.slack.com/services/..."}`, a Slack incoming webhook.
   POSTs `{"text": "[MATE alert] <rule name>: <message>"}`, with `&`, `<` and `>` escaped
   so a name cannot carry a `<!channel>` mention or a link.

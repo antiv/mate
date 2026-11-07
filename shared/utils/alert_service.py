@@ -21,7 +21,7 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy import func
 
 from .database_client import get_database_client
-from .models import AgentConfig, AlertRule, AuditLog, RateLimitConfig
+from .models import DEFAULT_WORKSPACE_ID, AgentConfig, AlertRule, AuditLog, RateLimitConfig
 from .notify import post_json, send_email
 from .workspaces import rows_of
 
@@ -478,6 +478,8 @@ class AlertService:
                              headers=config.get('headers') or {},
                              timeout=float(config.get('timeout', 30)))
         if rule.destination_type == 'email':
+            if rule.workspace_id not in (None, DEFAULT_WORKSPACE_ID):
+                return False, "refused: the server's mail account is the default workspace's"
             subject = config.get('subject') or f"[MATE alert] {rule.name}"
             body = payload['message'] + "\n\n" + "\n".join(
                 f"{k}: {v}" for k, v in payload.items() if k != 'message')

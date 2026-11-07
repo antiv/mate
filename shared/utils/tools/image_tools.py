@@ -8,7 +8,6 @@ the end of the file.
 """
 
 import asyncio
-import ipaddress
 import os
 import base64
 import re
@@ -26,6 +25,7 @@ except Exception:
 from google.adk.tools.tool_context import ToolContext
 
 from .. import settings
+from ..outbound import is_internal_address
 from ..content_marking import is_marked_as_ai_generated, mark_png_as_ai_generated
 
 logger = logging.getLogger(__name__)
@@ -285,14 +285,6 @@ def _image_private_network_allowed() -> bool:
     return os.getenv("IMAGE_ALLOW_PRIVATE_NETWORK", "false").lower() in ("true", "1", "yes")
 
 
-def _is_internal_address(ip: str) -> bool:
-    addr = ipaddress.ip_address(ip.split("%", 1)[0])
-    if getattr(addr, "ipv4_mapped", None):
-        addr = addr.ipv4_mapped
-    return (addr.is_private or addr.is_loopback or addr.is_link_local or addr.is_reserved
-            or addr.is_multicast or addr.is_unspecified)
-
-
 async def _download_image(url: str) -> bytes:
     """The image at a URL a provider returned, refusing internal addresses.
 
@@ -308,7 +300,7 @@ async def _download_image(url: str) -> bytes:
         raise ValueError(f"the provider returned an image URL that is not http(s)")
     if not _image_private_network_allowed():
         infos = await asyncio.get_running_loop().getaddrinfo(parsed.hostname, parsed.port or None)
-        if any(_is_internal_address(info[4][0]) for info in infos):
+        if any(is_internal_address(info[4][0]) for info in infos):
             raise ValueError(f"the provider returned an image URL on an internal address ({parsed.hostname})")
     import httpx
     async with httpx.AsyncClient(follow_redirects=False, timeout=30) as client:

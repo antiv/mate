@@ -65,8 +65,11 @@ Every call to `create_model()` and `create_chat_model()` passes a `ModelContext`
 | A subagent started by `subagent_delegation` | The parent agent: the subagent works for it |
 | The fallback agent shown when configuration fails to load, and the context-compaction summarizer | `ModelContext()`, the installation |
 
-Provider keys still come from the environment, whatever the context; the context
-only appears in the "Creating ... model" log line. It is where per-workspace keys
+Provider keys still come from the environment, whatever the context. Beyond the
+"Creating ... model" log line, the context decides one thing: a model with a base
+URL, for an agent outside the default workspace, gets its completion client wrapped
+so that no redirect is followed into the server's network
+([Requests to the server's own network](auth-and-access.md#requests-to-the-servers-own-network)). It is where per-workspace keys
 will be looked up in 2.0. `shared/test/test_model_context.py` reads the source and
 fails on a call to either function that leaves `context=` out, so pass
 `ModelContext()` when a model serves no agent.

@@ -9,7 +9,6 @@ import logging
 import time
 import asyncio
 import hashlib
-import ipaddress
 import re
 import socket
 from typing import Dict, Any, List, Optional, Tuple
@@ -17,6 +16,8 @@ from urllib.parse import urlparse
 
 from google.adk.tools.tool_context import ToolContext
 from playwright.async_api import async_playwright, Browser, BrowserContext, Page
+
+from ..outbound import is_internal_address
 
 logger = logging.getLogger(__name__)
 
@@ -31,14 +32,6 @@ _PASSTHROUGH_SCHEMES = ("data", "blob", "about")
 
 def _private_network_allowed() -> bool:
     return os.getenv("BROWSER_ALLOW_PRIVATE_NETWORK", "false").lower() in ("true", "1", "yes")
-
-
-def _is_internal_address(ip: str) -> bool:
-    addr = ipaddress.ip_address(ip.split("%", 1)[0])
-    if getattr(addr, "ipv4_mapped", None):
-        addr = addr.ipv4_mapped
-    return (addr.is_private or addr.is_loopback or addr.is_link_local or addr.is_reserved
-            or addr.is_multicast or addr.is_unspecified)
 
 
 async def url_block_reason(url: str) -> Optional[str]:
@@ -59,7 +52,7 @@ async def url_block_reason(url: str) -> Optional[str]:
     except socket.gaierror:
         return None  # unresolvable: the browser will fail to load it anyway
     for info in infos:
-        if _is_internal_address(info[4][0]):
+        if is_internal_address(info[4][0]):
             return f"{host} resolves to an internal address"
     return None
 

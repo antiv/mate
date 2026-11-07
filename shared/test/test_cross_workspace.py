@@ -1866,5 +1866,188 @@ class TestThirdReviewOfPhase2(_TwoWorkspaces):
                          "http://127.0.0.1:11434/v1")
 
 
+class TestFourthReviewOfPhase2(_TwoWorkspaces):
+    """The paths the fourth review of phase 2 found (#277, 2i)."""
+
+    def _as(self, user_id: str) -> TestClient:
+        return TestClient(auth_server.app, cookies=_signed_in(user_id))
+
+    def test_drive_s_mcp_server_is_the_default_workspace_s(self):
+        from fastapi import FastAPI
+        from shared.utils.mcp.google_drive_mcp_server import GoogleDriveMCPServer
+        app = FastAPI()
+        GoogleDriveMCPServer(app, gdrive_mcp_available=True)
+        client = TestClient(app)
+        path = "/gdrive/mcp/tools/list"
+        for headers, expected in (({"Authorization": f"Bearer {PATS[ALICE]}"}, 200),
+                                  ({"Authorization": f"Bearer {PATS[BOB]}"}, 403),
+                                  (_platform_admin(B), 200)):
+            self.assertEqual(client.post(path, headers=headers).status_code, expected, headers)
+
+    def test_a_name_taken_after_a_delete_inherits_no_ratings(self):
+        # Left by A's agent of that name, deleted before B took the name
+        session = self.Session()
+        left = ResponseFeedback(session_id="s-a", message_id="m-a", agent_name=B_ROOT,
+                                project_id=self.ids["project_a"], rating="down",
+                                comment="A_ONLY", question="A_ONLY", answer="A_ONLY")
+        session.add(left)
+        session.commit()
+        left_id = left.id
+        session.close()
+        bob = self._as(BOB)
+        listed = bob.get("/dashboard/api/evals/feedback")
+        self.assertEqual(listed.status_code, 200)
+        self.assertNotIn("A_ONLY", listed.text)
+        self.assertIn(B_MARKER, listed.text)
+        self.assertEqual(bob.post("/dashboard/api/evals/improve/propose",
+                                  json={"feedback_id": left_id}).status_code, 404)
+        self.assertEqual(bob.post("/dashboard/api/evals", json={
+            "agent_name": B_ROOT, "input": "q", "expected_output": "a",
+            "source_feedback_id": left_id}).status_code, 400)
+
+    def test_a_trace_recorded_in_another_workspace_is_not_shown(self):
+        session = self.Session()
+        session.execute(text(
+            "CREATE TABLE trace_spans (id INTEGER PRIMARY KEY, trace_id TEXT, span_id TEXT, "
+            "parent_span_id TEXT, name TEXT, kind TEXT, start_time DATETIME, end_time DATETIME, "
+            "duration_ms INTEGER, attributes TEXT, status TEXT, error_message TEXT)"))
+        now = datetime.now()
+        for trace, workspace_id in (("trace-of-a", A), ("trace-of-b", B)):
+            session.execute(text(
+                "INSERT INTO trace_spans (trace_id, span_id, name, start_time, end_time, attributes) "
+                "VALUES (:t, 's', 'invoke_agent', :st, :st, :a)"),
+                {"t": trace, "st": now, "a": json.dumps(
+                    {"gen_ai.agent.name": B_ROOT, "mate.workspace.id": workspace_id})})
+        session.commit()
+        session.close()
+        response = self.client.get("/dashboard/api/traces", headers=_platform_admin(B))
+        self.assertEqual([t["trace_id"] for t in response.json()["traces"]], ["trace-of-b"])
+
+    def test_the_server_s_mail_and_shop_orders_are_the_default_workspace_s(self):
+        from shared.utils import platform_only, shop_service
+        from shared.utils.alert_service import AlertService
+        from shared.utils.tools.shop_tools import create_shop_tools_from_config
+        from shared.utils.trigger_runner import TriggerRunner
+        mailed = {"shop": {"vendor_email": "victim@example.com"}}
+        self.assertEqual(platform_only.features_added({"tool_config": json.dumps(mailed)}),
+                         {platform_only.SERVER_CREDENTIALS})
+        self.assertEqual(platform_only.features_added(
+            {"tool_config": json.dumps({"shop": {"shop_name": "S", "currency": "EUR"}})}), set())
+        response = self._as(BOB).post("/dashboard/api/agents", data=self._agent_form(
+            self.ids["project_b"], tool_config=json.dumps(mailed)))
+        self.assertEqual(response.status_code, 403, response.text)
+
+        # At run time: the cart works, the order is neither mailed nor stored
+        config = {"shop": {"vendor_email": "victim@example.com", "partner_key": "partner"}}
+        for project, expected in ((self.ids["project_a"], 1), (self.ids["project_b"], 0)):
+            tools = {f.__name__: f for f in create_shop_tools_from_config(
+                {"name": "x", "project_id": project, "tool_config": config})}
+            context = MagicMock()
+            context.state = {}
+            product = tools["search_products"](tool_context=context)["products"][0]["id"]
+            tools["add_to_cart"](product, tool_context=context)
+            with patch.object(shop_service, "persist_order") as stored, \
+                    patch.object(shop_service, "send_order_emails", return_value={}) as sent:
+                self.assertIn("order_id", tools["place_order"]("C", "c@example.com", tool_context=context))
+            self.assertEqual((stored.call_count, sent.call_count), (expected, expected), project)
+
+        # A trigger's and an alert rule's email
+        with patch.dict(os.environ, {"SMTP_HOST": "smtp.example.com"}), \
+                patch("shared.utils.trigger_runner.send_email", return_value=(True, "ok")) as sent:
+            with self.assertRaises(RuntimeError):
+                TriggerRunner._output_email(MagicMock(), {"to": "x@example.com"}, "t",
+                                            self.ids["project_b"], B_ROOT)
+            sent.assert_not_called()
+            TriggerRunner._output_email(MagicMock(), {"to": "x@example.com"}, "t",
+                                        self.ids["project_a"], A_ROOT)
+            sent.assert_called_once()
+        rule = MagicMock(workspace_id=B, destination_type="email")
+        rule.get_destination_config.return_value = {"to": "x@example.com"}
+        with patch("shared.utils.alert_service.send_email", return_value=(True, "ok")) as sent:
+            ok, detail = AlertService._deliver(MagicMock(), rule, {"message": "m"})
+            self.assertFalse(ok)
+            sent.assert_not_called()
+            rule.workspace_id = A
+            self.assertTrue(AlertService._deliver(MagicMock(), rule, {"message": "m"})[0])
+
+    def _agent_form(self, project_id: int, name: str = "zz_ws_b_new", **fields) -> dict:
+        return TestWorkspaceAdmins._agent_form(self, project_id, name, **fields)
+
+    def test_a_model_endpoint_redirect_does_not_reach_the_server_s_network(self):
+        import asyncio
+        import threading
+        from http.server import BaseHTTPRequestHandler, HTTPServer
+        from shared.utils import outbound
+        from shared.utils.langgraph.model_factory import create_chat_model
+        from shared.utils.utils import ModelContext, create_model
+        reached = []
+
+        class Inside(BaseHTTPRequestHandler):
+            def do_POST(self):
+                reached.append(self.path)
+                body = json.dumps({"id": "x", "object": "chat.completion", "created": 0, "model": "m",
+                                   "choices": [{"index": 0, "finish_reason": "stop", "message": {
+                                       "role": "assistant", "content": "inside"}}]}).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *args):
+                pass
+
+        inside = HTTPServer(("127.0.0.1", 0), Inside)
+
+        class Outside(BaseHTTPRequestHandler):
+            def do_POST(self):
+                self.rfile.read(int(self.headers.get("Content-Length", 0)))
+                self.send_response(307)
+                self.send_header("Location", f"http://localhost:{inside.server_port}/v1/chat/completions")
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+
+            def log_message(self, *args):
+                pass
+
+        outside = HTTPServer(("127.0.0.1", 0), Outside)
+        for server in (inside, outside):
+            threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(inside.shutdown)
+        self.addCleanup(outside.shutdown)
+        base_url = f"http://127.0.0.1:{outside.server_port}/v1"
+        address = outbound.internal_address
+
+        def public_127(url: str):
+            # 127.0.0.1 stands for a public host; localhost stays the server's own
+            return None if "127.0.0.1" in url else address(url)
+
+        async def ask(project_id: int) -> None:
+            context = ModelContext(agent_name="x", project_id=project_id)
+            model = create_model("openai/m", api_key="k", base_url=base_url, context=context)
+            try:
+                await model.llm_client.acompletion(
+                    model="openai/m", messages=[{"role": "user", "content": "q"}], tools=None,
+                    api_key="k", base_url=base_url, num_retries=0)
+            except Exception:
+                pass
+            chat = create_chat_model("openai/m", api_key="k", base_url=base_url, context=context)
+            try:
+                await chat.ainvoke("q")
+            except Exception:
+                pass
+
+        with patch.object(outbound, "internal_address", side_effect=public_127):
+            asyncio.run(ask(self.ids["project_b"]))
+            self.assertEqual(reached, [])
+            # The default workspace follows it, as in 1.x
+            asyncio.run(ask(self.ids["project_a"]))
+            self.assertEqual(len(reached), 2)
+
+    def test_conflicting_app_names_are_refused(self):
+        body = json.dumps({"app_name": A_ROOT, "appName": B_ROOT, "user_id": BOB}).encode()
+        self.assertEqual(proxy_routes._workspace_refusal("run_sse", BOB, body), "conflicting app names")
+
+
 if __name__ == "__main__":
     unittest.main()

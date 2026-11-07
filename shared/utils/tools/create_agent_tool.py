@@ -12,6 +12,7 @@ import json
 import logging
 from typing import Dict, Any, Optional
 from google.adk.tools.tool_context import ToolContext
+from sqlalchemy.orm import Session
 from ..database_client import get_database_client
 from ..models import DEFAULT_WORKSPACE_ID, AgentConfig
 from ..user_service import get_user_service
@@ -74,7 +75,7 @@ def _is_admin_user(tool_context: ToolContext) -> bool:
     return 'admin' in roles
 
 
-def _same_workspace(session, agent_name: str, current_agent_name: Optional[str]) -> bool:
+def _same_workspace(session: Session, agent_name: str, current_agent_name: Optional[str]) -> bool:
     """True if agent_name is an agent of the calling agent's workspace (D1). The tools
     reach no other workspace's agents, by name or as a parent. A caller with no config
     (a hardcoded agent) is in the default workspace."""
