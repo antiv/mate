@@ -227,7 +227,11 @@ def create_model(model_name: str = None, api_key: str = None, base_url: str = No
 
     logger.info(f"Creating LiteLLM model: {effective_model_name} "
                 f"(provider: {provider}; {context.describe()})")
-    return LiteLlm(effective_model_name, **litellm_kwargs)
+    from .outbound import guard_model_client
+    # An agent's own base URL outside the default workspace: no redirect into the
+    # server's network (shared/utils/outbound.py)
+    return guard_model_client(LiteLlm(effective_model_name, **litellm_kwargs), "llm_client",
+                              base_url, context.agent_name, context.project_id)
 
 
 

@@ -109,7 +109,10 @@ def _app_name(path: str, body: Optional[bytes]) -> Optional[str]:
 def _workspace_refusal(path: str, identity: str, body: Optional[bytes]) -> Optional[str]:
     """Why a non-admin request is refused for the agent's workspace, or None: they may
     reach an agent of a workspace they are a member of (shared/utils/workspaces.py)."""
-    app_name = _app_name(path, body)
+    try:
+        app_name = _app_name(path, body)
+    except ConflictingFieldError:
+        return "conflicting app names"
     if app_name is None:
         return None
     return _agent_refusal(app_name, identity, check_roles=bool(_A2A_PATH.match(path)))
@@ -398,7 +401,9 @@ async def proxy_adk(request: Request, path: str, username: str = Depends(get_aut
     from server.auth import is_admin_user
     admin = is_admin_user(request)
     if not admin:
-        refusal = _non_admin_refusal(path, username, body) or _workspace_refusal(path, username, body)
+        # The workspace check reads the database: off the event loop, as run_live does
+        refusal = (_non_admin_refusal(path, username, body)
+                   or await asyncio.to_thread(_workspace_refusal, path, username, body))
         if refusal:
             logger.warning("Proxy refused %s %s for %s: %s", request.method, path, username, refusal)
             raise HTTPException(status_code=403, detail="Not allowed")
@@ -545,7 +550,7 @@ async def proxy_adk(request: Request, path: str, username: str = Depends(get_aut
                 await r.aread()
                 await client.aclose()
                 if path == "list-apps" and r.status_code == 200:
-                    content = _apps_of_workspace(request, username, r.content)
+                    content = await asyncio.to_thread(_apps_of_workspace, request, username, r.content)
                     headers = {k: v for k, v in r.headers.items()
                                if k.lower() not in ("content-length", "content-encoding")}
                     return Response(content=content, status_code=200, headers=headers)

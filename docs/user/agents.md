@@ -110,7 +110,9 @@ built-in account, and anyone with the `admin` role):
 - **Hardcoded**, and a name that already has a folder in the server's `agents/`
   folder;
 - the **Google Drive**, **CV Tools**, **Google Calendar** and **Supabase Storage**
-  tools, which use the server's own accounts, shared by every workspace.
+  tools, which use the server's own accounts, shared by every workspace, and the
+  **Shop** tool's `vendor_email` and `partner_key` (the server's mail account, the
+  platform's **Shop Orders**).
 
 An owner or admin of a workspace who is not a platform administrator can't add these
 to an agent, or change them on one: saving is refused with "Only a platform
@@ -125,7 +127,8 @@ refused.
 Outside the Default workspace, the code executor, MCP servers with a command and
 those four tools don't run at all for now: the agent answers without them. There, a
 **Model Base URL** or MCP server URL on the server's own network (such as
-`localhost` or `10.x.x.x`) is refused too.
+`localhost` or `10.x.x.x`) is refused too, and a model endpoint that redirects
+elsewhere fails the answer instead of being followed.
 
 The same holds for a copy. A clone's **Name suffix** may hold only letters, digits
 and underscores. A clone, template import or template update can't create an agent

@@ -48,6 +48,9 @@ Every route except the health check needs a signed-in caller.
 
 ### 2. Google Drive MCP Server (`/gdrive/mcp`)
 
+It works with the installation's service account, so it answers a caller of the
+default workspace, or a platform administrator; another workspace's token gets 403.
+
 **Endpoints:**
 - `GET /gdrive/mcp/health` - Health check (no auth required)
 - `GET /gdrive/mcp` - Server info endpoint

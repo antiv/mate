@@ -262,6 +262,9 @@ Some agent settings run code with the server's rights or read its environment, a
   Drive) and `google_calendar` (the service account) and `supabase_storage` (one
   key, one bucket). Its value is the
   defining part, so pointing `google_calendar` at another `calendar_id` is a change.
+  The shop tool counts by its `vendor_email` (mailed with the server's SMTP account)
+  and `partner_key` (orders in the platform's Shop Orders) only (`SHOP_SERVER_PARTS`):
+  a shop with a catalog and a cart is any workspace's.
 
 On save, `DashboardServer._refuse_platform_only` answers 403 when a caller who is no
 platform administrator adds one of these, or changes the part of the config that
@@ -319,7 +322,11 @@ At run time, `may_run_code` refuses the code executor, stdio MCP servers and the
 server-credential tools to an agent outside the default workspace, in the tool
 factory, `mcp_tools.py` and
 LangGraph's `mcp_client.py`, until phase 3 lets a platform administrator enable them
-per workspace. A config that names its `project_id` is judged by that project's
+per workspace. The shop tool drops its `vendor_email` and `partner_key` there and
+still takes orders. A trigger's `email` output and an alert rule's `email`
+destination are refused the same way, as they send with the server's SMTP account.
+The Google Drive MCP server at `/gdrive/mcp` (`mcp_auth.require_drive_user`) answers
+403 to a request of another workspace unless the caller is a platform administrator. A config that names its `project_id` is judged by that project's
 workspace: a subagent made by delegation has its parent's project and a name with no
 row. An agent with no config and no project counts as the default workspace's. The
 check fails closed: without the database, or with a project that doesn't exist, the
@@ -346,6 +353,22 @@ point inside (a local Ollama, an MCP server beside MATE), and
 the check, so a name whose address changes before the request (DNS rebinding) is
 not caught. A refused webhook reports `refused: ...`, a refused MCP server is left
 out of the agent's tools, and a refused model endpoint fails the agent's build.
+
+Alert and trigger webhooks follow no redirect, and the MCP clients follow one only
+within the server's origin. LiteLLM and the OpenAI SDK follow any, so a public base
+URL could answer 307 to an internal one. For an agent outside the default workspace
+with a `model_base_url`, `guard_model_client` wraps the model's completion client
+(ADK's `llm_client`, ChatLiteLLM's `client`). While one of its calls runs, a context
+variable makes httpx's `send()` refuse a request to an internal address and follow no
+redirect, so a model call fails on a redirect instead of following it. The patch on
+httpx is installed the first time such a model is built, and other requests pass
+untouched. `OUTBOUND_ALLOW_PRIVATE_NETWORK=true` leaves the model unwrapped.
+
+Ratings and traces outlive the agent they are about (`agent_cleanup.py` keeps logs),
+and an agent's name is free again once it is deleted. So the eval pages keep a
+rating to the workspace by its `project_id` as well as its agent's name
+(`feedback_service.of_workspace`), and `_traces_in_workspace` leaves out a trace
+whose spans record another workspace in `mate.workspace.id`.
 
 `shared/test/test_cross_workspace.py` proves the scoping on the real app, with two
 workspaces. A platform administrator in workspace A calls every `/dashboard/api/`

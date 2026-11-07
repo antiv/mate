@@ -162,7 +162,7 @@ class FeedbackService:
         try:
             query = session.query(ResponseFeedback).filter(
                 ResponseFeedback.rating == 'down',
-                ResponseFeedback.agent_name.in_(agent_names_of(workspace_id)))
+                *of_workspace(workspace_id))
             if agent_name:
                 query = query.filter(ResponseFeedback.agent_name == agent_name)
             rows = query.order_by(ResponseFeedback.updated_at.desc()).limit(limit).all()
@@ -198,7 +198,7 @@ class FeedbackService:
         try:
             rows = session.query(ResponseFeedback.agent_name).filter(
                 ResponseFeedback.rating == 'down',
-                ResponseFeedback.agent_name.in_(agent_names_of(workspace_id)),
+                *of_workspace(workspace_id),
             ).distinct().all()
             return sorted(r[0] for r in rows)
         except Exception as e:
@@ -206,6 +206,13 @@ class FeedbackService:
             return []
         finally:
             session.close()
+
+
+def of_workspace(workspace_id: int) -> tuple:
+    """Filters keeping the ratings of the workspace's agents. By project as well as by
+    name: a deleted agent's ratings stay, and its name may be taken in another workspace."""
+    return (ResponseFeedback.agent_name.in_(agent_names_of(workspace_id)),
+            *in_projects_of(ResponseFeedback.project_id, workspace_id))
 
 
 _feedback_service: Optional[FeedbackService] = None

@@ -37,7 +37,7 @@ only be adjusted there.
 | **Memory Blocks** | Read and update the project's shared notes. See [Memory blocks](memory-blocks.md). | Nothing. |
 | **Create Agent** | Create, read, change and delete other agents. | Nothing. Give this only to agents you trust to redesign your setup. |
 | **Code Executor** | Run Python and shell commands on the server. | See the warning below. |
-| **Shop (E-commerce)** | Show a catalog, keep a cart, take orders. Edit the catalog, currency and shop name in the JSON. | `vendor_email` to email orders; `partner_key` to list them under **Shop Orders**. |
+| **Shop (E-commerce)** | Show a catalog, keep a cart, take orders. Edit the catalog, currency and shop name in the JSON. | `vendor_email` to email orders; `partner_key` to list them under **Shop Orders**. These two are set by a platform administrator, and work only in the Default workspace; elsewhere the shop takes orders without them. |
 | **Subagent Delegation** | Split a task and hand the parts to temporary helper agents that run in parallel. | Nothing. Limits and the helpers' model are set in the JSON. |
 | **CV Tools** | Work with CVs stored in Google Drive. | The Google service account. Set by a platform administrator, and only in the Default workspace. |
 | Documentation (`docs`) | Search and read MATE's own documentation. Admins get every section, anyone else the user guides. See [Help in the dashboard](help.md). | Nothing. There is no checkbox; add `"docs": true` in the JSON. |

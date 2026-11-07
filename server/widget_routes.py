@@ -22,6 +22,7 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, File, Form, UploadFile, Query
 from fastapi.responses import HTMLResponse, StreamingResponse, FileResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
+from sqlalchemy.orm import Session
 
 from shared.utils.database_client import get_database_client
 from shared.utils.models import WidgetApiKey, AgentConfig, Project
@@ -999,7 +1000,7 @@ async def delete_widget_file(file_id: int, wk: WidgetApiKey = Depends(verify_wid
 # Dashboard API — widget key management
 # ---------------------------------------------------------------------------
 
-def _workspace_key(session, ctx: RequestContext, key_id: int) -> WidgetApiKey:
+def _workspace_key(session: Session, ctx: RequestContext, key_id: int) -> WidgetApiKey:
     """The widget key, if its project is the caller's workspace's; 404 otherwise."""
     wk = session.query(WidgetApiKey).filter(
         WidgetApiKey.id == key_id, *in_projects_of(WidgetApiKey.project_id, ctx.workspace_id)).first()
@@ -1008,7 +1009,7 @@ def _workspace_key(session, ctx: RequestContext, key_id: int) -> WidgetApiKey:
     return wk
 
 
-def _require_target(session, ctx: RequestContext, project_id=None,
+def _require_target(session: Session, ctx: RequestContext, project_id: Optional[int] = None,
                     agent_name: Optional[str] = None) -> None:
     """404 unless the key's project and agent are the caller's workspace's."""
     missing = missing_from(session, ctx.workspace_id, project_id=project_id, agent_name=agent_name)
