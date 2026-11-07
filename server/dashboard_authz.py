@@ -18,6 +18,7 @@ PLATFORM_ONLY_PATHS act on the whole installation and need a platform
 administrator (documents/design/workspaces.md, "What stays platform-only").
 """
 
+import asyncio
 import logging
 import re
 from typing import Callable
@@ -101,10 +102,16 @@ class DashboardAuthzMiddleware(BaseHTTPMiddleware):
         if not actor:
             # Nobody signed in: the route's own dependency answers 401 or redirects
             return await call_next(request)
-        ctx = context_for(request, actor)
         platform_only = is_platform_only(request.method, path)
+
+        def check() -> bool:
+            # Resolving the workspace and the roles reads the database: off the event
+            # loop. The route's dependency then reuses the context (context_for).
+            ctx = context_for(request, actor)
+            return ctx.is_platform_admin if platform_only else ctx.is_admin
+
         try:
-            allowed = ctx.is_platform_admin if platform_only else ctx.is_admin
+            allowed = await asyncio.to_thread(check)
         except HTTPException as exc:  # a workspace the caller can't open: 404
             return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
         if allowed:

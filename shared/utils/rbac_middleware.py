@@ -46,6 +46,10 @@ class RBACMiddleware:
                 logger.error(f"RBAC: {error_msg} for user {user_id}")
                 return False, error_msg
 
+            # A new user's membership was committed by get_or_create_user's own session.
+            # On MySQL (REPEATABLE READ) this transaction would still read as of its
+            # first query and miss it: start a new one.
+            session.rollback()
             access = caller_access(session, user, workspace_id)
             if access is None:
                 # Says no more than an unknown agent would

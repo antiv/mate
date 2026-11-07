@@ -995,6 +995,14 @@ class DashboardServer:
             if workspace_id != ctx.workspace_id:
                 raise HTTPException(status_code=404, detail=f"{what} not found")
 
+    @staticmethod
+    def _body_project_id(value: Any) -> int:
+        """A project id from a request body: 400 when it isn't a number."""
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="project_id must be a project's id")
+
     def _require_scope_in_workspace(self, ctx: RequestContext, scope: str, scope_id: str) -> None:
         """404 unless a budget's or an alert rule's agent or project is the workspace's.
         A user scope names a person, who may belong to several workspaces; a rule on
@@ -1324,7 +1332,7 @@ class DashboardServer:
                 except (json.JSONDecodeError, TypeError):
                     return {}
 
-            def _in_workspace(rows):
+            def _in_workspace(rows: List[Any]) -> List[Any]:
                 if workspace_id is None:
                     return rows
                 keep = self._traces_in_workspace(session, [
@@ -2299,13 +2307,16 @@ class DashboardServer:
             errors = []
             projects = {pid for (pid,) in session.query(self.Project.id).filter(
                 self.Project.workspace_id == workspace_id)}
+            # An agent or block naming no project goes to project 1, as in 1.x; in
+            # another workspace, which doesn't have it, to its oldest project
+            no_project = 1 if workspace_id == DEFAULT_WORKSPACE_ID else min(projects, default=1)
             names = [a.get("name") for a in import_data["agents"] if isinstance(a, dict)]
             existing = {n for (n,) in session.query(self.AgentConfig.name).filter(self.AgentConfig.name.in_(names))}
             new_names = set(names) - existing
             
             for agent_data in import_data["agents"]:
                 try:
-                    project_id = int(agent_data.get("project_id") or 1)
+                    project_id = int(agent_data.get("project_id") or no_project)
                     if project_id not in projects:
                         skipped_count += 1
                         errors.append(f"Agent '{agent_data['name']}': project {project_id} not found")
@@ -2396,7 +2407,7 @@ class DashboardServer:
                     from shared.utils.models import MemoryBlock
                     for block_data in import_data["memory_blocks"]:
                         try:
-                            block_project_id = int(block_data.get("project_id") or 1)
+                            block_project_id = int(block_data.get("project_id") or no_project)
                             block_label = block_data.get("label", "").strip()
                             if not block_label:
                                 continue
@@ -7133,7 +7144,9 @@ class DashboardServer:
                 project_id = config.project_id
                 before = self._build_config_snapshot(config)
                 cases = (session.query(self.TestCase)
-                         .filter(self.TestCase.agent_name == config.name, self.TestCase.is_active.is_(True))
+                         .filter(self.TestCase.agent_name == config.name,
+                                 self.TestCase.workspace_id == ctx.workspace_id,
+                                 self.TestCase.is_active.is_(True))
                          .order_by(self.TestCase.id).all())
                 session.expunge_all()
             finally:
@@ -7216,7 +7229,8 @@ class DashboardServer:
                             .filter(self.AgentConfigVersion.agent_config_id == config.id)
                             .order_by(self.AgentConfigVersion.version_number.desc()).limit(50).all())
                 active = session.query(self.TestCase).filter(
-                    self.TestCase.agent_name == config.name, self.TestCase.is_active.is_(True)).count()
+                    self.TestCase.agent_name == config.name, self.TestCase.workspace_id == ctx.workspace_id,
+                    self.TestCase.is_active.is_(True)).count()
                 return {"name": config.name, "model_name": config.model_name,
                         "instruction": config.instruction or "", "active_cases": active,
                         "versions": [{"id": v.id, "version_number": v.version_number, "tag": v.tag,
@@ -7282,7 +7296,9 @@ class DashboardServer:
 
                 if mode == "suite":
                     rows = (session.query(self.TestCase)
-                            .filter(self.TestCase.agent_name == config.name, self.TestCase.is_active.is_(True))
+                            .filter(self.TestCase.agent_name == config.name,
+                                    self.TestCase.workspace_id == ctx.workspace_id,
+                                    self.TestCase.is_active.is_(True))
                             .order_by(self.TestCase.id).all())
                     if not rows:
                         raise HTTPException(status_code=400, detail="This agent has no active test cases")
@@ -8120,7 +8136,7 @@ class DashboardServer:
             if config_error:
                 raise HTTPException(status_code=400, detail=config_error)
             self._require_in_workspace(ctx, agent_name=body.get("agent_name", ""),
-                                       project_id=int(body.get("project_id", 0)))
+                                       project_id=self._body_project_id(body.get("project_id", 0)))
             session = self.db_client.get_session()
             if not session:
                 raise HTTPException(status_code=500, detail="Database unavailable")
@@ -8151,7 +8167,7 @@ class DashboardServer:
                     description=body.get("description", ""),
                     trigger_type=trigger_type,
                     agent_name=body.get("agent_name", ""),
-                    project_id=int(body.get("project_id", 0)),
+                    project_id=self._body_project_id(body.get("project_id", 0)),
                     prompt=body.get("prompt", ""),
                     cron_expression=body.get("cron_expression"),
                     webhook_path=webhook_path,
@@ -8206,7 +8222,7 @@ class DashboardServer:
                 if "agent_name" in body or "project_id" in body:
                     self._require_in_workspace(
                         ctx, agent_name=body.get("agent_name", trigger.agent_name),
-                        project_id=int(body.get("project_id", trigger.project_id)))
+                        project_id=self._body_project_id(body.get("project_id", trigger.project_id)))
 
                 # Block converting a working trigger into an unfireable type. A row
                 # already stored as one may still be saved unchanged, so a legacy
@@ -8240,7 +8256,7 @@ class DashboardServer:
                     if field in body:
                         setattr(trigger, field, body[field])
                 if "project_id" in body:
-                    trigger.project_id = int(body["project_id"])
+                    trigger.project_id = self._body_project_id(body["project_id"])
                 if "is_enabled" in body:
                     trigger.is_enabled = bool(body["is_enabled"])
                 if "require_signature" in body:

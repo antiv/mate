@@ -129,7 +129,8 @@ def rename_agent_rows(session: Session, old_name: str, new_name: str) -> Dict[st
     transaction, which has the agent under the new name already. Returns the number of
     rows moved per table. Does not commit.
 
-    Nothing under the new name is deleted. Outside the default workspace a name with
+    The agent's sub-agents in its workspace name the new name as their parent after
+    it. Nothing under the new name is deleted. Outside the default workspace a name with
     rows under it is taken (left_behind), so there are none; in it they were left by a
     1.x rename and the agent takes them over, as under 1.x. Where both names have the
     same ADK session, or state (app_states, user_states), the renamed agent's wins.
@@ -140,14 +141,29 @@ def rename_agent_rows(session: Session, old_name: str, new_name: str) -> Dict[st
     ADK's events reference their session by (app_name, user_id, id), with no ON UPDATE,
     so its sessions are copied under the new name, their events moved, and the old
     sessions deleted."""
-    from .models import (AgentFileSearchStore, AgentTrigger, AlertRule, ChannelIntegration,
-                         Credential, LangGraphSession, MemorySession, RateLimitConfig,
-                         ResponseFeedback, TestCase, WidgetApiKey, DEFAULT_WORKSPACE_ID)
+    from .models import (AgentConfig, AgentFileSearchStore, AgentTrigger, AlertRule,
+                         ChannelIntegration, Credential, LangGraphSession, MemorySession,
+                         RateLimitConfig, ResponseFeedback, TestCase, WidgetApiKey,
+                         DEFAULT_WORKSPACE_ID)
     from .workspaces import agent_workspace, in_projects_of
 
     if not old_name or not new_name or old_name == new_name:
         return {}
     moved: Dict[str, int] = {}
+    workspace_id = agent_workspace(session, new_name) or DEFAULT_WORKSPACE_ID
+
+    # Its sub-agents name it as their parent: the workspace's only (D1), the LIKE a
+    # coarse filter with _ and % escaped, the list compared exactly
+    children = 0
+    for child in session.query(AgentConfig).filter(
+            AgentConfig.parent_agents.contains(f'"{old_name}"', autoescape=True),
+            *in_projects_of(AgentConfig.project_id, workspace_id)).all():
+        parents = child.get_parent_agents()
+        if old_name in parents:
+            child.set_parent_agents([new_name if name == old_name else name for name in parents])
+            children += 1
+    if children:
+        moved["parent_agents"] = children
 
     def move(label: str, query: Query, column: ColumnElement) -> None:
         count = query.update({column: new_name}, synchronize_session=False)
@@ -164,7 +180,6 @@ def rename_agent_rows(session: Session, old_name: str, new_name: str) -> Dict[st
             ("memory_sessions", MemorySession, MemorySession.app_name),
             ("lg_sessions", LangGraphSession, LangGraphSession.app_name)):
         move(label, session.query(model).filter(column == old_name), column)
-    workspace_id = agent_workspace(session, new_name) or DEFAULT_WORKSPACE_ID
     move("response_feedback", session.query(ResponseFeedback).filter(
         ResponseFeedback.agent_name == old_name,
         *in_projects_of(ResponseFeedback.project_id, workspace_id)), ResponseFeedback.agent_name)
