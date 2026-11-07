@@ -16,6 +16,7 @@ import re
 import asyncio
 from typing import Optional, Dict, Any
 from pathlib import Path
+from urllib.parse import unquote, urlencode
 
 import httpx
 import websockets
@@ -55,8 +56,20 @@ _USER_PATH = re.compile(r"^apps/[^/]+/users/([^/]+)(/.*)?$")
 _RUN_PATHS = ("run", "run_sse")
 
 
+def _has_dot_segment(path: str) -> bool:
+    """Whether a path has a . or .. segment, plain or percent-encoded.
+
+    The checks below read the path as sent, but httpx resolves dot segments
+    before forwarding it: apps/bot/users/me/../alice/sessions would pass as
+    "me" and reach alice's sessions.
+    """
+    return any(seg in (".", "..") for seg in unquote(path).split("/"))
+
+
 def _non_admin_refusal(path: str, identity: str, body: Optional[bytes]) -> Optional[str]:
     """Why a non-admin request is refused, or None when it may go through."""
+    if _has_dot_segment(path):
+        return "dot segment in path"
     if path == "list-apps":
         return None
     match = _USER_PATH.match(path)
@@ -241,7 +254,9 @@ async def websocket_run_live(
         except Exception as e:
             logger.warning("Rate limit check failed for run_live: %s", e, exc_info=True)
 
-    backend_ws_url = f"ws://{ADK_HOST}:{ADK_PORT}/run_live?app_name={app_name}&user_id={user_id}&session_id={session_id}"
+    # Escaped: a session_id of "x&user_id=alice" would otherwise run as alice
+    query = urlencode({"app_name": app_name, "user_id": user_id, "session_id": session_id})
+    backend_ws_url = f"ws://{ADK_HOST}:{ADK_PORT}/run_live?{query}"
 
     try:
         await websocket.accept()

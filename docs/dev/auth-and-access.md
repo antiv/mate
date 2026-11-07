@@ -137,7 +137,16 @@ a non-admin, `_non_admin_refusal` allows only:
   same way and answers `400` to a body whose spellings disagree.
 
 Everything else the agent server offers is admin-only. The `/run_live` WebSocket
-applies the same rule.
+applies the same rule, and builds the agent server's query with `urlencode`, so a
+`session_id` cannot add a second `user_id`.
+
+A non-admin path with a `.` or `..` segment is refused before these checks, also
+when the dots are percent-encoded. The checks read the path as it was sent, and
+uvicorn passes a raw `../` (or a decoded `%2e%2e`) through, but httpx resolves dot
+segments when the proxy forwards the request: `apps/bot/users/<own id>/../<other
+id>/sessions` would pass as the caller's own path and reach the other user's
+sessions. An admin's path is forwarded as before. For the same reason the widget
+escapes the visitor id when it creates a session (`_create_adk_session`).
 
 ## Layer 3: the agent
 
