@@ -468,6 +468,11 @@ class AlertService:
 
     def _deliver(self, rule: AlertRule, payload: Dict[str, Any]) -> tuple:
         config = rule.get_destination_config()
+        if rule.destination_type == 'http' or rule.destination_type in _CHAT_MESSAGE_KEYS:
+            from .outbound import outbound_refusal
+            refusal = outbound_refusal(config.get('url', ''), workspace_id=rule.workspace_id)
+            if refusal:
+                return False, f"refused: {refusal}"
         if rule.destination_type == 'http':
             return post_json(config.get('url', ''), payload,
                              headers=config.get('headers') or {},

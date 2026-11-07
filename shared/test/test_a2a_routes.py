@@ -96,6 +96,31 @@ class TestA2ARoutes(unittest.TestCase):
         other = self._rpc("custom", "tasks/get", {"id": task_id}).json()
         self.assertIn("error", other, other)
 
+    def test_the_proxy_s_caller_is_the_user_the_agent_runs_as(self):
+        from google.adk.a2a.converters.request_converter import _get_user_id
+        from shared.utils.a2a_routes import A2A_USER_HEADER
+
+        class UserEcho(EchoExecutor):
+            async def execute(self, context, event_queue):
+                from a2a.server.tasks import TaskUpdater
+                from google.adk.a2a import _compat
+                updater = TaskUpdater(event_queue, context.task_id, context.context_id)
+                await _compat.enqueue_submitted_signal(event_queue, context=context)
+                await updater.add_artifact([_compat.make_text_part(f"as {_get_user_id(context)}")])
+                await updater.complete()
+
+        app = FastAPI()
+        register_a2a_routes(app, ["bot"], UserEcho)
+        client = TestClient(app)
+        message = {"jsonrpc": "2.0", "id": "1", "method": "message/send", "params": {"message": {
+            "role": "user", "messageId": "m", "contextId": "ctx-of-someone", "kind": "message",
+            "parts": [{"kind": "text", "text": "x"}]}}}
+        reply = client.post("/a2a/bot", json=message, headers={A2A_USER_HEADER: "bob@corp.com"})
+        self.assertIn("as bob@corp.com", json.dumps(reply.json()))
+        # No header (an admin's request, the MCP bridge): ADK's own id, as before
+        reply = client.post("/a2a/bot", json=message)
+        self.assertIn("as A2A_USER_ctx-of-someone", json.dumps(reply.json()))
+
     def test_send_message_the_1_x_method_name_works(self):
         from a2a.utils.constants import VERSION_HEADER
         r = self.client.post("/a2a/custom", headers={VERSION_HEADER: "1.0"}, json={

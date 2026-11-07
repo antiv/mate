@@ -10,7 +10,7 @@ generated: true
 
 # Configuration reference
 
-Every environment variable the code reads: **135** in total. Descriptions come from the comments in `.env.example`; defaults come from the code. A ⚠ marks a variable read with different defaults in different places.
+Every environment variable the code reads: **136** in total. Descriptions come from the comments in `.env.example`; defaults come from the code. A ⚠ marks a variable read with different defaults in different places.
 
 | Variable | Default | Description | Read in |
 |---|---|---|---|
@@ -103,6 +103,7 @@ Every environment variable the code reads: **135** in total. Descriptions come f
 | `OTEL_SERVICE_NAME` | `mate` | — | `shared/utils/tracing/tracing_config.py` |
 | `OTEL_TRACES_DB_EXPORT` | `true` | — | `shared/utils/tracing/tracing_config.py` |
 | `OTEL_TRACING_ENABLED` | `false` | OpenTelemetry Distributed Tracing (optional) | `auth_server.py`, `shared/utils/tracing/tracing_config.py` |
+| `OUTBOUND_ALLOW_PRIVATE_NETWORK` | `false` | Let workspaces other than Default send webhooks, MCP and model requests to private-network hosts | `shared/utils/outbound.py` |
 | `PORT` | `8000` | Only when running adk_main.py/langgraph_main.py directly; auth_server.py sets it from ADK_PORT | `adk_main.py`, `langgraph_main.py` |
 | `PRINT_CONTEXT_FEATURES_STATUS` | `true` | Log context-feature flags at agent startup | `shared/template_agent/agent.py` |
 | `RATE_LIMIT_ENABLED` | `false` | Rate Limits & Budgets (optional) | `auth_server.py`, `server/openai_routes.py`, `server/proxy_routes.py` |

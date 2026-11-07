@@ -80,12 +80,16 @@ class SessionStore:
         finally:
             db.close()
 
-    def get_events(self, session_id: str) -> List[Dict[str, Any]]:
-        """Events of a session by id alone, for callers that know no app or user."""
+    def get_events(self, session_id: str, app_name: str) -> List[Dict[str, Any]]:
+        """Events of the agent's session, for callers that know no user. The session id
+        alone would find another agent's session, of another workspace too (#277)."""
         db = self._db_session()
         try:
-            events = db.query(LangGraphEvent).filter(
-                LangGraphEvent.session_id == session_id
+            events = db.query(LangGraphEvent).join(
+                LangGraphSession, LangGraphSession.id == LangGraphEvent.session_id
+            ).filter(
+                LangGraphEvent.session_id == session_id,
+                LangGraphSession.app_name == app_name,
             ).order_by(LangGraphEvent.timestamp).all()
             return [e.to_adk_event() for e in events]
         finally:

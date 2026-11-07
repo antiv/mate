@@ -8,7 +8,10 @@ the platform's (documents/design/workspaces.md, "What stays platform-only"):
   server's environment: a base URL of one's own with the key ${MATE_SECRET_KEY} would
   send that secret to it;
 - a hardcoded agent: the hardcoded flag, or a name that an agents/<name>/ folder
-  already has, whose agent.py the agent server loads.
+  already has, whose agent.py the agent server loads;
+- a tool that acts with the installation's own credentials, shared by every
+  workspace: Google Drive, CV Tools (which read Drive) and Google Calendar (its
+  service account) and Supabase Storage (one key, one bucket).
 
 Two checks:
 - On save, features_added() lists what a config gives an agent that it didn't have,
@@ -17,9 +20,9 @@ Two checks:
   config keeps without naming it. The dashboard routes refuse
   it to a caller who is no platform administrator, so a workspace admin keeps what a
   platform administrator set up as it is, and can't add more.
-- At run time, may_run_code() refuses the code executor and stdio MCP servers to an
-  agent outside the default workspace, until phase 3 lets a platform administrator
-  enable them per workspace.
+- At run time, may_run_code() refuses the code executor, stdio MCP servers and the
+  server-credential tools to an agent outside the default workspace, until phase 3
+  lets a platform administrator enable them per workspace.
 """
 
 import json
@@ -35,6 +38,9 @@ CODE_EXECUTOR = "the code executor"
 STDIO_MCP = "an MCP server started as a command"
 ENV_REFERENCE = "a ${VAR} reference"
 HARDCODED = "a hardcoded agent"
+SERVER_CREDENTIALS = "a tool that uses the server's own credentials"
+# tool_config keys of the tools that act with the installation's credentials
+SERVER_CREDENTIAL_TOOLS = ("google_drive", "cv_tools", "google_calendar", "supabase_storage")
 KEPT_KEY = "a new base URL for its stored API key (enter the key again)"
 
 
@@ -98,6 +104,12 @@ def _defining(config: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     # The tool factory builds a tool for any value but None
     if isinstance(tools, dict) and tools.get("code_executor") is not None:
         found[CODE_EXECUTOR] = tools["code_executor"]
+    if isinstance(tools, dict):
+        # Its value too: a calendar_id names which of the account's calendars
+        credential_tools = {key: tools[key] for key in SERVER_CREDENTIAL_TOOLS
+                            if tools.get(key) is not None}
+        if credential_tools:
+            found[SERVER_CREDENTIALS] = credential_tools
     servers = _parsed(config.get("mcp_servers_config"))
     entries = servers.get("mcpServers") if isinstance(servers, dict) else None
     if isinstance(entries, dict):
@@ -149,8 +161,9 @@ def has_code_folder(agents_dir: Path, name: Optional[str]) -> bool:
 
 
 def may_run_code(agent_name: Optional[str], project_id: Optional[int] = None) -> bool:
-    """True if the agent may have the code executor and stdio MCP servers: an agent of
-    the default workspace, or with no config (a hardcoded agent). False when the check
+    """True if the agent may have the code executor, stdio MCP servers and the
+    server-credential tools: an agent of the default workspace, or with no config (a
+    hardcoded agent). False when the check
     can't run, as the tools are refused rather than handed out by accident.
 
     A config that names its project_id is judged by that project's workspace, not by

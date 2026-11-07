@@ -163,7 +163,7 @@ the first time `require_signature` is set.
 | `output_type` | Config keys | Behaviour |
 |---|---|---|
 | `memory_block` | `label`, `description` | `MemoryBlocksService.modify_block`, falling back to `create_block` when the block is not found. Any other refusal (a read-only block, a value over its limit) raises, so the run is recorded as `error`. Default label `trigger_{id}_output`. Recorded as changed by `trigger:{id}`. |
-| `http_callback` | `url`, `headers`, `timeout` (default 30) | POSTs `{"response": "...", "source": "mate_trigger"}`. A non-2xx reply raises, so the run is recorded as `error`. |
+| `http_callback` | `url`, `headers`, `timeout` (default 30) | POSTs `{"response": "...", "source": "mate_trigger"}`. A non-2xx reply raises, so the run is recorded as `error`, as does a URL on the server's own network outside the default workspace (`outbound.py`). |
 | `email` | `to`, `subject` | Plain text over SMTP with STARTTLS, using `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`. A send failure raises. |
 
 An unknown `output_type` logs a warning and does nothing.

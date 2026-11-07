@@ -837,8 +837,11 @@ class TestProxy(_TwoWorkspaces):
         super().setUp()
         self.reached = []
 
+        self.a2a_users = []
+
         def agent_server(request: httpx.Request) -> httpx.Response:
             self.reached.append(request.url.path)
+            self.a2a_users.append(request.headers.get("x-mate-a2a-user"))
             if request.url.path == "/list-apps":
                 if request.url.params.get("detailed") == "true":
                     return httpx.Response(200, json={"apps": [{"name": n} for n in self.APPS]})
@@ -929,6 +932,18 @@ class TestProxy(_TwoWorkspaces):
                 pass
         self.assertEqual(len(connected), 1)
         self.assertIn(f"app_name={A_ROOT}", connected[0])
+
+    def test_a2a_runs_as_the_member_not_as_an_id_the_client_picks(self):
+        self._as_member(ALICE)
+        spoofed = {"x-mate-a2a-user": BOB}
+        self.assertEqual(self.client.post(f"/a2a/{A_ROOT}", json={}, headers=spoofed).status_code, 200)
+        self.assertEqual(self.a2a_users, [ALICE])
+
+    def test_a2a_for_an_admin_keeps_a2a_s_own_id(self):
+        response = self.client.post(f"/a2a/{A_ROOT}", json={},
+                                    headers={**_platform_admin(A), "x-mate-a2a-user": BOB})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.a2a_users, [None])
 
     def test_a_member_reaches_their_own_workspace_s_agent(self):
         self._as_member(ALICE)
@@ -1689,6 +1704,166 @@ class TestSecondReviewOfPhase2(_TwoWorkspaces):
         session.close()
         response = bob.post(path, json={"version_id": self.b_rows["version_id"], "actual_output": B_MARKER})
         self.assertEqual(response.status_code, 200, response.text)
+
+
+class TestThirdReviewOfPhase2(_TwoWorkspaces):
+    """The paths the third review of phase 2 found (#277, 2h)."""
+
+    def _as(self, user_id: str) -> TestClient:
+        return TestClient(auth_server.app, cookies=_signed_in(user_id))
+
+    def test_a_multi_parent_instance_runs_code_only_where_its_agent_may(self):
+        from shared.utils.agent_manager import AgentManager
+        session = self.Session()
+        session.query(AgentConfig).filter_by(name="zz_ws_b_sub").update({
+            "parent_agents": json.dumps([B_ROOT, "zz_ws_b_other"]),
+            "tool_config": json.dumps({"code_executor": {}})})
+        session.commit()
+        sub = session.query(AgentConfig).filter_by(name="zz_ws_b_sub").one()
+        session.expunge(sub)
+        session.close()
+        manager = AgentManager.__new__(AgentManager)
+        manager.initialized_agents = {"zz_ws_b_sub": object()}
+        manager.db_client = MagicMock()
+        built = {}
+
+        def initialize(config: dict, children: list) -> object:
+            # What the tool factory gives the instance
+            built[config["name"]] = ToolFactory()._create_code_executor_tools(config)
+            return object()
+
+        with patch.object(manager, "_initialize_agent", side_effect=initialize), \
+                patch("shared.utils.agent_config_identity.record_for_row"), \
+                patch.object(ToolFactory, "_agent_has_widget_key", return_value=False), \
+                patch("shared.utils.tools.code_executor_tools.create_code_executor_tools_from_config",
+                      return_value=["executor"]):
+            manager._get_or_create_subagent_instance(sub, "zz_ws_b_other")
+        self.assertEqual(built, {"zz_ws_b_sub_zz_ws_b_other": []})
+
+    def test_spend_with_sub_agents_keeps_to_the_agent_s_workspace(self):
+        from shared.utils.token_usage_service import _agent_tree
+        # A sub-agent of A that names a parent by a name B uses (allowed in 1.x)
+        session = self.Session()
+        session.query(AgentConfig).filter_by(name="ws_a_sub").update(
+            {"parent_agents": json.dumps([A_ROOT, B_ROOT])})
+        session.commit()
+        self.assertEqual(_agent_tree(session, B_ROOT), [B_ROOT, "zz_ws_b_sub"])
+        self.assertEqual(_agent_tree(session, A_ROOT), [A_ROOT, "ws_a_sub"])
+        session.close()
+
+    def test_a_slack_user_from_before_1_6_joins_the_agent_s_workspace(self):
+        from server.slack_routes import _carry_over_roles
+        session = self.Session()
+        session.add(User(user_id="slack_U1", roles='["user", "finance"]'))
+        session.commit()
+        session.close()
+        _carry_over_roles("slack_T_B_U1", "slack_U1", B_ROOT)
+        session = self.Session()
+        self.assertEqual(session.query(WorkspaceMember.workspace_id, WorkspaceMember.agent_roles)
+                         .filter_by(user_id="slack_T_B_U1").all(), [(B, '["user", "finance"]')])
+        session.close()
+
+    def test_a_token_of_a_closed_workspace_stops_working(self):
+        bearer = {"Authorization": f"Bearer {PATS[BOB]}"}
+        self.assertEqual(self.client.get("/v1/models", headers=bearer).status_code, 200)
+        session = self.Session()
+        session.query(Workspace).filter_by(id=B).update(
+            {"deleted_at": datetime.now(timezone.utc).replace(tzinfo=None)})
+        session.commit()
+        session.close()
+        self.assertEqual(self.client.get("/v1/models", headers=bearer).status_code, 403)
+
+    def test_a_test_case_links_only_a_version_of_the_workspace(self):
+        session = self.Session()
+        a_root = session.query(AgentConfig).filter_by(name=A_ROOT).one()
+        a_version = AgentConfigVersion(agent_config_id=a_root.id, version_number=1,
+                                       config_snapshot=json.dumps({"name": A_ROOT}))
+        session.add(a_version)
+        session.commit()
+        a_version_id = a_version.id
+        session.close()
+        bob = self._as(BOB)
+        case = {"agent_name": B_ROOT, "input": "q", "expected_output": "a"}
+        self.assertEqual(bob.post("/dashboard/api/evals", json={**case, "version_id": a_version_id})
+                         .status_code, 404)
+        path = f"/dashboard/api/evals/{self.b_rows['test_case_id']}"
+        self.assertEqual(bob.put(path, json={"version_id": a_version_id}).status_code, 404)
+        self.assertEqual(bob.put(path, json={"version_id": self.b_rows["version_id"]}).status_code, 200)
+
+    def test_tools_on_the_server_s_credentials_are_platform_only(self):
+        from shared.utils import platform_only
+        for tools in ({"google_drive": True}, {"cv_tools": True},
+                      {"google_calendar": {"calendar_id": "c@x"}}, {"supabase_storage": True}):
+            with self.subTest(tools=tools):
+                # On save: refused to a workspace admin
+                response = self._as(BOB).post("/dashboard/api/agents", data=self._agent_form(
+                    self.ids["project_b"], tool_config=json.dumps(tools)))
+                self.assertEqual(response.status_code, 403, response.text)
+                # At run time: left out outside the default workspace
+                tool_type = next(iter(tools))
+                for project, expected in ((self.ids["project_a"], 1), (self.ids["project_b"], 0)):
+                    factory = ToolFactory()
+                    factory._tool_creators[tool_type] = lambda config: ["tool"]
+                    built = factory.create_tools({"name": "x", "project_id": project,
+                                                  "tool_config": json.dumps(tools)})
+                    self.assertEqual(built.count("tool"), expected, project)
+        # Another calendar is a change, as a new command for a stdio server is
+        before = {"tool_config": json.dumps({"google_calendar": {"calendar_id": "a@x"}})}
+        after = {"tool_config": json.dumps({"google_calendar": {"calendar_id": "b@x"}})}
+        self.assertEqual(platform_only.features_added(after, before), {platform_only.SERVER_CREDENTIALS})
+        self.assertEqual(platform_only.features_added(before, before), set())
+
+    def _agent_form(self, project_id: int, name: str = "zz_ws_b_new", **fields) -> dict:
+        return TestWorkspaceAdmins._agent_form(self, project_id, name, **fields)
+
+    def test_outbound_requests_of_a_workspace_stay_off_the_server_s_network(self):
+        from shared.utils import outbound
+        from shared.utils.langgraph import mcp_client
+        from shared.utils.trigger_runner import TriggerRunner
+        from shared.utils.utils import resolve_agent_endpoint
+        internal, public = "http://127.0.0.1:8001/api/reload-all-agents", "http://93.184.216.34/hook"
+        self.assertIsNotNone(outbound.outbound_refusal(internal, workspace_id=B))
+        self.assertIsNotNone(outbound.outbound_refusal("http://169.254.169.254/", workspace_id=B))
+        self.assertIsNone(outbound.outbound_refusal(public, workspace_id=B))
+        # The installation's own configuration may point inside (a local Ollama)
+        self.assertIsNone(outbound.outbound_refusal(internal, workspace_id=A))
+        self.assertIsNone(outbound.outbound_refusal(internal, agent_name="no_config_agent"))
+        self.assertIsNotNone(outbound.outbound_refusal(internal, project_id=self.ids["project_b"]))
+        with patch.dict(os.environ, {"OUTBOUND_ALLOW_PRIVATE_NETWORK": "true"}):
+            self.assertIsNone(outbound.outbound_refusal(internal, workspace_id=B))
+
+        # An alert rule's webhook, its test button too
+        session = self.Session()
+        session.query(AlertRule).filter_by(id=self.b_rows["rule_id"]).update(
+            {"destination_config": json.dumps({"url": internal})})
+        session.commit()
+        session.close()
+        with patch("shared.utils.alert_service.post_json") as sent:
+            response = self._as(BOB).post(f"/dashboard/api/alert-rules/{self.b_rows['rule_id']}/test")
+        self.assertIn("internal address", response.text)
+        sent.assert_not_called()
+
+        # A trigger's callback
+        with patch("shared.utils.trigger_runner.post_json") as sent:
+            with self.assertRaises(RuntimeError):
+                TriggerRunner._output_http_callback(MagicMock(), {"url": internal}, "x",
+                                                    self.ids["project_b"], B_ROOT)
+        sent.assert_not_called()
+
+        # An agent's MCP server, on both runtimes, and its model endpoint
+        servers = {"mcpServers": {"s": {"url": internal}}}
+        with patch.object(mcp_tools, "create_mcp_toolset_http", return_value="toolset") as made:
+            for project, expected in ((self.ids["project_a"], ["toolset"]), (self.ids["project_b"], [])):
+                self.assertEqual(mcp_tools.create_mcp_tools_from_config(
+                    {"name": "x", "project_id": project, "mcp_servers_config": servers}), expected)
+        self.assertEqual(made.call_count, 1)
+        self.assertIsNone(mcp_client._http_connection("s", {"url": internal}, "x", self.ids["project_b"]))
+        self.assertIsNotNone(mcp_client._http_connection("s", {"url": internal}, "x", self.ids["project_a"]))
+        endpoint = {"name": "x", "model_name": "openai/m", "model_base_url": "http://127.0.0.1:11434/v1"}
+        with self.assertRaises(ValueError):
+            resolve_agent_endpoint({**endpoint, "project_id": self.ids["project_b"]})
+        self.assertEqual(resolve_agent_endpoint({**endpoint, "project_id": self.ids["project_a"]})[0],
+                         "http://127.0.0.1:11434/v1")
 
 
 if __name__ == "__main__":

@@ -396,7 +396,8 @@ async def proxy_adk(request: Request, path: str, username: str = Depends(get_aut
     body = await request.body() if request.method in ["POST", "PUT", "PATCH"] else None
 
     from server.auth import is_admin_user
-    if not is_admin_user(request):
+    admin = is_admin_user(request)
+    if not admin:
         refusal = _non_admin_refusal(path, username, body) or _workspace_refusal(path, username, body)
         if refusal:
             logger.warning("Proxy refused %s %s for %s: %s", request.method, path, username, refusal)
@@ -483,7 +484,13 @@ async def proxy_adk(request: Request, path: str, username: str = Depends(get_aut
         except Exception as e:
             logger.error("Error preprocessing run_sse payload: %s", e, exc_info=True)
 
-    headers = {key: value for key, value in request.headers.items() if key.lower() not in ("host", "content-length")}
+    from shared.utils.a2a_routes import A2A_USER_HEADER
+    headers = {key: value for key, value in request.headers.items()
+               if key.lower() not in ("host", "content-length", A2A_USER_HEADER)}
+    if not admin and _A2A_PATH.match(path):
+        # A2A runs the agent as A2A_USER_<context id> otherwise, an id the client picks:
+        # it would continue anyone's session that has it (shared/utils/a2a_routes.py)
+        headers[A2A_USER_HEADER] = username
     headers = _inject_trace_headers(headers)
 
     client = httpx.AsyncClient(timeout=900.0)

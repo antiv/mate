@@ -3676,12 +3676,11 @@ class DashboardServer:
         """
         A session's events by id and agent, from whichever runtime holds it; None when
         neither does. A feedback row knows the session and agent but not the user,
-        which the LangGraph lookup in _get_session_detail requires; a LangGraph
-        session id is unique on its own.
+        which the LangGraph lookup in _get_session_detail requires.
         """
         try:
             from shared.utils.langgraph.session_store import get_session_store
-            events = get_session_store().get_events(session_id)
+            events = get_session_store().get_events(session_id, app_name)
             if events:
                 return events
         except Exception as e:
@@ -7386,6 +7385,8 @@ class DashboardServer:
             if source_feedback_id is not None and (
                     isinstance(source_feedback_id, bool) or not isinstance(source_feedback_id, int)):
                 raise HTTPException(status_code=400, detail="source_feedback_id must be an integer")
+            if body.get("version_id") is not None:
+                self._require_in_workspace(ctx, version_id=body["version_id"])
 
             if not self.db_client:
                 raise HTTPException(status_code=503, detail="Database not available")
@@ -7441,6 +7442,8 @@ class DashboardServer:
             """Update a test case's fields."""
             self._require_in_workspace(ctx, test_case_id=test_case_id)
             body = await request.json()
+            if body.get("version_id") is not None:
+                self._require_in_workspace(ctx, version_id=body["version_id"])
             if not self.db_client:
                 raise HTTPException(status_code=503, detail="Database not available")
             session = self.db_client.get_session()

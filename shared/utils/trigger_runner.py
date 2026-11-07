@@ -517,7 +517,7 @@ class TriggerRunner:
         if output_type == "memory_block":
             self._output_memory_block(trigger, cfg, agent_response)
         elif output_type == "http_callback":
-            self._output_http_callback(cfg, agent_response)
+            self._output_http_callback(cfg, agent_response, trigger.project_id, trigger.agent_name)
         elif output_type == "email":
             self._output_email(cfg, agent_response)
         else:
@@ -541,7 +541,8 @@ class TriggerRunner:
         if result.get("status") != "success":
             raise RuntimeError(f"memory_block output failed: {result.get('error_message')}")
 
-    def _output_http_callback(self, cfg: dict, text: str) -> None:
+    def _output_http_callback(self, cfg: dict, text: str, project_id: Optional[int] = None,
+                              agent_name: Optional[str] = None) -> None:
         """POST agent response as JSON to a configured URL.
 
         Raises on delivery failure: _execute_trigger_sync records the trigger result
@@ -551,6 +552,12 @@ class TriggerRunner:
         if error:
             raise RuntimeError(error)
         url = cfg["url"]
+        from shared.utils.outbound import outbound_refusal
+        # The workspace of the trigger's project, else of its agent
+        refusal = (outbound_refusal(url, project_id=project_id, agent_name=agent_name)
+                   if project_id is not None or agent_name else None)
+        if refusal:
+            raise RuntimeError(f"http_callback refused: {refusal}")
         ok, detail = post_json(
             url,
             payload={"response": text, "source": "mate_trigger"},

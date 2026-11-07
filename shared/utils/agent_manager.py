@@ -1084,7 +1084,10 @@ class AgentManager:
                         'output_schema': subagent_config.output_schema,
                         'include_contents': subagent_config.include_contents,
                         'guardrail_config': subagent_config.guardrail_config,
-                        'allowed_for_roles': subagent_config.allowed_for_roles
+                        'allowed_for_roles': subagent_config.allowed_for_roles,
+                        # The instance's name has no row: tools are judged by the
+                        # project (may_run_code, File Search stores)
+                        'project_id': subagent_config.project_id,
                     }
                     
                     new_agent = self._initialize_agent(agent_config_dict, [])

@@ -276,6 +276,13 @@ def create_mcp_tools_from_config(config: Dict[str, Any]) -> List[Any]:
                             {'url': url, 'headers': headers}, server_name, agent_name)
                         if resolved is None:
                             continue
+                        from ..outbound import outbound_refusal
+                        refusal = outbound_refusal(resolved['url'], agent_name=agent_name,
+                                                   project_id=config.get('project_id'))
+                        if refusal:
+                            logger.error(f"Skipping MCP server '{server_name}' for agent "
+                                         f"'{agent_name}': {refusal}")
+                            continue
                         mcp_toolset = create_mcp_toolset_http(
                             resolved['url'],
                             resolved['headers'],

@@ -60,19 +60,22 @@ def _workspace_of_caller(request: Request, user: User, token_workspace_id: Optio
     """A token's own workspace, while its owner may still use it; else the workspace
     the request names or the caller's default (server/request_context.py)."""
     from server.request_context import resolve_workspace
-    from shared.utils.workspaces import member_role
+    from shared.utils.workspaces import member_role, workspace_is_open
 
     platform_admin = user.user_id == AUTH_USERNAME or "admin" in user.get_roles()
     if token_workspace_id is None:
         return resolve_workspace(request, user.user_id, platform_admin)[0]
-    if not platform_admin:
-        session = get_database_client().get_session()
-        try:
-            if member_role(session, token_workspace_id, user.user_id) is None:
-                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
-                                    detail="The token's owner is no longer a member of its workspace")
-        finally:
-            session.close()
+    session = get_database_client().get_session()
+    try:
+        # Closed as the dashboard is, for a platform administrator's token too
+        if not workspace_is_open(session, token_workspace_id):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                                detail="The token's workspace is closed")
+        if not platform_admin and member_role(session, token_workspace_id, user.user_id) is None:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                                detail="The token's owner is no longer a member of its workspace")
+    finally:
+        session.close()
     return token_workspace_id
 
 

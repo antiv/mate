@@ -20,10 +20,20 @@ logger = logging.getLogger(__name__)
 
 
 def _agent_tree(session: Session, agent_name: str) -> List[str]:
-    """The agent and every agent below it, following agents_config.parent_agents."""
-    from .models import AgentConfig
+    """The agent and every agent below it, following agents_config.parent_agents
+    within the agent's workspace, as the runtime builds the tree (D1). An agent with
+    no config, or with no project, counts as the default workspace's."""
+    from sqlalchemy import or_
+    from .models import DEFAULT_WORKSPACE_ID, AgentConfig, Project
+    from .workspaces import agent_workspace
+    workspace_id = agent_workspace(session, agent_name) or DEFAULT_WORKSPACE_ID
+    in_workspace = Project.workspace_id == workspace_id
+    if workspace_id == DEFAULT_WORKSPACE_ID:
+        in_workspace = or_(in_workspace, Project.id.is_(None))
     children: Dict[str, List[str]] = {}
-    for config in session.query(AgentConfig).filter(AgentConfig.parent_agents.isnot(None)).all():
+    for config in session.query(AgentConfig).outerjoin(
+            Project, AgentConfig.project_id == Project.id).filter(
+            AgentConfig.parent_agents.isnot(None), in_workspace).all():
         for parent in config.get_parent_agents():
             children.setdefault(parent, []).append(config.name)
     tree, todo = [agent_name], [agent_name]

@@ -108,10 +108,13 @@ Through the auth server they are reached at the same paths, for example:
 - `http://localhost:8000/a2a/chess_mate_root`
 - `http://localhost:8000/a2a/chess_mate_root/.well-known/agent-card.json`
 
-The auth server forwards `/a2a/*` to the ADK server for admins only.
-`_non_admin_refusal` in `server/proxy_routes.py` lets a non-admin through only to
-`list-apps`, their own user paths and their own `/run` and `/run_sse`; everything
-else, `/a2a/*` included, gets `403`.
+The auth server forwards `/a2a/*` to the ADK server for admins, and for a member of
+the agent's workspace whose roles the agent's `allowed_for_roles` allow
+(`_workspace_refusal` in `server/proxy_routes.py`); anyone else gets `403`. For such
+a member the proxy sets `x-mate-a2a-user` to their id, and `CallerAsA2AUser` in
+`shared/utils/a2a_routes.py` makes it the A2A user, so the agent runs as the member,
+with their sessions and roles. An admin's request runs as ADK's
+`A2A_USER_<contextId>`, as before.
 
 ## MCP Integration
 
