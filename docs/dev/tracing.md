@@ -63,7 +63,7 @@ span of that agent carries it:
 |---|---|
 | `mate.agent.config_hash` | A 12-character SHA-256 prefix of the config snapshot (the fields a version stores, without `model_api_key`). Always set for an agent built from a row. |
 | `mate.agent.config_version_id`, `mate.agent.config_version` | The `agent_config_versions` row holding this config, and its number. Set only when one does. |
-| `mate.workspace.id` | The workspace of the agent's project when the agent was built (V046). |
+| `mate.workspace.id` | The workspace of the agent's project when the agent was built (V046). The trace pages show a trace in the workspace it records, and one that records none in the default workspace. |
 
 - **What was loaded, not what the row says now.** The identity is taken when the
   agent is built, at startup or on a reload, so a run after an unreloaded edit still
@@ -74,7 +74,11 @@ span of that agent carries it:
 - **Configs no version holds.** Versions are only taken by dashboard saves; a config
   changed by the `create_agent` tool, a template import or SQL matches none and is
   recorded by its hash alone.
-- **Agents with no row.** An agent built in code records nothing.
+- **Agents with no row.** An agent built in code records nothing, and so does a
+  runtime sub-agent of `subagent_delegation`. While a sub-agent runs,
+  `DELEGATING_AGENT`, a context variable in the same module, names the agent that
+  delegated to it, which the agent tools (`create_agent_tool._caller_workspace`)
+  judge it as.
 - **Multi-parent copies.** The copy built per parent (`<agent>_<parent>`) records its
   agent's config under its own name.
 - **LangGraph.** That runtime traces to LangSmith, not these spans, and records nothing.

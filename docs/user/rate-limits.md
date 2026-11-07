@@ -61,7 +61,9 @@ of each call, at the model's list price.
 
 ### Including sub-agents
 
-An agent's budgets count only the calls logged under that agent's name. A sub-agent
+An agent's budgets count only the calls logged under that agent's name, in its
+workspace: calls of an agent another workspace had under that name before don't
+count. A project's budgets likewise count only its workspace's calls. A sub-agent
 logs under its own name, so by default a root agent's budget leaves out what its
 sub-agents use. Tick **Include sub-agents** on an agent config to count the agent and
 every agent below it (following the parent agents set on each agent) in its daily

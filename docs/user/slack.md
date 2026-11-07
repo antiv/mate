@@ -72,6 +72,9 @@ Invite the bot to a channel with `/invite @YourBot`, then write
   roles are tracked per person. They appear on the **Users** page as
   `slack_<team id>_<user id>`. The same Slack user id in two workspaces is two MATE
   users, with their own roles, profile, connected accounts and memory.
+- For an agent outside MATE's Default workspace the id names that workspace too,
+  `slack_w<workspace id>_<team id>_<user id>`. Whatever team its integration names, a
+  Slack user there is never one of the Default workspace's users, with their roles.
 
 ### Upgrading from 1.5 or earlier
 

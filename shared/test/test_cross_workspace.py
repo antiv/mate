@@ -482,11 +482,17 @@ class TestLogsAndOperations(_TwoWorkspaces):
             "parent_span_id TEXT, name TEXT, kind TEXT, start_time DATETIME, end_time DATETIME, "
             "duration_ms INTEGER, attributes TEXT, status TEXT, error_message TEXT)"))
         now = datetime.now()
-        for trace, agent in (("trace-a", A_ROOT), ("trace-b", B_ROOT), ("trace-none", None)):
+        # A trace is the workspace's its model calls record; one that records none is
+        # the default workspace's, unless it names another workspace's agent
+        for trace, agent, workspace in (("trace-a", A_ROOT, A), ("trace-b", B_ROOT, B),
+                                        ("trace-none", None, None),
+                                        ("trace-b-unrecorded", B_ROOT, None)):
             attributes = {"gen_ai.operation.name": "invoke_agent",
                           "gen_ai.conversation.id": f"session-{trace}"}
             if agent:
                 attributes["gen_ai.agent.name"] = agent
+            if workspace:
+                attributes["mate.workspace.id"] = workspace
             session.execute(text(
                 "INSERT INTO trace_spans (trace_id, span_id, name, start_time, end_time, attributes) "
                 "VALUES (:t, 's', 'invoke_agent', :st, :st, :a)"),
@@ -2176,24 +2182,15 @@ class TestFifthReviewOfPhase2(_TwoWorkspaces):
     def test_a_name_with_rows_left_from_1_x_is_taken_outside_the_default_workspace(self):
         from shared.utils.tools import create_agent_tool
         session = self.Session()
-        # Left by agents renamed under 1.x: a LangGraph conversation, and a trace from
-        # before V046; a trace that recorded its workspace and a rating keep to theirs
+        # Left by an agent renamed under 1.x: a LangGraph conversation. A rating keeps to
+        # its project, and traces to their workspace (2k), so neither takes a name.
         session.add(LangGraphSession(id="lg-left", app_name="zz_left", user_id=ALICE))
         session.add(ResponseFeedback(session_id="s-r", message_id="m-r", agent_name="zz_rated",
                                      project_id=self.ids["project_b"], rating="down"))
-        session.execute(text(
-            "CREATE TABLE trace_spans (id INTEGER PRIMARY KEY, trace_id TEXT, span_id TEXT, "
-            "parent_span_id TEXT, name TEXT, kind TEXT, start_time DATETIME, end_time DATETIME, "
-            "duration_ms INTEGER, attributes TEXT, status TEXT, error_message TEXT)"))
-        for trace, span, attributes in (("old", "a", {"gen_ai.agent.name": "zz_traced"}),
-                                        ("new", "a", {"gen_ai.agent.name": "zz_recorded"}),
-                                        ("new", "b", {"mate.workspace.id": A})):
-            session.execute(text("INSERT INTO trace_spans (trace_id, span_id, attributes) "
-                                 "VALUES (:t, :s, :a)"), {"t": trace, "s": span, "a": json.dumps(attributes)})
         session.commit()
         session.close()
         bob = self._as(BOB)
-        for name, expected in (("zz_left", 409), ("zz_traced", 409), ("zz_recorded", 200), ("zz_rated", 200)):
+        for name, expected in (("zz_left", 409), ("zz_rated", 200)):
             response = bob.post("/dashboard/api/agents", data=self._agent_form(self.ids["project_b"], name=name))
             self.assertEqual(response.status_code, expected, f"{name}: {response.text}")
         context = MagicMock()
@@ -2248,6 +2245,188 @@ class TestFifthReviewOfPhase2(_TwoWorkspaces):
         session.close()
         response = TestClient(app).post("/gdrive/mcp/tools/list", headers=_platform_admin(B))
         self.assertEqual(response.status_code, 200)
+
+
+
+class TestSixthReviewOfPhase2(_TwoWorkspaces):
+    """The paths the sixth review of phase 2 found (#277, 2k)."""
+
+    def test_a_runtime_sub_agent_works_for_the_agent_that_delegated_to_it(self):
+        from types import SimpleNamespace
+        from shared.utils import agent_config_identity
+        from shared.utils.agent_config_identity import DELEGATING_AGENT
+        from shared.utils.tools import create_agent_tool as tools
+        servers = json.dumps({"mcpServers": {"s": {"command": "sh", "args": ["-c", "id"]}}})
+        # Named <app>_<task>_<hex>, with no config: until 2k, the default workspace's
+        sub_agent = SimpleNamespace(agent_name=f"{B_ROOT}_task_abc123")
+        with patch.object(tools, "_is_admin_user", return_value=True), \
+                patch.object(tools, "reload_agent_cache", return_value={"success": True}):
+            token = DELEGATING_AGENT.set(B_ROOT)
+            try:
+                self.assertEqual(tools.update_agent("ws_a_sub", mcp_servers_config=servers,
+                                                    tool_context=sub_agent)["status"], "error")
+                self.assertEqual(tools.delete_agent(A_ROOT, tool_context=sub_agent)["status"], "error")
+                refused = tools.update_agent("zz_ws_b_sub", mcp_servers_config=servers,
+                                             tool_context=sub_agent)
+                self.assertIn("platform administrator", refused["error_message"])
+            finally:
+                DELEGATING_AGENT.reset(token)
+            # Any other name with no config, no recorded build and no code folder
+            self.assertEqual(tools.update_agent("ws_a_sub", instruction="x",
+                                                tool_context=sub_agent)["status"], "error")
+            # A multi-parent instance works for the config it was built from
+            agent_config_identity.record_loaded("zz_ws_b_sub_inst", {"hash": "h", "workspace_id": B})
+            self.addCleanup(agent_config_identity._loaded.pop, "zz_ws_b_sub_inst", None)
+            instance = SimpleNamespace(agent_name="zz_ws_b_sub_inst")
+            self.assertEqual(tools.update_agent("ws_a_sub", instruction="x",
+                                                tool_context=instance)["status"], "error")
+            self.assertEqual(tools.update_agent("zz_ws_b_sub", instruction="x",
+                                                tool_context=instance)["status"], "success")
+            # Delegated by the default workspace's agent, as in 1.x
+            token = DELEGATING_AGENT.set(A_ROOT)
+            try:
+                self.assertEqual(tools.update_agent("ws_a_sub", mcp_servers_config=servers,
+                                                    tool_context=sub_agent)["status"], "success")
+            finally:
+                DELEGATING_AGENT.reset(token)
+        session = self.Session()
+        self.assertIsNotNone(session.query(AgentConfig).filter_by(name=A_ROOT).first())
+        self.assertIsNone(session.query(AgentConfig).filter_by(name="zz_ws_b_sub").one().mcp_servers_config)
+        session.close()
+
+    def test_delegation_names_the_parent_while_a_sub_agent_runs(self):
+        import asyncio
+        from shared.utils.agent_config_identity import DELEGATING_AGENT
+        from shared.utils.tools import subagent_delegation_tool as delegation
+        seen = []
+
+        def build(*args, **kwargs):
+            seen.append(DELEGATING_AGENT.get())
+            return [], []
+
+        task = delegation.SubtaskSpec(name="t", instruction="i")
+        with patch.object(delegation, "_build_subagent_tools", side_effect=build), \
+                patch.object(delegation, "_resolve_subagent_model", side_effect=RuntimeError("stop")):
+            result = asyncio.run(delegation._run_single_subagent(
+                task, B_ROOT, BOB, "s", {"name": B_ROOT, "project_id": self.ids["project_b"]},
+                None, 5.0, None))
+        self.assertEqual(result["status"], "error")
+        self.assertEqual(seen, [B_ROOT])
+        self.assertIsNone(DELEGATING_AGENT.get())
+
+    def test_a_slack_user_of_another_workspace_is_not_the_default_one_s(self):
+        import asyncio
+        from unittest.mock import AsyncMock
+        from server import slack_routes
+        self.assertEqual(slack_routes._slack_user_id("T1", "U1"), "slack_T1_U1")
+        self.assertEqual(slack_routes._slack_user_id("T1", "U1", A), "slack_T1_U1")
+        self.assertEqual(slack_routes._slack_user_id("T1", "U1", B), f"slack_w{B}_T1_U1")
+        run = AsyncMock(return_value="")
+        with patch.object(slack_routes, "run_agent_message", run):
+            for agent in (B_ROOT, A_ROOT):
+                asyncio.run(slack_routes._dispatch({"agent_name": agent, "team_id": None, "bot_token": "x"},
+                                                   "C1", "U1", "s", None, "hi"))
+        self.assertEqual([call.kwargs["user_id"] for call in run.await_args_list],
+                         [f"slack_w{B}_t_U1", "slack_t_U1"])
+        # A payload with no team id: not an integration that has one, and the oldest
+        # of those that have none
+        self.assertIsNone(slack_routes._get_integration(None))
+        session = self.Session()
+        session.add(ChannelIntegration(project_id=self.ids["project_a"], agent_name=A_ROOT, label="a"))
+        session.add(ChannelIntegration(project_id=self.ids["project_b"], agent_name=B_ROOT, label="b"))
+        session.commit()
+        session.close()
+        self.assertEqual(slack_routes._get_integration(None).agent_name, A_ROOT)
+        self.assertEqual(slack_routes._get_integration("T_B").agent_name, B_ROOT)
+
+    def test_spend_on_an_agent_or_project_is_its_own_workspace_s(self):
+        from datetime import timedelta
+        from shared.utils.token_usage_service import get_token_usage_service
+        service = get_token_usage_service()
+        since = datetime.now() - timedelta(days=1)
+        # Spent in A under the name B's agent has now, by an agent deleted there since
+        session = self.Session()
+        session.add(TokenUsageLog(request_id="r-a", agent_name=B_ROOT, status="SUCCESS",
+                                  prompt_tokens=500, response_tokens=500, cost_usd=5.0, workspace_id=A))
+        session.commit()
+        session.close()
+        self.assertEqual(service.get_agent_tokens_since(B_ROOT, since), 2)
+        self.assertEqual(service.get_agent_tokens_since(B_ROOT, since, include_sub_agents=True), 2)
+        self.assertEqual(service.get_project_tokens_since(self.ids["project_b"], since), 2)
+        self.assertEqual(service.get_spend_since("agent", B_ROOT, since)[0], 0.0)
+        self.assertEqual(service.get_spend_since("project", str(self.ids["project_b"]), since)[0], 0.0)
+
+    def test_a_rename_merges_what_is_left_under_the_new_name(self):
+        from shared.utils.agent_cleanup import rename_agent_rows
+        session = self.Session()
+        session.execute(text(
+            "CREATE TABLE sessions (app_name TEXT, user_id TEXT, id TEXT, state TEXT, "
+            "create_time DATETIME, update_time DATETIME, PRIMARY KEY (app_name, user_id, id))"))
+        session.execute(text(
+            "CREATE TABLE events (id TEXT, app_name TEXT, user_id TEXT, session_id TEXT, content TEXT, "
+            "PRIMARY KEY (id, app_name, user_id, session_id))"))
+        session.execute(text("CREATE TABLE app_states (app_name TEXT PRIMARY KEY, state TEXT)"))
+        session.execute(text("CREATE TABLE user_states (app_name TEXT, user_id TEXT, state TEXT, "
+                             "PRIMARY KEY (app_name, user_id))"))
+        for app, user, sid, event in (("zz_old", "u", "s1", "e-old"), ("zz_new", "u", "s1", "e-left"),
+                                      ("zz_new", "u", "s2", "e-left-2")):
+            session.execute(text("INSERT INTO sessions VALUES (:a, :u, :s, '{}', NULL, NULL)"),
+                            {"a": app, "u": user, "s": sid})
+            session.execute(text("INSERT INTO events VALUES (:e, :a, :u, :s, '')"),
+                            {"e": event, "a": app, "u": user, "s": sid})
+        session.execute(text("INSERT INTO app_states VALUES ('zz_old', 'old'), ('zz_new', 'left')"))
+        session.execute(text("INSERT INTO user_states VALUES ('zz_old', 'u', 'old'), "
+                             "('zz_new', 'u', 'left'), ('zz_new', 'v', 'left-v')"))
+        # The agent, under its new name in the default workspace, and what 1.x left under it
+        session.add(AgentConfig(name="zz_new", type="llm", project_id=self.ids["project_a"]))
+        session.add(WidgetApiKey(api_key="wk_left", project_id=self.ids["project_a"], agent_name="zz_new"))
+        # Ratings under the old name in both workspaces, and one under the new name in B
+        for message, name, project in (("m1", "zz_old", "project_a"), ("m2", "zz_old", "project_b"),
+                                       ("m3", "zz_new", "project_b")):
+            session.add(ResponseFeedback(session_id="s-6", message_id=message, agent_name=name,
+                                         project_id=self.ids[project], rating="down"))
+        session.commit()
+        rename_agent_rows(session, "zz_old", "zz_new")
+        session.commit()
+        ratings = dict(session.query(ResponseFeedback.message_id, ResponseFeedback.agent_name).filter(
+            ResponseFeedback.session_id == "s-6").all())
+        self.assertEqual(ratings, {"m1": "zz_new", "m2": "zz_old", "m3": "zz_new"})
+        self.assertEqual(session.query(WidgetApiKey.agent_name).filter_by(api_key="wk_left").scalar(), "zz_new")
+        self.assertEqual(sorted(session.execute(text("SELECT app_name, id FROM sessions")).all()),
+                         [("zz_new", "s1"), ("zz_new", "s2")])
+        self.assertEqual(sorted(session.execute(text("SELECT id, app_name FROM events")).all()),
+                         [("e-left-2", "zz_new"), ("e-old", "zz_new")])
+        self.assertEqual(session.execute(text("SELECT app_name, state FROM app_states")).all(),
+                         [("zz_new", "old")])
+        self.assertEqual(sorted(session.execute(text("SELECT user_id, state FROM user_states "
+                                                     "WHERE app_name = 'zz_new'")).all()),
+                         [("u", "old"), ("v", "left-v")])
+        session.close()
+
+    def test_a_trace_that_records_no_workspace_is_not_left_behind(self):
+        from shared.utils.agent_cleanup import left_behind
+        session = self.Session()
+        session.execute(text(
+            "CREATE TABLE trace_spans (id INTEGER PRIMARY KEY, trace_id TEXT, span_id TEXT, "
+            "parent_span_id TEXT, name TEXT, kind TEXT, start_time DATETIME, end_time DATETIME, "
+            "duration_ms INTEGER, attributes TEXT, status TEXT, error_message TEXT)"))
+        session.execute(text(
+            "INSERT INTO trace_spans (trace_id, span_id, name, start_time, end_time, attributes) "
+            "VALUES ('old', 'a', 'invoke_agent', :now, :now, :a)"),
+            {"now": datetime.now(), "a": json.dumps({"gen_ai.agent.name": "zz_traced",
+                                                     "gen_ai.conversation.id": "old-session"})})
+        session.commit()
+        self.assertFalse(left_behind(session, "zz_traced"))
+        session.close()
+        # B takes the name, and doesn't see the default workspace's trace from before
+        created = self.client.post("/dashboard/api/agents", headers=_platform_admin(B),
+                                   data=TestWorkspaceAdmins._agent_form(self, self.ids["project_b"],
+                                                                        "zz_traced"))
+        self.assertEqual(created.status_code, 200, created.text)
+        listed = self.client.get("/dashboard/api/traces", headers=_platform_admin(B)).json()["traces"]
+        self.assertEqual(listed, [])
+        listed = self.client.get("/dashboard/api/traces", headers=_platform_admin(A)).json()["traces"]
+        self.assertEqual(listed, [])
 
 
 if __name__ == "__main__":

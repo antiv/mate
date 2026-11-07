@@ -213,7 +213,8 @@ class TestEveryDeletePath(_Db):
     def test_the_create_agent_tool(self):
         from shared.utils.tools import create_agent_tool
         context = MagicMock()
-        context.agent_name = "root"
+        # An agent of the same project; a name with no config is refused (2k)
+        context.agent_name = "keep"
         with patch.object(create_agent_tool, "get_database_client", return_value=self.db), \
                 patch.object(create_agent_tool, "reload_agent_cache", return_value={"success": True}), \
                 patch.object(create_agent_tool, "_is_admin_user", return_value=True):

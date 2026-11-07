@@ -81,13 +81,31 @@ def _is_admin_user(tool_context: ToolContext) -> bool:
     return 'admin' in roles
 
 
+def _caller_workspace(session: Session, current_agent_name: Optional[str]) -> Optional[int]:
+    """The workspace the calling agent works for. A runtime sub-agent works for the
+    agent that delegated to it, an agent with a config for its project's workspace, a
+    multi-parent instance for that of the config it was built from, and a hardcoded
+    agent (code in agents/) for the default workspace. None for any other name, which
+    the tools refuse: such a name has no row, and counting it as default would hand an
+    agent of another workspace the default one's agents."""
+    from ..agent_config_identity import DELEGATING_AGENT, loaded
+    name = DELEGATING_AGENT.get() or current_agent_name
+    if not name:
+        return None
+    workspace = agent_workspace(session, name)
+    if workspace is not None:
+        return workspace
+    built = loaded(name)
+    if built and built.get("workspace_id") is not None:
+        return built["workspace_id"]
+    return DEFAULT_WORKSPACE_ID if has_code_folder(_AGENTS_DIR, name) else None
+
+
 def _same_workspace(session: Session, agent_name: str, current_agent_name: Optional[str]) -> bool:
     """True if agent_name is an agent of the calling agent's workspace (D1). The tools
-    reach no other workspace's agents, by name or as a parent. A caller with no config
-    (a hardcoded agent) is in the default workspace."""
-    current = (agent_workspace(session, current_agent_name) if current_agent_name else None) \
-        or DEFAULT_WORKSPACE_ID
-    return agent_workspace(session, agent_name) == current
+    reach no other workspace's agents, by name or as a parent."""
+    current = _caller_workspace(session, current_agent_name)
+    return current is not None and agent_workspace(session, agent_name) == current
 
 
 def _for_the_platform(session: Session, current_agent_name: Optional[str]) -> bool:
@@ -95,8 +113,7 @@ def _for_the_platform(session: Session, current_agent_name: Optional[str]) -> bo
     role, but another workspace's agent follows what that workspace's admin wrote, so
     its tools give no more than they may (shared/utils/platform_only.py): no feature
     only a platform administrator may add, and no name with a folder in agents/."""
-    return ((agent_workspace(session, current_agent_name) if current_agent_name else None)
-            or DEFAULT_WORKSPACE_ID) == DEFAULT_WORKSPACE_ID
+    return _caller_workspace(session, current_agent_name) == DEFAULT_WORKSPACE_ID
 
 
 def _get_current_agent_config(agent_name: str) -> Optional[Dict[str, Any]]:
