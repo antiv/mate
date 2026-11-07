@@ -155,7 +155,7 @@ class TestListRatedDown(_DbTestCase):
 
 class TestLangGraphEventsById(_DbTestCase):
 
-    def test_events_are_found_without_app_or_user(self):
+    def test_events_are_found_by_agent_without_user(self):
         from shared.utils.langgraph.session_store import SessionStore
         self._add(LangGraphSession(id="lg-1", app_name="app", user_id="u"))
         self._add(LangGraphEvent(id="e1", session_id="lg-1", author="user", invocation_id="inv",
@@ -164,7 +164,9 @@ class TestLangGraphEventsById(_DbTestCase):
                                  content=json.dumps(_text("model", "Hello")), timestamp=2.0))
         with patch("shared.utils.langgraph.session_store.get_database_client",
                    return_value=self.db_client):
-            events = SessionStore().get_events("lg-1")
+            events = SessionStore().get_events("lg-1", "app")
+            # The same session id with another agent: another workspace's, maybe
+            self.assertEqual(SessionStore().get_events("lg-1", "other_app"), [])
         self.assertEqual(extract_exchange(events, "inv"), ("Hi", "Hello"))
 
 

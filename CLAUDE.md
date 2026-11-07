@@ -111,6 +111,7 @@ The same applies to everything posted on GitHub: PR descriptions, issues, commen
 | `CSP_MODE` | Content-Security-Policy: `report-only` (default), `enforce` or `off` |
 | `CSP_EXTRA_SOURCES` | Extra hosts the CSP allows for scripts, styles, fonts, connections and frames |
 | `BROWSER_ALLOW_PRIVATE_NETWORK` | Let the server-side browser load private/loopback addresses (blocked by default) |
+| `OUTBOUND_ALLOW_PRIVATE_NETWORK` | Let workspaces other than Default reach private/loopback addresses from webhooks, MCP servers and model endpoints (blocked by default) |
 | `MATE_ALLOW_CODE_EXECUTOR_ON_WIDGET` | Allow `code_executor` on an agent that has a widget key (refused by default — it is not a sandbox) |
 | `WIDGET_LEGACY_ADMIN_KEY` | Transitional: let the public widget key work on `/widget/api` admin routes |
 | `ADK_HOST` / `ADK_PORT` | ADK server address (default `127.0.0.1:8001`) |

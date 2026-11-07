@@ -82,6 +82,8 @@ answers.
 
    A Slack or Discord webhook URL lets anyone who has it post in the channel, so the
    rule list shows "Slack webhook" or "Discord webhook" instead of the URL.
+   Outside the Default workspace, a URL on the server's own network (such as
+   `localhost` or `192.168.x.x`) is not sent to: the delivery reports `refused`.
 5. Set the **Cooldown**, then **Save**.
 
 ## How often you are notified

@@ -460,7 +460,8 @@ class AgentBuilder:
 
         raw_tools = get_tool_factory().create_tools(factory_config)
         tools = adapt_tools(raw_tools)
-        tools.extend(await create_mcp_tools(mcp_config, agent_name=app_name))
+        tools.extend(await create_mcp_tools(mcp_config, agent_name=app_name,
+                                            project_id=config.get("project_id")))
         return apply_confirmation_wrapping(tools, confirm_names, agent_name=app_name)
 
 

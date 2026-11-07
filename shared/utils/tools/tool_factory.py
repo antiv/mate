@@ -10,7 +10,7 @@ import logging
 import os
 from typing import Dict, List, Any, Optional
 
-from ..platform_only import may_run_code
+from ..platform_only import SERVER_CREDENTIAL_TOOLS, may_run_code
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +71,13 @@ class ToolFactory:
                 
                 for tool_type, tool_config_value in tool_config_dict.items():
                     if tool_type in self._tool_creators and tool_config_value is not None:
+                        if (tool_type in SERVER_CREDENTIAL_TOOLS
+                                and not may_run_code(config.get('name'), config.get('project_id'))):
+                            # The installation's credentials, shared by every workspace
+                            logger.error("Refusing %s to agent %s: outside the default workspace "
+                                         "(shared/utils/platform_only.py)",
+                                         tool_type, config.get('name'))
+                            continue
                         creator = self._tool_creators[tool_type]
                         if tool_type == 'custom_functions':
                             # Custom functions expect a list and config

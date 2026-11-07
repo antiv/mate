@@ -35,7 +35,7 @@ def _parse_json_maybe(value: Any, fallback: Any) -> Any:
 
 
 def _http_connection(server_name: str, server_config: Dict[str, Any],
-                     agent_name: str) -> Optional[Dict[str, Any]]:
+                     agent_name: str, project_id: Optional[int] = None) -> Optional[Dict[str, Any]]:
     """The connection for a remote server, or None to skip it (the reason is logged).
 
     Follows create_mcp_tools_from_config for ADK: ${VAR} in the url and headers is
@@ -58,6 +58,11 @@ def _http_connection(server_name: str, server_config: Dict[str, Any],
                      f"url '{url}' is not http or https. "
                      f"The agent will respond without this MCP tool.")
         return None
+    from shared.utils.outbound import outbound_refusal
+    refusal = outbound_refusal(url, agent_name=agent_name, project_id=project_id)
+    if refusal:
+        logger.error(f"Skipping MCP server '{server_name}' for agent '{agent_name}': {refusal}")
+        return None
     return {
         "transport": "sse" if transport == "sse" else "streamable_http",
         "url": url,
@@ -68,9 +73,9 @@ def _http_connection(server_name: str, server_config: Dict[str, Any],
 
 
 def _stdio_connection(server_name: str, server_config: Dict[str, Any],
-                      agent_name: str) -> Optional[Dict[str, Any]]:
+                      agent_name: str, project_id: Optional[int] = None) -> Optional[Dict[str, Any]]:
     from shared.utils.platform_only import may_run_code
-    if not may_run_code(agent_name):
+    if not may_run_code(agent_name, project_id):
         logger.error(f"Skipping MCP server '{server_name}' for agent '{agent_name}': a server "
                      f"started as a command is platform-only outside the default workspace")
         return None
@@ -101,7 +106,8 @@ def _stdio_connection(server_name: str, server_config: Dict[str, Any],
     }
 
 
-async def create_mcp_tools(mcp_servers_config: Any, agent_name: str = "unknown") -> List[Any]:
+async def create_mcp_tools(mcp_servers_config: Any, agent_name: str = "unknown",
+                           project_id: Optional[int] = None) -> List[Any]:
     """Build LangChain tools for every configured MCP server, remote or stdio."""
     if not mcp_servers_config:
         return []
@@ -113,9 +119,9 @@ async def create_mcp_tools(mcp_servers_config: Any, agent_name: str = "unknown")
     connections: Dict[str, Dict[str, Any]] = {}
     for server_name, server_config in mcp_servers.items():
         if server_config.get("url"):
-            connection = _http_connection(server_name, server_config, agent_name)
+            connection = _http_connection(server_name, server_config, agent_name, project_id)
         else:
-            connection = _stdio_connection(server_name, server_config, agent_name)
+            connection = _stdio_connection(server_name, server_config, agent_name, project_id)
         if connection is not None:
             connections[server_name] = connection
 

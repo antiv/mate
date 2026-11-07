@@ -65,6 +65,31 @@ def card_data_for(app_name: str, agents_dir: Optional[Path]) -> Dict[str, Any]:
     return data
 
 
+# The caller the auth server's proxy authenticated, for a non-admin (server/proxy_routes.py).
+# The proxy drops it from what clients send; the agent server is reached only from inside.
+A2A_USER_HEADER = "x-mate-a2a-user"
+
+
+class CallerAsA2AUser:
+    """ASGI middleware: an /a2a/ request carrying A2A_USER_HEADER runs as that user.
+
+    a2a-sdk passes scope["user"] to the agent executor, and ADK runs the agent as its
+    name; without it ADK makes the user A2A_USER_<context id>, an id the client picks.
+    A request without the header (an admin's, the MCP bridge's) keeps that."""
+
+    def __init__(self, app: Any) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Dict[str, Any], receive: Any, send: Any) -> None:
+        if scope.get("type") == "http" and scope.get("path", "").startswith("/a2a/"):
+            for name, value in scope.get("headers", []):
+                if name.decode("latin-1").lower() == A2A_USER_HEADER:
+                    from starlette.authentication import SimpleUser
+                    scope = {**scope, "user": SimpleUser(value.decode("utf-8", "replace"))}
+                    break
+        await self.app(scope, receive, send)
+
+
 def register_a2a_routes(app: Any, app_names: Iterable[str],
                         executor_factory: Callable[[str], Any],
                         agents_dir: Optional[Path] = None) -> int:
@@ -77,6 +102,7 @@ def register_a2a_routes(app: Any, app_names: Iterable[str],
     from a2a.server.tasks import InMemoryTaskStore
     from google.adk.a2a import _compat
 
+    app.add_middleware(CallerAsA2AUser)
     mounted = 0
     for app_name in app_names:
         try:

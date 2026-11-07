@@ -244,7 +244,8 @@ def resolve_agent_endpoint(config: Dict[str, Any]) -> Tuple[Optional[str], Optio
     Raises ValueError if the configured key references an environment variable
     that is not set. Falling back would be worse than failing: `base_url` names a
     third-party host, and LiteLLM's fallback would send the provider's own key
-    there.
+    there. Raises it too for a base URL outside the default workspace that reaches
+    the server's own network (shared/utils/outbound.py).
     """
     resolved, missing = resolve_env_placeholders({
         'base_url': config.get('model_base_url') or None,
@@ -260,6 +261,11 @@ def resolve_agent_endpoint(config: Dict[str, Any]) -> Tuple[Optional[str], Optio
     api_key = resolved['api_key']
 
     if base_url:
+        from .outbound import outbound_refusal
+        refusal = outbound_refusal(base_url, agent_name=config.get('name'),
+                                   project_id=config.get('project_id'))
+        if refusal:
+            raise ValueError(f"model endpoint refused: {refusal}")
         model_name = (config.get('model_name') or '').strip()
         if _is_gemini_model(model_name):
             logger.warning(

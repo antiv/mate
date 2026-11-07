@@ -12,6 +12,7 @@ covers:
   - server/request_context.py
   - server/workspace_routes.py
   - shared/utils/platform_only.py
+  - shared/utils/outbound.py
   - shared/utils/auth_utils.py
   - server/proxy_routes.py::_non_admin_refusal
   - shared/utils/dashboard/dashboard_server.py::_require_in_workspace
@@ -255,7 +256,12 @@ Some agent settings run code with the server's rights or read its environment, a
 - an MCP server started as a command (an `mcpServers` entry with no `url`);
 - `${VAR}` in `model_api_key`, `model_base_url` or `mcp_servers_config`;
 - a hardcoded agent: the `hardcoded` flag, or a name that has a folder in `agents/`,
-  whose `agent.py` the agent server would load.
+  whose `agent.py` the agent server would load;
+- a tool that acts with the installation's own credentials, shared by every
+  workspace (`SERVER_CREDENTIAL_TOOLS`): `google_drive`, `cv_tools` (which read
+  Drive) and `google_calendar` (the service account) and `supabase_storage` (one
+  key, one bucket). Its value is the
+  defining part, so pointing `google_calendar` at another `calendar_id` is a change.
 
 On save, `DashboardServer._refuse_platform_only` answers 403 when a caller who is no
 platform administrator adds one of these, or changes the part of the config that
@@ -309,8 +315,9 @@ Every path that makes agent names keeps to the same rules:
   before creating the project. One with a folder in `agents/` refuses the import
   with 409. A template sync skips such a new agent ("this name is taken").
 
-At run time, `may_run_code` refuses the code executor and stdio MCP servers to an
-agent outside the default workspace, in the tool factory, `mcp_tools.py` and
+At run time, `may_run_code` refuses the code executor, stdio MCP servers and the
+server-credential tools to an agent outside the default workspace, in the tool
+factory, `mcp_tools.py` and
 LangGraph's `mcp_client.py`, until phase 3 lets a platform administrator enable them
 per workspace. A config that names its `project_id` is judged by that project's
 workspace: a subagent made by delegation has its parent's project and a name with no
@@ -323,6 +330,22 @@ The File Search tool queries only the stores of the agent's workspace
 written by whoever may edit the agent, and a store name reaches the store under the
 installation's Gemini key. A store MATE has no row for, made in Gemini directly as
 1.x allowed, is kept in the default workspace only. A store left out is logged.
+
+### Requests to the server's own network
+
+The server makes some requests to URLs a workspace sets: an alert rule's webhook
+(the **Test** button too), a trigger's HTTP callback, an agent's remote MCP servers
+on both runtimes, and its `model_base_url` (`resolve_agent_endpoint`). They leave
+from inside, where the agent server on port 8001 answers without authentication.
+`shared/utils/outbound.py::outbound_refusal` refuses such a URL when it resolves to
+a private, loopback, link-local, reserved or multicast address and the URL belongs
+to a workspace other than the default one: the rule's `workspace_id`, else the
+workspace of the trigger's or agent's project. The default workspace may still
+point inside (a local Ollama, an MCP server beside MATE), and
+`OUTBOUND_ALLOW_PRIVATE_NETWORK=true` lets every workspace. The host is resolved at
+the check, so a name whose address changes before the request (DNS rebinding) is
+not caught. A refused webhook reports `refused: ...`, a refused MCP server is left
+out of the agent's tools, and a refused model endpoint fails the agent's build.
 
 `shared/test/test_cross_workspace.py` proves the scoping on the real app, with two
 workspaces. A platform administrator in workspace A calls every `/dashboard/api/`
@@ -378,6 +401,15 @@ On what passes, `_workspace_refusal` also refuses an agent of a workspace the
 non-admin can't use (`caller_access`, below), before the agent server is reached.
 `/run_live` makes the same check (`_agent_refusal`) for a signed-in non-admin and
 closes the WebSocket with 1008.
+
+For a non-admin's `/a2a/*` request the proxy sets `x-mate-a2a-user` to the caller,
+and drops that header from every request a client sends. On the agent server
+`a2a_routes.CallerAsA2AUser` puts it in the request's `scope["user"]`, which a2a-sdk
+hands to the executor, and ADK runs the agent as that user. Without it ADK runs the
+agent as `A2A_USER_<context id>`, an id the client picks: anyone sending another
+caller's `contextId` would continue that session, and RBAC would check a made-up
+user. Admin requests and the MCP bridge, which calls the agent server directly, send
+no header and keep ADK's id.
 
 `/list-apps` answers with the agents of the request's workspace, for everyone: the
 one `X-MATE-Workspace` names, else the caller's default. An app with no
