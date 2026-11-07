@@ -20,7 +20,8 @@ An eval is a question with the answer you expect. A set of them for one agent is
 suite. Running the suite before and after you change an agent tells you whether the
 change helped, and whether it broke something that used to work.
 
-Evals are in **Studio → Evals**.
+Evals are in **Studio → Evals**. The page lists the suites, test cases and scores
+of the workspace you are working in.
 
 ## Add a test case
 

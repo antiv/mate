@@ -29,7 +29,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from datetime import datetime, timezone
-from typing import Dict, List, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 from unittest.mock import MagicMock, patch
 
 from fastapi import HTTPException, params
@@ -38,7 +38,7 @@ from fastapi.testclient import TestClient
 import httpx
 import itsdangerous
 from sqlalchemy import create_engine, text
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 from starlette.requests import Request
 
@@ -2429,7 +2429,6 @@ class TestSixthReviewOfPhase2(_TwoWorkspaces):
         self.assertEqual(listed, [])
 
 
-
 class TestSeventhReviewOfPhase2(_TwoWorkspaces):
     """What the seventh review of phase 2 found (#277, 2l): none of it crosses a
     workspace."""
@@ -2447,13 +2446,18 @@ class TestSeventhReviewOfPhase2(_TwoWorkspaces):
         real_access = rbac_middleware.caller_access
         real_session = rbac_middleware.get_database_client().get_session
 
-        def get_session():
+        def get_session() -> Session:
             session = real_session()
             rollback = session.rollback
-            session.rollback = lambda: (events.append("rollback"), rollback())[1]
+
+            def logged_rollback() -> None:
+                events.append("rollback")
+                rollback()
+
+            session.rollback = logged_rollback
             return session
 
-        def access(session, user, workspace_id):
+        def access(session: Session, user: User, workspace_id: int) -> Optional[Tuple[bool, List[str]]]:
             events.append("access")
             return real_access(session, user, workspace_id)
 
@@ -2489,7 +2493,10 @@ class TestSeventhReviewOfPhase2(_TwoWorkspaces):
             self, self.ids["project_b"], "zz_ws_b_renamed"))
         self.assertEqual(renamed.status_code, 200, renamed.text)
         session = self.Session()
-        parents = lambda name: session.query(AgentConfig).filter_by(name=name).one().get_parent_agents()  # noqa: E731
+
+        def parents(name: str) -> List[str]:
+            return session.query(AgentConfig).filter_by(name=name).one().get_parent_agents()
+
         self.assertEqual(parents("zz_ws_b_sub"), ["zz_ws_b_renamed"])
         self.assertEqual(parents("ws_a_stray"), [B_ROOT, A_ROOT])
         session.close()
@@ -2507,17 +2514,12 @@ class TestSeventhReviewOfPhase2(_TwoWorkspaces):
             self.assertEqual(updated.status_code, 400, updated.text)
 
     def test_the_dashboard_check_runs_off_the_event_loop(self):
-        import asyncio
         from server import request_context
         on_loop = []
         real = request_context.context_for
 
-        def context_for(request, user_id):
-            try:
-                asyncio.get_running_loop()
-                on_loop.append(True)
-            except RuntimeError:
-                on_loop.append(False)
+        def context_for(request: Request, user_id: str) -> request_context.RequestContext:
+            on_loop.append(_on_event_loop())
             return real(request, user_id)
 
         with patch.object(request_context, "context_for", context_for):
@@ -2531,6 +2533,124 @@ class TestSeventhReviewOfPhase2(_TwoWorkspaces):
         session.close()
         agent = self._get(f"/dashboard/api/evals/playground/agent/{B_ROOT}", B).json()
         self.assertEqual(agent["active_cases"], 1)
+
+
+def _on_event_loop() -> bool:
+    """True when called on a running asyncio event loop."""
+    import asyncio
+    try:
+        asyncio.get_running_loop()
+        return True
+    except RuntimeError:
+        return False
+
+
+class TestReviewOfPhase2l(_TwoWorkspaces):
+    """What the review of 2l found (#277, 2m): none of it crosses a workspace."""
+
+    _get = TestLogsAndOperations._get
+
+    def test_a_parent_with_a_non_ascii_name_keeps_its_sub_agents(self):
+        # json.dumps stores "pomoćnik" as "pomo\\u0107nik"
+        session = self.Session()
+        parent = AgentConfig(name="zz_pomoćnik", type="llm", project_id=self.ids["project_b"])
+        session.add(parent)
+        session.add(AgentConfig(name="zz_dete", type="llm", project_id=self.ids["project_b"],
+                                parent_agents=json.dumps(["zz_pomoćnik"])))
+        session.commit()
+        parent_id = parent.id
+        session.close()
+
+        from shared.utils.agent_manager import AgentManager
+        manager = AgentManager.__new__(AgentManager)
+        manager.db_client = MagicMock(get_session=self.Session)
+        self.assertEqual([a.name for a in manager.get_subagents("zz_pomoćnik")], ["zz_dete"])
+
+        renamed = self.client.put(f"/dashboard/api/agents/{parent_id}", headers=_platform_admin(B),
+                                  data=TestWorkspaceAdmins._agent_form(self, self.ids["project_b"],
+                                                                       "zz_pomoćnik2"))
+        self.assertEqual(renamed.status_code, 200, renamed.text)
+        session = self.Session()
+        self.assertEqual(session.query(AgentConfig).filter_by(name="zz_dete").one().get_parent_agents(),
+                         ["zz_pomoćnik2"])
+        session.close()
+        self.assertEqual([a.name for a in manager.get_subagents("zz_pomoćnik2")], ["zz_dete"])
+
+    def test_the_eval_pages_count_the_workspace_s_cases(self):
+        session = self.Session()
+        session.add(TestCase(agent_name=B_ROOT, input="i", expected_output="o", workspace_id=B))
+        stray = TestCase(agent_name=B_ROOT, input="from A", expected_output="o", workspace_id=A)
+        version = AgentConfigVersion(agent_config_id=self.b_rows["config_id"], version_number=1,
+                                     config_snapshot=json.dumps({"name": B_ROOT}))
+        session.add_all([stray, version])
+        session.flush()
+        session.add(EvalResult(test_case_id=stray.id, version_id=version.id, score=0.5,
+                               passed=False, eval_method="exact_match"))
+        session.commit()
+        session.close()
+        cases = self._get(f"/dashboard/api/evals/agent/{B_ROOT}", B).json()["test_cases"]
+        self.assertIn("i", [case["input"] for case in cases])
+        self.assertNotIn("from A", [case["input"] for case in cases])
+        suites = self._get("/dashboard/api/evals", B).json()["suites"]
+        self.assertEqual([suite["avg_score"] for suite in suites if suite["agent_name"] == B_ROOT], [None])
+        history = self._get(f"/dashboard/api/evals/agent/{B_ROOT}/history", B).json()["history"]
+        self.assertEqual(history, [])
+
+    def test_a_platform_admin_s_workspace_is_resolved_off_the_event_loop(self):
+        from server import request_context
+        on_loop = []
+        real = request_context.resolve_workspace
+
+        def resolve_workspace(request: Request, user_id: str,
+                              is_platform_admin: bool) -> Tuple[int, Optional[str]]:
+            on_loop.append(_on_event_loop())
+            return real(request, user_id, is_platform_admin)
+
+        with patch.object(request_context, "resolve_workspace", resolve_workspace):
+            self._get("/dashboard/api/agents", B)
+        self.assertEqual(on_loop, [False])
+
+    def test_a_denial_is_audited_off_the_event_loop(self):
+        from shared.utils import audit_service
+        on_loop = []
+
+        def log(*args: Any, **kwargs: Any) -> None:
+            on_loop.append(_on_event_loop())
+
+        alice = TestClient(auth_server.app, cookies=_signed_in(ALICE))
+        with patch.object(audit_service, "log", log):
+            denied = alice.post("/dashboard/api/projects", json={"name": "x"})
+        self.assertEqual(denied.status_code, 403, denied.text)
+        self.assertEqual(on_loop, [False])
+
+    def test_a_trigger_s_project_id_must_be_a_whole_number(self):
+        body = {"name": "t", "agent_name": B_ROOT, "prompt": "p", "trigger_type": "cron",
+                "cron_expression": "0 * * * *", "output_type": "memory_block",
+                "output_config": {"label": "x"}}
+        for project_id in (True, 2.5):
+            created = self.client.post("/dashboard/api/triggers", headers=_platform_admin(B),
+                                       json={**body, "project_id": project_id})
+            self.assertEqual(created.status_code, 400, created.text)
+        created = self.client.post("/dashboard/api/triggers", headers=_platform_admin(B),
+                                   json={**body, "project_id": float(self.ids["project_b"])})
+        self.assertEqual(created.status_code, 200, created.text)
+
+    def test_an_import_naming_no_project_goes_to_the_oldest_without_project_1(self):
+        session = self.Session()
+        later = Project(name="zz-later", workspace_id=A)
+        session.add(later)
+        session.query(Project).filter_by(id=1).update({"workspace_id": B})
+        session.commit()
+        later_id = later.id
+        session.close()
+        result = self.client.post("/dashboard/api/agents/import", headers=_platform_admin(A),
+                                  json={"agents": [{"name": "zz_imported", "type": "llm",
+                                                    "model_name": "m"}]}).json()
+        self.assertEqual(result.get("imported_count"), 1, result)
+        session = self.Session()
+        self.assertEqual(session.query(AgentConfig).filter_by(name="zz_imported").one().project_id,
+                         later_id)
+        session.close()
 
 
 if __name__ == "__main__":

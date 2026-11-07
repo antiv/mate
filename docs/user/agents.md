@@ -181,8 +181,8 @@ EU AI Act requires the notice unless it is already obvious to the person.
   An import only writes to projects of the current workspace: an agent, memory block
   or trigger naming another project is skipped and listed in the result, and so is
   an agent whose name another workspace uses, even with overwriting on. An agent or
-  memory block that names no project goes to project 1 in the Default workspace, and
-  to the workspace's oldest project in another. An imported
+  memory block that names no project goes to project 1, and to the workspace's
+  oldest project when the workspace doesn't have project 1. An imported
   trigger goes to the project of its agent, and is skipped when that agent is not in
   the workspace.
 - **Save as Template** turns a root agent and its tree into a reusable template.
