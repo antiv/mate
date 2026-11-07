@@ -35,6 +35,7 @@ from typing import TYPE_CHECKING, Dict, List, Optional, Set, Tuple
 
 from sqlalchemy import delete, event, insert, or_, select, update
 from sqlalchemy.engine import Connection
+from sqlalchemy.sql.elements import ColumnElement
 from sqlalchemy.orm import Mapper, Session, attributes
 
 from .models import (
@@ -133,6 +134,20 @@ def _member_for_changed_roles(mapper: Mapper, connection: Connection, user: User
         connection.execute(update(members).where(
             members.c.user_id == user.user_id, members.c.workspace_id != DEFAULT_WORKSPACE_ID,
         ).values(agent_roles=wanted[1]))
+    elif elsewhere:
+        # pending or widget: no member anywhere, not only in the default workspace
+        _remove_elsewhere(connection, [user.user_id])
+
+
+def _remove_elsewhere(connection: Connection, user_ids: List[str]) -> int:
+    """Delete the users' memberships outside the default workspace; returns how many."""
+    members = WorkspaceMember.__table__
+    removed = 0
+    for i in range(0, len(user_ids), _DELETE_CHUNK):
+        removed += connection.execute(delete(members).where(
+            members.c.workspace_id != DEFAULT_WORKSPACE_ID,
+            members.c.user_id.in_(user_ids[i:i + _DELETE_CHUNK]))).rowcount
+    return removed
 
 
 def sync_default_members(session: Session) -> Dict[str, int]:
@@ -140,8 +155,9 @@ def sync_default_members(session: Session) -> Dict[str, int]:
 
     Reads users and members as plain rows, since widget visitors can make users a
     large table, and writes only what differs. A user who is a member of another
-    workspace only is left out of it. Returns how many memberships were added,
-    updated and removed. Safe to run on every start.
+    workspace only is left out of it, and one whose roles make them no member
+    (pending, widget) loses the memberships of the other workspaces too. Returns how
+    many memberships were added, updated and removed. Safe to run on every start.
     """
     connection = session.connection()
     members = WorkspaceMember.__table__
@@ -151,13 +167,17 @@ def sync_default_members(session: Session) -> Dict[str, int]:
     elsewhere = _members_elsewhere(connection)
     users = User.__table__
     changes = {}
+    no_member = []
     for user_id, raw_roles in connection.execute(select(users.c.user_id, users.c.roles)):
         wanted = _membership(raw_roles)
+        if wanted is None and user_id in elsewhere:
+            no_member.append(user_id)
         if user_id in elsewhere and user_id not in current:
             continue
         if current.get(user_id) != wanted:
             changes[user_id] = (current.get(user_id), wanted)
     counts = _write_members(connection, changes)
+    counts["removed"] += _remove_elsewhere(connection, no_member)
     session.commit()
     return counts
 
@@ -256,7 +276,7 @@ def agent_names_of(workspace_id: int):
         Project.workspace_id == workspace_id).scalar_subquery()
 
 
-def rows_of(model, workspace_id: Optional[int]) -> tuple:
+def rows_of(model: type, workspace_id: Optional[int]) -> tuple:
     """Filters keeping a table with a workspace_id column to the workspace's rows, or
     none for None (every workspace). On a log table a row with no workspace is about an
     agent with no config or about the installation, or the backfill hasn't reached it;
@@ -268,7 +288,7 @@ def rows_of(model, workspace_id: Optional[int]) -> tuple:
     return (model.workspace_id == workspace_id,)
 
 
-def in_projects_of(column, workspace_id: Optional[int]) -> tuple:
+def in_projects_of(column: ColumnElement, workspace_id: Optional[int]) -> tuple:
     """Filters keeping rows whose project_id `column` is one of the workspace's
     projects, or none for None. A row with no project counts as the default
     workspace's."""
@@ -291,7 +311,7 @@ def agents_outside(session: Session, workspace_id: int, names: List[str]) -> Lis
             if found.get(name, DEFAULT_WORKSPACE_ID) != workspace_id]
 
 
-def missing_from(session: Session, workspace_id: int, *, project_id=None,
+def missing_from(session: Session, workspace_id: int, *, project_id: Optional[int] = None,
                  agent_name: Optional[str] = None) -> Optional[str]:
     """"Project" or "Agent" when the one named isn't the workspace's, for the caller to
     404 on; None when both are. An agent with no config counts as the default

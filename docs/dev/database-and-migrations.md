@@ -174,7 +174,10 @@ request context (`docs/dev/auth-and-access.md`, "The workspace of a request"):
   - `agent_roles` are the user's roles without `admin`.
   - A user with the `widget` or `pending` role is no member. A widget reaches its
     workspace through its key's project. Approving a pending user replaces
-    `pending`, which adds the membership.
+    `pending`, which adds the membership. A role change to `pending` or `widget`
+    removes the user's memberships of every workspace, and the startup sync removes
+    those of a user who already has such a role; approving them again adds the
+    default workspace's only.
   - The auth server runs `sync_default_members()` at startup, before it starts the
     agent server. That adds the users of a database that has just migrated. It
     reads users and members as plain rows and writes only what differs, since

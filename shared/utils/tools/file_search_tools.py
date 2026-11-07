@@ -216,6 +216,34 @@ def query_file_search(
         return f"Error querying File Search: {str(e)}"
 
 
+def stores_of_workspace(store_names: List[str], project_id: Optional[int]) -> List[str]:
+    """The stores an agent of this project may query: those of its workspace's
+    projects. A store MATE has no row for (made in Gemini directly, as 1.x allowed)
+    only in the default workspace. Raises when the database can't be read; the
+    caller then builds no tool."""
+    from shared.utils.database_client import get_database_client
+    from shared.utils.models import DEFAULT_WORKSPACE_ID
+    from shared.utils.workspaces import store_workspace, workspace_of_project
+
+    session = get_database_client().get_session()
+    if not session:
+        logger.error("File Search stores: no database session; leaving them out")
+        return []
+    try:
+        workspace_id = workspace_of_project(session, project_id)
+        allowed = []
+        for name in store_names:
+            owner = store_workspace(session, name)
+            if owner == workspace_id or (owner is None and workspace_id == DEFAULT_WORKSPACE_ID):
+                allowed.append(name)
+            else:
+                logger.warning("File Search store %s is not in the workspace of project %s; left out",
+                               name, project_id)
+        return allowed
+    finally:
+        session.close()
+
+
 def create_file_search_tools_from_config(config: Dict[str, Any]) -> List[Any]:
     """
     Create File Search tool integration for agent.
@@ -257,6 +285,10 @@ def create_file_search_tools_from_config(config: Dict[str, Any]) -> List[Any]:
         
         if not store_names:
             logger.warning("File Search enabled but no store_names provided")
+            return []
+        # tool_config is written by whoever may edit the agent: keep to its workspace (#277)
+        store_names = stores_of_workspace(list(store_names), config.get('project_id'))
+        if not store_names:
             return []
         
         # Get model from config or use default

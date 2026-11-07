@@ -272,7 +272,9 @@ sentinel) is refused as well, as the key would go to that host: the caller types
 the key again. So a
 workspace admin keeps what a platform administrator set up, as it is. Agent create,
 update, rollback and template import refuse; an agent import and a template sync skip
-the agent and say why (`errors`, `agents_skipped`). `_check_agent_names` answers 409
+the agent and say why (`errors`, `agents_skipped`). A sync checks an existing agent's
+`tool_config` and `mcp_servers_config` as it writes them, with the template's names
+mapped to the project's, since only those two are written. `_check_agent_names` answers 409
 for a name with a folder in `agents/`, and deleting a hardcoded agent's folder is
 platform-only.
 
@@ -294,9 +296,15 @@ Every path that makes agent names keeps to the same rules:
   `guardrail_config`. So the suffix may hold only letters, digits and underscores
   (400 otherwise), or it could write `${VAR}` or JSON into the config. For a caller
   who is no platform administrator, a name with a folder in `agents/` counts as
-  taken and is bumped (`_2`). A clone whose rename changes a platform-only feature of
-  its source, such as a stdio server whose arguments name the agent, is refused with
-  403 before any agent is written.
+  taken and is bumped (`_2`). A clone is a new agent, so for such a caller one that
+  holds a platform-only feature is refused with 403 before any agent is written,
+  whether it copied the feature from its source or the rename changed it (a stdio
+  server whose arguments name the agent).
+- **A rollback** brings back the version's name, `parent_agents` and `project_id`, so
+  it checks them as a save does: the project with `_require_in_workspace` (404), the
+  name and parents with `_check_agent_names` (409, 400). A version from before a
+  platform administrator moved the agent to this workspace, or from before its name
+  or parent was taken elsewhere, is refused.
 - **A template import** builds the names from the project name, so it computes them
   before creating the project. One with a folder in `agents/` refuses the import
   with 409. A template sync skips such a new agent ("this name is taken").
@@ -309,6 +317,12 @@ workspace: a subagent made by delegation has its parent's project and a name wit
 row. An agent with no config and no project counts as the default workspace's. The
 check fails closed: without the database, or with a project that doesn't exist, the
 tools are refused.
+
+The File Search tool queries only the stores of the agent's workspace
+(`file_search_tools.stores_of_workspace`): `tool_config.file_search.store_names` is
+written by whoever may edit the agent, and a store name reaches the store under the
+installation's Gemini key. A store MATE has no row for, made in Gemini directly as
+1.x allowed, is kept in the default workspace only. A store left out is logged.
 
 `shared/test/test_cross_workspace.py` proves the scoping on the real app, with two
 workspaces. A platform administrator in workspace A calls every `/dashboard/api/`
@@ -362,6 +376,8 @@ escapes the visitor id when it creates a session (`_create_adk_session`).
 
 On what passes, `_workspace_refusal` also refuses an agent of a workspace the
 non-admin can't use (`caller_access`, below), before the agent server is reached.
+`/run_live` makes the same check (`_agent_refusal`) for a signed-in non-admin and
+closes the WebSocket with 1008.
 
 `/list-apps` answers with the agents of the request's workspace, for everyone: the
 one `X-MATE-Workspace` names, else the caller's default. An app with no

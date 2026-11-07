@@ -2,6 +2,7 @@ import os
 import hashlib
 import logging
 from datetime import datetime, timezone
+from typing import Optional
 from fastapi import Request, HTTPException, Depends, status
 
 from shared.utils.database_client import get_database_client
@@ -55,9 +56,7 @@ def verify_pat_hash(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
-
-
-def _workspace_of_caller(request: Request, user: User, token_workspace_id) -> int:
+def _workspace_of_caller(request: Request, user: User, token_workspace_id: Optional[int]) -> int:
     """A token's own workspace, while its owner may still use it; else the workspace
     the request names or the caller's default (server/request_context.py)."""
     from server.request_context import resolve_workspace

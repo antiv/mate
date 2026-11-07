@@ -164,7 +164,9 @@ EU AI Act requires the notice unless it is already obvious to the person.
 ## History, copies and moving agents
 
 - **History**, in the agent form, lists earlier versions of the agent so you can
-  compare and restore them.
+  compare and restore them. Restoring is refused when the version would bring back
+  a name another agent has since taken, a parent agent outside the workspace, or a
+  project of another workspace.
 - **Clone to Project** copies an agent and its whole sub-agent tree into another
   project, optionally with the project's memory blocks and file-search stores. The
   source is not changed.

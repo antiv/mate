@@ -210,6 +210,34 @@ class TestMembers(_Db):
         session.close()
         self.assertEqual(self.members(), {})
 
+    def test_blocking_a_user_removes_them_from_every_workspace(self):
+        # A member of another workspace too, or of another workspace only (#277)
+        session = self.Session()
+        session.add(Workspace(id=2, name="Other", slug="other"))
+        both, other_only = User(user_id="ana", roles='["user"]'), User(user_id="bo", roles='["user"]')
+        other_only.home_workspace_id = 2
+        session.add_all([both, other_only])
+        session.flush()
+        session.add(WorkspaceMember(workspace_id=2, user_id="ana", role="admin", agent_roles='["user"]'))
+        session.commit()
+        both.set_roles(["pending"])
+        other_only.set_roles(["pending"])
+        session.commit()
+        session.close()
+        self.assertEqual(self.members(), {})
+
+    def test_the_startup_sync_removes_a_blocked_user_from_every_workspace(self):
+        # A user blocked before the role change removed the other memberships
+        self._add_users_without_members(ana=["pending"], bo=["user"])
+        session = self.Session()
+        session.add_all([WorkspaceMember(workspace_id=2, user_id="ana", role="member", agent_roles="[]"),
+                         WorkspaceMember(workspace_id=2, user_id="bo", role="member", agent_roles="[]")])
+        session.commit()
+        self.assertEqual(workspaces.sync_default_members(session),
+                         {"added": 0, "updated": 0, "removed": 1})
+        session.close()
+        self.assertEqual(self.members(), {"bo": (2, "member", [])})
+
     def test_the_startup_sync_removes_a_widget_visitor(self):
         # A membership written before visitors were left out
         self._add_users_without_members(widget_3_visitor=["widget"], ana=["user"])

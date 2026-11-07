@@ -37,6 +37,11 @@ File Search is implemented as a **regular Python function tool** that wraps the 
    - Adds the tool to `Agent.tools` (ADK-compliant)
 3. **File Search Active** → Agent can now use the `query_file_search` tool for RAG
 
+An agent only queries stores of its own workspace's projects. A store written into
+`tool_config` by hand that belongs to another workspace is left out, and the server
+log says so. A store created in Gemini outside MATE works in the Default workspace
+only.
+
 ## How It Works Internally
 
 The `query_file_search` tool:

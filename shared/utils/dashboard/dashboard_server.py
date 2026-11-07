@@ -2581,7 +2581,8 @@ class DashboardServer:
                     "project_id": target_project_id,
                 }
                 if not platform_admin:
-                    added = features_added(config_data, source.to_dict())
+                    # A clone is a new agent: what it copies counts as given, as on create
+                    added = features_added(config_data)
                     if added:
                         return {"error": (f"Only a platform administrator can give an agent "
                                           f"{', '.join(sorted(added))}: cloning '{old_name}' "
@@ -3122,10 +3123,18 @@ class DashboardServer:
                 tpl_name = tpl_agent.get("name", "")
                 proj_name = name_map.get(tpl_name, tpl_name)
                 if not platform_admin:
-                    synced = {field: tpl_agent.get(field) for field in (
-                        "tool_config", "mcp_servers_config", "model_base_url", "hardcoded")
-                        if field in tpl_agent}
                     existing = db_agent_map.get(proj_name)
+                    if existing:
+                        # What the update below writes: these two, when set, names mapped
+                        synced = {}
+                        for field in ("tool_config", "mcp_servers_config"):
+                            value = tpl_agent.get(field)
+                            if value:
+                                synced[field] = sub_names(value) if isinstance(value, str) else value
+                    else:
+                        synced = {field: tpl_agent.get(field) for field in (
+                            "tool_config", "mcp_servers_config", "model_base_url", "hardcoded")
+                            if field in tpl_agent}
                     if not existing and has_code_folder(self.project_root / "agents", proj_name):
                         agents_skipped.append({"name": proj_name, "reason": "this name is taken"})
                         continue
@@ -5756,9 +5765,20 @@ class DashboardServer:
         async def rollback_agent(config_id: int, version_id: int, request: Request, ctx: RequestContext = Depends(get_request_context)):
             """Rollback an agent config to a previous version snapshot."""
             self._require_in_workspace(ctx, config_id=config_id)
-            if not ctx.is_platform_admin:
-                self._refuse_platform_only(ctx, self._version_snapshot(config_id, version_id),
-                                           self._agent_config_dict(config_id))
+            snapshot = self._version_snapshot(config_id, version_id)
+            if snapshot:
+                # The name, parents and project come back as the version holds them:
+                # check them as a save would (an agent moved since, a name taken since)
+                if snapshot.get("project_id") is not None:
+                    self._require_in_workspace(ctx, project_id=snapshot["project_id"])
+                try:
+                    parents = json.loads(snapshot.get("parent_agents") or "[]")
+                except (TypeError, json.JSONDecodeError):
+                    parents = []
+                current = self._agent_config_dict(config_id) or {}
+                self._check_agent_names(ctx, snapshot.get("name") or current.get("name"),
+                                        parents if isinstance(parents, list) else [], config_id)
+                self._refuse_platform_only(ctx, snapshot, current)
             result = self._rollback_agent_config(config_id, version_id, changed_by=ctx.user_id)
             if result:
                 return {"success": True, "message": "Agent rolled back successfully", "config": result}
@@ -7651,6 +7671,8 @@ class DashboardServer:
 
             if not version_id:
                 raise HTTPException(status_code=400, detail="version_id is required")
+            # The result is stored against the version, a given actual_output too
+            self._require_in_workspace(ctx, version_id=version_id)
 
             if not self.db_client:
                 raise HTTPException(status_code=503, detail="Database not available")
@@ -7664,7 +7686,6 @@ class DashboardServer:
 
                 if not actual_output:
                     from shared.utils.eval_agent_runner import SnapshotAgent
-                    self._require_in_workspace(ctx, version_id=version_id)
                     version = session.query(self.AgentConfigVersion).filter(
                         self.AgentConfigVersion.id == version_id).first()
                     if not version:
