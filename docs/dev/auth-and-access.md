@@ -205,7 +205,12 @@ An import (`POST /dashboard/api/agents/import`) skips an agent, block or trigger
 that names another workspace's project, and an agent whose name another workspace
 uses, even with `overwrite=true`. An imported trigger takes the project of its
 agent. The agent tools of `create_agent_tool.py` (create, update, delete) reach
-only agents of the calling agent's workspace. They need the admin role, but an agent
+only agents of the calling agent's workspace (`_caller_workspace`): a runtime
+sub-agent's, whose name has no row, is that of the agent that delegated to it
+(`agent_config_identity.DELEGATING_AGENT`, set in `_run_single_subagent`); a
+multi-parent instance's that of the config it was built from (`loaded`); a
+hardcoded agent's, with code in `agents/`, the default one. Any other name with no
+row is refused. They need the admin role, but an agent
 outside the default workspace follows what that workspace's admin wrote, so there
 they give no more than the dashboard gives a workspace admin
 (`_for_the_platform`): `update_agent` refuses a platform-only feature
@@ -235,22 +240,34 @@ the installation (a sign-in, a user change). Through them:
 - a rating (`POST /dashboard/api/feedback`) names its agent, and is refused with 404
   unless the session is the caller's (any of the workspace's for an admin) with that
   agent; the rated-answer pages read a session's events by its id and agent;
-- a trace belongs to a workspace when every agent its spans name
-  (`gen_ai.agent.name`, `mate.agent.name`) is one of its agents, and a trace naming
-  none to the default workspace (`DashboardServer._traces_in_workspace`);
+- a trace belongs to the workspace its spans record in `mate.workspace.id`, set on
+  the inference span when a model call starts. One that records none (from before
+  V046, of a hardcoded agent, or a turn that reached no model) belongs to the
+  default workspace, unless an agent its spans name (`gen_ai.agent.name`,
+  `mate.agent.name`) is another workspace's (`DashboardServer._traces_in_workspace`);
 - a budget, alert rule, trigger, widget key or Slack integration may name only the
   workspace's agents and projects. `workspaces.missing_from` answers which of the
   two is another workspace's;
 - `rate_limit_config` is looked up by scope, scope id and workspace, so a user has
   a limit in each workspace. The request check takes the configs of the agent's
-  workspace, and counts a user's tokens and spend there only. Alert rules measure
-  their own workspace (`docs/dev/alerts.md`).
+  workspace, and counts a user's tokens and spend there only. An agent's or a
+  project's tokens and spend are counted by agent name, within its own workspace
+  (`token_usage_service._spent_in`), as the name may have been another workspace's
+  before. Alert rules measure their own workspace (`docs/dev/alerts.md`).
 
 A Slack team connects to one integration on the installation (`UNIQUE (team_id)`,
 V047): an event names only its team. Creating or editing an integration onto a team
 that is taken answers 409 without saying whose it is. The first workspace to connect
 a team keeps it; the 409 tells the caller to ask a platform administrator, who can
-switch to the workspace holding it and delete that integration.
+switch to the workspace holding it and delete that integration. An event with no
+team id gets the oldest integration that has none.
+
+A workspace's admin chooses its integration's team id and signing secret, so the
+Slack user an event names is theirs to choose. Outside the default workspace the
+MATE user id names the workspace (`slack_w<id>_<team>_<user>`,
+`slack_routes._slack_user_id`), so such an event never acts as a default
+workspace's Slack user, with that user's global roles. The default workspace keeps
+`slack_<team>_<user>`.
 
 ### What only a platform administrator may give an agent
 
@@ -376,23 +393,27 @@ Ratings and traces outlive the agent they are about (`agent_cleanup.py` keeps lo
 and an agent's name is free again once it is deleted. So the eval pages keep a
 rating to the workspace by its `project_id` as well as its agent's name
 (`feedback_service.of_workspace`; in the default workspace a name with no config
-counts too, as a hardcoded agent's does), and `_traces_in_workspace` leaves out a
-trace whose spans record another workspace in `mate.workspace.id`. The replay
-picker reads the spans that carry it along with those that carry the conversation.
+counts too, as a hardcoded agent's does), and `_traces_in_workspace` goes by the
+workspace a trace records, not by the names it holds. The replay picker reads the
+spans that carry it along with those that carry the conversation.
 
 A rename frees the old name as well. `agent_cleanup.rename_agent_rows`, called by
-the agent update and rollback, moves what `delete_agent_rows` would remove, and the
-ratings, to the new name, after deleting rows a former agent left under the new
-name. ADK's events reference their session with no ON UPDATE, so its sessions are
-copied under the new name, the events moved, and the old sessions deleted.
+the agent update and rollback, moves what `delete_agent_rows` would remove to the
+new name, and the ratings given in the projects of the agent's workspace. It
+deletes nothing under the new name: ratings are a log, and other rows can only be
+there in the default workspace (below), which takes them over as 1.x did. Where both
+names hold the same ADK session id, or `app_states`/`user_states` rows for the same
+key, the renamed agent's are kept. ADK's events reference their session with no ON
+UPDATE, so its sessions are copied under the new name, the events moved, and the old
+sessions deleted.
 
 A rename under 1.x left these rows under the old name, with no agent to own them.
 They are the default workspace's, so an agent of another workspace may not take
 such a name (`DashboardServer._name_unavailable`, `agent_cleanup.left_behind`): agent
 create and rename, import, clone, template import and sync, and the `create_agent`
-tool answer "this name is taken". Ratings don't count, since the eval pages keep
-them to their project. A trace counts only when none of its spans records a
-workspace, as before V046. The default workspace takes such a name, as in 1.x.
+tool answer "this name is taken". Ratings and traces don't count, since the eval
+and trace pages keep them to their project and workspace. The default workspace
+takes such a name, as in 1.x.
 
 `shared/test/test_cross_workspace.py` proves the scoping on the real app, with two
 workspaces. A platform administrator in workspace A calls every `/dashboard/api/`

@@ -17,6 +17,7 @@ import hashlib
 import json
 import logging
 import threading
+from contextvars import ContextVar
 from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
@@ -87,6 +88,10 @@ def identify(session: Any, config: Any) -> Dict[str, Any]:
 
 _loaded: Dict[str, Dict[str, Any]] = {}
 _lock = threading.Lock()
+
+# A runtime sub-agent of subagent_delegation has no row and is never recorded. While
+# it runs, this names the agent that delegated to it, which it works for.
+DELEGATING_AGENT: ContextVar[Optional[str]] = ContextVar("mate_delegating_agent", default=None)
 
 
 def record_loaded(agent_name: str, identity: Dict[str, Any]) -> None:

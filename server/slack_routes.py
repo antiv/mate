@@ -58,7 +58,8 @@ def _already_handled(event_id: Optional[str]) -> bool:
 
 
 def _get_integration(team_id: Optional[str]) -> Optional[ChannelIntegration]:
-    """Look up the active Slack integration for a workspace."""
+    """Look up the active Slack integration for a Slack workspace. A payload with no
+    team id gets the oldest integration that has none, not any workspace's."""
     db = get_database_client()
     session = db.get_session()
     if not session:
@@ -70,7 +71,9 @@ def _get_integration(team_id: Optional[str]) -> Optional[ChannelIntegration]:
         )
         if team_id:
             query = query.filter(ChannelIntegration.team_id == team_id)
-        integration = query.first()
+        else:
+            query = query.filter(ChannelIntegration.team_id.is_(None))
+        integration = query.order_by(ChannelIntegration.id).first()
         if integration:
             session.expunge(integration)
         return integration
@@ -279,10 +282,27 @@ def _conversation_ids(team_id: str, channel: str, thread_ts: Optional[str], is_d
     return f"slack_{team_id}_{channel}_{reply_thread}", reply_thread
 
 
-def _slack_user_id(team_id: str, slack_user: str) -> str:
+def _slack_user_id(team_id: str, slack_user: str, workspace_id: Optional[int] = None) -> str:
     """The MATE user id of a Slack user: per Slack workspace, as the same Slack user
-    id in two workspaces must not share roles, profile, credentials or memory."""
-    return f"slack_{team_id}_{slack_user}"
+    id in two workspaces must not share roles, profile, credentials or memory. Outside
+    MATE's default workspace, per MATE workspace too: that workspace's admin sets the
+    integration's team id and signing secret, so the Slack users its events name are
+    theirs to choose, and must not be the default workspace's users with their roles."""
+    if workspace_id in (None, DEFAULT_WORKSPACE_ID):
+        return f"slack_{team_id}_{slack_user}"
+    return f"slack_w{workspace_id}_{team_id}_{slack_user}"
+
+
+def _workspace_of_agent(agent_name: str) -> Optional[int]:
+    """The agent's workspace, None when it has no config or the database is down."""
+    db = get_database_client()
+    session = db.get_session() if db else None
+    if not session:
+        return None
+    try:
+        return agent_workspace(session, agent_name)
+    finally:
+        session.close()
 
 
 def _legacy_slack_user_id(slack_user: str) -> str:
@@ -340,7 +360,8 @@ async def _dispatch(integration_dict: dict, channel: str, slack_user: str,
     """Run the agent for `user_text` and post the (card-aware) reply to Slack."""
     if not channel or not user_text:
         return
-    user_id = _slack_user_id(integration_dict.get("team_id") or "t", slack_user)
+    user_id = _slack_user_id(integration_dict.get("team_id") or "t", slack_user,
+                             _workspace_of_agent(integration_dict["agent_name"]))
     _carry_over_roles(user_id, _legacy_slack_user_id(slack_user), integration_dict["agent_name"])
     try:
         reply = await run_agent_message(

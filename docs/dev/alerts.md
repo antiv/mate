@@ -73,7 +73,9 @@ dashboard routes check that an agent or project `scope_id` is the workspace's
 the log rows through `workspaces.rows_of` (on `token_usage_logs`, `guardrail_logs` and
 `audit_logs`, a row with no workspace counts as the default workspace's), the
 `rate_limit_config` limit by the rule's `workspace_id`, and a user's tokens and spend
-in that workspace only. So `global` means every agent of the workspace. `update_rule`
+in that workspace only. An agent's or project's tokens and spend are those logged in
+its own workspace, which is the rule's (`token_usage_service._spent_in`). So `global`
+means every agent of the workspace. `update_rule`
 sets only the fields in `_RULE_FIELDS`, never the workspace.
 
 `guardrail_count` cannot be scoped to a user — guardrail hits are recorded per agent.

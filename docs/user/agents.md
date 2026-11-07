@@ -208,5 +208,10 @@ Before MATE 1.6 these were left behind and passed to the new agent.
 
 Renaming an agent takes all of this along to the new name, conversations included:
 its widget keys, Slack integrations and triggers keep working, and the old name is
-free with nothing left under it. A rename before 2.0 left them under the old name;
-in a workspace other than Default such a name is refused as taken.
+free with nothing left under it. Its ratings go along too, those given in the
+workspace's projects; none is deleted.
+
+A rename before 2.0 left them under the old name. In a workspace other than Default
+such a name is refused as taken. In the Default workspace an agent may take it, and
+takes over what was left, as before 2.0; where both names hold the same conversation,
+or stored state for the same person, the renamed agent's is kept.

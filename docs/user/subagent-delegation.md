@@ -77,6 +77,11 @@ Two consequences worth knowing:
 - **A child inherits the parent's settings for a tool, not a bare `true`.** A
   subagent given `shop` gets the parent's catalog and vendor details, not an
   empty default that would behave differently.
+- **A child given the agent tools (`create_agent`) works for its parent.** Its
+  own name has no configuration, so the tools judge it as the parent: they reach
+  only agents of the parent's workspace, and outside the Default workspace they add
+  nothing only a platform administrator may set. A caller the tools can't place, an
+  agent with no configuration and no code in `agents/`, is refused.
 
 MCP works the same way: a subagent's MCP servers are the parent's, so a parent
 with none grants none.

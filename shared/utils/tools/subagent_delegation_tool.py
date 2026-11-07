@@ -306,6 +306,10 @@ async def _run_single_subagent(
     """Execute a single ephemeral subagent asynchronously with isolated memory and timeout."""
     subagent_id = uuid.uuid4().hex[:6]
     clean_task_name = task.name.strip() or "subtask"
+    # The child's name has no row; the tools it holds act for its parent. Each
+    # subtask runs in a task of its own (asyncio.gather), so this stays in it.
+    from shared.utils.agent_config_identity import DELEGATING_AGENT
+    DELEGATING_AGENT.set((parent_config or {}).get("name") or parent_app_name)
     subagent_name = f"{parent_app_name}_{clean_task_name}_{subagent_id}"
     sub_session_id = f"{parent_session_id}_{clean_task_name}_{subagent_id}"
 
