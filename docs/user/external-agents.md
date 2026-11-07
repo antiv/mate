@@ -61,6 +61,11 @@ Two failure modes are deliberate:
   placeholder is sent instead, so `OPENAI_API_KEY` never travels to a third-party
   host. Endpoints that need no key (local servers, private networks) work as
   expected.
+- **Outside the Default workspace, the endpoint stays off the server's own
+  network.** A base URL such as `localhost` or `10.x.x.x` refuses to build the
+  agent, and a redirect from the endpoint is not followed: the answer fails
+  instead. Run such an agent in the Default workspace, or have the server's
+  administrator set `OUTBOUND_ALLOW_PRIVATE_NETWORK=true`.
 
 ## What you get, and what you do not
 
