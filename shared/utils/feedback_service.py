@@ -11,8 +11,10 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
+from sqlalchemy import or_, select
+
 from .database_client import get_database_client
-from .models import ResponseFeedback, TestCase
+from .models import DEFAULT_WORKSPACE_ID, AgentConfig, ResponseFeedback, TestCase
 from .workspaces import agent_names_of, in_projects_of
 
 logger = logging.getLogger(__name__)
@@ -210,9 +212,14 @@ class FeedbackService:
 
 def of_workspace(workspace_id: int) -> tuple:
     """Filters keeping the ratings of the workspace's agents. By project as well as by
-    name: a deleted agent's ratings stay, and its name may be taken in another workspace."""
-    return (ResponseFeedback.agent_name.in_(agent_names_of(workspace_id)),
-            *in_projects_of(ResponseFeedback.project_id, workspace_id))
+    name: a deleted agent's ratings stay, and its name may be taken in another workspace.
+    A name with no config (a hardcoded agent, or one deleted since) counts as the
+    default workspace's, as everywhere else, so 1.x keeps listing its ratings."""
+    names = ResponseFeedback.agent_name.in_(agent_names_of(workspace_id))
+    if workspace_id == DEFAULT_WORKSPACE_ID:
+        names = or_(names, ResponseFeedback.agent_name.is_(None),
+                    ResponseFeedback.agent_name.not_in(select(AgentConfig.name)))
+    return (names, *in_projects_of(ResponseFeedback.project_id, workspace_id))
 
 
 _feedback_service: Optional[FeedbackService] = None

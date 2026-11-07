@@ -11,6 +11,12 @@ name, which may belong to another project and another admin:
 - what its users left with it: stored OAuth credentials (Google Drive, Calendar),
   conversations on both runtimes, the memory built from them, and app-wide state.
 
+A rename is the same problem: the old name is free afterwards. rename_agent_rows()
+moves every row delete_agent_rows() would remove, and the agent's ratings, to the new
+name, so the renamed agent keeps its links, settings and conversations and the old
+name brings nothing to the next agent that takes it. The dashboard's update and
+rollback call it when the name changes.
+
 Every path that deletes agents calls delete_agent_rows() in the same transaction:
 the dashboard's agent and project delete, the create_agent tool and the wizard's
 trial cleanup. Logs (token usage, guardrails, responses, feedback, audit) stay:
@@ -114,3 +120,68 @@ def purge_langgraph_checkpoints(thread_ids: Iterable[str]) -> None:
                 saver.delete_thread(thread_id)
     except Exception as e:
         logger.error(f"Could not delete the LangGraph checkpoints of {len(thread_ids)} session(s): {e}")
+
+
+def rename_agent_rows(session, old_name: str, new_name: str) -> Dict[str, object]:
+    """Move the rows keyed by an agent's old name to its new one, in the caller's
+    transaction. Rows already keyed by the new name, left by an agent that had it
+    before, are deleted first: the renamed agent does not inherit them. Returns the
+    number of rows moved per table and, under "langgraph_threads", the threads
+    delete_agent_rows() removed for the new name. Does not commit.
+
+    ADK's events reference their session by (app_name, user_id, id), with no ON UPDATE,
+    so its sessions are copied under the new name, their events moved, and the old
+    sessions deleted."""
+    from .models import (AgentFileSearchStore, AgentTrigger, AlertRule, ChannelIntegration,
+                         Credential, LangGraphSession, MemorySession, RateLimitConfig,
+                         ResponseFeedback, TestCase, WidgetApiKey)
+
+    if not old_name or not new_name or old_name == new_name:
+        return {"langgraph_threads": []}
+    cleared = delete_agent_rows(session, [new_name])
+    session.query(ResponseFeedback).filter(ResponseFeedback.agent_name == new_name).delete(
+        synchronize_session=False)
+    moved: Dict[str, object] = {"langgraph_threads": cleared["langgraph_threads"]}
+
+    def move(label, query, column):
+        count = query.update({column: new_name}, synchronize_session=False)
+        if count:
+            moved[label] = count
+
+    for label, model, column in (
+            ("agent_file_search_stores", AgentFileSearchStore, AgentFileSearchStore.agent_name),
+            ("widget_api_keys", WidgetApiKey, WidgetApiKey.agent_name),
+            ("channel_integrations", ChannelIntegration, ChannelIntegration.agent_name),
+            ("agent_triggers", AgentTrigger, AgentTrigger.agent_name),
+            ("test_cases", TestCase, TestCase.agent_name),
+            ("response_feedback", ResponseFeedback, ResponseFeedback.agent_name),
+            ("credentials", Credential, Credential.app_name),
+            ("memory_sessions", MemorySession, MemorySession.app_name),
+            ("lg_sessions", LangGraphSession, LangGraphSession.app_name)):
+        move(label, session.query(model).filter(column == old_name), column)
+    move("rate_limit_config", session.query(RateLimitConfig).filter(
+        RateLimitConfig.scope == "agent", RateLimitConfig.scope_id == old_name), RateLimitConfig.scope_id)
+    move("alert_rules", session.query(AlertRule).filter(
+        AlertRule.scope == "agent", AlertRule.scope_id == old_name), AlertRule.scope_id)
+
+    inspector = inspect(session.connection())
+    existing = set(inspector.get_table_names())
+    params = {"old": old_name, "new": new_name}
+    if {"sessions", "events"} <= existing:
+        # Column names come from the schema, the agent names are bound parameters
+        columns = [c["name"] for c in inspector.get_columns("sessions") if c["name"] != "app_name"]
+        listed = ", ".join(columns)
+        copied = session.execute(text(
+            f"INSERT INTO sessions (app_name, {listed}) "
+            f"SELECT :new, {listed} FROM sessions WHERE app_name = :old"), params).rowcount or 0
+        session.execute(text("UPDATE events SET app_name = :new WHERE app_name = :old"), params)
+        session.execute(text("DELETE FROM sessions WHERE app_name = :old"), params)
+        if copied:
+            moved["adk_sessions"] = copied
+    for table in ("app_states", "user_states"):
+        if table in existing:
+            count = session.execute(text(f"UPDATE {table} SET app_name = :new WHERE app_name = :old"),
+                                    params).rowcount or 0
+            if count:
+                moved[f"adk_{table}"] = count
+    return moved

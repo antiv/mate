@@ -10,14 +10,19 @@ This tool allows an agent to create new agents with:
 
 import json
 import logging
+from pathlib import Path
 from typing import Dict, Any, Optional
 from google.adk.tools.tool_context import ToolContext
 from sqlalchemy.orm import Session
 from ..database_client import get_database_client
 from ..models import DEFAULT_WORKSPACE_ID, AgentConfig
 from ..user_service import get_user_service
+from ..platform_only import features_added, has_code_folder, is_agent_name
 from ..workspaces import agent_workspace
 from ...utils.utils import mask_config_secrets, reload_agent_cache
+
+# Hardcoded agents' code, which the agent server loads by name
+_AGENTS_DIR = Path(__file__).resolve().parents[3] / "agents"
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +87,15 @@ def _same_workspace(session: Session, agent_name: str, current_agent_name: Optio
     current = (agent_workspace(session, current_agent_name) if current_agent_name else None) \
         or DEFAULT_WORKSPACE_ID
     return agent_workspace(session, agent_name) == current
+
+
+def _for_the_platform(session: Session, current_agent_name: Optional[str]) -> bool:
+    """True when the calling agent is the default workspace's. The tools need the admin
+    role, but another workspace's agent follows what that workspace's admin wrote, so
+    its tools give no more than they may (shared/utils/platform_only.py): no feature
+    only a platform administrator may add, and no name with a folder in agents/."""
+    return ((agent_workspace(session, current_agent_name) if current_agent_name else None)
+            or DEFAULT_WORKSPACE_ID) == DEFAULT_WORKSPACE_ID
 
 
 def _get_current_agent_config(agent_name: str) -> Optional[Dict[str, Any]]:
@@ -247,10 +261,19 @@ def create_agent(
             }
         
         try:
+            # As the dashboard: a name ADK accepts, and one with no code folder unless the
+            # tool acts for the platform
+            if not is_agent_name(name.strip()):
+                return {
+                    "status": "error",
+                    "error_message": "Agent name must be a valid identifier: letters, digits and underscores"
+                }
             existing_agent = session.query(AgentConfig).filter(
                 AgentConfig.name == name.strip()
             ).first()
-            
+            if not existing_agent and not _for_the_platform(session, current_agent_name):
+                existing_agent = has_code_folder(_AGENTS_DIR, name.strip())
+
             if existing_agent:
                 return {
                     "status": "error",
@@ -659,6 +682,20 @@ def update_agent(
                     "status": "error",
                     "error_message": "No fields to update. Provide at least one field: description, instruction, model, parent_agent, tool_config, or mcp_servers_config"
                 }
+
+            if not _for_the_platform(session, current_agent_name):
+                before = {column: getattr(agent_config, column) for column in (
+                    "tool_config", "mcp_servers_config", "model_api_key", "model_base_url", "hardcoded")}
+                added = features_added({key: value for key, value in config_data.items()
+                                        if key in ("tool_config", "mcp_servers_config")}, before)
+                if added:
+                    logger.warning("Agent '%s' refused to give '%s' %s", current_agent_name,
+                                   agent_name, ", ".join(sorted(added)))
+                    return {
+                        "status": "error",
+                        "error_message": f"Only a platform administrator can give an agent "
+                                         f"{', '.join(sorted(added))}."
+                    }
             
             # Update agent configuration
             for key, value in config_data.items():

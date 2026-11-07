@@ -28,7 +28,7 @@ from sqlalchemy.orm import Session
 
 from shared.utils.agent_invoke import run_agent_message
 from shared.utils.database_client import get_database_client
-from shared.utils.models import ChannelIntegration, User
+from shared.utils.models import DEFAULT_WORKSPACE_ID, ChannelIntegration, User
 from shared.utils.workspaces import agent_workspace, in_projects_of, missing_from
 from server.request_context import RequestContext, get_api_request_context
 
@@ -294,8 +294,11 @@ def _carry_over_roles(user_id: str, legacy_user_id: str, agent_name: str) -> Non
     """On a Slack user's first message under the per-workspace id, start them with
     the roles an admin gave the id they had before 1.6, so no one loses access to a
     restricted agent at the upgrade. Only roles: profile, credentials and memory of
-    the old id stay with it. The user joins the agent's workspace, as one the
-    platform creates for the agent would (get_or_create_user). Never raises."""
+    the old id stay with it. Only for an agent of the default workspace, where the old
+    id lived: another workspace's admin sets their integration's signing secret, so
+    the Slack user an event names is theirs to choose, and the old id's roles (admin
+    among them) were never theirs to hand out. The user joins the agent's workspace,
+    as one the platform creates for the agent would (get_or_create_user). Never raises."""
     db = get_database_client()
     session = db.get_session() if db else None
     if not session:
@@ -303,13 +306,16 @@ def _carry_over_roles(user_id: str, legacy_user_id: str, agent_name: str) -> Non
     try:
         if session.query(User.id).filter(User.user_id == user_id).first():
             return
+        workspace_id = agent_workspace(session, agent_name)
+        if workspace_id not in (None, DEFAULT_WORKSPACE_ID):
+            return
         legacy = session.query(User).filter(User.user_id == legacy_user_id).first()
         if not legacy:
             return
         roles = legacy.get_roles()
         new_user = User(user_id=user_id)
         new_user.set_roles(roles)
-        new_user.home_workspace_id = agent_workspace(session, agent_name)
+        new_user.home_workspace_id = workspace_id
         session.add(new_user)
         session.commit()
         logger.info("Slack user %s starts with the roles of %s: %s", user_id, legacy_user_id, roles)

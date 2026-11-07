@@ -56,13 +56,18 @@ def verify_pat_hash(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
+def is_platform_admin(user: User) -> bool:
+    """True for the built-in account and anyone with the admin role."""
+    return user.user_id == AUTH_USERNAME or "admin" in user.get_roles()
+
+
 def _workspace_of_caller(request: Request, user: User, token_workspace_id: Optional[int]) -> int:
     """A token's own workspace, while its owner may still use it; else the workspace
     the request names or the caller's default (server/request_context.py)."""
     from server.request_context import resolve_workspace
     from shared.utils.workspaces import member_role, workspace_is_open
 
-    platform_admin = user.user_id == AUTH_USERNAME or "admin" in user.get_roles()
+    platform_admin = is_platform_admin(user)
     if token_workspace_id is None:
         return resolve_workspace(request, user.user_id, platform_admin)[0]
     session = get_database_client().get_session()

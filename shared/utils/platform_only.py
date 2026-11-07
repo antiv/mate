@@ -179,25 +179,11 @@ def may_run_code(agent_name: Optional[str], project_id: Optional[int] = None) ->
 
     A config that names its project_id is judged by that project's workspace, not by
     its name: a subagent made by delegation has its parent's project and a name with
-    no row (tools/subagent_delegation_tool.py). A project that doesn't exist refuses."""
-    from .database_client import get_database_client
+    no row (tools/subagent_delegation_tool.py). A project that doesn't exist refuses.
+    The rule is outbound.workspace_of_run's."""
     from .models import DEFAULT_WORKSPACE_ID
-    from .workspaces import agent_workspace, workspace_of_project
+    from .outbound import workspace_of_run
 
     if not agent_name and project_id is None:
         return True
-    try:
-        session = get_database_client().get_session()
-        if not session:
-            logger.error("Platform-only check for %s: no database session; refusing", agent_name)
-            return False
-        try:
-            if project_id is not None:
-                return workspace_of_project(session, project_id) == DEFAULT_WORKSPACE_ID
-            workspace_id = agent_workspace(session, agent_name)
-        finally:
-            session.close()
-    except Exception as e:
-        logger.error("Platform-only check for %s failed (%s); refusing", agent_name, e)
-        return False
-    return workspace_id in (None, DEFAULT_WORKSPACE_ID)
+    return workspace_of_run(agent_name, project_id) == DEFAULT_WORKSPACE_ID

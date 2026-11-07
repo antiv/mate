@@ -15,6 +15,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Set, Tuple
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
 from fastapi import Body, FastAPI, Request, HTTPException, Depends, Form, File, UploadFile, Query
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
@@ -1005,7 +1006,7 @@ class DashboardServer:
                 raise HTTPException(status_code=404, detail="Project not found")
             self._require_in_workspace(ctx, project_id=int(scope_id))
 
-    def _workspace_trigger(self, session, ctx: RequestContext, trigger_id: int):
+    def _workspace_trigger(self, session: Session, ctx: RequestContext, trigger_id: int) -> Any:
         """The trigger, if its project is the caller's workspace's; 404 otherwise."""
         trigger = session.query(self.AgentTrigger).filter(
             self.AgentTrigger.id == trigger_id,
@@ -1252,7 +1253,7 @@ class DashboardServer:
         finally:
             session.close()
 
-    def _traces_in_workspace(self, session, spans: List[Dict[str, Any]],
+    def _traces_in_workspace(self, session: Session, spans: List[Dict[str, Any]],
                              workspace_id: Optional[int]) -> Set[str]:
         """The ids of the traces among `spans` that are the workspace's: every agent a
         trace names is one of its agents. An agent with no config counts as the default
@@ -1463,9 +1464,13 @@ class DashboardServer:
                 from sqlalchemy import text
                 project_agents = {row[0] for row in session.execute(
                     text("SELECT name FROM agents_config WHERE project_id = :pid"), {"pid": project_id})}
+            # The workspace check needs the spans that record a workspace too: the
+            # inference span carries mate.workspace.id, not the conversation id
             spans = self._replay_spans(
-                session, "start_time >= :threshold AND {attributes_text} LIKE :pat",
-                {"threshold": datetime.now() - timedelta(hours=hours), "pat": "%gen_ai.conversation.id%"},
+                session, "start_time >= :threshold AND ({attributes_text} LIKE :pat "
+                         "OR {attributes_text} LIKE :workspace)",
+                {"threshold": datetime.now() - timedelta(hours=hours), "pat": "%gen_ai.conversation.id%",
+                 "workspace": "%mate.workspace.id%"},
             )
             if workspace_id is not None:
                 keep = self._traces_in_workspace(session, spans, workspace_id)
@@ -1876,7 +1881,11 @@ class DashboardServer:
                 if project_changed and is_root_agent:
                     _propagate_project_to_descendants(original_name, config.project_id)
 
+                # The old name is free once this commits: its rows go with the agent
+                from shared.utils.agent_cleanup import purge_langgraph_checkpoints, rename_agent_rows
+                cleared = rename_agent_rows(session, original_name, config.name)["langgraph_threads"]
                 session.commit()
+                purge_langgraph_checkpoints(cleared)
                 self._snapshot_agent_config(session, config, change_type='update', changed_by=changed_by)
                 return True
             return False
@@ -1992,11 +2001,17 @@ class DashboardServer:
                 return None
 
             snapshot = version.get_snapshot()
+            original_name = config.name
             for key, value in snapshot.items():
                 if hasattr(config, key) and key not in ('id', 'project'):
                     setattr(config, key, value)
 
+            # A version with another name renames the agent: its rows go with it
+            from shared.utils.agent_cleanup import purge_langgraph_checkpoints, rename_agent_rows
+            session.flush()
+            cleared = rename_agent_rows(session, original_name, config.name)["langgraph_threads"]
             session.commit()
+            purge_langgraph_checkpoints(cleared)
             self._snapshot_agent_config(session, config, change_type='rollback', changed_by=changed_by)
             return mask_config_secrets(config.to_dict())
         except Exception as e:

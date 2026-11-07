@@ -65,9 +65,10 @@ def internal_address(url: str) -> Optional[str]:
     return None
 
 
-def _workspace_of(agent_name: Optional[str], project_id: Optional[int]) -> Optional[int]:
-    """The workspace of the project, else of the agent; the default one for an agent
-    with no config. None when the database can't say, which the caller refuses."""
+def workspace_of_run(agent_name: Optional[str], project_id: Optional[int]) -> Optional[int]:
+    """The workspace an agent runs in: its project's, else its own; the default one for
+    an agent with no config. None when the database can't say, or the project doesn't
+    exist, which every caller refuses. Also platform_only.may_run_code's rule."""
     from .database_client import get_database_client
     from .workspaces import agent_workspace, workspace_of_project
     try:
@@ -81,7 +82,7 @@ def _workspace_of(agent_name: Optional[str], project_id: Optional[int]) -> Optio
         finally:
             session.close()
     except Exception as e:
-        logger.error("Outbound check: no workspace for %s / project %s: %s", agent_name, project_id, e)
+        logger.error("No workspace for %s / project %s: %s", agent_name, project_id, e)
         return None
 
 
@@ -93,7 +94,7 @@ def outbound_refusal(url: str, *, workspace_id: Optional[int] = None,
     if private_network_allowed():
         return None
     if workspace_id is None:
-        workspace_id = _workspace_of(agent_name, project_id)
+        workspace_id = workspace_of_run(agent_name, project_id)
     if workspace_id == DEFAULT_WORKSPACE_ID:
         return None
     reason = internal_address(url)
@@ -143,6 +144,46 @@ def _install_guard() -> None:
     httpx.AsyncClient.send = asend
 
 
+class _GuardedStream:
+    """A streamed answer whose chunks are read guarded too: some providers (gemini and
+    vertex_ai through LiteLLM, codestral, predibase) send the request only when the
+    first chunk is read, after acompletion() has returned."""
+
+    def __init__(self, inner: Any, workspace_id: int):
+        self._inner = inner
+        self._workspace_id = workspace_id
+
+    def __aiter__(self) -> "_GuardedStream":
+        return self
+
+    async def __anext__(self) -> Any:
+        token = _GUARDED.set(self._workspace_id)
+        try:
+            return await self._inner.__anext__()
+        finally:
+            _GUARDED.reset(token)
+
+    def __iter__(self) -> "_GuardedStream":
+        return self
+
+    def __next__(self) -> Any:
+        token = _GUARDED.set(self._workspace_id)
+        try:
+            return next(self._inner)
+        finally:
+            _GUARDED.reset(token)
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._inner, name)
+
+
+def _guarded_stream(result: Any, workspace_id: int) -> Any:
+    """The result, its chunks read guarded when it is a stream."""
+    if hasattr(result, "__anext__") or hasattr(result, "__next__"):
+        return _GuardedStream(result, workspace_id)
+    return result
+
+
 class GuardedCompletions:
     """An object with completion() and acompletion() (ADK's LiteLLMClient, or the
     litellm module ChatLiteLLM calls), whose calls run guarded."""
@@ -154,15 +195,14 @@ class GuardedCompletions:
     def completion(self, *args: Any, **kwargs: Any) -> Any:
         token = _GUARDED.set(self._workspace_id)
         try:
-            return self._inner.completion(*args, **kwargs)
+            return _guarded_stream(self._inner.completion(*args, **kwargs), self._workspace_id)
         finally:
             _GUARDED.reset(token)
 
     async def acompletion(self, *args: Any, **kwargs: Any) -> Any:
-        # A streamed answer is requested here; only reading its body comes later
         token = _GUARDED.set(self._workspace_id)
         try:
-            return await self._inner.acompletion(*args, **kwargs)
+            return _guarded_stream(await self._inner.acompletion(*args, **kwargs), self._workspace_id)
         finally:
             _GUARDED.reset(token)
 
@@ -177,7 +217,7 @@ def guard_model_client(model: Any, attribute: str, base_url: Optional[str],
     with no base URL configured, is the installation's and stays as it is."""
     if not base_url or private_network_allowed() or (not agent_name and project_id is None):
         return model
-    workspace_id = _workspace_of(agent_name, project_id)
+    workspace_id = workspace_of_run(agent_name, project_id)
     if workspace_id == DEFAULT_WORKSPACE_ID:
         return model
     _install_guard()
