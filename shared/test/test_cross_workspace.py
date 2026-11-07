@@ -2429,5 +2429,109 @@ class TestSixthReviewOfPhase2(_TwoWorkspaces):
         self.assertEqual(listed, [])
 
 
+
+class TestSeventhReviewOfPhase2(_TwoWorkspaces):
+    """What the seventh review of phase 2 found (#277, 2l): none of it crosses a
+    workspace."""
+
+    _get = TestLogsAndOperations._get
+
+    def _as(self, user_id: str) -> TestClient:
+        return TestClient(auth_server.app, cookies=_signed_in(user_id))
+
+    def test_the_rbac_check_reads_a_new_user_s_membership_afresh(self):
+        # On MySQL the check's transaction would otherwise read as of its first query,
+        # before get_or_create_user's session committed the membership
+        from shared.utils import rbac_middleware
+        events = []
+        real_access = rbac_middleware.caller_access
+        real_session = rbac_middleware.get_database_client().get_session
+
+        def get_session():
+            session = real_session()
+            rollback = session.rollback
+            session.rollback = lambda: (events.append("rollback"), rollback())[1]
+            return session
+
+        def access(session, user, workspace_id):
+            events.append("access")
+            return real_access(session, user, workspace_id)
+
+        with patch.object(rbac_middleware.get_database_client(), "get_session", get_session), \
+                patch.object(rbac_middleware, "caller_access", access):
+            allowed, _ = rbac_middleware.RBACMiddleware().check_agent_access(
+                "zz_new_user", {"name": B_ROOT, "allowed_for_roles": ["user"]})
+        self.assertTrue(allowed)
+        self.assertEqual(events[-2:], ["rollback", "access"])
+
+    def test_an_import_naming_no_project_goes_to_the_workspace_s_own(self):
+        bundle = {"agents": [{"name": "zz_imported", "type": "llm", "model_name": "m"}],
+                  "memory_blocks": [{"label": "zz-imported-block", "value": "v"}]}
+        result = self.client.post("/dashboard/api/agents/import", json=bundle,
+                                  headers=_platform_admin(B)).json()
+        self.assertEqual(result.get("imported_count"), 1, result)
+        session = self.Session()
+        self.assertEqual(session.query(AgentConfig).filter_by(name="zz_imported").one().project_id,
+                         self.ids["project_b"])
+        self.assertEqual(session.query(MemoryBlock).filter_by(label="zz-imported-block").one().project_id,
+                         self.ids["project_b"])
+        session.close()
+
+    def test_a_renamed_parent_keeps_its_sub_agents(self):
+        session = self.Session()
+        # An agent of A naming B's root, as 1.x allowed: not B's to rename
+        session.add(AgentConfig(name="ws_a_stray", type="llm", project_id=self.ids["project_a"],
+                                parent_agents=json.dumps([B_ROOT, A_ROOT])))
+        session.commit()
+        config_id = self.b_rows["config_id"]
+        session.close()
+        renamed = self._as(BOB).put(f"/dashboard/api/agents/{config_id}", data=TestWorkspaceAdmins._agent_form(
+            self, self.ids["project_b"], "zz_ws_b_renamed"))
+        self.assertEqual(renamed.status_code, 200, renamed.text)
+        session = self.Session()
+        parents = lambda name: session.query(AgentConfig).filter_by(name=name).one().get_parent_agents()  # noqa: E731
+        self.assertEqual(parents("zz_ws_b_sub"), ["zz_ws_b_renamed"])
+        self.assertEqual(parents("ws_a_stray"), [B_ROOT, A_ROOT])
+        session.close()
+
+    def test_a_trigger_s_project_id_must_be_a_number(self):
+        body = {"name": "t", "agent_name": B_ROOT, "prompt": "p", "trigger_type": "cron",
+                "cron_expression": "0 * * * *", "output_type": "memory_block",
+                "output_config": {"label": "x"}}
+        for project_id in (None, "abc"):
+            created = self.client.post("/dashboard/api/triggers", headers=_platform_admin(B),
+                                       json={**body, "project_id": project_id})
+            self.assertEqual(created.status_code, 400, created.text)
+            updated = self.client.put(f"/dashboard/api/triggers/{self.b_rows['trigger_id']}",
+                                      headers=_platform_admin(B), json={"project_id": project_id})
+            self.assertEqual(updated.status_code, 400, updated.text)
+
+    def test_the_dashboard_check_runs_off_the_event_loop(self):
+        import asyncio
+        from server import request_context
+        on_loop = []
+        real = request_context.context_for
+
+        def context_for(request, user_id):
+            try:
+                asyncio.get_running_loop()
+                on_loop.append(True)
+            except RuntimeError:
+                on_loop.append(False)
+            return real(request, user_id)
+
+        with patch.object(request_context, "context_for", context_for):
+            self._get("/dashboard/api/agents", B)
+        self.assertEqual(on_loop[0], False)
+
+    def test_the_playground_counts_the_workspace_s_cases(self):
+        session = self.Session()
+        session.add(TestCase(agent_name=B_ROOT, input="i", expected_output="o", workspace_id=A))
+        session.commit()
+        session.close()
+        agent = self._get(f"/dashboard/api/evals/playground/agent/{B_ROOT}", B).json()
+        self.assertEqual(agent["active_cases"], 1)
+
+
 if __name__ == "__main__":
     unittest.main()

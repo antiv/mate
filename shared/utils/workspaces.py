@@ -36,6 +36,7 @@ from typing import TYPE_CHECKING, Dict, List, Optional, Set, Tuple
 from sqlalchemy import delete, event, insert, or_, select, update
 from sqlalchemy.engine import Connection
 from sqlalchemy.sql.elements import ColumnElement
+from sqlalchemy.sql.selectable import ScalarSelect
 from sqlalchemy.orm import Mapper, Session, attributes
 
 from .models import (
@@ -270,7 +271,7 @@ def test_case_workspace(session: Session, test_case_id: int) -> Optional[int]:
     return session.query(TestCase.workspace_id).filter(TestCase.id == test_case_id).scalar()
 
 
-def agent_names_of(workspace_id: int):
+def agent_names_of(workspace_id: int) -> ScalarSelect:
     """A subquery of the names of the workspace's agents, for an IN filter."""
     return select(AgentConfig.name).join(Project, AgentConfig.project_id == Project.id).where(
         Project.workspace_id == workspace_id).scalar_subquery()

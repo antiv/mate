@@ -155,8 +155,9 @@ A dashboard route learns who is calling from one dependency,
 
 Every `/dashboard` route takes it, and the route inventory test fails on one that
 does not. The context is made once a request (`context_for`, kept on
-`request.state`): `DashboardAuthzMiddleware` makes it to check for an admin, and the
-route's dependency reuses it and the workspace it resolved.
+`request.state`): `DashboardAuthzMiddleware` makes it to check for an admin, in a
+thread (`asyncio.to_thread`), as resolving the workspace and the roles reads the
+database. The route's dependency reuses it and the workspace it resolved.
 
 ### The workspace of a request
 
@@ -489,7 +490,10 @@ Both the plain list and `?detailed=true` are filtered.
 Before each model call, the role check
 (`shared/utils/rbac_middleware.py::check_agent_access`) takes the agent's workspace
 from its project, and asks `shared/utils/workspaces.py::caller_access` whether the
-caller may use that workspace's agents:
+caller may use that workspace's agents. A caller seen for the first time is created
+first, with their membership, in a session of its own (`get_or_create_user`); the
+check then starts a new transaction, as on MySQL (REPEATABLE READ) the one it began
+would not see that membership:
 
 - a platform administrator (the `admin` role) may, and passes `allowed_for_roles`;
 - an owner or admin of the workspace may, and passes `allowed_for_roles`;

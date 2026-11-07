@@ -180,7 +180,9 @@ EU AI Act requires the notice unless it is already obvious to the person.
 - **Export** and **Import** move a project's agents between installations as a file.
   An import only writes to projects of the current workspace: an agent, memory block
   or trigger naming another project is skipped and listed in the result, and so is
-  an agent whose name another workspace uses, even with overwriting on. An imported
+  an agent whose name another workspace uses, even with overwriting on. An agent or
+  memory block that names no project goes to project 1 in the Default workspace, and
+  to the workspace's oldest project in another. An imported
   trigger goes to the project of its agent, and is skipped when that agent is not in
   the workspace.
 - **Save as Template** turns a root agent and its tree into a reusable template.
@@ -208,8 +210,9 @@ Before MATE 1.6 these were left behind and passed to the new agent.
 
 Renaming an agent takes all of this along to the new name, conversations included:
 its widget keys, Slack integrations and triggers keep working, and the old name is
-free with nothing left under it. Its ratings go along too, those given in the
-workspace's projects; none is deleted.
+free with nothing left under it. Its sub-agents name the new name as their parent,
+so the tree stays whole. Its ratings go along too, those given in the workspace's
+projects; none is deleted.
 
 A rename before 2.0 left them under the old name. In a workspace other than Default
 such a name is refused as taken. In the Default workspace an agent may take it, and
