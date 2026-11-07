@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import case, func
 from sqlalchemy.exc import SQLAlchemyError
 from .database_client import get_database_client
-from .models import TokenUsageLog
+from .models import DEFAULT_WORKSPACE_ID, TokenUsageLog
 from .workspaces import rows_of
 
 logger = logging.getLogger(__name__)
@@ -43,6 +43,18 @@ def _agent_tree(session: Session, agent_name: str) -> List[str]:
                 tree.append(child)
                 todo.append(child)
     return tree
+
+
+def _spent_in(session: Session, agent_name: Optional[str] = None,
+              project_id: Optional[int] = None) -> tuple:
+    """Filters keeping the log rows written in the agent's or project's workspace. An
+    agent's or project's spend is counted by agent name, and a name another workspace
+    used before is not this one's spend. With no config or project, the default
+    workspace's, as rows_of counts a row with none."""
+    from .workspaces import agent_workspace, workspace_of_project
+    workspace_id = (agent_workspace(session, agent_name) if agent_name is not None
+                    else workspace_of_project(session, project_id))
+    return rows_of(TokenUsageLog, workspace_id or DEFAULT_WORKSPACE_ID)
 
 
 class TokenUsageService:
@@ -386,7 +398,8 @@ class TokenUsageService:
                 ), 0)
             ).filter(
                 TokenUsageLog.agent_name.in_(names),
-                TokenUsageLog.timestamp >= since
+                TokenUsageLog.timestamp >= since,
+                *_spent_in(session, agent_name=agent_name)
             ).scalar()
             return int(row or 0)
         except SQLAlchemyError as e:
@@ -416,7 +429,8 @@ class TokenUsageService:
                 ), 0)
             ).filter(
                 TokenUsageLog.agent_name.in_(agent_names),
-                TokenUsageLog.timestamp >= since
+                TokenUsageLog.timestamp >= since,
+                *_spent_in(session, project_id=project_id)
             ).scalar()
             return int(row or 0)
         except SQLAlchemyError as e:
@@ -432,7 +446,8 @@ class TokenUsageService:
 
         None when the database could not be read, so a caller can tell an error
         from no spend. include_sub_agents widens an agent scope to its sub-agents.
-        workspace_id narrows a user scope to what the user spent in that workspace.
+        workspace_id narrows a user scope to what the user spent in that workspace;
+        an agent or project scope counts what was spent in its own workspace.
         """
         session = self._get_session()
         if not session:
@@ -449,7 +464,8 @@ class TokenUsageService:
                                      *rows_of(TokenUsageLog, workspace_id))
             elif scope == "agent":
                 names = _agent_tree(session, scope_id) if include_sub_agents else [scope_id]
-                query = query.filter(TokenUsageLog.agent_name.in_(names))
+                query = query.filter(TokenUsageLog.agent_name.in_(names),
+                                     *_spent_in(session, agent_name=scope_id))
             elif scope == "project":
                 from .models import AgentConfig
                 try:
@@ -460,7 +476,8 @@ class TokenUsageService:
                     AgentConfig.project_id == project_id).all()]
                 if not agent_names:
                     return (0.0, 0)
-                query = query.filter(TokenUsageLog.agent_name.in_(agent_names))
+                query = query.filter(TokenUsageLog.agent_name.in_(agent_names),
+                                     *_spent_in(session, project_id=project_id))
             else:
                 return (0.0, 0)
             cost, unpriced = query.one()

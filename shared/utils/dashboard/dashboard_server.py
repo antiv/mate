@@ -1269,11 +1269,13 @@ class DashboardServer:
 
     def _traces_in_workspace(self, session: Session, spans: List[Dict[str, Any]],
                              workspace_id: Optional[int]) -> Set[str]:
-        """The ids of the traces among `spans` that are the workspace's: every agent a
-        trace names is one of its agents. An agent with no config counts as the default
-        workspace's, and so does a trace that names none. A trace whose spans record
-        another workspace (mate.workspace.id) is not, though its agents' names are: an
-        agent deleted there may have left its name to one here. None keeps every trace."""
+        """The ids of the traces among `spans` that are the workspace's. A trace whose
+        spans record a workspace (mate.workspace.id, set when a model call starts) is
+        that workspace's, whatever names it holds: a name may have passed to another
+        workspace since, and a runtime sub-agent's has no config. A trace that records
+        none is the default workspace's, unless it names an agent of another one:
+        traces from before 2.0, of hardcoded agents, and of turns that never reached a
+        model. None keeps every trace."""
         from shared.utils.tracing.genai_attributes import MATE_WORKSPACE_ID
         from shared.utils.tracing.replay import AGENT_ATTRS
         named: Dict[str, Set[str]] = {}
@@ -1287,10 +1289,13 @@ class DashboardServer:
                     str(span["attributes"][MATE_WORKSPACE_ID]))
         if workspace_id is None:
             return set(named)
-        outside = set(agents_outside(session, workspace_id, sorted(set().union(*named.values()))))
-        return {trace for trace, agents in named.items()
-                if not agents & outside and (agents or workspace_id == DEFAULT_WORKSPACE_ID)
-                and recorded.get(trace, set()) <= {str(workspace_id)}}
+        unrecorded = {trace: agents for trace, agents in named.items() if trace not in recorded}
+        keep = {trace for trace, workspaces in recorded.items() if workspaces == {str(workspace_id)}}
+        if workspace_id == DEFAULT_WORKSPACE_ID and unrecorded:
+            outside = set(agents_outside(session, workspace_id,
+                                         sorted(set().union(*unrecorded.values()))))
+            keep |= {trace for trace, agents in unrecorded.items() if not agents & outside}
+        return keep
 
     def _get_traces(self, hours: int = 24, limit: int = 50, trace_id: Optional[str] = None,
                     workspace_id: Optional[int] = None) -> Dict[str, Any]:
@@ -1896,10 +1901,9 @@ class DashboardServer:
                     _propagate_project_to_descendants(original_name, config.project_id)
 
                 # The old name is free once this commits: its rows go with the agent
-                from shared.utils.agent_cleanup import purge_langgraph_checkpoints, rename_agent_rows
-                cleared = rename_agent_rows(session, original_name, config.name)["langgraph_threads"]
+                from shared.utils.agent_cleanup import rename_agent_rows
+                rename_agent_rows(session, original_name, config.name)
                 session.commit()
-                purge_langgraph_checkpoints(cleared)
                 self._snapshot_agent_config(session, config, change_type='update', changed_by=changed_by)
                 return True
             return False
@@ -2021,11 +2025,10 @@ class DashboardServer:
                     setattr(config, key, value)
 
             # A version with another name renames the agent: its rows go with it
-            from shared.utils.agent_cleanup import purge_langgraph_checkpoints, rename_agent_rows
+            from shared.utils.agent_cleanup import rename_agent_rows
             session.flush()
-            cleared = rename_agent_rows(session, original_name, config.name)["langgraph_threads"]
+            rename_agent_rows(session, original_name, config.name)
             session.commit()
-            purge_langgraph_checkpoints(cleared)
             self._snapshot_agent_config(session, config, change_type='rollback', changed_by=changed_by)
             return mask_config_secrets(config.to_dict())
         except Exception as e:
