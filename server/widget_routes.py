@@ -624,7 +624,11 @@ async def widget_chat(request: Request, wk: WidgetApiKey = Depends(verify_widget
 
 async def _create_adk_session(app_name: str, user_id: str) -> str:
     """Always create a fresh ADK session and return its id."""
-    url = f"http://{ADK_HOST}:{ADK_PORT}/apps/{app_name}/users/{user_id}/sessions"
+    from urllib.parse import quote
+    # The visitor id comes from the widget's request: escaped, so ../ in it
+    # cannot move the session to another agent or user
+    url = (f"http://{ADK_HOST}:{ADK_PORT}/apps/{quote(app_name, safe='')}"
+           f"/users/{quote(user_id, safe='')}/sessions")
     async with httpx.AsyncClient(timeout=30.0) as c:
         resp = await c.post(url, json={})
         if resp.status_code == 200:
