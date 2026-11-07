@@ -205,7 +205,12 @@ An import (`POST /dashboard/api/agents/import`) skips an agent, block or trigger
 that names another workspace's project, and an agent whose name another workspace
 uses, even with `overwrite=true`. An imported trigger takes the project of its
 agent. The agent tools of `create_agent_tool.py` (create, update, delete) reach
-only agents of the calling agent's workspace.
+only agents of the calling agent's workspace. They need the admin role, but an agent
+outside the default workspace follows what that workspace's admin wrote, so there
+they give no more than the dashboard gives a workspace admin
+(`_for_the_platform`): `update_agent` refuses a platform-only feature
+(`features_added`), and `create_agent` a name with a folder in `agents/`. A name
+must be one ADK accepts in every workspace.
 
 The template catalogue (`templates/agent_templates/`) is shared by every workspace:
 listing and reading it is open, and importing creates the project in the current
@@ -362,13 +367,32 @@ with a `model_base_url`, `guard_model_client` wraps the model's completion clien
 variable makes httpx's `send()` refuse a request to an internal address and follow no
 redirect, so a model call fails on a redirect instead of following it. The patch on
 httpx is installed the first time such a model is built, and other requests pass
-untouched. `OUTBOUND_ALLOW_PRIVATE_NETWORK=true` leaves the model unwrapped.
+untouched. A streamed answer is read guarded too (`_GuardedStream`): some providers
+(`gemini/` and `vertex_ai` through LiteLLM, codestral, predibase) send the request
+only when the first chunk is read. `OUTBOUND_ALLOW_PRIVATE_NETWORK=true` leaves the
+model unwrapped.
 
 Ratings and traces outlive the agent they are about (`agent_cleanup.py` keeps logs),
 and an agent's name is free again once it is deleted. So the eval pages keep a
 rating to the workspace by its `project_id` as well as its agent's name
-(`feedback_service.of_workspace`), and `_traces_in_workspace` leaves out a trace
-whose spans record another workspace in `mate.workspace.id`.
+(`feedback_service.of_workspace`; in the default workspace a name with no config
+counts too, as a hardcoded agent's does), and `_traces_in_workspace` leaves out a
+trace whose spans record another workspace in `mate.workspace.id`. The replay
+picker reads the spans that carry it along with those that carry the conversation.
+
+A rename frees the old name as well. `agent_cleanup.rename_agent_rows`, called by
+the agent update and rollback, moves what `delete_agent_rows` would remove, and the
+ratings, to the new name, after deleting rows a former agent left under the new
+name. ADK's events reference their session with no ON UPDATE, so its sessions are
+copied under the new name, the events moved, and the old sessions deleted.
+
+A rename under 1.x left these rows under the old name, with no agent to own them.
+They are the default workspace's, so an agent of another workspace may not take
+such a name (`DashboardServer._name_unavailable`, `agent_cleanup.left_behind`): agent
+create and rename, import, clone, template import and sync, and the `create_agent`
+tool answer "this name is taken". Ratings don't count, since the eval pages keep
+them to their project. A trace counts only when none of its spans records a
+workspace, as before V046. The default workspace takes such a name, as in 1.x.
 
 `shared/test/test_cross_workspace.py` proves the scoping on the real app, with two
 workspaces. A platform administrator in workspace A calls every `/dashboard/api/`

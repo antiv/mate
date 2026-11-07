@@ -1757,10 +1757,11 @@ class TestThirdReviewOfPhase2(_TwoWorkspaces):
         session.add(User(user_id="slack_U1", roles='["user", "finance"]'))
         session.commit()
         session.close()
-        _carry_over_roles("slack_T_B_U1", "slack_U1", B_ROOT)
+        # The old id's roles carry over in the default workspace only (2j)
+        _carry_over_roles("slack_T_A_U1", "slack_U1", A_ROOT)
         session = self.Session()
         self.assertEqual(session.query(WorkspaceMember.workspace_id, WorkspaceMember.agent_roles)
-                         .filter_by(user_id="slack_T_B_U1").all(), [(B, '["user", "finance"]')])
+                         .filter_by(user_id="slack_T_A_U1").all(), [(A, '["user", "finance"]')])
         session.close()
 
     def test_a_token_of_a_closed_workspace_stops_working(self):
@@ -2047,6 +2048,206 @@ class TestFourthReviewOfPhase2(_TwoWorkspaces):
     def test_conflicting_app_names_are_refused(self):
         body = json.dumps({"app_name": A_ROOT, "appName": B_ROOT, "user_id": BOB}).encode()
         self.assertEqual(proxy_routes._workspace_refusal("run_sse", BOB, body), "conflicting app names")
+
+
+class TestFifthReviewOfPhase2(_TwoWorkspaces):
+    """The paths the fifth review of phase 2 found (#277, 2j)."""
+
+    def _as(self, user_id: str) -> TestClient:
+        return TestClient(auth_server.app, cookies=_signed_in(user_id))
+
+    def test_slack_roles_from_before_1_6_carry_over_in_the_default_workspace_only(self):
+        from server.slack_routes import _carry_over_roles
+        session = self.Session()
+        session.add(User(user_id="slack_U9", roles='["admin"]'))
+        session.commit()
+        session.close()
+        # B's admin signs the events of B's integration, so the Slack user is theirs to name
+        _carry_over_roles("slack_T_B_U9", "slack_U9", B_ROOT)
+        _carry_over_roles("slack_T_A_U9", "slack_U9", A_ROOT)
+        session = self.Session()
+        self.assertIsNone(session.query(User).filter_by(user_id="slack_T_B_U9").first())
+        self.assertEqual(session.query(User).filter_by(user_id="slack_T_A_U9").one().get_roles(), ["admin"])
+        session.close()
+
+    def test_a_lazy_stream_is_read_guarded(self):
+        import asyncio
+        from shared.utils import outbound
+        seen = []
+
+        class Lazy:
+            # As LiteLLM's gemini stream: the request goes out on the first read
+            def __aiter__(self):
+                return self
+
+            async def __anext__(self):
+                if seen:
+                    raise StopAsyncIteration
+                seen.append(outbound._GUARDED.get())
+                return "chunk"
+
+            def __iter__(self):
+                return self
+
+            def __next__(self):
+                if len(seen) > 1:
+                    raise StopIteration
+                seen.append(outbound._GUARDED.get())
+                return "chunk"
+
+        class Client:
+            async def acompletion(self, **kwargs):
+                return Lazy()
+
+            def completion(self, **kwargs):
+                return Lazy()
+
+        guarded = outbound.GuardedCompletions(Client(), B)
+
+        async def read() -> list:
+            return [chunk async for chunk in await guarded.acompletion()]
+
+        self.assertEqual(asyncio.run(read()), ["chunk"])
+        self.assertEqual(list(guarded.completion()), ["chunk"])
+        self.assertEqual(seen, [B, B])
+        self.assertIsNone(outbound._GUARDED.get())
+
+    def test_the_agent_tools_give_no_more_than_the_dashboard(self):
+        from shared.utils.tools import create_agent_tool
+        context = MagicMock()
+        servers = json.dumps({"mcpServers": {"s": {"url": "https://mcp.example.com",
+                                                   "headers": {"Authorization": "${SECRET}"}}}})
+        with patch.object(create_agent_tool, "_is_admin_user", return_value=True), \
+                patch.object(create_agent_tool, "reload_agent_cache", return_value={"success": True}):
+            # Run by a platform administrator, an agent of B follows B's admin's instruction
+            context.agent_name = B_ROOT
+            refused = create_agent_tool.update_agent("zz_ws_b_sub", mcp_servers_config=servers,
+                                                     tool_context=context)
+            self.assertEqual(refused["status"], "error")
+            self.assertIn("platform administrator", refused["error_message"])
+            # A hardcoded agent's folder, in an agents/ of the test's own
+            agents_dir = Path(tempfile.mkdtemp())
+            self.addCleanup(lambda: __import__("shutil").rmtree(agents_dir, ignore_errors=True))
+            (agents_dir / "zz_coded").mkdir()
+            with patch.object(create_agent_tool, "_AGENTS_DIR", agents_dir):
+                for name in ("zz_coded", "../x"):
+                    made = create_agent_tool.create_agent(name, "d", "i", tool_context=context)
+                    self.assertEqual(made["status"], "error", name)
+            # An agent of the default workspace, as in 1.x
+            context.agent_name = A_ROOT
+            self.assertEqual(create_agent_tool.update_agent(
+                "ws_a_sub", mcp_servers_config=servers, tool_context=context)["status"], "success")
+        session = self.Session()
+        self.assertIsNone(session.query(AgentConfig).filter_by(name="zz_ws_b_sub").one().mcp_servers_config)
+        session.close()
+
+    def test_a_renamed_agent_takes_its_rows_along(self):
+        session = self.Session()
+        session.execute(text(
+            "CREATE TABLE sessions (app_name TEXT, user_id TEXT, id TEXT, state TEXT, "
+            "create_time DATETIME, update_time DATETIME, PRIMARY KEY (app_name, user_id, id))"))
+        session.execute(text(
+            "CREATE TABLE events (id TEXT, app_name TEXT, user_id TEXT, session_id TEXT, content TEXT, "
+            "PRIMARY KEY (id, app_name, user_id, session_id), FOREIGN KEY (app_name, user_id, session_id) "
+            "REFERENCES sessions (app_name, user_id, id) ON DELETE CASCADE)"))
+        session.execute(text("INSERT INTO sessions VALUES (:a, :u, 's1', '{}', NULL, NULL)"),
+                        {"a": B_ROOT, "u": BOB})
+        session.execute(text("INSERT INTO events VALUES ('e1', :a, :u, 's1', :c)"),
+                        {"a": B_ROOT, "u": BOB, "c": B_MARKER})
+        session.commit()
+        config_id = self.b_rows["config_id"]
+        session.close()
+        renamed = self._as(BOB).put(f"/dashboard/api/agents/{config_id}", data=self._agent_form(
+            self.ids["project_b"], name="zz_ws_b_renamed"))
+        self.assertEqual(renamed.status_code, 200, renamed.text)
+        session = self.Session()
+        for table, column in (("sessions", "app_name"), ("events", "app_name"),
+                              ("lg_sessions", "app_name"), ("test_cases", "agent_name"),
+                              ("response_feedback", "agent_name")):
+            names = {row[0] for row in session.execute(text(f"SELECT {column} FROM {table}"))}
+            self.assertNotIn(B_ROOT, names, table)
+            self.assertIn("zz_ws_b_renamed", names, table)
+        self.assertEqual(session.execute(text("SELECT content FROM events")).scalar(), B_MARKER)
+        session.close()
+
+    def _agent_form(self, project_id: int, name: str = "zz_ws_b_new", **fields) -> dict:
+        return TestWorkspaceAdmins._agent_form(self, project_id, name, **fields)
+
+    def test_a_name_with_rows_left_from_1_x_is_taken_outside_the_default_workspace(self):
+        from shared.utils.tools import create_agent_tool
+        session = self.Session()
+        # Left by agents renamed under 1.x: a LangGraph conversation, and a trace from
+        # before V046; a trace that recorded its workspace and a rating keep to theirs
+        session.add(LangGraphSession(id="lg-left", app_name="zz_left", user_id=ALICE))
+        session.add(ResponseFeedback(session_id="s-r", message_id="m-r", agent_name="zz_rated",
+                                     project_id=self.ids["project_b"], rating="down"))
+        session.execute(text(
+            "CREATE TABLE trace_spans (id INTEGER PRIMARY KEY, trace_id TEXT, span_id TEXT, "
+            "parent_span_id TEXT, name TEXT, kind TEXT, start_time DATETIME, end_time DATETIME, "
+            "duration_ms INTEGER, attributes TEXT, status TEXT, error_message TEXT)"))
+        for trace, span, attributes in (("old", "a", {"gen_ai.agent.name": "zz_traced"}),
+                                        ("new", "a", {"gen_ai.agent.name": "zz_recorded"}),
+                                        ("new", "b", {"mate.workspace.id": A})):
+            session.execute(text("INSERT INTO trace_spans (trace_id, span_id, attributes) "
+                                 "VALUES (:t, :s, :a)"), {"t": trace, "s": span, "a": json.dumps(attributes)})
+        session.commit()
+        session.close()
+        bob = self._as(BOB)
+        for name, expected in (("zz_left", 409), ("zz_traced", 409), ("zz_recorded", 200), ("zz_rated", 200)):
+            response = bob.post("/dashboard/api/agents", data=self._agent_form(self.ids["project_b"], name=name))
+            self.assertEqual(response.status_code, expected, f"{name}: {response.text}")
+        context = MagicMock()
+        context.agent_name = B_ROOT
+        with patch.object(create_agent_tool, "_is_admin_user", return_value=True):
+            self.assertEqual(create_agent_tool.create_agent("zz_left", "d", "i", tool_context=context)["status"],
+                             "error")
+        # The default workspace takes it, as in 1.x
+        response = self.client.post("/dashboard/api/agents", headers=_platform_admin(A),
+                                    data=self._agent_form(self.ids["project_a"], name="zz_left"))
+        self.assertEqual(response.status_code, 200, response.text)
+
+    def test_ratings_of_an_agent_with_no_config_stay_in_the_default_workspace(self):
+        session = self.Session()
+        session.add(ResponseFeedback(session_id="s-h", message_id="m-h", agent_name="hardcoded_bot",
+                                     rating="down", comment="HARDCODED"))
+        session.commit()
+        session.close()
+        listed = self.client.get("/dashboard/api/evals/feedback", headers=_platform_admin(A))
+        self.assertIn("HARDCODED", listed.text)
+        self.assertNotIn("HARDCODED", self._as(BOB).get("/dashboard/api/evals/feedback").text)
+
+    def test_the_replay_picker_sees_the_workspace_a_trace_recorded(self):
+        session = self.Session()
+        session.execute(text(
+            "CREATE TABLE trace_spans (id INTEGER PRIMARY KEY, trace_id TEXT, span_id TEXT, "
+            "parent_span_id TEXT, name TEXT, kind TEXT, start_time DATETIME, end_time DATETIME, "
+            "duration_ms INTEGER, attributes TEXT, status TEXT, error_message TEXT)"))
+        now = datetime.now()
+        # The turn names B's agent; its inference span recorded workspace A
+        for span, attributes in (("turn", {"gen_ai.agent.name": B_ROOT,
+                                           "gen_ai.conversation.id": "session-of-a"}),
+                                 ("inference", {"mate.workspace.id": A})):
+            session.execute(text(
+                "INSERT INTO trace_spans (trace_id, span_id, name, start_time, end_time, attributes) "
+                "VALUES ('t', :s, :s, :st, :st, :a)"), {"s": span, "st": now, "a": json.dumps(attributes)})
+        session.commit()
+        session.close()
+        response = self.client.get("/dashboard/api/traces/sessions", headers=_platform_admin(B))
+        self.assertEqual(response.json()["sessions"], [])
+
+    def test_the_built_in_account_is_a_platform_administrator_for_drive(self):
+        from fastapi import FastAPI
+        from shared.utils.mcp.google_drive_mcp_server import GoogleDriveMCPServer
+        app = FastAPI()
+        GoogleDriveMCPServer(app, gdrive_mcp_available=True)
+        # The built-in account whose row lacks the admin role: pat_auth counts it all the same
+        session = self.Session()
+        if not session.query(User).filter_by(user_id=auth.AUTH_USERNAME).update({"roles": '["user"]'}):
+            session.add(User(user_id=auth.AUTH_USERNAME, roles='["user"]'))
+        session.commit()
+        session.close()
+        response = TestClient(app).post("/gdrive/mcp/tools/list", headers=_platform_admin(B))
+        self.assertEqual(response.status_code, 200)
 
 
 if __name__ == "__main__":

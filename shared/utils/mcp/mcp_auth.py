@@ -30,10 +30,10 @@ async def require_mcp_user(request: Request) -> str:
 async def require_drive_user(request: Request) -> str:
     """FastAPI dependency for /gdrive/mcp: require_mcp_user, in the default workspace
     unless the caller is a platform administrator; 403 otherwise."""
-    from server.pat_auth import get_pat_user
+    from server.pat_auth import get_pat_user, is_platform_admin
     from ..models import DEFAULT_WORKSPACE_ID
     user = await get_pat_user(request)
-    if request.state.workspace_id != DEFAULT_WORKSPACE_ID and "admin" not in user.get_roles():
+    if request.state.workspace_id != DEFAULT_WORKSPACE_ID and not is_platform_admin(user):
         raise HTTPException(status_code=403,
                             detail="Google Drive uses the installation's account: default workspace only")
     return user.user_id
