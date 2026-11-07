@@ -58,7 +58,7 @@ from shared.utils import (
 from shared.utils.mcp.mcp_auth import agent_allowed
 from shared.utils.models import (
     AgentConfig, AgentConfigVersion, AgentResponse, AgentTrigger, AlertRule, AuditLog, Base,
-    ChannelIntegration, FileSearchStore, GuardrailLog, LangGraphSession, MemoryBlock,
+    ChannelIntegration, EvalResult, FileSearchStore, GuardrailLog, LangGraphSession, MemoryBlock,
     PersonalAccessToken, Project, RateLimitConfig, ResponseFeedback, TestCase, TokenUsageLog, User,
     WidgetApiKey, Workspace, WorkspaceMember,
 )
@@ -903,6 +903,33 @@ class TestProxy(_TwoWorkspaces):
         session.close()
         self.assertEqual(self.client.post(f"/a2a/{A_ROOT}", json={}).status_code, 403)
 
+    def test_run_live_keeps_to_the_member_s_workspaces(self):
+        from starlette.websockets import WebSocketDisconnect
+        connected = []
+
+        def connect(url, *args, **kwargs):
+            connected.append(url)
+            raise ConnectionError("no agent server in this test")
+
+        cookie = f"session={_signed_in(ALICE)['session']}"
+        with patch.object(proxy_routes.websockets, "connect", side_effect=connect):
+            with self.assertRaises(WebSocketDisconnect) as refused:
+                with self.client.websocket_connect(
+                        f"/run_live?app_name={B_ROOT}&user_id={ALICE}&session_id=s",
+                        headers={"cookie": cookie}) as ws:
+                    ws.receive_text()
+            self.assertEqual(refused.exception.code, 1008)
+            self.assertEqual(connected, [])
+            try:
+                with self.client.websocket_connect(
+                        f"/run_live?app_name={A_ROOT}&user_id={ALICE}&session_id=s",
+                        headers={"cookie": cookie}) as ws:
+                    ws.receive_text()
+            except WebSocketDisconnect:
+                pass
+        self.assertEqual(len(connected), 1)
+        self.assertIn(f"app_name={A_ROOT}", connected[0])
+
     def test_a_member_reaches_their_own_workspace_s_agent(self):
         self._as_member(ALICE)
         response = self.client.post(f"/apps/{A_ROOT}/users/{ALICE}/sessions", json={})
@@ -1523,6 +1550,145 @@ class TestReviewOfPhase2(_TwoWorkspaces):
         with patch("server.request_context.resolve_workspace", wraps=resolve_workspace) as resolved:
             self.assertEqual(bob.get("/dashboard/api/agents").status_code, 200)
         self.assertEqual(resolved.call_count, 1)
+
+
+class TestSecondReviewOfPhase2(_TwoWorkspaces):
+    """The paths the second review of phase 2 found (#277, 2g)."""
+
+    def _as(self, user_id: str) -> TestClient:
+        return TestClient(auth_server.app, cookies=_signed_in(user_id))
+
+    def test_file_search_keeps_to_the_agent_s_workspace(self):
+        from shared.utils.tools.file_search_tools import create_file_search_tools_from_config
+        session = self.Session()
+        session.add(FileSearchStore(store_name="ws-a-store", display_name="a",
+                                    project_id=self.ids["project_a"]))
+        session.commit()
+        session.close()
+
+        def stores(project_id: int, names: List[str]) -> List[str]:
+            config = {"name": "x", "project_id": project_id, "tool_config": json.dumps(
+                {"file_search": {"enabled": True, "store_names": names}})}
+            with patch("shared.utils.tools.file_search_tools.query_file_search",
+                       side_effect=lambda question, store_names, model: store_names):
+                tools = create_file_search_tools_from_config(config)
+                return tools[0]("q") if tools else []
+
+        b_store = self.b_rows["store_name"]
+        # tool_config is the agent's own: an admin of A names B's store there
+        self.assertEqual(stores(self.ids["project_a"], [b_store, "ws-a-store"]), ["ws-a-store"])
+        self.assertEqual(stores(self.ids["project_b"], [b_store, "ws-a-store"]), [b_store])
+        # A store made in Gemini directly, as 1.x allowed: in the default workspace only
+        self.assertEqual(stores(self.ids["project_a"], ["fileSearchStores/made-elsewhere"]),
+                         ["fileSearchStores/made-elsewhere"])
+        self.assertEqual(stores(self.ids["project_b"], ["fileSearchStores/made-elsewhere"]), [])
+
+    def _version_of_b_root(self, **snapshot) -> int:
+        session = self.Session()
+        version = AgentConfigVersion(agent_config_id=self.b_rows["config_id"], version_number=2,
+                                     config_snapshot=json.dumps({"name": B_ROOT, **snapshot}))
+        session.add(version)
+        session.commit()
+        version_id = version.id
+        session.close()
+        return version_id
+
+    def _roll_back(self, version_id: int) -> int:
+        return self._as(BOB).post(
+            f"/dashboard/api/agents/{self.b_rows['config_id']}/rollback/{version_id}").status_code
+
+    def test_a_rollback_checks_what_it_brings_back(self):
+        # A version from before a platform administrator moved the agent to B, or
+        # before its parent or its name were taken elsewhere
+        cases = (
+            ({"project_id": self.ids["project_a"]}, 404),
+            ({"parent_agents": json.dumps([A_ROOT])}, 400),
+            ({"name": A_ROOT}, 409),
+            ({"name": "has_code"}, 409),
+        )
+        for snapshot, refused in cases:
+            with self.subTest(snapshot=snapshot):
+                with patch("shared.utils.dashboard.dashboard_server.has_code_folder",
+                           side_effect=lambda root, name: name == "has_code"):
+                    self.assertEqual(self._roll_back(self._version_of_b_root(**snapshot)), refused)
+        session = self.Session()
+        b_root = session.query(AgentConfig).filter_by(id=self.b_rows["config_id"]).one()
+        self.assertEqual((b_root.name, b_root.project_id), (B_ROOT, self.ids["project_b"]))
+        session.close()
+        version_id = self._version_of_b_root(project_id=self.ids["project_b"], description="older")
+        self.assertEqual(self._roll_back(version_id), 200)
+
+    def test_a_clone_by_an_owner_copies_no_code_the_source_has(self):
+        # Set on B's agent by a platform administrator; the rename leaves it as it is
+        session = self.Session()
+        session.query(AgentConfig).filter_by(name=B_ROOT).update({"mcp_servers_config": json.dumps(
+            {"mcpServers": {"s": {"command": "npx", "args": ["server"]}}})})
+        session.commit()
+        session.close()
+        body = {"target_project_id": self.ids["project_b"], "suffix": "_copy"}
+        response = self._as(BOB).post(f"/dashboard/api/agents/{B_ROOT}/clone", json=body)
+        self.assertEqual(response.status_code, 403, response.text)
+        response = self.client.post(f"/dashboard/api/agents/{B_ROOT}/clone", json=body,
+                                    headers=_platform_admin(B))
+        self.assertEqual(response.status_code, 200, response.text)
+
+    def test_a_template_sync_checks_the_config_it_writes(self):
+        dashboard = auth_server.dashboard_server
+        slug = dashboard.template_service.slugify_project_name(f"{B_MARKER}-project")
+        synced_name = f"{slug}_root"
+
+        def stdio(arg: str) -> str:
+            return json.dumps({"mcpServers": {"s": {"command": "npx", "args": ["server", arg]}}})
+
+        template = {"template_meta": {"agent_prefix": "tpl_"},
+                    "agents": [{"name": "tpl_root", "type": "llm", "description": "d",
+                                "instruction": "i", "mcp_servers_config": stdio("tpl_root")}]}
+        session = self.Session()
+        session.query(Project).filter_by(id=self.ids["project_b"]).update(
+            {"template_id": "t", "template_prefix": "tpl_"})
+        # Set by a platform administrator
+        session.add(AgentConfig(name=synced_name, type="llm", model_name="m",
+                                project_id=self.ids["project_b"], mcp_servers_config=stdio("tpl_root")))
+        session.commit()
+        session.close()
+
+        def sync() -> dict:
+            with patch.object(dashboard.template_service, "get_template", return_value=template):
+                response = self._as(BOB).post("/dashboard/api/templates/sync",
+                                              json={"project_id": self.ids["project_b"]})
+            self.assertEqual(response.status_code, 200, response.text)
+            return response.json()
+
+        # The sync maps the name in the arguments: a changed stdio server
+        self.assertEqual([s["name"] for s in sync()["agents_skipped"]], [synced_name])
+        session = self.Session()
+        self.assertEqual(session.query(AgentConfig.mcp_servers_config).filter_by(
+            name=synced_name).scalar(), stdio("tpl_root"))
+        # The same server as the sync writes it is no change
+        session.query(AgentConfig).filter_by(name=synced_name).update(
+            {"mcp_servers_config": stdio(synced_name)})
+        session.commit()
+        session.close()
+        self.assertEqual(sync()["agents_skipped"], [])
+
+    def test_a_scored_output_is_stored_only_against_a_version_of_the_workspace(self):
+        session = self.Session()
+        a_root = session.query(AgentConfig).filter_by(name=A_ROOT).one()
+        a_version = AgentConfigVersion(agent_config_id=a_root.id, version_number=1,
+                                       config_snapshot=json.dumps({"name": A_ROOT}))
+        session.add(a_version)
+        session.commit()
+        a_version_id = a_version.id
+        session.close()
+        bob = self._as(BOB)
+        path = f"/dashboard/api/evals/{self.b_rows['test_case_id']}/run"
+        response = bob.post(path, json={"version_id": a_version_id, "actual_output": B_MARKER})
+        self.assertEqual(response.status_code, 404, response.text)
+        session = self.Session()
+        self.assertEqual(session.query(EvalResult).filter_by(version_id=a_version_id).count(), 0)
+        session.close()
+        response = bob.post(path, json={"version_id": self.b_rows["version_id"], "actual_output": B_MARKER})
+        self.assertEqual(response.status_code, 200, response.text)
 
 
 if __name__ == "__main__":

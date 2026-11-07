@@ -24,6 +24,7 @@ from urllib.parse import parse_qs
 
 import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response
+from sqlalchemy.orm import Session
 
 from shared.utils.agent_invoke import run_agent_message
 from shared.utils.database_client import get_database_client
@@ -483,7 +484,8 @@ _EDITABLE_FIELDS = (
 )
 
 
-def _workspace_integration(session, ctx: RequestContext, integration_id: int) -> ChannelIntegration:
+def _workspace_integration(session: Session, ctx: RequestContext,
+                           integration_id: int) -> ChannelIntegration:
     """The integration, if its project is the caller's workspace's; 404 otherwise."""
     integration = session.query(ChannelIntegration).filter(
         ChannelIntegration.id == integration_id,
@@ -493,8 +495,9 @@ def _workspace_integration(session, ctx: RequestContext, integration_id: int) ->
     return integration
 
 
-def _check_target(session, ctx: RequestContext, project_id, agent_name: str,
-                  team_id: Optional[str], integration_id: Optional[int] = None) -> None:
+def _check_target(session: Session, ctx: RequestContext, project_id: Optional[int],
+                  agent_name: str, team_id: Optional[str],
+                  integration_id: Optional[int] = None) -> None:
     """404 unless the project and agent are the workspace's; 409 when another
     integration, of any workspace, has the Slack team (V047). Neither says whose: the
     first to connect a team keeps it, and a platform administrator, who opens every

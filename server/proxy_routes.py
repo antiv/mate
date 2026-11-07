@@ -112,6 +112,12 @@ def _workspace_refusal(path: str, identity: str, body: Optional[bytes]) -> Optio
     app_name = _app_name(path, body)
     if app_name is None:
         return None
+    return _agent_refusal(app_name, identity, check_roles=bool(_A2A_PATH.match(path)))
+
+
+def _agent_refusal(app_name: str, identity: str, check_roles: bool) -> Optional[str]:
+    """Why a non-admin may not reach this agent, or None. The agent's roles are checked
+    here only when the agent will not run as the caller (A2A); otherwise RBAC does it."""
     from shared.utils.database_client import get_database_client
     from shared.utils.models import AgentConfig, User
     from shared.utils.workspaces import agent_workspace, caller_access, roles_allow
@@ -121,7 +127,7 @@ def _workspace_refusal(path: str, identity: str, body: Optional[bytes]) -> Optio
         access = caller_access(session, user, agent_workspace(session, app_name)) if user else None
         if access is None:
             return "not an agent of the user's workspaces"
-        if _A2A_PATH.match(path):
+        if check_roles:
             roles = session.query(AgentConfig.allowed_for_roles).filter_by(name=app_name).scalar()
             if not roles_allow(access, roles):
                 return "the agent's roles don't allow the user"
@@ -272,6 +278,11 @@ async def websocket_run_live(
                 is_admin = True
             if is_admin or (identity and user_id == identity):
                 authenticated = True
+            if authenticated and not is_admin:
+                refusal = await asyncio.to_thread(_agent_refusal, app_name, identity, False)
+                if refusal:
+                    logger.warning("run_live refused %s for %s: %s", app_name, identity, refusal)
+                    authenticated = False
 
     if not authenticated:
         auth_header = websocket.headers.get("authorization", "")
