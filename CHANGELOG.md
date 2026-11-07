@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.1] - 2026-11-07
+
+### Security
+
+- **The proxy refuses dot segments from non-admins** - the proxy to the agent server checked a non-admin's path as it was sent, but httpx resolves `.` and `..` segments when it forwards the request. A signed-in user who was not an admin could send `apps/<agent>/users/<own id>/../<other id>/sessions` (with `curl --path-as-is`, or `%2e%2e`) and read another user's conversations, or reach `run_sse` and other admin-only routes the same way. Such a path is now refused with 403; an admin's request is forwarded as before. See `docs/dev/auth-and-access.md`
+- **`/run_live` escapes its query** - the WebSocket proxy built the agent server's URL by pasting `app_name`, `user_id` and `session_id` into it, so a `session_id` of `x&user_id=<other id>` ran the live session as that other user. The query is now built with `urlencode`.
+- **The widget escapes the visitor id** - the widget created a visitor's session at a URL built from the visitor id the page sent, so `../` in it could create a session under another agent or user. The id is now escaped; a generated visitor id is unchanged.
+
 ## [1.6.0] - 2026-10-31
 
 ### Added
