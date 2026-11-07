@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 from ..database_client import get_database_client
 from ..models import DEFAULT_WORKSPACE_ID, AgentConfig
 from ..user_service import get_user_service
+from ..agent_cleanup import left_behind
 from ..platform_only import features_added, has_code_folder, is_agent_name
 from ..workspaces import agent_workspace
 from ...utils.utils import mask_config_secrets, reload_agent_cache
@@ -272,7 +273,9 @@ def create_agent(
                 AgentConfig.name == name.strip()
             ).first()
             if not existing_agent and not _for_the_platform(session, current_agent_name):
-                existing_agent = has_code_folder(_AGENTS_DIR, name.strip())
+                # Nor rows left under the name, which are the default workspace's
+                existing_agent = (has_code_folder(_AGENTS_DIR, name.strip())
+                                  or left_behind(session, name.strip()))
 
             if existing_agent:
                 return {

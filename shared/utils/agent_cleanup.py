@@ -26,7 +26,7 @@ they record what happened and are not read by the agent.
 import logging
 from typing import Dict, Iterable, List
 
-from sqlalchemy import inspect, text
+from sqlalchemy import bindparam, inspect, text
 
 logger = logging.getLogger(__name__)
 
@@ -185,3 +185,46 @@ def rename_agent_rows(session, old_name: str, new_name: str) -> Dict[str, object
             if count:
                 moved[f"adk_{table}"] = count
     return moved
+
+
+def left_behind(session, name: str) -> bool:
+    """True if rows are keyed by this name with no agent of that name to own them: left
+    by an agent renamed under 1.x, before rename_agent_rows. They are the default
+    workspace's, so another workspace's new agent may not take the name and inherit
+    them. Ratings don't count, the eval pages keep them to their project; nor does a
+    trace that records its workspace (mate.workspace.id), which the trace pages keep
+    to it. Spans from before V046 record none."""
+    from .models import (AgentFileSearchStore, AgentTrigger, AlertRule, ChannelIntegration,
+                         Credential, LangGraphSession, MemorySession, RateLimitConfig,
+                         TestCase, WidgetApiKey)
+
+    for column in (AgentFileSearchStore.agent_name, WidgetApiKey.agent_name,
+                   ChannelIntegration.agent_name, AgentTrigger.agent_name, TestCase.agent_name,
+                   Credential.app_name, MemorySession.app_name, LangGraphSession.app_name):
+        if session.query(column).filter(column == name).first():
+            return True
+    for model in (RateLimitConfig, AlertRule):
+        if session.query(model.id).filter(model.scope == "agent", model.scope_id == name).first():
+            return True
+    existing = set(inspect(session.connection()).get_table_names())
+    for table in ADK_SESSION_TABLES:
+        if table in existing and session.execute(
+                text(f"SELECT 1 FROM {table} WHERE app_name = :name"), {"name": name}).first():
+            return True
+    if "trace_spans" in existing:
+        # The name as a JSON string value. A name is an identifier, so only _ is a LIKE
+        # wildcard in it: a near name may also count, never fewer
+        dialect = session.get_bind().dialect.name
+        attributes = {"postgresql": "CAST(attributes AS TEXT)",
+                      "mysql": "CAST(attributes AS CHAR)"}.get(dialect, "attributes")
+        traces = {row[0] for row in session.execute(text(
+            f"SELECT DISTINCT trace_id FROM trace_spans WHERE {attributes} LIKE :pattern"),
+            {"pattern": f'%"{name}"%'})}
+        if traces:
+            recorded = {row[0] for row in session.execute(text(
+                f"SELECT DISTINCT trace_id FROM trace_spans WHERE trace_id IN :traces "
+                f"AND {attributes} LIKE '%mate.workspace.id%'").bindparams(
+                    bindparam("traces", expanding=True)), {"traces": sorted(traces)})}
+            if traces - recorded:
+                return True
+    return False

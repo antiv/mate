@@ -1015,12 +1015,26 @@ class DashboardServer:
             raise HTTPException(status_code=404, detail="Trigger not found")
         return trigger
 
+    def _name_unavailable(self, session: Session, name: str, workspace_id: Optional[int],
+                          platform_admin: bool) -> bool:
+        """True if a new agent may not take this name, though no agent has it: it has a
+        folder in agents/ (unless the caller is a platform administrator), or, for an
+        agent outside the default workspace, rows are left under it
+        (agent_cleanup.left_behind), which the agent would inherit."""
+        if not platform_admin and has_code_folder(self.project_root / "agents", name):
+            return True
+        if workspace_id not in (None, DEFAULT_WORKSPACE_ID):
+            from shared.utils.agent_cleanup import left_behind
+            return left_behind(session, name)
+        return False
+
     def _check_agent_names(self, ctx: RequestContext, name: str, parents: List[str],
                            config_id: Optional[int] = None) -> None:
         """D1: an agent name is unique across the installation, and parent_agents name
         agents of the same workspace. 409 or 400; neither says which workspace. For a
         caller who is no platform administrator, a name with a folder in agents/ is
-        taken too: the agent would run that folder's code (platform_only.py).
+        taken too: the agent would run that folder's code (platform_only.py). So is,
+        outside the default workspace, a name with rows left under it (_name_unavailable).
 
         A new name must be one ADK accepts (is_agent_name), 400 otherwise: the name
         becomes a folder under agents/ and a LIKE pattern. An agent keeps the name it has."""
@@ -1036,8 +1050,8 @@ class DashboardServer:
                     "letters, digits and underscores"))
             taken = session.query(self.AgentConfig.id).filter(
                 self.AgentConfig.name == name, self.AgentConfig.id != config_id).first()
-            if not taken and not ctx.is_platform_admin:
-                taken = name != current and has_code_folder(self.project_root / "agents", name)
+            if not taken and name != current:
+                taken = self._name_unavailable(session, name, ctx.workspace_id, ctx.is_platform_admin)
             outside = agents_outside(session, ctx.workspace_id, parents)
         finally:
             session.close()
@@ -2311,12 +2325,12 @@ class DashboardServer:
                         skipped_count += 1
                         errors.append(f"Agent '{agent_data['name']}': not a valid agent name")
                         continue
+                    if not existing_agent and self._name_unavailable(
+                            session, agent_data.get("name"), workspace_id, platform_admin):
+                        skipped_count += 1
+                        errors.append(f"Agent '{agent_data['name']}': this name is taken")
+                        continue
                     if not platform_admin:
-                        if not existing_agent and has_code_folder(self.project_root / "agents",
-                                                                  agent_data.get("name")):
-                            skipped_count += 1
-                            errors.append(f"Agent '{agent_data['name']}': this name is taken")
-                            continue
                         added = features_added(agent_data, existing_agent.to_dict() if existing_agent else None)
                         if added:
                             skipped_count += 1
@@ -2548,8 +2562,10 @@ class DashboardServer:
 
             # New names: suffix everyone, bump on collision against the DB and
             # against names assigned earlier in this very clone.
+            target_workspace = workspace_of_project(session, target_project_id)
+
             def _name_taken(candidate: str) -> bool:
-                if not platform_admin and has_code_folder(self.project_root / "agents", candidate):
+                if self._name_unavailable(session, candidate, target_workspace, platform_admin):
                     return True
                 return session.query(self.AgentConfig.id).filter(
                     self.AgentConfig.name == candidate).first() is not None
@@ -2750,11 +2766,16 @@ class DashboardServer:
             if old_name:
                 new_name = old_name.replace(agent_prefix, replace_with, 1) if agent_prefix in old_name else f"{slug}_{old_name}"
                 name_map[old_name] = new_name
-        if not platform_admin:
-            coded = [n for n in name_map.values() if has_code_folder(self.project_root / "agents", n)]
-            if coded:
-                return {"error": f"This name is taken: {', '.join(sorted(coded))}. "
-                                 f"Choose another project name.", "status_code": 409}
+        session = self.db_client.get_session() if self.db_client else None
+        try:
+            coded = [n for n in name_map.values()
+                     if self._name_unavailable(session, n, workspace_id, platform_admin)] if session else []
+        finally:
+            if session:
+                session.close()
+        if coded:
+            return {"error": f"This name is taken: {', '.join(sorted(coded))}. "
+                             f"Choose another project name.", "status_code": 409}
 
         # Create project
         try:
@@ -3141,10 +3162,15 @@ class DashboardServer:
             
             # Sort: root agents first
             ordered = sorted(template_agents, key=lambda a: (len(a.get("parent_agents") or []), a.get("name", "")))
-            
+            workspace_id = workspace_of_project(session, project_id)
+
             for tpl_agent in ordered:
                 tpl_name = tpl_agent.get("name", "")
                 proj_name = name_map.get(tpl_name, tpl_name)
+                if proj_name not in db_agent_map and self._name_unavailable(
+                        session, proj_name, workspace_id, platform_admin):
+                    agents_skipped.append({"name": proj_name, "reason": "this name is taken"})
+                    continue
                 if not platform_admin:
                     existing = db_agent_map.get(proj_name)
                     if existing:
@@ -3158,9 +3184,6 @@ class DashboardServer:
                         synced = {field: tpl_agent.get(field) for field in (
                             "tool_config", "mcp_servers_config", "model_base_url", "hardcoded")
                             if field in tpl_agent}
-                    if not existing and has_code_folder(self.project_root / "agents", proj_name):
-                        agents_skipped.append({"name": proj_name, "reason": "this name is taken"})
-                        continue
                     added = features_added(synced, existing.to_dict() if existing else None)
                     if added:
                         agents_skipped.append({"name": proj_name, "reason": (

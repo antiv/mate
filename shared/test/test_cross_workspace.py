@@ -2170,6 +2170,39 @@ class TestFifthReviewOfPhase2(_TwoWorkspaces):
     def _agent_form(self, project_id: int, name: str = "zz_ws_b_new", **fields) -> dict:
         return TestWorkspaceAdmins._agent_form(self, project_id, name, **fields)
 
+    def test_a_name_with_rows_left_from_1_x_is_taken_outside_the_default_workspace(self):
+        from shared.utils.tools import create_agent_tool
+        session = self.Session()
+        # Left by agents renamed under 1.x: a LangGraph conversation, and a trace from
+        # before V046; a trace that recorded its workspace and a rating keep to theirs
+        session.add(LangGraphSession(id="lg-left", app_name="zz_left", user_id=ALICE))
+        session.add(ResponseFeedback(session_id="s-r", message_id="m-r", agent_name="zz_rated",
+                                     project_id=self.ids["project_b"], rating="down"))
+        session.execute(text(
+            "CREATE TABLE trace_spans (id INTEGER PRIMARY KEY, trace_id TEXT, span_id TEXT, "
+            "parent_span_id TEXT, name TEXT, kind TEXT, start_time DATETIME, end_time DATETIME, "
+            "duration_ms INTEGER, attributes TEXT, status TEXT, error_message TEXT)"))
+        for trace, span, attributes in (("old", "a", {"gen_ai.agent.name": "zz_traced"}),
+                                        ("new", "a", {"gen_ai.agent.name": "zz_recorded"}),
+                                        ("new", "b", {"mate.workspace.id": A})):
+            session.execute(text("INSERT INTO trace_spans (trace_id, span_id, attributes) "
+                                 "VALUES (:t, :s, :a)"), {"t": trace, "s": span, "a": json.dumps(attributes)})
+        session.commit()
+        session.close()
+        bob = self._as(BOB)
+        for name, expected in (("zz_left", 409), ("zz_traced", 409), ("zz_recorded", 200), ("zz_rated", 200)):
+            response = bob.post("/dashboard/api/agents", data=self._agent_form(self.ids["project_b"], name=name))
+            self.assertEqual(response.status_code, expected, f"{name}: {response.text}")
+        context = MagicMock()
+        context.agent_name = B_ROOT
+        with patch.object(create_agent_tool, "_is_admin_user", return_value=True):
+            self.assertEqual(create_agent_tool.create_agent("zz_left", "d", "i", tool_context=context)["status"],
+                             "error")
+        # The default workspace takes it, as in 1.x
+        response = self.client.post("/dashboard/api/agents", headers=_platform_admin(A),
+                                    data=self._agent_form(self.ids["project_a"], name="zz_left"))
+        self.assertEqual(response.status_code, 200, response.text)
+
     def test_ratings_of_an_agent_with_no_config_stay_in_the_default_workspace(self):
         session = self.Session()
         session.add(ResponseFeedback(session_id="s-h", message_id="m-h", agent_name="hardcoded_bot",

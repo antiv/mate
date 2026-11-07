@@ -386,6 +386,14 @@ ratings, to the new name, after deleting rows a former agent left under the new
 name. ADK's events reference their session with no ON UPDATE, so its sessions are
 copied under the new name, the events moved, and the old sessions deleted.
 
+A rename under 1.x left these rows under the old name, with no agent to own them.
+They are the default workspace's, so an agent of another workspace may not take
+such a name (`DashboardServer._name_unavailable`, `agent_cleanup.left_behind`): agent
+create and rename, import, clone, template import and sync, and the `create_agent`
+tool answer "this name is taken". Ratings don't count, since the eval pages keep
+them to their project. A trace counts only when none of its spans records a
+workspace, as before V046. The default workspace takes such a name, as in 1.x.
+
 `shared/test/test_cross_workspace.py` proves the scoping on the real app, with two
 workspaces. A platform administrator in workspace A calls every `/dashboard/api/`
 GET route, and none may answer with B's data. Every route that names a row in its
