@@ -2125,11 +2125,14 @@ class TestFifthReviewOfPhase2(_TwoWorkspaces):
                                                      tool_context=context)
             self.assertEqual(refused["status"], "error")
             self.assertIn("platform administrator", refused["error_message"])
-            folder = sorted(p.name for p in create_agent_tool._AGENTS_DIR.iterdir() if p.is_dir()
-                            and p.name.isidentifier())[0]
-            for name in (folder, "../x"):
-                made = create_agent_tool.create_agent(name, "d", "i", tool_context=context)
-                self.assertEqual(made["status"], "error", name)
+            # A hardcoded agent's folder, in an agents/ of the test's own
+            agents_dir = Path(tempfile.mkdtemp())
+            self.addCleanup(lambda: __import__("shutil").rmtree(agents_dir, ignore_errors=True))
+            (agents_dir / "zz_coded").mkdir()
+            with patch.object(create_agent_tool, "_AGENTS_DIR", agents_dir):
+                for name in ("zz_coded", "../x"):
+                    made = create_agent_tool.create_agent(name, "d", "i", tool_context=context)
+                    self.assertEqual(made["status"], "error", name)
             # An agent of the default workspace, as in 1.x
             context.agent_name = A_ROOT
             self.assertEqual(create_agent_tool.update_agent(
