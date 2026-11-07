@@ -108,7 +108,15 @@ class DashboardAuthzMiddleware(BaseHTTPMiddleware):
             # Resolving the workspace and the roles reads the database: off the event
             # loop. The route's dependency then reuses the context (context_for).
             ctx = context_for(request, actor)
-            return ctx.is_platform_admin if platform_only else ctx.is_admin
+            allowed = ctx.is_platform_admin if platform_only else ctx.is_admin
+            if allowed and not platform_only:
+                # A platform admin is allowed before the workspace is resolved: resolve
+                # it here too. One it can't open is the route's to answer, as before.
+                try:
+                    ctx.workspace_id
+                except HTTPException:
+                    pass
+            return allowed
 
         try:
             allowed = await asyncio.to_thread(check)
@@ -120,8 +128,8 @@ class DashboardAuthzMiddleware(BaseHTTPMiddleware):
         logger.warning("Dashboard authz: denied %s %s for non-admin %s", request.method, path, actor)
         try:
             from shared.utils import audit_service
-            audit_service.log(
-                actor, audit_service.ACTION_RBAC_DENIAL, "dashboard_api",
+            await asyncio.to_thread(
+                audit_service.log, actor, audit_service.ACTION_RBAC_DENIAL, "dashboard_api",
                 resource_id=path, details={"method": request.method}, request=request,
             )
         except Exception as exc:

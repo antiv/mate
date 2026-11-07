@@ -16,6 +16,7 @@ from google.adk import Workflow
 from google.genai import types
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, create_model
+from .agent_cleanup import may_name_as_parent
 from .database_client import get_database_client
 from .models import DEFAULT_WORKSPACE_ID, AgentConfig, Project
 from .workspaces import agent_workspace
@@ -161,11 +162,11 @@ class AgentManager:
         
         try:
             workspace_id = agent_workspace(session, parent_name) or DEFAULT_WORKSPACE_ID
-            # Query for agents that have the parent_name in their parent_agents JSON array
-            # This works for SQLite, PostgreSQL, and MySQL with JSON support
+            # Agents that may list parent_name in their parent_agents JSON array,
+            # checked exactly below
             subagents = session.query(AgentConfig).join(
                 Project, AgentConfig.project_id == Project.id).filter(
-                AgentConfig.parent_agents.like(f'%"{parent_name}"%'),
+                may_name_as_parent(parent_name),
                 AgentConfig.disabled.is_(False),
                 Project.workspace_id == workspace_id,
             ).all()

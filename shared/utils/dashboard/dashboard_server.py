@@ -997,7 +997,9 @@ class DashboardServer:
 
     @staticmethod
     def _body_project_id(value: Any) -> int:
-        """A project id from a request body: 400 when it isn't a number."""
+        """A project id from a request body: 400 when it isn't a whole number."""
+        if isinstance(value, bool) or (isinstance(value, float) and not value.is_integer()):
+            value = None
         try:
             return int(value)
         except (TypeError, ValueError):
@@ -1882,11 +1884,11 @@ class DashboardServer:
                         return
                     visited.add(parent_name)
 
-                    # The agent's own workspace only, and a parent named exactly: the
-                    # LIKE is a coarse filter, with _ and % escaped
+                    # The agent's own workspace only, and a parent named exactly
+                    from shared.utils.agent_cleanup import may_name_as_parent
                     child_agents = session.query(self.AgentConfig).filter(
                         self.AgentConfig.parent_agents.isnot(None),
-                        self.AgentConfig.parent_agents.contains(f'"{parent_name}"', autoescape=True),
+                        may_name_as_parent(parent_name),
                         *in_projects_of(self.AgentConfig.project_id, original_workspace)
                     ).all()
 
@@ -2307,9 +2309,9 @@ class DashboardServer:
             errors = []
             projects = {pid for (pid,) in session.query(self.Project.id).filter(
                 self.Project.workspace_id == workspace_id)}
-            # An agent or block naming no project goes to project 1, as in 1.x; in
-            # another workspace, which doesn't have it, to its oldest project
-            no_project = 1 if workspace_id == DEFAULT_WORKSPACE_ID else min(projects, default=1)
+            # An agent or block naming no project goes to project 1, as in 1.x; where
+            # the workspace doesn't have it, to its oldest project
+            no_project = 1 if 1 in projects else min(projects, default=1)
             names = [a.get("name") for a in import_data["agents"] if isinstance(a, dict)]
             existing = {n for (n,) in session.query(self.AgentConfig.name).filter(self.AgentConfig.name.in_(names))}
             new_names = set(names) - existing
@@ -6832,7 +6834,8 @@ class DashboardServer:
                             func.avg(self.EvalResult.score).label("avg_score"),
                         )
                         .join(self.TestCase, self.EvalResult.test_case_id == self.TestCase.id)
-                        .filter(self.TestCase.agent_name == row.agent_name)
+                        .filter(self.TestCase.agent_name == row.agent_name,
+                                self.TestCase.workspace_id == ctx.workspace_id)
                         .first()
                     )
                     suites.append({
@@ -6871,7 +6874,8 @@ class DashboardServer:
                     )
                     .join(self.EvalResult, self.AgentConfigVersion.id == self.EvalResult.version_id)
                     .join(self.TestCase, self.EvalResult.test_case_id == self.TestCase.id)
-                    .filter(self.TestCase.agent_name == agent_name)
+                    .filter(self.TestCase.agent_name == agent_name,
+                            self.TestCase.workspace_id == ctx.workspace_id)
                     .group_by(self.AgentConfigVersion.id, self.AgentConfigVersion.version_number)
                     .order_by(self.AgentConfigVersion.version_number.asc())
                     .all()
@@ -6907,6 +6911,7 @@ class DashboardServer:
                     session.query(self.TestCase)
                     .filter(
                         self.TestCase.agent_name == agent_name,
+                        self.TestCase.workspace_id == ctx.workspace_id,
                         self.TestCase.is_active.is_(True),
                     )
                     .order_by(self.TestCase.id.asc())
@@ -7669,6 +7674,7 @@ class DashboardServer:
                             .filter(
                                 self.EvalResult.version_id == prev_version.id,
                                 self.TestCase.agent_name == agent_name,
+                                self.TestCase.workspace_id == ctx.workspace_id,
                             )
                             .scalar()
                         )
@@ -8135,8 +8141,8 @@ class DashboardServer:
             )
             if config_error:
                 raise HTTPException(status_code=400, detail=config_error)
-            self._require_in_workspace(ctx, agent_name=body.get("agent_name", ""),
-                                       project_id=self._body_project_id(body.get("project_id", 0)))
+            project_id = self._body_project_id(body.get("project_id", 0))
+            self._require_in_workspace(ctx, agent_name=body.get("agent_name", ""), project_id=project_id)
             session = self.db_client.get_session()
             if not session:
                 raise HTTPException(status_code=500, detail="Database unavailable")
@@ -8167,7 +8173,7 @@ class DashboardServer:
                     description=body.get("description", ""),
                     trigger_type=trigger_type,
                     agent_name=body.get("agent_name", ""),
-                    project_id=self._body_project_id(body.get("project_id", 0)),
+                    project_id=project_id,
                     prompt=body.get("prompt", ""),
                     cron_expression=body.get("cron_expression"),
                     webhook_path=webhook_path,
@@ -8220,9 +8226,9 @@ class DashboardServer:
             try:
                 trigger = self._workspace_trigger(session, ctx, trigger_id)
                 if "agent_name" in body or "project_id" in body:
+                    project_id = self._body_project_id(body.get("project_id", trigger.project_id))
                     self._require_in_workspace(
-                        ctx, agent_name=body.get("agent_name", trigger.agent_name),
-                        project_id=self._body_project_id(body.get("project_id", trigger.project_id)))
+                        ctx, agent_name=body.get("agent_name", trigger.agent_name), project_id=project_id)
 
                 # Block converting a working trigger into an unfireable type. A row
                 # already stored as one may still be saved unchanged, so a legacy
@@ -8256,7 +8262,7 @@ class DashboardServer:
                     if field in body:
                         setattr(trigger, field, body[field])
                 if "project_id" in body:
-                    trigger.project_id = self._body_project_id(body["project_id"])
+                    trigger.project_id = project_id
                 if "is_enabled" in body:
                     trigger.is_enabled = bool(body["is_enabled"])
                 if "require_signature" in body:

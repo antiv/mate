@@ -23,10 +23,11 @@ trial cleanup. Logs (token usage, guardrails, responses, feedback, audit) stay:
 they record what happened and are not read by the agent.
 """
 
+import json
 import logging
 from typing import Dict, Iterable, List
 
-from sqlalchemy import bindparam, inspect, text
+from sqlalchemy import bindparam, inspect, or_, text
 from sqlalchemy.orm import Query, Session
 from sqlalchemy.sql.elements import ColumnElement
 
@@ -36,6 +37,16 @@ logger = logging.getLogger(__name__)
 # app_name (the root agent): google/adk/sessions/schemas. Events first, they
 # reference sessions.
 ADK_SESSION_TABLES = ("events", "sessions", "app_states", "user_states")
+
+
+def may_name_as_parent(name: str) -> ColumnElement:
+    """A coarse filter for the agents whose parent_agents may list name, with _ and %
+    escaped; compare the list exactly afterwards. json.dumps writes a non-ASCII name
+    as \\u escapes, so both spellings."""
+    from .models import AgentConfig
+
+    return or_(*(AgentConfig.parent_agents.contains(spelling, autoescape=True)
+                 for spelling in sorted({f'"{name}"', json.dumps(name)})))
 
 
 def delete_agent_rows(session: Session, agent_names: Iterable[str]) -> Dict[str, object]:
@@ -152,11 +163,11 @@ def rename_agent_rows(session: Session, old_name: str, new_name: str) -> Dict[st
     moved: Dict[str, int] = {}
     workspace_id = agent_workspace(session, new_name) or DEFAULT_WORKSPACE_ID
 
-    # Its sub-agents name it as their parent: the workspace's only (D1), the LIKE a
-    # coarse filter with _ and % escaped, the list compared exactly
+    # Its sub-agents name it as their parent: the workspace's only (D1), the list
+    # compared exactly
     children = 0
     for child in session.query(AgentConfig).filter(
-            AgentConfig.parent_agents.contains(f'"{old_name}"', autoescape=True),
+            may_name_as_parent(old_name),
             *in_projects_of(AgentConfig.project_id, workspace_id)).all():
         parents = child.get_parent_agents()
         if old_name in parents:
