@@ -55,6 +55,8 @@ steps, those of the workspace only. A trace records the workspace of the agent w
 model calls it holds, and is shown in that workspace. A trace that records none, as
 one from before 2.0, of a hardcoded agent, or of a request that never reached a model,
 is shown in the Default workspace, unless it names an agent of another workspace.
+One that names a hardcoded agent is shown to platform administrators only, as are that
+agent's sessions.
 Open one to see the steps nested inside each other; the long bar is your
 answer. A model call's step also names the version of the agent's configuration that
 answered (`mate.agent.config_version`). A trace recorded for a chat session also has
