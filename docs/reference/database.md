@@ -10,7 +10,7 @@ generated: true
 
 # Database reference
 
-**36** tables defined in `shared/utils/models.py`; migrations are at **V047**. Migrations apply automatically on startup and are the source of truth for the schema: the models describe it, the migrations create it.
+**37** tables defined in `shared/utils/models.py`; migrations are at **V048**. Migrations apply automatically on startup and are the source of truth for the schema: the models describe it, the migrations create it.
 
 ## Migrations
 
@@ -65,6 +65,7 @@ A ✗ means that dialect has no file for that version. All dialects are in step.
 | V045 | encrypted secret columns | ✓ | ✓ | ✓ |
 | V046 | workspaces | ✓ | ✓ | ✓ |
 | V047 | channel team unique | ✓ | ✓ | ✓ |
+| V048 | workspace management | ✓ | ✓ | ✓ |
 
 ## `users`
 
@@ -145,7 +146,7 @@ Model `Project`. Model for grouping agents under projects.
 | Column | Type | Constraints | Default | Notes |
 |---|---|---|---|---|
 | `id` | `Integer` | PK | — | — |
-| `name` | `String(255)` | not null, unique | — | — |
+| `name` | `String(255)` | not null | — | — |
 | `description` | `Text` | — | — | — |
 | `template_id` | `String(255)` | — | — | Source template ID (e.g., "jira-worklog-assistant") |
 | `template_version` | `String(50)` | — | — | Template version at import/sync (e.g., "3.0") |
@@ -164,9 +165,11 @@ Model `Workspace`. An organisation sharing the installation: its projects, membe
 | `name` | `String(255)` | not null, unique | — | — |
 | `slug` | `String(40)` | not null, unique | — | — |
 | `allow_platform_keys` | `Boolean` | not null | `True` | Whether the workspace may call models on the installation's provider keys |
+| `platform_features` | `Text` | not null | `'[]'` | JSON list of the PLATFORM_FEATURES enabled for the workspace (V048) |
 | `created_at` | `DateTime` | not null | `(computed)` | — |
 | `updated_at` | `DateTime` | not null | `(computed)` | — |
-| `deleted_at` | `DateTime` | — | — | — |
+| `deleted_at` | `DateTime` | — | — | closed |
+| `suspended_at` | `DateTime` | — | — | stopped until resumed (V048) |
 
 ## `workspace_members`
 
@@ -180,6 +183,23 @@ Model `WorkspaceMember`. A user's membership of a workspace (V046).
 | `role` | `String(20)` | not null | `'member'` | — |
 | `agent_roles` | `Text` | not null | `'["user"]'` | — |
 | `invited_by` | `String(255)` | — | — | — |
+| `created_at` | `DateTime` | not null | `(computed)` | — |
+
+## `workspace_invitations`
+
+Model `WorkspaceInvitation`. An invitation for one email to join one workspace with a role (V048).
+
+| Column | Type | Constraints | Default | Notes |
+|---|---|---|---|---|
+| `id` | `Integer` | PK | — | — |
+| `workspace_id` | `Integer` | FK → `workspaces.id`, not null | — | — |
+| `email` | `String(255)` | not null | — | — |
+| `role` | `String(20)` | not null | `'member'` | — |
+| `token_hash` | `String(64)` | not null, unique | — | — |
+| `expires_at` | `DateTime` | not null | — | — |
+| `accepted_at` | `DateTime` | — | — | — |
+| `accepted_by` | `String(255)` | — | — | — |
+| `created_by` | `String(255)` | — | — | — |
 | `created_at` | `DateTime` | not null | `(computed)` | — |
 
 ## `agents_config`

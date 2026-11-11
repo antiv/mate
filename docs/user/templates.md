@@ -30,7 +30,10 @@ instead of an empty page.
 The import creates a new project in the current workspace, with the template's
 agents and memory blocks.
 Agent names are derived from the project name, so the same template can be imported
-more than once without the copies colliding.
+more than once without the copies colliding. Agent names are unique across the whole
+installation, while project names are unique only within a workspace. If another
+workspace already has agents with those names, the import stops before it creates
+anything and asks you to choose another project name.
 
 After the import, open the project on the **Agents** page. Two things usually need
 your attention:

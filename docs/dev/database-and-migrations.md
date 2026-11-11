@@ -105,6 +105,15 @@ what makes a re-run of `CREATE TABLE` or `ADD COLUMN` statements harmless.
    missing from a dialect.
 5. Run the tests; `shared/test/` includes migration tests.
 
+SQLite can't drop a constraint in place, so a migration that changes one rebuilds the
+table: create `<table>_vNNN`, copy the rows, `DROP TABLE`, rename (V037, V048). With
+foreign keys on, as the database client's connections have them, that `DROP TABLE`
+would first delete every row and cascade to the child tables. The runner turns
+foreign keys off on a SQLite connection for each migration and back on after it
+(`MigrationSystem._sqlite_foreign_keys_off`), as SQLite's own procedure does: the
+pragma does nothing inside a transaction. Child tables keep their `REFERENCES`,
+which the renamed table answers.
+
 Never edit a migration that has been released. Installations have already applied
 it, and nothing re-runs a file whose version is recorded. Add a new one.
 
@@ -166,8 +175,20 @@ request context (`docs/dev/auth-and-access.md`, "The workspace of a request"):
   and `personal_access_tokens` have `workspace_id NOT NULL DEFAULT 1`.
   - The default puts existing rows in workspace 1.
   - Code that doesn't know a workspace yet writes `models.DEFAULT_WORKSPACE_ID`.
-  - Only PostgreSQL and MySQL have a foreign key from `projects.workspace_id`.
-    SQLite can't add a `REFERENCES` column with a default by `ALTER TABLE`.
+  - `projects.workspace_id` has a foreign key on PostgreSQL and MySQL since V046,
+    and on SQLite since V048 rebuilt the table: SQLite can't add a `REFERENCES`
+    column with a default by `ALTER TABLE`.
+- **Phase 3 (V048).**
+  - `projects.name` is unique per workspace (`uq_projects_workspace_name`), not
+    across the installation. A lookup of a project by name takes the workspace.
+  - `workspace_invitations`: one email, one workspace, a role. Only the token's
+    SHA-256 is stored, and `accepted_at` makes a row used.
+  - `workspaces.suspended_at` stops a workspace until it is resumed; `deleted_at`
+    closes one.
+  - `workspaces.platform_features` is a JSON list of `models.PLATFORM_FEATURES`
+    (`code`, `server_credentials`, `email`). The default workspace has all three,
+    which is what 1.x does; another workspace starts with none. Nothing reads these
+    columns before 3c.
 - **Members are derived from `users.roles` until a later phase edits them on their
   own** (`shared/utils/workspaces.py`).
   - A user with the `admin` role is an `owner`; anyone else is a `member`.
