@@ -3856,6 +3856,18 @@ class DashboardServer:
                 "is_admin": True,
             })
 
+        @self.app.get("/dashboard/members", response_class=HTMLResponse, tags=["Dashboard - Pages"])
+        async def dashboard_members(request: Request, ctx: RequestContext = Depends(get_request_context)):
+            """Workspace settings → Members (server/member_routes.py)"""
+            if not ctx.is_admin:
+                return RedirectResponse(url="/dashboard/workroom", status_code=302)
+            return self.templates.TemplateResponse(request, "dashboard/members.html", {
+                "request": request,
+                "page_title": "Members",
+                "username": ctx.user_id,
+                "is_admin": True,
+            })
+
         @self.app.get("/dashboard/agents", response_class=HTMLResponse, tags=["Dashboard - Pages"])
         async def dashboard_agents(request: Request, ctx: RequestContext = Depends(get_request_context)):
             """Dashboard agents page"""
@@ -4678,10 +4690,16 @@ class DashboardServer:
 
         @self.app.put("/dashboard/api/users/{user_id}", tags=["Dashboard - Users"])
         async def update_user(user_id: str, request: Request, ctx: RequestContext = Depends(get_request_context), roles: str = Form(...), profile_data: str = Form(None)):
-            """Update user roles and profile data."""
+            """Update a user's platform roles (admin, pending) and profile data. Agent roles
+            are a workspace's, set on its Members page (server/member_routes.py)."""
             try:
                 import json
-                roles_list = json.loads(roles) if roles else ["user"]
+                from shared.utils.workspaces import PLATFORM_ROLES
+                roles_list = json.loads(roles) if roles else []
+                if not isinstance(roles_list, list) or any(r not in PLATFORM_ROLES for r in roles_list):
+                    return {"success": False,
+                            "message": f"Only the platform roles {', '.join(PLATFORM_ROLES)} are set "
+                                       "here. Set agent roles on each workspace's Members page."}
                 profile_data_value = profile_data if profile_data else None
                 success = self._update_user(user_id, roles_list, profile_data_value)
                 if success:

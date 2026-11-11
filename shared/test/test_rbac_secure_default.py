@@ -75,6 +75,7 @@ class TestWidgetRoleAssignment(unittest.TestCase):
         engine = create_engine("sqlite:///:memory:")
         Base.metadata.create_all(engine)
         Session = sessionmaker(bind=engine, expire_on_commit=False)
+        self.Session = Session
 
         class _DB:
             def get_session(self):
@@ -88,8 +89,13 @@ class TestWidgetRoleAssignment(unittest.TestCase):
         self.assertEqual(u.get_roles(), ["widget"])
 
     def test_regular_user_gets_user_role(self):
+        from shared.utils.workspaces import agent_roles_in
         u = self.svc.get_or_create_user("someone@example.com")
-        self.assertEqual(u.get_roles(), ["user"])
+        # users.roles keeps the platform roles; "user" is the membership's agent role
+        self.assertEqual(u.get_roles(), [])
+        session = self.Session()
+        self.assertEqual(agent_roles_in(session, 1, "someone@example.com"), ["user"])
+        session.close()
 
 
 if __name__ == "__main__":

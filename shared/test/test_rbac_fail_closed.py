@@ -45,7 +45,8 @@ class TestNewUserIsUsable(_Db):
 
     def test_a_created_user_can_be_read_after_its_session_closes(self):
         user = self._user_service().get_or_create_user("brand_new")
-        self.assertEqual(user.get_roles(), ["user"])
+        # Its agent role "user" is its membership's (shared/utils/workspaces.py)
+        self.assertEqual(user.get_roles(), [])
 
 
 class TestAdkCallback(_Db):

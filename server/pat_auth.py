@@ -29,6 +29,17 @@ def roles_allow_api(user_id: str, roles: list) -> bool:
     return any(role in roles for role in get_allowed_roles())
 
 
+def api_roles(user: User, workspace_id: Optional[int]) -> list:
+    """The roles ALLOWED_API_ROLES is matched against: the user's platform roles and
+    their agent roles in the workspace (shared/utils/workspaces.py)."""
+    from shared.utils.workspaces import agent_roles_in
+    session = get_database_client().get_session()
+    try:
+        return user.get_roles() + agent_roles_in(session, workspace_id, user.user_id)
+    finally:
+        session.close()
+
+
 def dashboard_user_may_hold_token(request: Request) -> bool:
     """True if the signed-in dashboard user may create personal access tokens.
 
@@ -36,6 +47,7 @@ def dashboard_user_may_hold_token(request: Request) -> bool:
     offered a token the API would refuse.
     """
     from server.auth import get_dashboard_auth_user, is_admin_user
+    from server.request_context import context_for
     from shared.utils.user_service import get_user_service
 
     user_id = get_dashboard_auth_user(request)
@@ -44,11 +56,14 @@ def dashboard_user_may_hold_token(request: Request) -> bool:
     if is_admin_user(request):
         return True
     try:
-        roles = get_user_service().get_user_roles(user_id)
-    except Exception as exc:
+        user = get_user_service().get_user_by_id(user_id)
+        if user is None:
+            return False
+        workspace_id = context_for(request, user_id).workspace_id
+        return roles_allow_api(user_id, api_roles(user, workspace_id))
+    except Exception as exc:  # no workspace to open, or the database failed
         logger.warning("Could not read the roles of %s: %s", user_id, exc)
         return False
-    return roles_allow_api(user_id, roles)
 
 
 def verify_pat_hash(token: str) -> str:
@@ -190,14 +205,15 @@ async def get_pat_user(request: Request) -> User:
                 headers={"WWW-Authenticate": 'Bearer, Basic realm="MATE"'}
             )
             
-        # 4. Role Authorization Check
-        if not roles_allow_api(user_record.user_id, user_record.get_roles()):
+        request.state.workspace_id = _workspace_of_caller(request, user_record, token_workspace_id)
+
+        # 4. Role Authorization Check, on the agent roles of the request's workspace
+        roles = api_roles(user_record, request.state.workspace_id)
+        if not roles_allow_api(user_record.user_id, roles):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"User roles {user_record.get_roles()} are not authorized to use the API (allowed: {list(get_allowed_roles())})"
+                detail=f"User roles {roles} are not authorized to use the API (allowed: {list(get_allowed_roles())})"
             )
-
-        request.state.workspace_id = _workspace_of_caller(request, user_record, token_workspace_id)
         return user_record
         
     finally:

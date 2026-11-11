@@ -87,6 +87,12 @@ ACTION_WORKSPACE_SUSPEND = "workspace.suspend"
 ACTION_WORKSPACE_RESUME = "workspace.resume"
 ACTION_WORKSPACE_CLOSE = "workspace.close"
 
+# Workspace members (server/member_routes.py)
+RESOURCE_MEMBER = "workspace_member"
+ACTION_MEMBER_UPDATE = "member.update"
+ACTION_MEMBER_REMOVE = "member.remove"
+ACTION_MEMBER_LEAVE = "member.leave"
+
 
 def _client_ip(request: Any) -> Optional[str]:
     """Extract client IP from a FastAPI Request.

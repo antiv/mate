@@ -61,7 +61,7 @@
                         <th class="px-3 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[18%]">User ID</th>
                         <th class="px-3 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[18%]">Name / Email</th>
                         <th class="px-3 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[10%]">Provider</th>
-                        <th class="px-3 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[16%]">Roles</th>
+                        <th class="px-3 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[16%]">Platform roles</th>
                         <th class="px-3 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[10%]">Profile</th>
                         <th class="px-3 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[13%]">Created</th>
                         <th class="px-3 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[15%]">Actions</th>
@@ -113,6 +113,7 @@
                     <div>
                         <label for="userRoles" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Roles (comma-separated)</label>
                         <input type="text" id="userRoles" name="userRoles" placeholder="user, admin" class="mt-1 block w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <p class="text-xs text-gray-500 dark:text-gray-400 mt-1"><code>admin</code> and <code>pending</code> stay on the user; any other role is an agent role in the Default workspace, which the user joins.</p>
                     </div>
                 </div>
                 <div class="flex justify-end gap-3 mt-6">
@@ -157,8 +158,9 @@
                     </div>
                     <hr class="border-gray-200 dark:border-gray-700">
                     <div>
-                        <label for="editUserRoles" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Roles (comma-separated)</label>
-                        <input type="text" id="editUserRoles" name="editUserRoles" class="mt-1 block w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <label for="editUserRoles" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Platform roles (comma-separated)</label>
+                        <input type="text" id="editUserRoles" name="editUserRoles" placeholder="admin, pending" class="mt-1 block w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <p class="text-xs text-gray-500 dark:text-gray-400 mt-1"><code>admin</code> makes a platform administrator, <code>pending</code> keeps a sign-up out. Agent roles are set per workspace, on its <a href="/dashboard/members" class="text-blue-600 dark:text-blue-400">Members</a> page.</p>
                     </div>
                     <div>
                         <label for="editUserProfile" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Profile Data</label>
@@ -455,7 +457,7 @@
         const userId = document.getElementById('editUserId').value;
         const fd = new FormData();
         const ri = document.getElementById('editUserRoles').value;
-        fd.append('roles', JSON.stringify(ri ? ri.split(',').map(r => r.trim()) : ['user']));
+        fd.append('roles', JSON.stringify(ri ? ri.split(',').map(r => r.trim()).filter(Boolean) : []));
         const pd = document.getElementById('editUserProfile').value;
         if (pd) fd.append('profile_data', pd);
 

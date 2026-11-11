@@ -105,9 +105,14 @@ whether to answer.
 `admin` makes the caller a **platform administrator** (`ctx.is_platform_admin`). The
 dashboard of a workspace is also open to its **owners and admins**
 (`workspace_members.role`), who are no platform administrators: `ctx.is_admin` is
-either. Until memberships are edited on their own (phase 3), they follow `users.roles`,
-so every owner is a platform administrator too and an installation sees no
-difference.
+either. Owners edit memberships on the Members page (`server/member_routes.py`):
+`PUT /dashboard/api/members/{user_id}` changes a member's `role` and `agent_roles`,
+`DELETE` removes one, and a workspace admin gets 403 from both. Anyone leaves the
+current workspace with `POST /dashboard/api/members/leave`, allowlisted for
+non-admins. The last owner can't be demoted, removed or leave (409). Agent roles are
+never a platform role (`admin`, `pending`, `widget`). Each change writes `member.update`,
+`member.remove` or `member.leave` in the workspace. The Users page sets platform roles
+only.
 
 ## Layer 1: the dashboard API
 
@@ -298,7 +303,8 @@ workspace with no projects, and nothing clears it. Both refuse the default works
 with 409, as does a change to its `platform_features`, and no route changes a closed
 workspace. The same routes create a workspace,
 with a first owner who is an existing user and not `pending` or a widget visitor
-(the membership's `agent_roles` are that user's roles without `admin`), and change
+(the membership's `agent_roles` are those of the user's membership of the default
+workspace, else `["user"]`), and change
 its name, `allow_platform_keys` and `platform_features`. The slug is set once. Each
 change writes an audit entry (`workspace.create`, `.update`, `.suspend`, `.resume`,
 `.close`) in the workspace it changed. `allow_platform_keys` is stored only; nothing

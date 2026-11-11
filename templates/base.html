@@ -486,6 +486,11 @@
                         <i class="fas fa-key" style="width: 14px;"></i>Personal Tokens
                     </a>
                     {% endif %}
+                    {% if ws_switcher %}
+                    <a href="#" data-click="leaveWorkspace" data-args='["$event"]' class="mate-menu-item">
+                        <i class="fas fa-door-open" style="width: 14px;"></i>Leave this workspace
+                    </a>
+                    {% endif %}
                     <a href="#" data-click="confirmLogout" data-args='["$event"]' class="mate-menu-item danger">
                         <i class="fas fa-sign-out-alt" style="width: 14px;"></i>Logout
                     </a>
@@ -637,6 +642,10 @@
                         <span class="sidebar-text">Workspaces</span>
                     </a>
                     {% endif %}
+                    <a href="/dashboard/members" class="mate-nav-item {% if request.url.path == '/dashboard/members' %}sidebar-active{% endif %}" title="Members">
+                        <i class="fas fa-user-friends sidebar-icon"></i>
+                        <span class="sidebar-text">Members</span>
+                    </a>
                     <a href="/dashboard/rate-limits" class="mate-nav-item {% if request.url.path == '/dashboard/rate-limits' %}sidebar-active{% endif %}" title="Rate Limits">
                         <i class="fas fa-shield-alt sidebar-icon"></i>
                         <span class="sidebar-text">Rate Limits</span>
@@ -808,7 +817,7 @@
         mateActions.allow('controlAdkServer', 'toggleTheme', 'toggleUserMenu', 'showTokensModal',
                           'confirmLogout', 'closeMobileSidebar', 'toggleSidebar', 'closeTokensModal',
                           'generateToken', 'copyGeneratedToken', 'revokeToken',
-                          'handleVisualBuilderNav', 'switchWorkspace');
+                          'handleVisualBuilderNav', 'switchWorkspace', 'leaveWorkspace');
 
         // The workspace switcher: the session works in the chosen workspace from now on.
         // The page reloads without its query, which may name a row of the old one.
@@ -823,6 +832,25 @@
                 window.location.href = window.location.pathname;
             } else if (typeof showNotification === 'function') {
                 showNotification('Could not switch the workspace', 'error');
+            }
+        }
+
+        // Leave the current workspace (server/member_routes.py); the dashboard then
+        // opens another one
+        async function leaveWorkspace(event) {
+            if (event) event.preventDefault();
+            const current = document.getElementById('workspaceSwitcher');
+            const name = current ? current.options[current.selectedIndex].text : 'this workspace';
+            if (!await showConfirm(`Leave ${name}? You lose access to its agents and conversations until an owner adds you again.`,
+                                   'Leave workspace', 'Leave', 'Cancel', 'danger')) return;
+            const response = await fetch('/dashboard/api/members/leave', {
+                method: 'POST', credentials: 'same-origin',
+            });
+            if (response.ok) {
+                window.location.href = '/dashboard';
+            } else {
+                const data = await response.json().catch(() => ({}));
+                showNotification(data.detail || 'Could not leave the workspace', 'error');
             }
         }
 

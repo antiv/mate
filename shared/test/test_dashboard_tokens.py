@@ -42,12 +42,13 @@ class TestDashboardTokens(unittest.TestCase):
 
     def _as(self, *, admin: bool = False, roles=("user",)):
         """Patch the caller to be alice with these roles."""
-        service = MagicMock()
-        service.get_user_roles.return_value = list(roles)
         patches = [
             patch("server.auth.get_dashboard_auth_user", return_value="alice"),
             patch("server.auth.is_admin_user", return_value=admin),
-            patch("shared.utils.user_service.get_user_service", return_value=service),
+            patch("shared.utils.user_service.get_user_service", return_value=MagicMock()),
+            # Her agent roles in the current workspace
+            patch("server.request_context.context_for", return_value=MagicMock(workspace_id=1)),
+            patch("server.pat_auth.api_roles", return_value=list(roles)),
             patch.dict(os.environ, {"ALLOWED_API_ROLES": "developer"}),
         ]
         for p in patches:

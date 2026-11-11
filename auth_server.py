@@ -421,6 +421,7 @@ from server.slack_routes import router as slack_router, dashboard_router as slac
 from server.docs_routes import router as docs_router
 from server.workspace_routes import router as workspace_router
 from server.platform_workspace_routes import router as platform_workspace_router
+from server.member_routes import router as member_router
 
 configure_widget_proxy(ADK_HOST, ADK_PORT)
 
@@ -436,6 +437,7 @@ app.include_router(slack_dashboard_router)
 app.include_router(docs_router)
 app.include_router(workspace_router)
 app.include_router(platform_workspace_router)
+app.include_router(member_router)
 app.include_router(public_artifacts_router)
 app.include_router(csp_report_router)
 app.include_router(proxy_router)
@@ -476,8 +478,9 @@ if __name__ == "__main__":
     import atexit as _atexit
     _atexit.register(lambda: server_control.stop_adk_server())
 
-    # Every user a member of the default workspace (V046); before the agent server
-    # starts, so neither process adds the same member at once
+    # Users' agent roles to their memberships, once, and no membership for a pending
+    # user (shared/utils/workspaces.py); before the agent server starts, so neither
+    # process adds the same member at once
     from shared.utils.workspaces import run_member_sync
     run_member_sync(get_database_client())
 

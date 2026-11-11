@@ -33,7 +33,9 @@ from shared.utils import audit_service
 from shared.utils.models import (
     DEFAULT_WORKSPACE_ID, PLATFORM_FEATURES, Project, User, Workspace, WorkspaceMember,
 )
-from shared.utils.workspaces import ROLE_OWNER, is_reserved_user_id, membership_from_roles
+from shared.utils.workspaces import (
+    DEFAULT_AGENT_ROLES, NON_MEMBER_ROLES, ROLE_OWNER, is_reserved_user_id,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/dashboard/api/platform/workspaces", tags=["Dashboard - Platform"])
@@ -143,17 +145,20 @@ def _name_taken(session: Session, name: str, workspace_id: Optional[int] = None)
 
 
 def _owner_agent_roles(session: Session, user_id: Any) -> str:
-    """The first owner's agent_roles as stored: the existing user's roles without admin,
-    as their membership of the default workspace has them. 400 for anyone who can't
-    be a member: no such user, a widget visitor, a system caller or a pending sign-up."""
+    """The first owner's agent_roles as stored: those of their membership of the
+    default workspace, else the default ones. 400 for anyone who can't be a member: no
+    such user, a widget visitor, a system caller or a pending sign-up."""
     if not isinstance(user_id, str) or not user_id.strip():
         raise HTTPException(status_code=400, detail="owner must be the id of an existing user")
     user = session.query(User).filter(User.user_id == user_id.strip()).first()
-    membership = membership_from_roles(user.get_roles()) if user else None
-    if user is None or is_reserved_user_id(user.user_id) or membership is None:
+    if (user is None or is_reserved_user_id(user.user_id)
+            or NON_MEMBER_ROLES.intersection(user.get_roles())):
         raise HTTPException(status_code=400,
                             detail="owner must be an existing user who is not pending or a widget visitor")
-    return json.dumps(membership[1])
+    raw = session.query(WorkspaceMember.agent_roles).filter(
+        WorkspaceMember.workspace_id == DEFAULT_WORKSPACE_ID,
+        WorkspaceMember.user_id == user.user_id).scalar()
+    return raw or json.dumps(DEFAULT_AGENT_ROLES)
 
 
 def _audit(ctx: RequestContext, action: str, workspace_id: int, details: Dict[str, Any],

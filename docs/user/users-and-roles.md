@@ -12,6 +12,8 @@ covers:
   - server/auth.py::_is_session_oauth_user
   - shared/utils/dashboard/dashboard_server.py::*user*
   - server/workspace_routes.py
+  - server/member_routes.py
+  - templates/dashboard/members.html
   - templates/base.html
 ---
 
@@ -20,17 +22,21 @@ covers:
 Two separate checks decide what a person can do in MATE, and they are easy to
 confuse:
 
-- **Dashboard access** depends on how the person signed in.
-- **Agent access** depends on the roles stored on their user record.
+- **Dashboard access** depends on how the person signed in, and on their role in the
+  workspace.
+- **Agent access** depends on their agent roles in the workspace.
 
-Users are managed in **Control Room → Users**.
+People are managed on two pages. **Control Room → Users** holds every user record of
+the installation and their platform roles. **Control Room → Members** holds the
+people of the current workspace, with their role and agent roles there.
 
 ## Dashboard access
 
 A person gets the whole dashboard (Studio and Control Room) when they sign in with
 the built-in account, or sign in through Google or GitHub and have the `admin` role.
 Everyone else sees the Work Room and their own usage. People with a role in
-`ALLOWED_API_ROLES` (by default `admin` and `developer`) also get **Personal Tokens**
+`ALLOWED_API_ROLES` (by default `admin` and `developer`), in the workspace they work
+in, also get **Personal Tokens**
 in the account menu, for the OpenAI-compatible API and the agents' MCP servers; see
 [Personal access tokens](personal-access-tokens.md).
 
@@ -50,8 +56,7 @@ Default, and with one workspace nothing below changes what anyone sees.
   hidden, and the pages send them to the Work Room.
 - A **member** has the Work Room and their own usage.
 
-Until workspace members can be managed on their own, a person's role in the Default
-workspace follows their roles: `admin` makes them its owner, and anyone else a member.
+An owner sets these roles on the **Members** page (below).
 
 ### Switching workspace
 
@@ -63,38 +68,73 @@ menu is not shown. Scripts that use the API name a workspace with the
 
 ## Agent access
 
-Whether an agent answers a person depends only on that person's roles and the
-agent's **Allowed Roles**. Being a dashboard administrator does not bypass it.
+Whether an agent answers a person depends on their agent roles in the agent's
+workspace and the agent's **Allowed Roles**. A platform administrator, and an owner or
+admin of the workspace, pass every agent of it. Anyone else is matched on their
+agent roles.
 
 ## Roles
 
-A role is a label. A person can have several, and you can invent your own, such as
-`support` or `sales`. Five have a built-in meaning:
+There are two kinds of role.
+
+**Platform roles** are on the user record, and set on the **Users** page:
 
 | Role | Meaning |
 |---|---|
-| `admin` | The whole dashboard for people who sign in through Google or GitHub. Admits the person to every agent, whatever its **Allowed Roles**, and lets agents change memory blocks on their behalf. |
-| `developer` | May create personal access tokens and call the API with them, while the dashboard stays the Work Room. The roles with this right are set by `ALLOWED_API_ROLES`, `admin` and `developer` by default. |
-| `user` | An ordinary person. Agents that list `user` in **Allowed Roles** are open to them. |
-| `pending` | Signed in, but not yet given access to anything. New single sign-on users start here. |
+| `admin` | A platform administrator: the whole dashboard of every workspace, every agent whatever its **Allowed Roles**, and agents may change memory blocks on their behalf. |
+| `pending` | Signed in, but not let in yet: no workspace, no agent. New single sign-on users start here. |
 | `widget` | Assigned automatically to visitors who chat through an embedded widget. |
+
+**Agent roles** are per workspace, and set on the **Members** page. A role is a
+label: a person can have several, and you can invent your own, such as `support` or
+`sales`. Two have a built-in meaning:
+
+| Role | Meaning |
+|---|---|
+| `user` | An ordinary person. Agents that list `user` in **Allowed Roles** are open to them. A new member gets it. |
+| `developer` | May create personal access tokens and call the API with them in that workspace, while the dashboard stays the Work Room. The roles with this right are set by `ALLOWED_API_ROLES`, `admin` and `developer` by default. |
+
+A person can have different agent roles in different workspaces. Before 2.0, agent
+roles were on the user record with the platform roles. The first start of 2.0 moves
+each user's agent roles to their membership of the Default workspace, and the user
+record keeps the platform roles.
+
+## Members
+
+**Control Room → Members** lists the people of the workspace you are working in: their
+role (owner, admin or member), their agent roles, and when they joined. Owners and
+admins of the workspace see the page, and platform administrators see it in every
+workspace.
+
+- An owner, or a platform administrator, changes a member's role and agent roles
+  (separated by commas) and clicks **Save**, or removes them with **Remove**. Removing
+  someone keeps their user record; their personal access tokens for the workspace
+  stop working.
+- An admin of the workspace sees the list but can't change it.
+- Anyone leaves the workspace with **Leave workspace** on the page, or **Leave this
+  workspace** in the account menu, shown to people with more than one workspace.
+- The last owner can't be demoted, removed or leave: make someone else an owner
+  first.
+
+Every change is written to the workspace's audit log, as `member.update`,
+`member.remove` or `member.leave`.
 
 ## Open an agent to people
 
-Each agent has an **Allowed Roles** list. A person can use the agent when at least
-one of their roles is on that list. People with the `admin` role can use every agent.
+Each agent has an **Allowed Roles** list. A member can use the agent when at least
+one of their agent roles in its workspace is on that list. Platform administrators,
+and owners and admins of the workspace, can use every agent of it.
 
-- An agent with `["user"]` is open to everyone with the `user` role.
-- An agent with `["support", "sales"]` is open to people with either role.
-- **An agent with an empty list is open only to people with the `admin` role.**
+- An agent with `["user"]` is open to every member with the `user` role.
+- An agent with `["support", "sales"]` is open to members with either role.
+- **An agent with an empty list is open only to administrators.**
 
-The built-in account (`AUTH_USERNAME`) always has the `admin` role. Its user record
-is created with `admin, user` the first time it talks to an agent, and `admin` is
-added back whenever it is missing, so it is not refused by an agent whose list is
+The built-in account (`AUTH_USERNAME`) always has the `admin` role. It is added back
+whenever it is missing, so the account is not refused by an agent whose list is
 empty. Removing `admin` from it on the Users page lasts only until its next chat.
 
-Someone who is refused is told which roles the agent requires and which roles they
-have. Each refusal is written to the audit log.
+Someone who is refused is told which roles the agent requires. Each refusal is
+written to the audit log.
 
 ## Let a new person in
 
@@ -104,17 +144,20 @@ agent.
 
 1. Open **Control Room → Users**. Filter by **Provider** or search for their email.
 2. Click edit on their row.
-3. Replace `pending` in **Roles** with the roles they should have, separated by
-   commas, for example `user` or `user, support`.
+3. Remove `pending` from **Platform roles** and save. They join the Default workspace
+   as a member with the `user` agent role.
+4. To give them other agent roles, open **Control Room → Members** in the Default
+   workspace and change theirs there.
 
 Your administrator can change the starting role for new sign-ins, and can restrict
 sign-in to certain email domains or addresses; see `OAUTH_DEFAULT_ROLE`,
 `OAUTH_ALLOWED_DOMAINS` and `OAUTH_ALLOWED_EMAILS` in the
 [configuration reference](../reference/configuration.md).
 
-**Add User** creates a record by hand: enter a user id and roles. This is useful for
-giving roles in advance to an id that an application will use when it calls an agent
-through the API.
+**Add User** creates a record by hand: enter a user id and roles. `admin` and
+`pending` stay on the record; any other role is an agent role the user gets as a
+member of the Default workspace. This is useful for giving roles in advance to an id
+that an application will use when it calls an agent through the API.
 
 ## Profiles
 
@@ -125,8 +168,8 @@ it when it learns something about the person. Edit or clear it from the user's r
 ## Users you did not create
 
 A user record is also created automatically the first time an unknown id reaches an
-agent: with the `user` role for the API and the dashboard, and with the `widget`
-role for visitors of an embedded widget. On a busy public widget this adds up.
+agent: as a member of the agent's workspace with the `user` agent role for the API
+and the dashboard, and with the `widget` role for visitors of an embedded widget. On a busy public widget this adds up.
 
 MATE removes such temporary users once they have been inactive for five days. The
 cleanup runs every night, and **Clean Up Inactive Users** runs it immediately. It

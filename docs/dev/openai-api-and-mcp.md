@@ -24,8 +24,9 @@ An exposed agent appears to the client as a model.
 
 1. Mark a **root** agent with **Expose as Model** in the dashboard. Sub-agents cannot
    be exposed.
-2. Create a personal access token from the account menu. The user needs a role
-   listed in `ALLOWED_API_ROLES` (default `admin`, `developer`).
+2. Create a personal access token from the account menu. The user needs the `admin`
+   role, or an agent role listed in `ALLOWED_API_ROLES` (default `admin`,
+   `developer`) in the token's workspace.
 3. Point the client at `https://<your-mate>/v1` with the token as the API key.
 
 ```bash
@@ -87,8 +88,9 @@ that connects sees the agent as a tool it can call, plus a prompt that asks the 
 a question through that tool and a resource describing the agent.
 
 The callers are the same as for the OpenAI-compatible API: a personal access token
-(or Basic auth, the dashboard's login token or a dashboard session) of a user with a
-role in `ALLOWED_API_ROLES`. On top of that the user's roles must grant the agent
+(or Basic auth, the dashboard's login token or a dashboard session) of a user with
+`admin`, or a role in `ALLOWED_API_ROLES` among their agent roles in the request's
+workspace (`pat_auth.api_roles`). On top of that the user's roles must grant the agent
 itself (its `allowed_for_roles`; an agent with none is admin-only), checked by
 `shared/utils/mcp/mcp_auth.py`. The check sits on the route because the tool call
 reaches the agent over A2A without the caller's identity. Without credentials the

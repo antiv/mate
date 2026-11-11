@@ -66,7 +66,7 @@ Three consequences worth knowing:
 
 All requests to the `/v1` endpoints are authenticated and authorized using:
 1. **Personal Access Tokens (PATs)**: Individual users generate PATs in the MATE dashboard. The PAT is sent as a bearer token (`Authorization: Bearer mate_pat_...`). MATE stores only the SHA-256 hash of the token for security.
-2. **Role Restrictions**: Access to the OpenAI compatible endpoints is restricted by user roles. By default, only users with the `admin` or `developer` roles are authorized to verify a PAT and call the API.
+2. **Role Restrictions**: Access to the OpenAI compatible endpoints is restricted by roles. By default, only users with the `admin` role, or the `developer` agent role in the token's workspace, are authorized to verify a PAT and call the API.
    * *Note: Permitted roles can be custom configured in the MATE `.env` file via `ALLOWED_API_ROLES=admin,developer`.*
 3. **Rate limits and token budgets**: with `RATE_LIMIT_ENABLED=true`, the per-user, per-agent and per-project limits from [Rate limits](../user/rate-limits.md) apply to `/v1/chat/completions` too. A blocked request gets `429` with a `Retry-After` header.
 

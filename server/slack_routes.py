@@ -29,7 +29,9 @@ from sqlalchemy.orm import Session
 from shared.utils.agent_invoke import run_agent_message
 from shared.utils.database_client import get_database_client
 from shared.utils.models import DEFAULT_WORKSPACE_ID, ChannelIntegration, User
-from shared.utils.workspaces import agent_workspace, in_projects_of, missing_from, project_is_open
+from shared.utils.workspaces import (
+    agent_roles_in, agent_workspace, in_projects_of, missing_from, project_is_open,
+)
 from server.request_context import RequestContext, get_api_request_context
 
 logger = logging.getLogger(__name__)
@@ -335,7 +337,11 @@ def _carry_over_roles(user_id: str, legacy_user_id: str, agent_name: str) -> Non
         legacy = session.query(User).filter(User.user_id == legacy_user_id).first()
         if not legacy:
             return
+        # Its platform roles, and its agent roles in the default workspace, which the
+        # new user's membership there gets (shared/utils/workspaces.py)
         roles = legacy.get_roles()
+        roles += [r for r in agent_roles_in(session, DEFAULT_WORKSPACE_ID, legacy_user_id)
+                  if r not in roles]
         new_user = User(user_id=user_id)
         new_user.set_roles(roles)
         new_user.home_workspace_id = workspace_id

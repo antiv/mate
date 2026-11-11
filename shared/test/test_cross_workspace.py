@@ -69,7 +69,7 @@ from shared.utils.user_service import UserService
 from shared.utils.alert_service import AlertService
 from shared.utils.trigger_runner import TriggerRunner
 from shared.utils.workspaces import (
-    agent_workspace_for, agents_outside, caller_access, is_reserved_user_id, sync_default_members,
+    agent_workspace_for, agents_outside, caller_access, is_reserved_user_id, move_roles_to_members,
 )
 
 B_MARKER = "zz-ws-b"
@@ -208,6 +208,7 @@ COVERED_BY_TEST: Dict[Route, str] = {
     ("POST", "/dashboard/api/templates/import"): "test_a_template_is_imported_into_the_current_workspace",
     ("POST", "/dashboard/api/tokens"): "test_a_token_acts_in_the_current_workspace",
     ("PUT", "/dashboard/api/workspaces/current"): "test_the_session_works_in_the_workspace_it_switched_to",
+    ("POST", "/dashboard/api/members/leave"): "test_a_member_leaves_the_current_workspace",
     **{route: "test_every_body_naming_a_row_of_b_is_a_404" for route in BODIES_NAMING_B},
 }
 
@@ -378,7 +379,7 @@ class _TwoWorkspaces(unittest.TestCase):
     def b_ids(self) -> Dict[str, str]:
         return {**B_IDS, **{k: str(v) for k, v in self.b_rows.items()},
                 "project_id": str(self.ids["project_b"]), "admin": auth.AUTH_USERNAME,
-                "bob": BOB, "lg_session_id": f"{B_MARKER}-lg-session"}
+                "bob": BOB, "user_id": BOB, "lg_session_id": f"{B_MARKER}-lg-session"}
 
 
 class TestEveryRoute(_TwoWorkspaces):
@@ -819,7 +820,7 @@ class TestRbacCheck(_TwoWorkspaces):
         self.assertTrue(self._allowed("end-user-of-b", B_ROOT))
         self.assertEqual(self._memberships("end-user-of-b"), {B: "member"})
         session = self.Session()
-        sync_default_members(session)
+        move_roles_to_members(session)
         session.close()
         self.assertEqual(self._memberships("end-user-of-b"), {B: "member"})
         # Once a member of B, the same id doesn't reach A
@@ -3021,6 +3022,150 @@ class TestPlatformWorkspaces(_TwoWorkspaces):
         self.assertEqual(listed[empty], "closed")
         # It keeps its slug
         self.assertEqual(self._create(name="Other").status_code, 409)
+
+
+
+class TestMembers(_TwoWorkspaces):
+    """Workspace settings → Members (#277, 3e): owners change roles and agent roles and
+    remove members, admins only look, anyone leaves, and a workspace keeps an owner.
+    Agent roles live on the membership, and what they open follows it."""
+
+    CAROL = "carol@b.example"
+
+    def setUp(self):
+        super().setUp()
+        session = self.Session()
+        carol = User(user_id=self.CAROL, roles='["user"]')
+        carol.home_workspace_id = B
+        session.add(carol)
+        session.commit()
+        session.close()
+        self.bob = TestClient(auth_server.app, cookies=_signed_in(BOB))
+        self.carol = TestClient(auth_server.app, cookies=_signed_in(self.CAROL))
+
+    def _member(self, workspace_id: int, user_id: str) -> Optional[Tuple[str, List[str]]]:
+        session = self.Session()
+        try:
+            row = session.query(WorkspaceMember).filter_by(workspace_id=workspace_id, user_id=user_id).first()
+            return (row.role, json.loads(row.agent_roles)) if row else None
+        finally:
+            session.close()
+
+    def _audit(self, action: str) -> List[AuditLog]:
+        session = self.Session()
+        try:
+            return session.query(AuditLog).filter_by(action=action).all()
+        finally:
+            session.close()
+
+    def test_an_owner_sees_their_workspace_s_members_only(self):
+        listed = self.bob.get("/dashboard/api/members").json()
+        self.assertEqual([m["user_id"] for m in listed["members"]], [BOB, self.CAROL])
+        self.assertTrue(listed["can_manage"])
+        self.assertEqual(listed["members"][1]["agent_roles"], ["user"])
+        in_a = self.client.get("/dashboard/api/members", headers=_platform_admin(A)).json()
+        self.assertNotIn(BOB, [m["user_id"] for m in in_a["members"]])
+        self.assertIn(ALICE, [m["user_id"] for m in in_a["members"]])
+
+    def test_an_owner_sets_a_member_s_role_and_agent_roles(self):
+        response = self.bob.put(f"/dashboard/api/members/{self.CAROL}",
+                                json={"role": "admin", "agent_roles": ["finance", " support", "finance"]})
+        self.assertEqual(response.json()["changed"], ["agent_roles", "role"], response.text)
+        self.assertEqual(self._member(B, self.CAROL), ("admin", ["finance", "support"]))
+        entry, = self._audit("member.update")
+        self.assertEqual((entry.workspace_id, entry.resource_id, entry.actor), (B, self.CAROL, BOB))
+        self.assertEqual(json.loads(entry.details)["role"], {"from": "member", "to": "admin"})
+        # Nothing changed, nothing audited
+        self.assertEqual(self.bob.put(f"/dashboard/api/members/{self.CAROL}", json={"role": "admin"})
+                         .json()["changed"], [])
+        self.assertEqual(len(self._audit("member.update")), 1)
+
+    def test_agent_roles_decide_which_agents_a_member_runs(self):
+        rbac = RBACMiddleware()
+        finance_only = {"name": B_ROOT, "allowed_for_roles": ["finance"]}
+        self.assertFalse(rbac.check_agent_access(self.CAROL, finance_only)[0])
+        self.bob.put(f"/dashboard/api/members/{self.CAROL}", json={"agent_roles": ["finance"]})
+        self.assertTrue(rbac.check_agent_access(self.CAROL, finance_only)[0])
+        self.assertFalse(rbac.check_agent_access(self.CAROL, {"name": B_ROOT, "allowed_for_roles": ["user"]})[0])
+
+    def test_the_api_reads_the_agent_roles_of_the_token_s_workspace(self):
+        models = lambda: self.client.get("/v1/models", headers={"Authorization": f"Bearer {PATS[ALICE]}"})
+        self.assertEqual(models().status_code, 200)
+        response = self.client.put(f"/dashboard/api/members/{ALICE}", headers=_platform_admin(A),
+                                   json={"agent_roles": ["user"]})
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(models().status_code, 403)
+
+    def test_what_a_member_change_is_refused(self):
+        for body in ({"role": "god"}, {"agent_roles": ["admin"]}, {"agent_roles": ["pending"]},
+                     {"agent_roles": ["bad role!"]}, {"agent_roles": "user"}, {}):
+            with self.subTest(body=body):
+                self.assertEqual(self.bob.put(f"/dashboard/api/members/{self.CAROL}", json=body).status_code, 400)
+        self.assertEqual(self.bob.put("/dashboard/api/members/nobody", json={"role": "member"}).status_code, 404)
+        self.assertEqual(self._member(B, self.CAROL), ("member", ["user"]))
+
+    def test_a_workspace_admin_looks_but_changes_nothing(self):
+        self.bob.put(f"/dashboard/api/members/{self.CAROL}", json={"role": "admin"})
+        self.assertEqual(self.carol.get("/dashboard/api/members").json()["can_manage"], False)
+        self.assertEqual(self.carol.put(f"/dashboard/api/members/{BOB}", json={"role": "member"}).status_code, 403)
+        self.assertEqual(self.carol.delete(f"/dashboard/api/members/{BOB}").status_code, 403)
+        self.assertEqual(self._member(B, BOB)[0], "owner")
+
+    def test_a_member_sees_no_member_list(self):
+        self.assertEqual(self.carol.get("/dashboard/api/members").status_code, 403)
+        self.assertIn(self.carol.get("/dashboard/members", follow_redirects=False).status_code, (302, 303, 307))
+
+    def test_the_last_owner_stays(self):
+        for response in (self.bob.put(f"/dashboard/api/members/{BOB}", json={"role": "member"}),
+                         self.bob.delete(f"/dashboard/api/members/{BOB}"),
+                         self.bob.post("/dashboard/api/members/leave")):
+            with self.subTest(response=response.request.method):
+                self.assertEqual(response.status_code, 409)
+        self.assertEqual(self._member(B, BOB)[0], "owner")
+        # With a second owner, the first may step down
+        self.bob.put(f"/dashboard/api/members/{self.CAROL}", json={"role": "owner"})
+        self.assertEqual(self.bob.put(f"/dashboard/api/members/{BOB}", json={"role": "member"}).status_code, 200)
+        self.assertEqual(self.bob.put(f"/dashboard/api/members/{self.CAROL}", json={"role": "admin"}).status_code,
+                         403)  # bob is no owner any more
+
+    def test_an_owner_removes_a_member(self):
+        self.assertEqual(self.bob.delete(f"/dashboard/api/members/{self.CAROL}").status_code, 200)
+        self.assertIsNone(self._member(B, self.CAROL))
+        entry, = self._audit("member.remove")
+        self.assertEqual((entry.workspace_id, json.loads(entry.details)["role"]), (B, "member"))
+        # The account stays
+        session = self.Session()
+        try:
+            self.assertIsNotNone(session.query(User).filter_by(user_id=self.CAROL).first())
+        finally:
+            session.close()
+
+    def test_a_member_leaves_the_current_workspace(self):
+        from server.workspace_routes import workspaces_for
+        self.assertEqual(self.carol.post("/dashboard/api/members/leave").status_code, 200)
+        self.assertIsNone(self._member(B, self.CAROL))
+        self.assertEqual(workspaces_for(self.CAROL, False), [])
+        self.assertEqual([e.workspace_id for e in self._audit("member.leave")], [B])
+        # Leaving acts on the current workspace only: alice stays in A
+        alice = TestClient(auth_server.app, cookies=_signed_in(ALICE))
+        self.assertEqual(alice.post("/dashboard/api/members/leave").status_code, 200)
+        self.assertIsNone(self._member(A, ALICE))
+        self.assertIsNotNone(self._member(B, BOB))
+
+    def test_the_users_page_sets_platform_roles_only(self):
+        # The dashboard keeps the user service it started with
+        users = patch.object(auth_server.dashboard_server, "user_service", UserService())
+        users.start()
+        self.addCleanup(users.stop)
+        response = self.client.put(f"/dashboard/api/users/{ALICE}", headers=_platform_admin(A),
+                                   data={"roles": json.dumps(["user", "developer"])})
+        self.assertFalse(response.json()["success"])
+        self.assertIn("Members", response.json()["message"])
+        response = self.client.put(f"/dashboard/api/users/{ALICE}", headers=_platform_admin(A),
+                                   data={"roles": json.dumps(["admin"])})
+        self.assertTrue(response.json()["success"], response.text)
+        # Her membership and agent roles stay as they were
+        self.assertEqual(self._member(A, ALICE), ("member", ["user", "developer"]))
 
 
 if __name__ == "__main__":

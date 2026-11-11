@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+
+{% block title %}Members - MATE{% endblock %}
+
+{% block content %}
+<div class="space-y-4">
+    <div class="flex justify-between items-center">
+        <div>
+            <h2 class="text-xl font-bold text-gray-900 dark:text-white">Members</h2>
+            <p id="membersHint" class="text-xs text-gray-500 dark:text-gray-400">The people of this workspace, their role and the agent roles that open its agents to them.</p>
+        </div>
+        <button id="leaveButton" class="hidden bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-100 px-3 py-1.5 text-xs rounded-lg flex items-center space-x-1.5 transition-colors" data-click="leaveWorkspace" data-args='[null]'>
+            <i class="fas fa-door-open"></i>
+            <span>Leave workspace</span>
+        </button>
+    </div>
+
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow">
+        <div class="p-4 overflow-auto table-responsive">
+            <table class="w-full divide-y divide-gray-200 dark:divide-gray-700 table-cards-mobile">
+                <thead class="bg-gray-50 dark:bg-gray-700">
+                    <tr>
+                        <th class="px-3 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Member</th>
+                        <th class="px-3 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Role</th>
+                        <th class="px-3 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Agent roles</th>
+                        <th class="px-3 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Joined</th>
+                        <th class="px-3 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="membersBody" class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                    <tr><td colspan="5" class="px-3 py-6 text-sm text-center text-gray-500 dark:text-gray-400">Loading…</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script nonce="{{ request.state.csp_nonce }}">
+(function () {
+    mateActions.allow('saveMember', 'removeMember');
+
+    const API = '/dashboard/api/members';
+    let state = {members: [], me: null, roles: [], can_manage: false};
+
+    function esc(s) {
+        return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    async function call(url, method, body) {
+        const r = await fetch(url, {
+            method, credentials: 'same-origin',
+            headers: body ? {'Content-Type': 'application/json'} : {},
+            body: body ? JSON.stringify(body) : undefined,
+        });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(data.detail || `Request failed (${r.status})`);
+        return data;
+    }
+
+    // Row ids hold the index, since a user id can hold characters an id can't
+    function render() {
+        const body = document.getElementById('membersBody');
+        body.innerHTML = state.members.map((m, i) => {
+            const who = `<div class="font-medium">${esc(m.user_id)}${m.user_id === state.me ? ' <span class="text-gray-400">(you)</span>' : ''}</div>`
+                + (m.display_name || (m.email && m.email !== m.user_id)
+                    ? `<div class="text-gray-400 dark:text-gray-500">${esc(m.display_name || m.email)}</div>` : '');
+            const role = state.can_manage
+                ? `<select id="role-${i}" class="border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-1.5 py-1 text-xs">${
+                    state.roles.map(r => `<option value="${r}" ${r === m.role ? 'selected' : ''}>${r}</option>`).join('')}</select>`
+                : esc(m.role);
+            const agentRoles = state.can_manage
+                ? `<input id="roles-${i}" type="text" value="${esc(m.agent_roles.join(', '))}" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1 text-xs" placeholder="user, support">`
+                : esc(m.agent_roles.join(', ')) || '—';
+            const actions = state.can_manage
+                ? `<button data-click="saveMember" data-args="${mateActions.attr([i])}" class="text-blue-600 dark:text-blue-400 hover:text-blue-900 min-h-[44px] touch-target px-2"><i class="fas fa-save"></i> Save</button>`
+                  + `<button data-click="removeMember" data-args="${mateActions.attr([i])}" class="text-red-600 dark:text-red-400 hover:text-red-900 min-h-[44px] touch-target px-2"><i class="fas fa-user-minus"></i> Remove</button>`
+                : '';
+            return `<tr>
+                <td class="px-3 py-1.5 text-xs text-gray-900 dark:text-white" data-label="Member">${who}</td>
+                <td class="px-3 py-1.5 text-xs text-gray-700 dark:text-gray-300" data-label="Role">${role}</td>
+                <td class="px-3 py-1.5 text-xs text-gray-700 dark:text-gray-300" data-label="Agent roles">${agentRoles}</td>
+                <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400" data-label="Joined">${esc((m.joined_at || '').slice(0, 10))}</td>
+                <td class="px-3 py-1.5 text-xs font-medium" data-label="Actions">${actions}</td>
+            </tr>`;
+        }).join('') || `<tr><td colspan="5" class="px-3 py-6 text-sm text-center text-gray-500 dark:text-gray-400">No members.</td></tr>`;
+        document.getElementById('leaveButton').classList.toggle('hidden', !state.members.some(m => m.user_id === state.me));
+        if (!state.can_manage) {
+            document.getElementById('membersHint').textContent = 'Only an owner of the workspace changes its members.';
+        }
+    }
+
+    async function load() {
+        try {
+            state = await call(API, 'GET');
+            render();
+        } catch (e) { showNotification(e.message, 'error'); }
+    }
+
+    window.saveMember = async function (i) {
+        const m = state.members[i];
+        const agentRoles = document.getElementById(`roles-${i}`).value
+            .split(',').map(r => r.trim()).filter(Boolean);
+        try {
+            const result = await call(`${API}/${encodeURIComponent(m.user_id)}`, 'PUT',
+                                      {role: document.getElementById(`role-${i}`).value, agent_roles: agentRoles});
+            showNotification(result.changed.length ? `${m.user_id} updated` : 'Nothing changed');
+            load();
+        } catch (e) { showNotification(e.message, 'error'); }
+    };
+
+    window.removeMember = async function (i) {
+        const m = state.members[i];
+        if (!await showConfirm(`Remove ${m.user_id} from this workspace? Their account stays, and their tokens for this workspace stop working.`,
+                               'Remove member', 'Remove', 'Cancel', 'danger')) return;
+        try {
+            await call(`${API}/${encodeURIComponent(m.user_id)}`, 'DELETE');
+            showNotification(`${m.user_id} removed`);
+            load();
+        } catch (e) { showNotification(e.message, 'error'); }
+    };
+
+    load();
+})();
+</script>
+{% endblock %}

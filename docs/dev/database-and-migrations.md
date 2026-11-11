@@ -190,30 +190,35 @@ request context (`docs/dev/auth-and-access.md`, "The workspace of a request"):
     which is what 1.x does; another workspace starts with none.
   - Both columns are read as `docs/dev/auth-and-access.md` describes ("A closed or
     suspended workspace", and the platform-only features after it).
-- **Members are derived from `users.roles` until a later phase edits them on their
-  own** (`shared/utils/workspaces.py`).
-  - A user with the `admin` role is an `owner`; anyone else is a `member`.
-  - `agent_roles` are the user's roles without `admin`.
+- **A membership holds the user's `role` and `agent_roles` in its workspace**, edited
+  on the Members page (`server/member_routes.py`). `users.roles` keeps the platform
+  roles (`workspaces.PLATFORM_ROLES`: `admin`, `pending`, `widget`). The server's own
+  callers (`SYSTEM_CALLERS`, `trigger_runner`) belong to no workspace and keep their
+  agent roles there. What is left of phase 2's derivation from `users.roles`
+  (`shared/utils/workspaces.py`):
+  - A user inserted with agent roles in `users.roles`, as the Users page, 1.x code
+    and `get_or_create_user` (`["user"]`) write them, becomes a member of their home
+    workspace with those agent roles, and the listener leaves `users.roles` the
+    platform ones. `admin` makes them an `owner`, anything else a `member`. The home
+    workspace is the default one, or the one `get_or_create_user(user_id,
+    workspace_id)` names for a user the platform creates for an agent of another
+    workspace (`home_workspace_id`).
   - A user with the `widget` or `pending` role is no member. A widget reaches its
-    workspace through its key's project. Approving a pending user replaces
-    `pending`, which adds the membership. A role change to `pending` or `widget`
-    removes the user's memberships of every workspace, and the startup sync removes
-    those of a user who already has such a role; approving them again adds the
-    default workspace's only.
-  - The auth server runs `sync_default_members()` at startup, before it starts the
-    agent server. That adds the users of a database that has just migrated. It
-    reads users and members as plain rows and writes only what differs, since
-    widget visitors can make `users` a large table.
-  - Listeners on the `User` model keep a member in step when a user is inserted or
-    their roles change, in whichever process writes it.
+    workspace through its key's project. A role change to `pending` or `widget`
+    removes every membership of the user. Approving a pending user who is a member
+    nowhere adds them to the default workspace, with the agent roles the change
+    wrote or `["user"]`.
+  - Agent roles written to `users.roles` later move to the user's membership of the
+    default workspace. A change of platform roles leaves the memberships alone.
+  - The auth server runs `move_roles_to_members()` at startup, before it starts the
+    agent server. The first time, it derives the default workspace's memberships as
+    phase 2 did, which also adds the users of a database that has just migrated
+    from 1.x, and leaves `users.roles` the platform roles; the
+    `workspaces.roles_moved_to_members` row of `system_settings` records that it
+    ran. Every start it removes the memberships of `pending` and `widget` users. It
+    reads users and members as plain rows, since widget visitors can make `users` a
+    large table.
   - Deleting a user deletes their memberships (`ON DELETE CASCADE`).
-  - A user the platform creates for an agent of another workspace joins that one
-    instead: `get_or_create_user(user_id, workspace_id)` sets `home_workspace_id` on
-    the new `User`, and the listener writes the membership there. Neither the sync
-    nor the listeners add a user who is a member of another workspace only to the
-    default one.
-  - When a user's roles change, every membership's `agent_roles` follow them. Only
-    the default workspace's `role` is derived.
 - `test_cases.workspace_id` is the workspace of the case's agent, set when the
   dashboard creates the case. The other lookups in `workspaces.py`
   (`config_workspace`, `version_workspace`, `store_workspace`, `agents_outside`)
