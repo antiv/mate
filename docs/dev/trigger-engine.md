@@ -48,7 +48,7 @@ outcome:
 |---|---|
 | `ok` | Agent answered and output routing did not raise. Carries `agent_response`. |
 | `error` | Agent invocation or output routing raised. Carries `message`, and `agent_response` if the agent had already answered. |
-| `skipped` | The type is in `UNIMPLEMENTED_TRIGGER_TYPES` (`file_watch`, `event_bus`). |
+| `skipped` | The type is in `UNIMPLEMENTED_TRIGGER_TYPES` (`file_watch`, `event_bus`), or the trigger's workspace is closed or suspended (`workspaces.project_is_open`). |
 
 ### Invoking the agent
 
@@ -164,7 +164,7 @@ the first time `require_signature` is set.
 |---|---|---|
 | `memory_block` | `label`, `description` | `MemoryBlocksService.modify_block`, falling back to `create_block` when the block is not found. Any other refusal (a read-only block, a value over its limit) raises, so the run is recorded as `error`. Default label `trigger_{id}_output`. Recorded as changed by `trigger:{id}`. |
 | `http_callback` | `url`, `headers`, `timeout` (default 30) | POSTs `{"response": "...", "source": "mate_trigger"}`. A non-2xx reply raises, so the run is recorded as `error`, as does a URL on the server's own network outside the default workspace (`outbound.py`). |
-| `email` | `to`, `subject` | Plain text over SMTP with STARTTLS, using `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`. A send failure raises, and so does a trigger outside the default workspace (`platform_only.may_run_code`): the SMTP account is the installation's. |
+| `email` | `to`, `subject` | Plain text over SMTP with STARTTLS, using `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`. A send failure raises, and so does a trigger of a workspace without the `email` platform feature (`platform_only.may_use(FEATURE_EMAIL, ...)`; the default workspace has it): the SMTP account is the installation's. |
 
 An unknown `output_type` logs a warning and does nothing.
 

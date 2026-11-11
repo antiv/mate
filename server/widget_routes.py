@@ -29,7 +29,7 @@ from shared.utils.models import WidgetApiKey, AgentConfig, Project
 from shared.utils.ai_disclosure import DEFAULT_DISCLOSURE, resolve_disclosure
 from server.csp import set_csp_header, widget_frame_ancestors
 from server.request_context import RequestContext, get_api_request_context
-from shared.utils.workspaces import in_projects_of, missing_from
+from shared.utils.workspaces import in_projects_of, missing_from, project_is_open
 
 logger = logging.getLogger(__name__)
 
@@ -147,13 +147,19 @@ def configure_widget_proxy(adk_host: str, adk_port: int):
 # Widget API Key authentication
 # ---------------------------------------------------------------------------
 
+def _if_open(session: Session, wk: Optional[WidgetApiKey]) -> Optional[WidgetApiKey]:
+    """The key, unless its workspace is closed or suspended: then it works as no key."""
+    return wk if wk and project_is_open(session, wk.project_id) else None
+
+
 def _lookup_widget_key(api_key: str) -> Optional[WidgetApiKey]:
     db = get_database_client()
     session = db.get_session()
     if not session:
         return None
     try:
-        return session.query(WidgetApiKey).filter_by(api_key=api_key, is_active=True).first()
+        return _if_open(session, session.query(WidgetApiKey).filter_by(
+            api_key=api_key, is_active=True).first())
     finally:
         session.close()
 
@@ -164,7 +170,8 @@ def _lookup_widget_admin_key(admin_key: str) -> Optional[WidgetApiKey]:
     if not session:
         return None
     try:
-        return session.query(WidgetApiKey).filter_by(admin_key=admin_key, is_active=True).first()
+        return _if_open(session, session.query(WidgetApiKey).filter_by(
+            admin_key=admin_key, is_active=True).first())
     finally:
         session.close()
 
@@ -175,7 +182,8 @@ def _lookup_widget_feedback_key(feedback_key: str) -> Optional[WidgetApiKey]:
     if not session:
         return None
     try:
-        return session.query(WidgetApiKey).filter_by(feedback_key=feedback_key, is_active=True).first()
+        return _if_open(session, session.query(WidgetApiKey).filter_by(
+            feedback_key=feedback_key, is_active=True).first())
     finally:
         session.close()
 

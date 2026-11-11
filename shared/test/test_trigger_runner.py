@@ -74,10 +74,14 @@ class TestExecuteTriggerSync(unittest.TestCase):
 
     def setUp(self):
         self.runner = TriggerRunner()
+        # The trigger's workspace is open (phase 3c)
+        patcher = patch("shared.utils.trigger_runner._project_is_open", return_value=True)
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def _trigger(self, trigger_type="cron"):
         return SimpleNamespace(
-            id=1, trigger_type=trigger_type, agent_name="reporter", prompt="go"
+            id=1, trigger_type=trigger_type, agent_name="reporter", prompt="go", project_id=1
         )
 
     def test_unimplemented_types_are_skipped_not_run(self):

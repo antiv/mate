@@ -172,8 +172,8 @@ it, never by a workspace id from the query (`documents/design/workspaces.md`, D6
 - The session's choice is `session["workspace_id"]`, written by `PUT
   /dashboard/api/workspaces/current` (`server/workspace_routes.py`) after checking
   that the caller may open it; `GET /dashboard/api/workspaces` lists the ones they
-  may. A choice the caller has since lost, or a workspace since closed, falls back
-  to the default rather than a 404 on every page. The proxy and `/list-apps` read it
+  may. A choice the caller has since lost, or a workspace since closed or
+  suspended, falls back to the default rather than a 404 on every page. The proxy and `/list-apps` read it
   too, so the Work Room follows the switch. `base.html` shows the switcher only to a
   user with more than one workspace.
 - `ctx.workspace_role` is the caller's role there (`owner`, `admin`, `member`), or
@@ -276,6 +276,24 @@ MATE user id names the workspace (`slack_w<id>_<team>_<user>`,
 workspace's Slack user, with that user's global roles. The default workspace keeps
 `slack_<team>_<user>`.
 
+### A closed or suspended workspace
+
+A workspace is open while `deleted_at` (closed) and `suspended_at` (suspended, V048)
+are both empty (`workspaces.workspace_is_open`, `open_filters`). Anything else
+stops everywhere, for a platform administrator too:
+
+- the dashboard: `X-MATE-Workspace` naming it answers 404, a session switched to it
+  falls back, and the switcher leaves it out;
+- a personal access token of it answers 403;
+- its agents: `caller_access` answers None first, so the RBAC callback, the proxy,
+  `/list-apps`, A2A, `/run_live` and the MCP endpoints refuse them;
+- its widget keys work as no key (401), and its Slack integrations as none (404),
+  through `workspaces.project_is_open`;
+- its triggers are skipped (`status: skipped`), cron and webhook alike, and the
+  alert evaluator passes over its rules.
+
+Nothing sets either column from the dashboard before 3d.
+
 ### What only a platform administrator may give an agent
 
 Some agent settings run code with the server's rights or read its environment, and
@@ -347,13 +365,23 @@ Every path that makes agent names keeps to the same rules:
   before creating the project. One with a folder in `agents/` refuses the import
   with 409. A template sync skips such a new agent ("this name is taken").
 
-At run time, `may_run_code` refuses the code executor, stdio MCP servers and the
-server-credential tools to an agent outside the default workspace, in the tool
-factory, `mcp_tools.py` and
-LangGraph's `mcp_client.py`, until phase 3 lets a platform administrator enable them
-per workspace. The shop tool drops its `vendor_email` and `partner_key` there and
-still takes orders. A trigger's `email` output and an alert rule's `email`
-destination are refused the same way, as they send with the server's SMTP account.
+At run time, `platform_only.may_use(feature, agent_name, project_id)` gives an agent
+a feature only where a platform administrator enabled it for the agent's workspace,
+in `workspaces.platform_features` (V048), and the workspace is open
+(`workspaces.workspace_has_feature`). The default workspace has all three, as 1.x
+does; another one starts with none:
+
+- `FEATURE_CODE`: the code executor (tool factory), stdio MCP servers
+  (`mcp_tools.py`, LangGraph's `mcp_client.py`);
+- `FEATURE_SERVER_CREDENTIALS`: Google Drive, CV Tools, Google Calendar and Supabase
+  Storage (tool factory), the shop's `vendor_email` and `partner_key` (the shop
+  drops them and still takes orders), and `/gdrive/mcp` for a caller who is no
+  platform administrator (`mcp_auth.require_drive_user`);
+- `FEATURE_EMAIL`: a trigger's `email` output and an alert rule's `email`
+  destination, which send with the server's SMTP account.
+
+Saving still needs a platform administrator, whatever the workspace has
+(`features_added`). Nothing sets `platform_features` from the dashboard before 3d.
 The Google Drive MCP server at `/gdrive/mcp` (`mcp_auth.require_drive_user`) answers
 403 to a request of another workspace unless the caller is a platform administrator. A config that names its `project_id` is judged by that project's
 workspace: a subagent made by delegation has its parent's project and a name with no

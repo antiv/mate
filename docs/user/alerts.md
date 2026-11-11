@@ -73,7 +73,8 @@ answers.
 4. Choose the **Destination**:
    - **HTTP POST** sends a JSON message to a **Webhook URL**.
    - **Email** sends to a **Recipient**. This needs outgoing mail configured on the
-     server, and works in the Default workspace only: elsewhere the delivery reports
+     server. It works in the Default workspace, and in another one only if a
+     platform administrator has enabled email for it: otherwise the delivery reports
      `refused`, as the mail goes out from the server's own account.
    - **Slack (incoming webhook)** posts the alert as a message to a channel. In Slack,
      create an [incoming webhook](https://api.slack.com/messaging/webhooks) for the

@@ -60,6 +60,21 @@ def alerts_enabled() -> bool:
     return os.getenv("ALERTS_ENABLED", "false").lower() == "true"
 
 
+def _may_email(workspace_id: Optional[int]) -> bool:
+    """True if the workspace may send email through the server's SMTP account
+    (platform_only.FEATURE_EMAIL). A rule with no workspace is the default one's."""
+    from .database_client import get_database_client
+    from .platform_only import FEATURE_EMAIL
+    from .workspaces import workspace_has_feature
+    session = get_database_client().get_session()
+    if not session:
+        return False
+    try:
+        return workspace_has_feature(session, workspace_id or DEFAULT_WORKSPACE_ID, FEATURE_EMAIL)
+    finally:
+        session.close()
+
+
 class AlertService:
     """CRUD plus evaluation for alert rules."""
 
@@ -478,8 +493,9 @@ class AlertService:
                              headers=config.get('headers') or {},
                              timeout=float(config.get('timeout', 30)))
         if rule.destination_type == 'email':
-            if rule.workspace_id not in (None, DEFAULT_WORKSPACE_ID):
-                return False, "refused: the server's mail account is the default workspace's"
+            if not _may_email(rule.workspace_id):
+                return False, ("refused: a platform administrator hasn't enabled email for "
+                               "the rule's workspace")
             subject = config.get('subject') or f"[MATE alert] {rule.name}"
             body = payload['message'] + "\n\n" + "\n".join(
                 f"{k}: {v}" for k, v in payload.items() if k != 'message')
@@ -538,7 +554,12 @@ class AlertService:
         fired: List[Dict[str, Any]] = []
         try:
             rules = session.query(AlertRule).filter(AlertRule.is_enabled.is_(True)).all()
+            # A closed or suspended workspace's rules rest with it
+            from .workspaces import open_workspace_ids
+            open_ids = open_workspace_ids(session)
             for rule in rules:
+                if rule.workspace_id not in open_ids:
+                    continue
                 try:
                     # Cooldown first: a broken agent must not cost one aggregation
                     # query per evaluation pass while it is already alerting.

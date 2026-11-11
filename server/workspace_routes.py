@@ -23,11 +23,12 @@ router = APIRouter(prefix="/dashboard/api/workspaces", tags=["Dashboard - Worksp
 
 
 def workspaces_for(user_id: str, is_platform_admin: bool) -> List[Dict[str, Any]]:
-    """The open workspaces the user may open, lowest id first, each with the user's role
-    in it: every workspace for a platform administrator (role None where they are no
-    member), else their memberships."""
+    """The open workspaces (neither closed nor suspended) the user may open, lowest id
+    first, each with the user's role in it: every workspace for a platform
+    administrator (role None where they are no member), else their memberships."""
     from shared.utils.database_client import get_database_client
     from shared.utils.models import Workspace, WorkspaceMember
+    from shared.utils.workspaces import open_filters
 
     session = get_database_client().get_session()
     if not session:
@@ -35,7 +36,7 @@ def workspaces_for(user_id: str, is_platform_admin: bool) -> List[Dict[str, Any]
     try:
         query = session.query(Workspace.id, Workspace.name, WorkspaceMember.role).outerjoin(
             WorkspaceMember, (WorkspaceMember.workspace_id == Workspace.id)
-            & (WorkspaceMember.user_id == user_id)).filter(Workspace.deleted_at.is_(None))
+            & (WorkspaceMember.user_id == user_id)).filter(*open_filters())
         if not is_platform_admin:
             query = query.filter(WorkspaceMember.user_id.isnot(None))
         return [{"id": workspace_id, "name": name, "role": role}

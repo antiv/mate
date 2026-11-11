@@ -207,10 +207,42 @@ def workspace_of_project(session: Session, project_id: Optional[int]) -> Optiona
     return session.query(Project.workspace_id).filter(Project.id == project_id).scalar()
 
 
+def open_filters() -> tuple:
+    """Filters keeping the workspaces that are neither closed (deleted_at) nor
+    suspended (suspended_at, V048). Anything else stops: the dashboard, tokens,
+    agents, widget keys, Slack, triggers and alert rules (phase 3c)."""
+    return (Workspace.deleted_at.is_(None), Workspace.suspended_at.is_(None))
+
+
 def workspace_is_open(session: Session, workspace_id: int) -> bool:
-    """True if the workspace exists and is not deleted."""
+    """True if the workspace exists, and is neither closed nor suspended."""
     return session.query(Workspace.id).filter(
-        Workspace.id == workspace_id, Workspace.deleted_at.is_(None)).first() is not None
+        Workspace.id == workspace_id, *open_filters()).first() is not None
+
+
+def open_workspace_ids(session: Session) -> Set[int]:
+    """The ids of every open workspace."""
+    return {workspace_id for (workspace_id,) in session.query(Workspace.id).filter(*open_filters())}
+
+
+def project_is_open(session: Session, project_id: Optional[int]) -> bool:
+    """True if the project exists and its workspace is open: a widget key, Slack
+    integration or trigger of a closed or suspended workspace stops with it."""
+    return session.query(Project.id).join(Workspace, Workspace.id == Project.workspace_id).filter(
+        Project.id == project_id, *open_filters()).first() is not None
+
+
+def workspace_has_feature(session: Session, workspace_id: Optional[int], feature: str) -> bool:
+    """True if a platform administrator enabled the platform-only feature (one of
+    PLATFORM_FEATURES) for the workspace, and it is open."""
+    raw = session.query(Workspace.platform_features).filter(
+        Workspace.id == workspace_id, *open_filters()).scalar() if workspace_id is not None else None
+    try:
+        features = json.loads(raw) if raw else []
+    except (TypeError, ValueError):
+        logger.warning("Invalid platform_features on workspace %s", workspace_id)
+        return False
+    return isinstance(features, list) and feature in features
 
 
 def member_role(session: Session, workspace_id: int, user_id: str) -> Optional[str]:
@@ -224,7 +256,7 @@ def first_workspace_of(session: Session, user_id: str) -> Optional[int]:
     """The open workspace with the lowest id the user is a member of, or None."""
     return session.query(WorkspaceMember.workspace_id).join(
         Workspace, Workspace.id == WorkspaceMember.workspace_id).filter(
-        WorkspaceMember.user_id == user_id, Workspace.deleted_at.is_(None)).order_by(
+        WorkspaceMember.user_id == user_id, *open_filters()).order_by(
         WorkspaceMember.workspace_id).limit(1).scalar()
 
 
@@ -375,7 +407,11 @@ def caller_access(session: Session, user: User,
       gives out) reaches the workspace of their key's project, and a system caller
       any workspace, both on users.roles. Neither id can be signed in with
       (is_reserved_user_id).
+    - No one uses the agents of a closed or suspended workspace, a platform
+      administrator included.
     """
+    if workspace_id is not None and not workspace_is_open(session, workspace_id):
+        return None
     roles = user.get_roles()
     if "admin" in roles:
         return True, roles

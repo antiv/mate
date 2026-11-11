@@ -149,6 +149,20 @@ def generate_webhook_path(name: str) -> str:
     return f"{slug}-{suffix}"
 
 
+def _project_is_open(project_id: Optional[int]) -> bool:
+    """True if the project's workspace is open (workspaces.project_is_open). False when
+    the database can't say: a trigger doesn't fire on a guess."""
+    from shared.utils.database_client import get_database_client
+    from shared.utils.workspaces import project_is_open
+    session = get_database_client().get_session()
+    if not session:
+        return False
+    try:
+        return project_is_open(session, project_id)
+    finally:
+        session.close()
+
+
 class TriggerRunner:
     """
     Owns the APScheduler instance and provides:
@@ -408,6 +422,9 @@ class TriggerRunner:
         if trigger.trigger_type in UNIMPLEMENTED_TRIGGER_TYPES:
             logger.info("Trigger %s type='%s' — not yet implemented", trigger.id, trigger.trigger_type)
             return {"status": "skipped", "message": f"trigger_type '{trigger.trigger_type}' not yet implemented"}
+        if not _project_is_open(trigger.project_id):
+            logger.info("Trigger %s skipped: its workspace is closed or suspended", trigger.id)
+            return {"status": "skipped", "message": "the trigger's workspace is closed or suspended"}
 
         try:
             prompt = render_prompt(trigger.prompt, payload)
@@ -570,14 +587,15 @@ class TriggerRunner:
     def _output_email(self, cfg: dict, text: str, project_id: Optional[int] = None,
                       agent_name: Optional[str] = None) -> None:
         """Send agent response via SMTP. Raises on delivery failure (see above), and
-        outside the default workspace: the SMTP account is the installation's."""
+        when the trigger's workspace may not send email: the SMTP account is the
+        installation's."""
         error = output_config_error("email", cfg)
         if error:
             raise RuntimeError(error)
-        from shared.utils.platform_only import may_run_code
-        if (project_id is not None or agent_name) and not may_run_code(agent_name, project_id):
-            raise RuntimeError("email output refused: the server's mail account is the "
-                               "default workspace's")
+        from shared.utils.platform_only import FEATURE_EMAIL, may_use
+        if (project_id is not None or agent_name) and not may_use(FEATURE_EMAIL, agent_name, project_id):
+            raise RuntimeError("email output refused: a platform administrator hasn't enabled "
+                               "email for the trigger's workspace")
         to_addr = cfg["to"]
         ok, detail = send_email(to_addr, cfg.get("subject", "MATE Trigger Result"), text)
         if not ok:

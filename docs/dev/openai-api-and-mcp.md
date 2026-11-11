@@ -111,8 +111,9 @@ Two more MCP servers are built in, serving MATE's own image generation and Googl
 Drive tools to any MCP client: `/images/mcp` and `/gdrive/mcp`. Endpoints, tools and
 client configuration are in [Exposed MCP servers](mcp-servers.md). Apart from their
 health checks, both need a caller: `/gdrive/mcp` the same callers as the agent
-servers, in the default workspace unless they are a platform administrator (it reads
-Drive with the server's service account, `mcp_auth.require_drive_user`), `/images/mcp` a
+servers, in a workspace with the `server_credentials` platform feature unless they
+are a platform administrator (it reads Drive with the server's service account,
+`mcp_auth.require_drive_user`), `/images/mcp` a
 signed-in dashboard user (it spends the server's provider keys; it does not take
 personal access tokens).
 
