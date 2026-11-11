@@ -29,7 +29,7 @@ from sqlalchemy.orm import Session
 from shared.utils.agent_invoke import run_agent_message
 from shared.utils.database_client import get_database_client
 from shared.utils.models import DEFAULT_WORKSPACE_ID, ChannelIntegration, User
-from shared.utils.workspaces import agent_workspace, in_projects_of, missing_from
+from shared.utils.workspaces import agent_workspace, in_projects_of, missing_from, project_is_open
 from server.request_context import RequestContext, get_api_request_context
 
 logger = logging.getLogger(__name__)
@@ -59,7 +59,8 @@ def _already_handled(event_id: Optional[str]) -> bool:
 
 def _get_integration(team_id: Optional[str]) -> Optional[ChannelIntegration]:
     """Look up the active Slack integration for a Slack workspace. A payload with no
-    team id gets the oldest integration that has none, not any workspace's."""
+    team id gets the oldest integration that has none, not any workspace's. One of a
+    closed or suspended MATE workspace counts as none."""
     db = get_database_client()
     session = db.get_session()
     if not session:
@@ -74,6 +75,8 @@ def _get_integration(team_id: Optional[str]) -> Optional[ChannelIntegration]:
         else:
             query = query.filter(ChannelIntegration.team_id.is_(None))
         integration = query.order_by(ChannelIntegration.id).first()
+        if integration and not project_is_open(session, integration.project_id):
+            return None
         if integration:
             session.expunge(integration)
         return integration

@@ -124,8 +124,10 @@ To give an agent with a stored **Model API Key** a new **Model Base URL**, type 
 key again: otherwise the stored key would be sent to the new address, and saving is
 refused.
 
-Outside the Default workspace, the code executor, MCP servers with a command and
-those four tools don't run at all for now: the agent answers without them. There, a
+In a workspace other than Default, the code executor and MCP servers with a command
+run only if a platform administrator has enabled code for that workspace, and those
+four tools only if they have enabled the server's credentials. Otherwise the agent
+answers without them. Outside the Default workspace, a
 **Model Base URL** or MCP server URL on the server's own network (such as
 `localhost` or `10.x.x.x`) is refused too, and a model endpoint that redirects
 elsewhere fails the answer instead of being followed.

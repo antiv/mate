@@ -1087,7 +1087,7 @@ class AgentManager:
                         'guardrail_config': subagent_config.guardrail_config,
                         'allowed_for_roles': subagent_config.allowed_for_roles,
                         # The instance's name has no row: tools are judged by the
-                        # project (may_run_code, File Search stores)
+                        # project (may_use, File Search stores)
                         'project_id': subagent_config.project_id,
                     }
                     

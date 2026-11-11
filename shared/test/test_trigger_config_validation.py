@@ -203,7 +203,9 @@ class TestUndeliverableRunIsAnError(unittest.TestCase):
         runner._invoke_agent = MagicMock(return_value="the answer")
         trigger = MagicMock(id=1, trigger_type="cron", prompt="go", output_type="http_callback")
         trigger.get_output_config.return_value = {}
-        result = runner._execute_trigger_sync(trigger)
+        # Its workspace is open (phase 3c)
+        with patch("shared.utils.trigger_runner._project_is_open", return_value=True):
+            result = runner._execute_trigger_sync(trigger)
         self.assertEqual(result["status"], "error")
         self.assertIn("url", result["message"])
         # The agent did run; its answer is kept so Last Run can show it.

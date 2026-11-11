@@ -86,6 +86,10 @@ class TestExecuteTriggerThreadsPayload(unittest.TestCase):
             prompt="Issue {{ payload.key }} needs attention",
         )
         self.runner._route_output = MagicMock()
+        # The trigger's workspace is open (phase 3c)
+        patcher = patch("shared.utils.trigger_runner._project_is_open", return_value=True)
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def test_payload_reaches_the_agent_prompt(self):
         self.runner._invoke_agent = MagicMock(return_value="done")

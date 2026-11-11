@@ -29,17 +29,17 @@ only be adjusted there.
 | Tool | What the agent can do | Needs |
 |---|---|---|
 | Web search (`google_search`) | Search the web. | Nothing. With a Tavily key on the server, results come from Tavily; without one, from DuckDuckGo. |
-| **Google Drive** | List and read files in a Drive folder. | A Google service account on the server. Set by a platform administrator, and only in the Default workspace. |
-| **Google Calendar** | Check availability, list and create events. | The same service account, and the calendar shared with its email address. Set the calendar, timezone, working hours and appointment length in the dialog. Set by a platform administrator, and only in the Default workspace. |
+| **Google Drive** | List and read files in a Drive folder. | A Google service account on the server. Set by a platform administrator, and only in a workspace allowed the server's credentials (Default always). |
+| **Google Calendar** | Check availability, list and create events. | The same service account, and the calendar shared with its email address. Set the calendar, timezone, working hours and appointment length in the dialog. Set by a platform administrator, and only in a workspace allowed the server's credentials (Default always). |
 | **Browser** | Open pages, click and type in a browser running on the server. Watch it in the Work Room's Browser panel. | Private and local addresses are blocked unless the administrator allows them. |
 | **Image Tools** | Generate images. Type any LiteLLM image model in the dialog (suggestions list common ones), or leave it empty for the server's default, set under [Settings](settings.md). | An API key for the chosen model's provider. |
 | **Image Data Extraction** | Read structured data out of an image. | A vision model, set in the dialog. |
 | **Memory Blocks** | Read and update the project's shared notes. See [Memory blocks](memory-blocks.md). | Nothing. |
 | **Create Agent** | Create, read, change and delete other agents. | Nothing. Give this only to agents you trust to redesign your setup. |
 | **Code Executor** | Run Python and shell commands on the server. | See the warning below. |
-| **Shop (E-commerce)** | Show a catalog, keep a cart, take orders. Edit the catalog, currency and shop name in the JSON. | `vendor_email` to email orders; `partner_key` to list them under **Shop Orders**. These two are set by a platform administrator, and work only in the Default workspace; elsewhere the shop takes orders without them. |
+| **Shop (E-commerce)** | Show a catalog, keep a cart, take orders. Edit the catalog, currency and shop name in the JSON. | `vendor_email` to email orders; `partner_key` to list them under **Shop Orders**. These two are set by a platform administrator, and work only in a workspace allowed the server's credentials (Default always); elsewhere the shop takes orders without them. |
 | **Subagent Delegation** | Split a task and hand the parts to temporary helper agents that run in parallel. | Nothing. Limits and the helpers' model are set in the JSON. |
-| **CV Tools** | Work with CVs stored in Google Drive. | The Google service account. Set by a platform administrator, and only in the Default workspace. |
+| **CV Tools** | Work with CVs stored in Google Drive. | The Google service account. Set by a platform administrator, and only in a workspace allowed the server's credentials (Default always). |
 | Documentation (`docs`) | Search and read MATE's own documentation. Admins get every section, anyone else the user guides. See [Help in the dashboard](help.md). | Nothing. There is no checkbox; add `"docs": true` in the JSON. |
 
 The [tool reference](../reference/tools.md) lists every key the JSON accepts.
@@ -102,7 +102,8 @@ JSON mapping with one entry per server:
   skipped rather than called without its credential.
 - A server with `command` and a `${NAME}` reference can only be set by a platform
   administrator, and a server with `command` runs only for agents of the Default
-  workspace. Outside it, a server `url` on the server's own network (such as
+  workspace or of one a platform administrator has enabled code for. Outside the
+  Default workspace, a server `url` on the server's own network (such as
   `localhost`) is skipped too (see [What only a platform administrator can set](agents.md#what-only-a-platform-administrator-can-set)).
 
 ## Use your agents from other tools

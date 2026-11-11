@@ -22,11 +22,13 @@ Two checks:
   config keeps without naming it. The dashboard routes refuse
   it to a caller who is no platform administrator, so a workspace admin keeps what a
   platform administrator set up as it is, and can't add more.
-- At run time, may_run_code() refuses the code executor, stdio MCP servers and the
-  server-credential tools (the shop without its vendor_email and partner_key) to an
-  agent outside the default workspace, until phase 3 lets a platform administrator
-  enable them per workspace. A trigger's or alert rule's email goes out the same way,
-  from the default workspace only.
+- At run time, may_use() gives an agent a feature only where a platform
+  administrator enabled it for the agent's workspace (workspaces.platform_features,
+  V048): FEATURE_CODE for the code executor and stdio MCP servers,
+  FEATURE_SERVER_CREDENTIALS for the server-credential tools (the shop without its
+  vendor_email and partner_key), FEATURE_EMAIL for a trigger's or alert rule's
+  email. The default workspace has all three, as 1.x does; another one starts with
+  none.
 """
 
 import json
@@ -34,6 +36,7 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, Optional, Set
 
+from .models import PLATFORM_FEATURES
 from .utils import ENV_PLACEHOLDER
 
 logger = logging.getLogger(__name__)
@@ -48,6 +51,9 @@ SERVER_CREDENTIAL_TOOLS = ("google_drive", "cv_tools", "google_calendar", "supab
 # The shop tool's settings that do: mail from the server's SMTP account, orders in shop_orders
 SHOP_SERVER_PARTS = ("vendor_email", "partner_key")
 KEPT_KEY = "a new base URL for its stored API key (enter the key again)"
+
+# What a platform administrator enables per workspace (models.PLATFORM_FEATURES)
+FEATURE_CODE, FEATURE_SERVER_CREDENTIALS, FEATURE_EMAIL = PLATFORM_FEATURES
 
 
 def _parsed(value: Any) -> Any:
@@ -171,19 +177,33 @@ def has_code_folder(agents_dir: Path, name: Optional[str]) -> bool:
     return (agents_dir / name).is_dir()
 
 
-def may_run_code(agent_name: Optional[str], project_id: Optional[int] = None) -> bool:
-    """True if the agent may have the code executor, stdio MCP servers and the
-    server-credential tools: an agent of the default workspace, or with no config (a
-    hardcoded agent). False when the check
-    can't run, as the tools are refused rather than handed out by accident.
+def may_use(feature: str, agent_name: Optional[str], project_id: Optional[int] = None) -> bool:
+    """True if the agent's workspace has the platform feature (FEATURE_CODE,
+    FEATURE_SERVER_CREDENTIALS or FEATURE_EMAIL) and is open. An agent with no config
+    (a hardcoded agent) runs in the default workspace. False when the check can't
+    run, as the feature is refused rather than handed out by accident.
 
     A config that names its project_id is judged by that project's workspace, not by
     its name: a subagent made by delegation has its parent's project and a name with
     no row (tools/subagent_delegation_tool.py). A project that doesn't exist refuses.
-    The rule is outbound.workspace_of_run's."""
-    from .models import DEFAULT_WORKSPACE_ID
+    The workspace is outbound.workspace_of_run's."""
+    from .database_client import get_database_client
     from .outbound import workspace_of_run
+    from .workspaces import workspace_has_feature
 
     if not agent_name and project_id is None:
         return True
-    return workspace_of_run(agent_name, project_id) == DEFAULT_WORKSPACE_ID
+    workspace_id = workspace_of_run(agent_name, project_id)
+    if workspace_id is None:
+        return False
+    try:
+        session = get_database_client().get_session()
+        if not session:
+            return False
+        try:
+            return workspace_has_feature(session, workspace_id, feature)
+        finally:
+            session.close()
+    except Exception as e:
+        logger.error("No platform features for workspace %s: %s", workspace_id, e)
+        return False

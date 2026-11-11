@@ -66,8 +66,10 @@ from shared.utils.rbac_middleware import RBACMiddleware
 from shared.utils.tools import mcp_tools
 from shared.utils.tools.tool_factory import ToolFactory
 from shared.utils.user_service import UserService
+from shared.utils.alert_service import AlertService
+from shared.utils.trigger_runner import TriggerRunner
 from shared.utils.workspaces import (
-    agent_workspace_for, agents_outside, is_reserved_user_id, sync_default_members,
+    agent_workspace_for, agents_outside, caller_access, is_reserved_user_id, sync_default_members,
 )
 
 B_MARKER = "zz-ws-b"
@@ -2762,6 +2764,111 @@ class TestAgentWithNoConfig(_TwoWorkspaces):
             self.assertNotIn(self.NO_CONFIG, self.carol.get("/dashboard/api/sessions").text)
             self.assertEqual(self.carol.get("/dashboard/api/sessions/detail", params=params)
                              .status_code, 404)
+
+
+class TestClosedOrSuspendedWorkspace(_TwoWorkspaces):
+    """A closed or suspended workspace stops everywhere, and the platform-only features
+    follow workspaces.platform_features (#277, 3c). Phase 3c has no route that sets
+    either column yet, so the tests set them directly."""
+
+    def _set_b(self, **values) -> None:
+        session = self.Session()
+        session.query(Workspace).filter_by(id=B).update(values)
+        session.commit()
+        session.close()
+
+    def _suspend_b(self) -> None:
+        self._set_b(suspended_at=datetime.now(timezone.utc).replace(tzinfo=None))
+
+    def test_no_one_uses_its_agents(self):
+        rbac = RBACMiddleware()
+        b_root = {"name": B_ROOT, "allowed_for_roles": ["user"]}
+        self.assertTrue(rbac.check_agent_access(BOB, b_root)[0])
+        for state in ({"suspended_at": datetime(2026, 11, 1)}, {"deleted_at": datetime(2026, 11, 1)}):
+            with self.subTest(state=state):
+                self._set_b(**{"suspended_at": None, "deleted_at": None, **state})
+                self.assertFalse(rbac.check_agent_access(BOB, b_root)[0])
+                session = self.Session()
+                try:
+                    admin = session.query(User).filter_by(user_id=BOB).one()
+                    admin.set_roles(["admin"])  # a platform administrator, not stored
+                    self.assertIsNone(caller_access(session, admin, B))
+                finally:
+                    session.rollback()
+                    session.close()
+                # Workspace A goes on
+                self.assertTrue(rbac.check_agent_access(
+                    ALICE, {"name": A_ROOT, "allowed_for_roles": ["user"]})[0])
+
+    def test_its_dashboard_tokens_and_switcher_stop(self):
+        from server.workspace_routes import workspaces_for
+        self._suspend_b()
+        response = self.client.get("/dashboard/api/agents", headers=_platform_admin(B))
+        self.assertEqual(response.status_code, 404)
+        self.assertNotIn(B, [w["id"] for w in workspaces_for(BOB, False)])
+        self.assertNotIn(B, [w["id"] for w in workspaces_for(auth.AUTH_USERNAME, True)])
+        bob = TestClient(auth_server.app, cookies=_signed_in(BOB))
+        self.assertNotIn(B_ROOT, bob.get("/dashboard/api/agents").text)
+        token = self.client.get("/v1/models", headers={"Authorization": f"Bearer {PATS[BOB]}"})
+        self.assertEqual(token.status_code, 403)
+
+    def test_its_widget_keys_slack_triggers_and_alert_rules_stop(self):
+        from server import slack_routes
+        service = AlertService()
+
+        def measured() -> Set[int]:
+            with patch.object(service, "_measure", return_value=None) as measure:
+                service.evaluate_all()
+            return {call.args[1].workspace_id for call in measure.call_args_list}
+
+        self.assertIn(B, measured())
+        self.assertEqual(self.client.get("/widget/public-config", params={"key": "wk_b"}).status_code, 200)
+        self.assertIsNotNone(slack_routes._get_integration("T_B"))
+        self._suspend_b()
+        self.assertEqual(self.client.get("/widget/public-config", params={"key": "wk_b"}).status_code, 401)
+        self.assertEqual(self.client.get("/widget/public-config", params={"key": "wk_a"}).status_code, 200)
+        self.assertIsNone(slack_routes._get_integration("T_B"))
+
+        session = self.Session()
+        trigger = session.get(AgentTrigger, self.b_rows["trigger_id"])
+        runner = TriggerRunner()
+        with patch.object(runner, "_invoke_agent") as invoke:
+            result = runner._execute_trigger_sync(trigger)
+        session.close()
+        invoke.assert_not_called()
+        self.assertEqual(result["status"], "skipped")
+        self.assertNotIn(B, measured())
+
+    def test_platform_features_follow_the_workspace(self):
+        from shared.utils.platform_only import (
+            FEATURE_CODE, FEATURE_EMAIL, FEATURE_SERVER_CREDENTIALS, may_use)
+        features = (FEATURE_CODE, FEATURE_SERVER_CREDENTIALS, FEATURE_EMAIL)
+        project_a, project_b = self.ids["project_a"], self.ids["project_b"]
+        # The default workspace has all three, as 1.x; another one none
+        self.assertTrue(all(may_use(f, A_ROOT, project_a) for f in features))
+        self.assertFalse(any(may_use(f, B_ROOT, project_b) for f in features))
+        # A runtime sub-agent with no config goes by its project
+        self.assertFalse(may_use(FEATURE_CODE, "zz_ws_b_root_task_1", project_b))
+        self._set_b(platform_features=json.dumps([FEATURE_CODE]))
+        self.assertTrue(may_use(FEATURE_CODE, B_ROOT, project_b))
+        self.assertFalse(may_use(FEATURE_EMAIL, B_ROOT, project_b))
+        # Nor does a suspended workspace keep them
+        self._suspend_b()
+        self.assertFalse(may_use(FEATURE_CODE, B_ROOT, project_b))
+
+    def test_email_follows_the_feature(self):
+        rule = MagicMock(workspace_id=B, destination_type="email")
+        rule.get_destination_config.return_value = {"to": "x@example.com"}
+        with patch("shared.utils.alert_service.send_email", return_value=(True, "ok")) as sent:
+            self.assertFalse(AlertService._deliver(MagicMock(), rule, {"message": "m"})[0])
+            self._set_b(platform_features=json.dumps(["email"]))
+            self.assertTrue(AlertService._deliver(MagicMock(), rule, {"message": "m"})[0])
+        sent.assert_called_once()
+        with patch.dict(os.environ, {"SMTP_HOST": "smtp.example.com"}), \
+                patch("shared.utils.trigger_runner.send_email", return_value=(True, "ok")) as sent:
+            TriggerRunner._output_email(MagicMock(), {"to": "x@example.com"}, "t",
+                                        self.ids["project_b"], B_ROOT)
+        sent.assert_called_once()
 
 
 if __name__ == "__main__":

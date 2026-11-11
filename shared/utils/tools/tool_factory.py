@@ -10,7 +10,7 @@ import logging
 import os
 from typing import Dict, List, Any, Optional
 
-from ..platform_only import SERVER_CREDENTIAL_TOOLS, may_run_code
+from ..platform_only import FEATURE_CODE, FEATURE_SERVER_CREDENTIALS, SERVER_CREDENTIAL_TOOLS, may_use
 
 logger = logging.getLogger(__name__)
 
@@ -72,10 +72,11 @@ class ToolFactory:
                 for tool_type, tool_config_value in tool_config_dict.items():
                     if tool_type in self._tool_creators and tool_config_value is not None:
                         if (tool_type in SERVER_CREDENTIAL_TOOLS
-                                and not may_run_code(config.get('name'), config.get('project_id'))):
+                                and not may_use(FEATURE_SERVER_CREDENTIALS, config.get('name'),
+                                                config.get('project_id'))):
                             # The installation's credentials, shared by every workspace
-                            logger.error("Refusing %s to agent %s: outside the default workspace "
-                                         "(shared/utils/platform_only.py)",
+                            logger.error("Refusing %s to agent %s: its workspace may not use the "
+                                         "server's credentials (shared/utils/platform_only.py)",
                                          tool_type, config.get('name'))
                             continue
                         creator = self._tool_creators[tool_type]
@@ -259,10 +260,10 @@ class ToolFactory:
         happen. Delete the key, or set MATE_ALLOW_CODE_EXECUTOR_ON_WIDGET=true.
         """
         agent_name = config.get('name')
-        if not may_run_code(agent_name, config.get('project_id')):
+        if not may_use(FEATURE_CODE, agent_name, config.get('project_id')):
             logger.error(
-                "Refusing code_executor for agent '%s': outside the default workspace "
-                "it is platform-only (shared/utils/platform_only.py).", agent_name)
+                "Refusing code_executor for agent '%s': a platform administrator hasn't "
+                "enabled code for its workspace (shared/utils/platform_only.py).", agent_name)
             return []
         if agent_name and self._agent_has_widget_key(agent_name):
             logger.error(

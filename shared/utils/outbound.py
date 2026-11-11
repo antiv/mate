@@ -68,7 +68,7 @@ def internal_address(url: str) -> Optional[str]:
 def workspace_of_run(agent_name: Optional[str], project_id: Optional[int]) -> Optional[int]:
     """The workspace an agent runs in: its project's, else its own; the default one for
     an agent with no config. None when the database can't say, or the project doesn't
-    exist, which every caller refuses. Also platform_only.may_run_code's rule."""
+    exist, which every caller refuses. Also platform_only.may_use's rule."""
     from .database_client import get_database_client
     from .workspaces import agent_workspace, workspace_of_project
     try:

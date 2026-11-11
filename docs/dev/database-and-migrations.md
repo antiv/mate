@@ -187,8 +187,9 @@ request context (`docs/dev/auth-and-access.md`, "The workspace of a request"):
     closes one.
   - `workspaces.platform_features` is a JSON list of `models.PLATFORM_FEATURES`
     (`code`, `server_credentials`, `email`). The default workspace has all three,
-    which is what 1.x does; another workspace starts with none. Nothing reads these
-    columns before 3c.
+    which is what 1.x does; another workspace starts with none.
+  - Both columns are read as `docs/dev/auth-and-access.md` describes ("A closed or
+    suspended workspace", and the platform-only features after it).
 - **Members are derived from `users.roles` until a later phase edits them on their
   own** (`shared/utils/workspaces.py`).
   - A user with the `admin` role is an `owner`; anyone else is a `member`.
