@@ -10,7 +10,7 @@ generated: true
 
 # HTTP API reference
 
-Every HTTP route declared in the code: **269** routes. 36 have no docstring and so no summary here.
+Every HTTP route declared in the code: **276** routes. 36 have no docstring and so no summary here.
 
 This page lists what exists and where it is implemented. For request and response schemas, and to try a call, use the live Swagger UI under **Documentation → API** in the dashboard.
 
@@ -18,7 +18,7 @@ Requests to `/dashboard/api/*` require an admin, apart from the short allowlist 
 
 ## Auth server and dashboard
 
-Port 8000. Everything a browser or an external client talks to. 249 routes.
+Port 8000. Everything a browser or an external client talks to. 256 routes.
 
 ### Authentication
 
@@ -212,7 +212,19 @@ Web interface pages for system management.
 | `GET` | `/dashboard/wizard-pricing` | Dashboard page to edit Agent Builder Wizard tier prices and currencies | shared/utils/dashboard/dashboard_server.py · dashboard_wizard_pricing |
 | `GET` | `/dashboard/workroom` | — | shared/utils/dashboard/dashboard_server.py · dashboard_workroom |
 | `GET` | `/dashboard/workroom/canvas` | An empty page that runs the code shown in the Work Room canvas | shared/utils/dashboard/dashboard_server.py · dashboard_workroom_canvas |
+| `GET` | `/dashboard/workspaces` | Platform → Workspaces (server/platform_workspace_routes.py) | shared/utils/dashboard/dashboard_server.py · dashboard_workspaces |
 | `GET` | `/login` | Login page for dashboard (no auth required) | server/auth_routes.py · login_page |
+
+### Dashboard - Platform
+
+| Method | Path | Summary | Implemented in |
+|---|---|---|---|
+| `GET` | `/dashboard/api/platform/workspaces` | Every workspace, closed ones included, with its owners and counts | server/platform_workspace_routes.py · list_workspaces |
+| `POST` | `/dashboard/api/platform/workspaces` | Create a workspace: name, slug, owner (an existing user's id), and optionally allow_platform_keys (default true) and platform_features (default none) | server/platform_workspace_routes.py · create_workspace |
+| `PUT` | `/dashboard/api/platform/workspaces/{workspace_id}` | Change any of name, allow_platform_keys and platform_features | server/platform_workspace_routes.py · update_workspace |
+| `POST` | `/dashboard/api/platform/workspaces/{workspace_id}/close` | Close a workspace with no projects, for good | server/platform_workspace_routes.py · close_workspace |
+| `POST` | `/dashboard/api/platform/workspaces/{workspace_id}/resume` | Undo a suspension | server/platform_workspace_routes.py · resume_workspace |
+| `POST` | `/dashboard/api/platform/workspaces/{workspace_id}/suspend` | Stop the workspace until it is resumed: its dashboard, tokens, agents, widget keys, Slack, triggers and alert rules | server/platform_workspace_routes.py · suspend_workspace |
 
 ### Dashboard - Projects
 

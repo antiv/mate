@@ -55,11 +55,12 @@ USER_READABLE_PATHS = [
 
 
 # (methods, or None for every method; path). Migrations, server control, installation
-# settings and system jobs, the wizard and shop, users, audit retention, the template
-# catalogue, and binary builds, which pack the installation's agents/ folder.
+# settings and system jobs, the wizard and shop, users, Platform → Workspaces, audit
+# retention, the template catalogue, and binary builds, which pack the installation's
+# agents/ folder.
 PLATFORM_ONLY_PATHS = [
     (None, re.compile(
-        r"^/dashboard/api/(migrations|server|settings|system-jobs|wizard|shop|users)(/.*)?$")),
+        r"^/dashboard/api/(migrations|server|settings|system-jobs|wizard|shop|users|platform)(/.*)?$")),
     (None, re.compile(r"^/dashboard/api/audit-logs/retention(-config)?/?$")),
     (None, re.compile(r"^/dashboard/api/agents/build-binary(/.*)?$")),
     ({"POST"}, re.compile(r"^/dashboard/api/agents/reinitialize-all/?$")),

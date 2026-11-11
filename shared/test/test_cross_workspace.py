@@ -134,6 +134,12 @@ POST /dashboard/api/agents/reinitialize-all
 POST /dashboard/api/agents/build-binary
 GET /dashboard/api/agents/build-binary/{build_id}/status
 GET /dashboard/api/agents/build-binary/{build_id}/download
+GET /dashboard/api/platform/workspaces
+POST /dashboard/api/platform/workspaces
+PUT /dashboard/api/platform/workspaces/{workspace_id}
+POST /dashboard/api/platform/workspaces/{workspace_id}/suspend
+POST /dashboard/api/platform/workspaces/{workspace_id}/resume
+POST /dashboard/api/platform/workspaces/{workspace_id}/close
 """)
 
 # The template catalogue: files every workspace imports from. Writing to it is
@@ -1075,12 +1081,13 @@ class TestWorkspaceAdmins(_TwoWorkspaces):
 
     def test_the_installation_s_pages_are_for_platform_administrators(self):
         bob = self._as(BOB, follow_redirects=False)
-        for page in ("/dashboard/users", "/dashboard/migrations", "/dashboard/settings",
-                     "/dashboard/wizard-leads", "/dashboard/wizard-pricing", "/dashboard/shop-orders"):
+        for page in ("/dashboard/users", "/dashboard/workspaces", "/dashboard/migrations",
+                     "/dashboard/settings", "/dashboard/wizard-leads", "/dashboard/wizard-pricing", "/dashboard/shop-orders"):
             with self.subTest(page=page):
                 self.assertIn(bob.get(page).status_code, (302, 303, 307))
         for page, platform_only in (("/dashboard/overview", 'href="/dashboard/users"'),
                                     ("/dashboard/overview", 'href="/dashboard/migrations"'),
+                                    ("/dashboard/overview", 'href="/dashboard/workspaces"'),
                                     ("/dashboard/overview", 'id="adkStatusIndicator"'),
                                     ("/dashboard/agents", 'data-click="reinitializeAllAgents"')):
             with self.subTest(page=page, platform_only=platform_only):
@@ -2869,6 +2876,151 @@ class TestClosedOrSuspendedWorkspace(_TwoWorkspaces):
             TriggerRunner._output_email(MagicMock(), {"to": "x@example.com"}, "t",
                                         self.ids["project_b"], B_ROOT)
         sent.assert_called_once()
+
+
+
+class TestPlatformWorkspaces(_TwoWorkspaces):
+    """Platform → Workspaces (#277, 3d): a platform administrator creates, edits,
+    suspends, resumes and closes workspaces, and every change is audited. Workspace
+    owners are refused every route (TestEveryRoute, PLATFORM_ONLY)."""
+
+    API = "/dashboard/api/platform/workspaces"
+
+    def _call(self, method: str, path: str = "", **kwargs) -> httpx.Response:
+        return self.client.request(method, self.API + path, headers=_platform_admin(A), **kwargs)
+
+    def _audit(self, action: str) -> List[AuditLog]:
+        session = self.Session()
+        try:
+            return session.query(AuditLog).filter_by(action=action).all()
+        finally:
+            session.close()
+
+    def _workspace(self, workspace_id: int) -> Workspace:
+        session = self.Session()
+        try:
+            return session.get(Workspace, workspace_id)
+        finally:
+            session.close()
+
+    def _create(self, **body) -> httpx.Response:
+        return self._call("POST", json={"name": "Carol's team", "slug": "carol", "owner": ALICE, **body})
+
+    def test_a_new_workspace_gets_its_first_owner(self):
+        response = self._create(platform_features=["email", "code"], allow_platform_keys=False)
+        self.assertEqual(response.status_code, 200, response.text)
+        created = response.json()["workspace"]
+        self.assertEqual((created["status"], created["owners"], created["platform_features"]),
+                         ("open", [ALICE], ["code", "email"]))
+        session = self.Session()
+        try:
+            member = session.query(WorkspaceMember).filter_by(workspace_id=created["id"]).one()
+            self.assertEqual((member.user_id, member.role, json.loads(member.agent_roles)),
+                             (ALICE, "owner", ["user", "developer"]))
+            self.assertFalse(session.get(Workspace, created["id"]).allow_platform_keys)
+        finally:
+            session.close()
+        # alice may now open it, and owns it
+        alice = TestClient(auth_server.app, cookies=_signed_in(ALICE))
+        listed = {w["id"]: w["role"] for w in alice.get("/dashboard/api/workspaces").json()["workspaces"]}
+        self.assertEqual(listed.get(created["id"]), "owner")
+        entry, = self._audit("workspace.create")
+        self.assertEqual((entry.workspace_id, entry.resource_type, entry.resource_id),
+                         (created["id"], "workspace", str(created["id"])))
+        self.assertEqual(json.loads(entry.details)["owner"], ALICE)
+        # The list holds every workspace, with counts
+        listed = {w["id"]: w for w in self._call("GET").json()["workspaces"]}
+        self.assertEqual(sorted(listed), [A, B, created["id"]])
+        self.assertEqual((listed[B]["owners"], listed[B]["projects"]), ([BOB], 1))
+        self.assertTrue(listed[A]["is_default"])
+
+    def test_what_a_new_workspace_is_refused(self):
+        session = self.Session()
+        session.add_all([User(user_id="pending@x.example", roles='["pending"]'),
+                         User(user_id="widget_1_abc", roles='["widget"]')])
+        session.commit()
+        session.close()
+        for body, status in (({"slug": "Bad Slug"}, 400), ({"slug": "-carol"}, 400),
+                             ({"slug": "c" * 41}, 400), ({"name": "  "}, 400),
+                             ({"slug": B_MARKER}, 409), ({"name": "default"}, 409),
+                             ({"owner": "nobody@x.example"}, 400), ({"owner": "pending@x.example"}, 400),
+                             ({"owner": "widget_1_abc"}, 400), ({"owner": None}, 400),
+                             ({"platform_features": ["root"]}, 400),
+                             ({"allow_platform_keys": "yes"}, 400)):
+            with self.subTest(body=body):
+                self.assertEqual(self._create(**body).status_code, status)
+        session = self.Session()
+        try:
+            self.assertEqual(session.query(Workspace).count(), 2)
+        finally:
+            session.close()
+        self.assertEqual(self._audit("workspace.create"), [])
+
+    def test_a_workspace_is_renamed_and_its_policy_set(self):
+        response = self._call("PUT", f"/{B}", json={
+            "name": "Renamed", "allow_platform_keys": False, "platform_features": ["code"]})
+        self.assertEqual(response.json()["changed"],
+                         ["allow_platform_keys", "name", "platform_features"])
+        workspace = self._workspace(B)
+        self.assertEqual((workspace.name, workspace.allow_platform_keys,
+                          json.loads(workspace.platform_features)), ("Renamed", False, ["code"]))
+        entry, = self._audit("workspace.update")
+        self.assertEqual(entry.workspace_id, B)
+        self.assertEqual(json.loads(entry.details)["name"], {"from": f"{B_MARKER} workspace", "to": "Renamed"})
+        # The default workspace's name is taken, and an unchanged value changes nothing
+        self.assertEqual(self._call("PUT", f"/{B}", json={"name": "DEFAULT"}).status_code, 409)
+        self.assertEqual(self._call("PUT", f"/{B}", json={"name": "Renamed"}).json()["changed"], [])
+        self.assertEqual(len(self._audit("workspace.update")), 1)
+        self.assertEqual(self._call("PUT", f"/{B}", json={}).status_code, 400)
+        self.assertEqual(self._call("PUT", "/99", json={"name": "x"}).status_code, 404)
+
+    def test_suspending_stops_the_workspace_until_it_is_resumed(self):
+        from server.workspace_routes import workspaces_for
+        self.assertEqual(self._call("POST", f"/{B}/suspend").json()["status"], "suspended")
+        self.assertIsNotNone(self._workspace(B).suspended_at)
+        self.assertNotIn(B, [w["id"] for w in workspaces_for(BOB, False)])
+        token = self.client.get("/v1/models", headers={"Authorization": f"Bearer {PATS[BOB]}"})
+        self.assertEqual(token.status_code, 403)
+        # Suspending again changes nothing
+        self._call("POST", f"/{B}/suspend")
+        self.assertEqual(len(self._audit("workspace.suspend")), 1)
+        self.assertEqual(self._call("POST", f"/{B}/resume").json()["status"], "open")
+        self.assertIn(B, [w["id"] for w in workspaces_for(BOB, False)])
+        token = self.client.get("/v1/models", headers={"Authorization": f"Bearer {PATS[BOB]}"})
+        self.assertEqual(token.status_code, 200)
+        self.assertEqual([e.workspace_id for e in self._audit("workspace.resume")], [B])
+
+    def test_the_default_workspace_is_never_suspended_or_closed(self):
+        for verb in ("suspend", "close"):
+            with self.subTest(verb=verb):
+                self.assertEqual(self._call("POST", f"/{A}/{verb}").status_code, 409)
+        # It keeps every platform feature, as in 1.x; its name can change
+        self.assertEqual(self._call("PUT", f"/{A}", json={"platform_features": []}).status_code, 409)
+        self.assertEqual(self._call("PUT", f"/{A}", json={
+            "name": "Main", "platform_features": ["code", "server_credentials", "email"]}).json()["changed"],
+            ["name"])
+        workspace = self._workspace(A)
+        self.assertIsNone(workspace.suspended_at)
+        self.assertIsNone(workspace.deleted_at)
+        self.assertEqual(json.loads(workspace.platform_features), ["code", "server_credentials", "email"])
+
+    def test_only_a_workspace_with_no_projects_is_closed_and_for_good(self):
+        response = self._call("POST", f"/{B}/close")
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("1 project", response.json()["detail"])
+        self.assertIsNone(self._workspace(B).deleted_at)
+        empty = self._create().json()["workspace"]["id"]
+        self.assertEqual(self._call("POST", f"/{empty}/close").json()["status"], "closed")
+        self.assertIsNotNone(self._workspace(empty).deleted_at)
+        self.assertEqual([e.workspace_id for e in self._audit("workspace.close")], [empty])
+        for method, path in (("POST", f"/{empty}/resume"), ("POST", f"/{empty}/suspend"),
+                             ("POST", f"/{empty}/close"), ("PUT", f"/{empty}")):
+            with self.subTest(path=path):
+                self.assertEqual(self._call(method, path, json={"name": "x"}).status_code, 409)
+        listed = {w["id"]: w["status"] for w in self._call("GET").json()["workspaces"]}
+        self.assertEqual(listed[empty], "closed")
+        # It keeps its slug
+        self.assertEqual(self._create(name="Other").status_code, 409)
 
 
 if __name__ == "__main__":

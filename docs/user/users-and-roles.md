@@ -41,9 +41,10 @@ Default, and with one workspace nothing below changes what anyone sees.
 
 - A **platform administrator** (the built-in account, or anyone with the `admin`
   role) has the whole dashboard of every workspace, and the pages that cover the
-  whole installation: **Users**, **Settings**, **Migrations**, the agent server's
-  start and stop controls, system jobs, audit-log retention, the wizard and shop
-  orders, saving and deleting templates, **Reload All** and binary builds.
+  whole installation: **Users**, **Workspaces** (see [Workspaces](workspaces.md)),
+  **Settings**, **Migrations**, the agent server's start and stop controls, system
+  jobs, audit-log retention, the wizard and shop orders, saving and deleting
+  templates, **Reload All** and binary builds.
 - An **owner** or **admin** of a workspace has the dashboard of that workspace, as a
   platform administrator does, but not those installation pages: their links are
   hidden, and the pages send them to the Work Room.

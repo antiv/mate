@@ -632,6 +632,10 @@
                         <i class="fas fa-users sidebar-icon"></i>
                         <span class="sidebar-text">Users</span>
                     </a>
+                    <a href="/dashboard/workspaces" class="mate-nav-item {% if request.url.path == '/dashboard/workspaces' %}sidebar-active{% endif %}" title="Workspaces">
+                        <i class="fas fa-building sidebar-icon"></i>
+                        <span class="sidebar-text">Workspaces</span>
+                    </a>
                     {% endif %}
                     <a href="/dashboard/rate-limits" class="mate-nav-item {% if request.url.path == '/dashboard/rate-limits' %}sidebar-active{% endif %}" title="Rate Limits">
                         <i class="fas fa-shield-alt sidebar-icon"></i>

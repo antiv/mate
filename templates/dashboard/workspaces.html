@@ -1,0 +1,260 @@
+{% extends "base.html" %}
+
+{% block title %}Workspaces - MATE{% endblock %}
+
+{% block content %}
+<div class="space-y-4">
+    <div class="flex justify-between items-center">
+        <div>
+            <h2 class="text-xl font-bold text-gray-900 dark:text-white">Workspaces</h2>
+            <p class="text-xs text-gray-500 dark:text-gray-400">Every workspace of this installation. Only platform administrators see this page.</p>
+        </div>
+        <button class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 text-xs rounded-lg flex items-center space-x-1.5 transition-colors" data-click="showCreateWorkspace">
+            <i class="fas fa-plus"></i>
+            <span>New Workspace</span>
+        </button>
+    </div>
+
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow">
+        <div class="p-4 overflow-auto table-responsive">
+            <table class="w-full divide-y divide-gray-200 dark:divide-gray-700 table-cards-mobile">
+                <thead class="bg-gray-50 dark:bg-gray-700">
+                    <tr>
+                        <th class="px-3 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Name</th>
+                        <th class="px-3 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Status</th>
+                        <th class="px-3 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Owners</th>
+                        <th class="px-3 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Members</th>
+                        <th class="px-3 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Projects</th>
+                        <th class="px-3 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Platform keys</th>
+                        <th class="px-3 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Features</th>
+                        <th class="px-3 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="workspacesBody" class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                    <tr><td colspan="8" class="px-3 py-6 text-sm text-center text-gray-500 dark:text-gray-400">Loading…</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Create / edit workspace -->
+<div id="workspaceModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden z-50 dashboard-modal">
+    <div class="flex items-center justify-center min-h-screen p-4">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full">
+            <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+                <h3 id="workspaceModalTitle" class="text-lg font-semibold text-gray-900 dark:text-white">New Workspace</h3>
+            </div>
+            <form id="workspaceForm" class="px-6 py-4">
+                <input type="hidden" id="wsId">
+                <div class="space-y-4">
+                    <div>
+                        <label for="wsName" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Name</label>
+                        <input type="text" id="wsName" required maxlength="255" class="mt-1 block w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                    <div id="wsCreateOnly" class="space-y-4">
+                        <div>
+                            <label for="wsSlug" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Slug</label>
+                            <input type="text" id="wsSlug" maxlength="40" pattern="[a-z0-9]([a-z0-9\-]*[a-z0-9])?" class="mt-1 block w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-md px-3 py-2 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Lowercase letters, digits and hyphens. It can't be changed later.</p>
+                        </div>
+                        <div>
+                            <label for="wsOwner" class="block text-sm font-medium text-gray-700 dark:text-gray-300">First owner</label>
+                            <input type="text" id="wsOwner" list="wsOwnerOptions" autocomplete="off" class="mt-1 block w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <datalist id="wsOwnerOptions"></datalist>
+                            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">The id of an existing user, who becomes the workspace's owner.</p>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                            <input type="checkbox" id="wsPlatformKeys" class="rounded">
+                            May use platform keys
+                        </label>
+                        <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Stored only for now: every workspace calls models on the installation's keys until per-workspace provider keys arrive.</p>
+                    </div>
+                    <div>
+                        <p class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Platform features</p>
+                        <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                            <input type="checkbox" class="ws-feature rounded" value="code">
+                            Code: the code executor and stdio MCP servers
+                        </label>
+                        <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                            <input type="checkbox" class="ws-feature rounded" value="server_credentials">
+                            Server credentials: Google Drive, Calendar, Supabase, shop
+                        </label>
+                        <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                            <input type="checkbox" class="ws-feature rounded" value="email">
+                            Email from triggers and alert rules
+                        </label>
+                    </div>
+                </div>
+                <div class="flex justify-end gap-3 mt-6">
+                    <button type="button" data-click="hideWorkspaceModal" class="px-4 py-2 min-h-[44px] text-gray-700 dark:text-gray-300 bg-gray-200 dark:bg-gray-600 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500 touch-target">Cancel</button>
+                    <button type="submit" id="wsSubmit" class="px-4 py-2 min-h-[44px] bg-blue-600 text-white rounded-lg hover:bg-blue-700 touch-target">Save</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script nonce="{{ request.state.csp_nonce }}">
+(function () {
+    mateActions.allow('showCreateWorkspace', 'editWorkspace', 'hideWorkspaceModal',
+                      'suspendWorkspace', 'resumeWorkspace', 'closeWorkspace');
+
+    const API = '/dashboard/api/platform/workspaces';
+    const FEATURE_LABELS = {code: 'Code', server_credentials: 'Server credentials', email: 'Email'};
+    const STATUS_BADGE = {
+        open: 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200',
+        suspended: 'bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200',
+        closed: 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300',
+    };
+    let workspaces = [];
+    let ownersLoaded = false;
+
+    function esc(s) {
+        return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    async function call(url, method, body) {
+        const r = await fetch(url, {
+            method, credentials: 'same-origin',
+            headers: body ? {'Content-Type': 'application/json'} : {},
+            body: body ? JSON.stringify(body) : undefined,
+        });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(data.detail || `Request failed (${r.status})`);
+        return data;
+    }
+
+    function badge(text, classes) {
+        return `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${classes} mr-1">${esc(text)}</span>`;
+    }
+
+    function actionButton(name, id, icon, label, color) {
+        return `<button data-click="${name}" data-args="${mateActions.attr([id])}" class="text-${color}-600 dark:text-${color}-400 hover:text-${color}-900 dark:hover:text-${color}-300 min-h-[44px] touch-target px-2"><i class="fas ${icon}"></i> ${label}</button>`;
+    }
+
+    function render() {
+        const body = document.getElementById('workspacesBody');
+        body.innerHTML = workspaces.map(w => {
+            const actions = [];
+            if (w.status !== 'closed') actions.push(actionButton('editWorkspace', w.id, 'fa-edit', 'Edit', 'blue'));
+            if (w.status === 'open' && !w.is_default) actions.push(actionButton('suspendWorkspace', w.id, 'fa-pause', 'Suspend', 'yellow'));
+            if (w.status === 'suspended') actions.push(actionButton('resumeWorkspace', w.id, 'fa-play', 'Resume', 'green'));
+            if (w.status !== 'closed' && !w.is_default) actions.push(actionButton('closeWorkspace', w.id, 'fa-ban', 'Close', 'red'));
+            return `<tr>
+                <td class="px-3 py-1.5 text-xs text-gray-900 dark:text-white" data-label="Name">
+                    <div class="font-medium">${esc(w.name)}${w.is_default ? ' ' + badge('default', 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200') : ''}</div>
+                    <div class="text-gray-400 dark:text-gray-500 font-mono">${esc(w.slug)}</div>
+                </td>
+                <td class="px-3 py-1.5 text-xs" data-label="Status">${badge(w.status, STATUS_BADGE[w.status])}</td>
+                <td class="px-3 py-1.5 text-xs text-gray-700 dark:text-gray-300" data-label="Owners">${w.owners.map(esc).join('<br>') || '—'}</td>
+                <td class="px-3 py-1.5 text-xs text-gray-700 dark:text-gray-300" data-label="Members">${w.members}</td>
+                <td class="px-3 py-1.5 text-xs text-gray-700 dark:text-gray-300" data-label="Projects">${w.projects}</td>
+                <td class="px-3 py-1.5 text-xs text-gray-700 dark:text-gray-300" data-label="Platform keys">${w.allow_platform_keys ? 'Yes' : 'No'}</td>
+                <td class="px-3 py-1.5 text-xs" data-label="Features">${w.platform_features.map(f => badge(FEATURE_LABELS[f] || f, 'bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200')).join('') || '—'}</td>
+                <td class="px-3 py-1.5 text-xs font-medium" data-label="Actions">${actions.join('')}</td>
+            </tr>`;
+        }).join('') || `<tr><td colspan="8" class="px-3 py-6 text-sm text-center text-gray-500 dark:text-gray-400">No workspaces.</td></tr>`;
+    }
+
+    async function load() {
+        try {
+            workspaces = (await call(API, 'GET')).workspaces;
+            render();
+        } catch (e) { showNotification(e.message, 'error'); }
+    }
+
+    async function loadOwners() {
+        if (ownersLoaded) return;
+        try {
+            const users = (await call('/dashboard/api/users', 'GET')).users;
+            document.getElementById('wsOwnerOptions').innerHTML = users
+                .filter(u => !u.user_id.startsWith('widget_') && !u.roles.includes('widget') && !u.roles.includes('pending'))
+                .map(u => `<option value="${esc(u.user_id)}">${esc(u.display_name || u.email || '')}</option>`).join('');
+            ownersLoaded = true;
+        } catch (e) { /* the owner can still be typed */ }
+    }
+
+    function openModal(w) {
+        document.getElementById('workspaceForm').reset();
+        delete document.getElementById('wsSlug').dataset.edited;
+        document.getElementById('wsId').value = w ? w.id : '';
+        document.getElementById('workspaceModalTitle').textContent = w ? `Edit ${w.name}` : 'New Workspace';
+        document.getElementById('wsCreateOnly').classList.toggle('hidden', !!w);
+        document.getElementById('wsSlug').required = !w;
+        document.getElementById('wsOwner').required = !w;
+        document.getElementById('wsName').value = w ? w.name : '';
+        document.getElementById('wsPlatformKeys').checked = w ? w.allow_platform_keys : true;
+        const features = w ? w.platform_features : [];
+        // The default workspace keeps every feature (the route refuses a change)
+        document.querySelectorAll('.ws-feature').forEach(box => {
+            box.checked = features.includes(box.value);
+            box.disabled = !!(w && w.is_default);
+        });
+        document.getElementById('workspaceModal').classList.remove('hidden');
+    }
+
+    window.showCreateWorkspace = function () { loadOwners(); openModal(null); };
+    window.editWorkspace = function (id) { openModal(workspaces.find(w => w.id === id)); };
+    window.hideWorkspaceModal = function () { document.getElementById('workspaceModal').classList.add('hidden'); };
+
+    async function changeState(id, verb, message, type) {
+        const w = workspaces.find(x => x.id === id);
+        const label = verb.charAt(0).toUpperCase() + verb.slice(1);
+        if (!await showConfirm(message.replace('{name}', w.name), `${label} workspace`, label, 'Cancel', type)) return;
+        try {
+            await call(`${API}/${id}/${verb}`, 'POST');
+            showNotification(`Workspace ${w.name}: ${verb} done`);
+            load();
+        } catch (e) { showNotification(e.message, 'error'); }
+    }
+
+    window.suspendWorkspace = id => changeState(id, 'suspend',
+        'Suspend "{name}"? Its dashboard, tokens, agents, widgets, Slack, triggers and alert rules stop until you resume it.', 'warning');
+    window.resumeWorkspace = id => changeState(id, 'resume', 'Resume "{name}"?', 'warning');
+    window.closeWorkspace = id => changeState(id, 'close',
+        'Close "{name}" for good? It stops like a suspended workspace and can\'t be reopened.', 'danger');
+
+    document.getElementById('workspaceForm').addEventListener('submit', async function (e) {
+        e.preventDefault();
+        const id = document.getElementById('wsId').value;
+        const body = {
+            name: document.getElementById('wsName').value.trim(),
+            allow_platform_keys: document.getElementById('wsPlatformKeys').checked,
+        };
+        if (!workspaces.some(w => String(w.id) === id && w.is_default)) {
+            body.platform_features = [...document.querySelectorAll('.ws-feature:checked')].map(b => b.value);
+        }
+        if (!id) {
+            body.slug = document.getElementById('wsSlug').value.trim();
+            body.owner = document.getElementById('wsOwner').value.trim();
+        }
+        const button = document.getElementById('wsSubmit');
+        button.disabled = true;
+        try {
+            await call(id ? `${API}/${id}` : API, id ? 'PUT' : 'POST', body);
+            showNotification(id ? 'Workspace updated' : 'Workspace created');
+            hideWorkspaceModal();
+            load();
+        } catch (err) { showNotification(err.message, 'error'); }
+        finally { button.disabled = false; }
+    });
+
+    // Suggest a slug from the name while creating
+    document.getElementById('wsName').addEventListener('input', function () {
+        if (document.getElementById('wsId').value) return;
+        const slug = document.getElementById('wsSlug');
+        if (slug.dataset.edited) return;
+        slug.value = this.value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40).replace(/-+$/, '');
+    });
+    document.getElementById('wsSlug').addEventListener('input', function () { this.dataset.edited = '1'; });
+
+    load();
+})();
+</script>
+{% endblock %}
