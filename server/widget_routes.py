@@ -1012,7 +1012,8 @@ def _workspace_key(session: Session, ctx: RequestContext, key_id: int) -> Widget
 def _require_target(session: Session, ctx: RequestContext, project_id: Optional[int] = None,
                     agent_name: Optional[str] = None) -> None:
     """404 unless the key's project and agent are the caller's workspace's."""
-    missing = missing_from(session, ctx.workspace_id, project_id=project_id, agent_name=agent_name)
+    missing = missing_from(session, ctx.workspace_id, is_platform_admin=ctx.is_platform_admin,
+                           project_id=project_id, agent_name=agent_name)
     if missing:
         raise HTTPException(status_code=404, detail=f"{missing} not found")
 

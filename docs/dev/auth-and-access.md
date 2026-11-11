@@ -192,7 +192,12 @@ A dashboard route that names a row, in its path or its body, calls
 project_id=..., version_id=..., store_name=..., test_case_id=...)` before it acts.
 It answers 404 unless every row named is the current workspace's. An agent name
 with no `agents_config` row is a hardcoded agent, which belongs to the installation:
-only a platform administrator reaches it, from the default workspace. Lists join to
+only a platform administrator reaches it, from the default workspace. One rule in
+`workspaces.py` says so (`agent_workspace_for`), and `agents_outside` and
+`missing_from` follow it: they take `is_platform_admin`. An owner or admin of the
+default workspace without the `admin` role can't name such an agent as a parent, a
+widget key's, Slack integration's or test case's agent, and doesn't see its sessions
+or the traces that record no workspace and name it. Lists join to
 the project and filter on `projects.workspace_id`. Test cases carry their own
 `workspace_id`, and ratings are matched through their agent.
 
@@ -201,8 +206,8 @@ D1). Creating or renaming an agent to a name in use anywhere answers 409, "This
 name is taken", without saying where. `parent_agents` may only name agents of the
 same workspace (400), and `AgentManager.get_subagents` and LangGraph's
 `_load_child_configs` look for children in the parent's workspace only, so a name
-can't link two workspaces. A name with no config counts as the default workspace's.
-An import (`POST /dashboard/api/agents/import`) skips an agent, block or trigger
+can't link two workspaces. A name with no config is a parent for a platform
+administrator only. An import (`POST /dashboard/api/agents/import`) skips an agent, block or trigger
 that names another workspace's project, and an agent whose name another workspace
 uses, even with `overwrite=true`. An imported trigger takes the project of its
 agent. The agent tools of `create_agent_tool.py` (create, update, delete) reach
@@ -245,7 +250,8 @@ the installation (a sign-in, a user change). Through them:
   the inference span when a model call starts. One that records none (from before
   V046, of a hardcoded agent, or a turn that reached no model) belongs to the
   default workspace, unless an agent its spans name (`gen_ai.agent.name`,
-  `mate.agent.name`) is another workspace's (`DashboardServer._traces_in_workspace`);
+  `mate.agent.name`) is another workspace's, or has no config and the caller is no
+  platform administrator (`DashboardServer._traces_in_workspace`);
 - a budget, alert rule, trigger, widget key or Slack integration may name only the
   workspace's agents and projects. `workspaces.missing_from` answers which of the
   two is another workspace's;

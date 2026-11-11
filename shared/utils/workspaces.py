@@ -244,6 +244,21 @@ def agent_workspace(session: Session, agent_name: str) -> Optional[int]:
         AgentConfig.name == agent_name).limit(1).scalar()
 
 
+def _no_config_workspace(is_platform_admin: bool) -> Optional[int]:
+    """The workspace an agent name with no config (a hardcoded agent, or one deleted
+    since) belongs to for the caller. Such an agent belongs to the installation: a
+    platform administrator reaches it from the default workspace, anyone else from
+    none. The one rule for it (agent_workspace_for, agents_outside, missing_from)."""
+    return DEFAULT_WORKSPACE_ID if is_platform_admin else None
+
+
+def agent_workspace_for(session: Session, agent_name: str, is_platform_admin: bool) -> Optional[int]:
+    """The workspace of the agent for this caller: its project's, and for a name with no
+    config the default workspace for a platform administrator, else None."""
+    workspace_id = agent_workspace(session, agent_name)
+    return workspace_id if workspace_id is not None else _no_config_workspace(is_platform_admin)
+
+
 def config_workspace(session: Session, config_id: int) -> Optional[int]:
     """The workspace of the agent config, or None for no such config."""
     return session.query(Project.workspace_id).join(
@@ -301,22 +316,24 @@ def in_projects_of(column: ColumnElement, workspace_id: Optional[int]) -> tuple:
     return (projects,)
 
 
-def agents_outside(session: Session, workspace_id: int, names: List[str]) -> List[str]:
-    """Those of the names that aren't agents of the workspace (D1: parent_agents stay
-    within it). A name with no config counts as the default workspace's: hardcoded
-    agents belong to the installation, and 1.x lets parent_agents name anything."""
+def agents_outside(session: Session, workspace_id: int, names: List[str], *,
+                   is_platform_admin: bool) -> List[str]:
+    """Those of the names that aren't agents of the workspace for this caller (D1:
+    parent_agents stay within it). A name with no config is the default workspace's
+    for a platform administrator only (_no_config_workspace)."""
     found = dict(session.query(AgentConfig.name, Project.workspace_id).join(
         Project, AgentConfig.project_id == Project.id).filter(
         AgentConfig.name.in_(names)).all()) if names else {}
-    return [name for name in names
-            if found.get(name, DEFAULT_WORKSPACE_ID) != workspace_id]
+    no_config = _no_config_workspace(is_platform_admin)
+    return [name for name in names if found.get(name, no_config) != workspace_id]
 
 
-def missing_from(session: Session, workspace_id: int, *, project_id: Optional[int] = None,
+def missing_from(session: Session, workspace_id: int, *, is_platform_admin: bool,
+                 project_id: Optional[int] = None,
                  agent_name: Optional[str] = None) -> Optional[str]:
     """"Project" or "Agent" when the one named isn't the workspace's, for the caller to
-    404 on; None when both are. An agent with no config counts as the default
-    workspace's."""
+    404 on; None when both are. An agent with no config is the default workspace's for
+    a platform administrator only (_no_config_workspace)."""
     if project_id is not None:
         try:
             project_id = int(project_id)
@@ -324,7 +341,8 @@ def missing_from(session: Session, workspace_id: int, *, project_id: Optional[in
             return "Project"
         if workspace_of_project(session, project_id) != workspace_id:
             return "Project"
-    if agent_name is not None and agents_outside(session, workspace_id, [agent_name]):
+    if agent_name is not None and agents_outside(session, workspace_id, [agent_name],
+                                                 is_platform_admin=is_platform_admin):
         return "Agent"
     return None
 

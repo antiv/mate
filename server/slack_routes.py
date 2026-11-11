@@ -531,7 +531,8 @@ def _check_target(session: Session, ctx: RequestContext, project_id: Optional[in
     integration, of any workspace, has the Slack team (V047). Neither says whose: the
     first to connect a team keeps it, and a platform administrator, who opens every
     workspace, resolves a dispute."""
-    missing = missing_from(session, ctx.workspace_id, project_id=project_id, agent_name=agent_name)
+    missing = missing_from(session, ctx.workspace_id, is_platform_admin=ctx.is_platform_admin,
+                           project_id=project_id, agent_name=agent_name)
     if missing:
         raise HTTPException(status_code=404, detail=f"{missing} not found")
     if team_id and session.query(ChannelIntegration.id).filter(

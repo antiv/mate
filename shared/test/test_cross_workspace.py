@@ -66,7 +66,9 @@ from shared.utils.rbac_middleware import RBACMiddleware
 from shared.utils.tools import mcp_tools
 from shared.utils.tools.tool_factory import ToolFactory
 from shared.utils.user_service import UserService
-from shared.utils.workspaces import is_reserved_user_id, sync_default_members
+from shared.utils.workspaces import (
+    agent_workspace_for, agents_outside, is_reserved_user_id, sync_default_members,
+)
 
 B_MARKER = "zz-ws-b"
 # Agent names can't hold a hyphen, so B's carry the marker with underscores
@@ -2651,6 +2653,85 @@ class TestReviewOfPhase2l(_TwoWorkspaces):
         self.assertEqual(session.query(AgentConfig).filter_by(name="zz_imported").one().project_id,
                          later_id)
         session.close()
+
+
+class TestAgentWithNoConfig(_TwoWorkspaces):
+    """One rule for an agent name with no config, a hardcoded agent (#277, 3a): it is
+    the default workspace's for a platform administrator, and no one else's. Carol
+    administers the default workspace without the admin role, as phase 3 allows."""
+
+    CAROL = "carol@a.example"
+    NO_CONFIG = "zz_hardcoded_bot"
+
+    def setUp(self):
+        super().setUp()
+        session = self.Session()
+        session.add(User(user_id=self.CAROL, roles='["user"]'))
+        session.flush()
+        session.query(WorkspaceMember).filter_by(user_id=self.CAROL, workspace_id=A).update(
+            {"role": "admin"})
+        session.add(LangGraphSession(id="zz-hardcoded-session", app_name=self.NO_CONFIG,
+                                     user_id=ALICE))
+        session.commit()
+        session.close()
+        self.carol = TestClient(auth_server.app, cookies=_signed_in(self.CAROL))
+
+    def _as_both(self, method: str, path: str, **kwargs) -> Tuple[int, int]:
+        """(the platform administrator's status, carol's) for the same request in A."""
+        with patch("shared.utils.audit_service.log"):
+            admin = self.client.request(method, path, headers=_platform_admin(A), **kwargs)
+            carol = self.carol.request(method, path, **kwargs)
+        return admin.status_code, carol.status_code
+
+    def test_the_rule(self):
+        session = self.Session()
+        try:
+            self.assertEqual(agent_workspace_for(session, self.NO_CONFIG, True), A)
+            self.assertIsNone(agent_workspace_for(session, self.NO_CONFIG, False))
+            self.assertEqual(agent_workspace_for(session, B_ROOT, False), B)
+            self.assertEqual(agents_outside(session, A, [self.NO_CONFIG, A_ROOT],
+                                            is_platform_admin=False), [self.NO_CONFIG])
+            self.assertEqual(agents_outside(session, A, [self.NO_CONFIG, A_ROOT],
+                                            is_platform_admin=True), [])
+        finally:
+            session.close()
+
+    def test_carol_administers_the_default_workspace(self):
+        self.assertEqual(self.carol.get("/dashboard/api/agents").status_code, 200)
+
+    def test_a_widget_key_or_slack_integration_targets_it_for_a_platform_admin_only(self):
+        body = {"json": {"project_id": self.ids["project_a"], "agent_name": self.NO_CONFIG}}
+        self.assertEqual(self._as_both("POST", "/dashboard/api/widget-keys", **body)[1], 404)
+        admin, carol = self._as_both("POST", "/dashboard/api/channel-integrations", **body)
+        self.assertEqual((admin, carol), (200, 404))
+
+    def test_it_is_a_parent_for_a_platform_admin_only(self):
+        def form(name: str) -> Dict[str, Any]:
+            return {"data": {"name": name, "type": "llm", "project_id": str(self.ids["project_a"]),
+                             "description": "d", "instruction": "i",
+                             "parent_agents": json.dumps([self.NO_CONFIG])}}
+        with patch("shared.utils.audit_service.log"):
+            admin = self.client.post("/dashboard/api/agents", headers=_platform_admin(A),
+                                     **form("zz_child_of_admin"))
+            carol = self.carol.post("/dashboard/api/agents", **form("zz_child_of_carol"))
+        self.assertEqual(admin.status_code, 200, admin.text)
+        self.assertEqual((carol.status_code, carol.json()["detail"]),
+                         (400, f"Not an agent of this workspace: {self.NO_CONFIG}"))
+
+    def test_a_test_case_names_it_for_a_platform_admin_only(self):
+        body = {"json": {"agent_name": self.NO_CONFIG, "input": "i", "expected_output": "o"}}
+        self.assertEqual(self._as_both("POST", "/dashboard/api/evals", **body), (200, 404))
+
+    def test_its_sessions_are_a_platform_admin_s_in_the_list_as_in_the_detail(self):
+        from shared.utils.langgraph import session_store
+        params = {"session_id": "zz-hardcoded-session", "app_name": self.NO_CONFIG,
+                  "user_id": ALICE, "runtime": "langgraph"}
+        with patch.object(session_store, "_session_store", None):
+            listed = self.client.get("/dashboard/api/sessions", headers=_platform_admin(A))
+            self.assertIn(self.NO_CONFIG, listed.text)
+            self.assertNotIn(self.NO_CONFIG, self.carol.get("/dashboard/api/sessions").text)
+            self.assertEqual(self.carol.get("/dashboard/api/sessions/detail", params=params)
+                             .status_code, 404)
 
 
 if __name__ == "__main__":

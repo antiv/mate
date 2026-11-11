@@ -27,7 +27,7 @@ from shared.utils.path_safety import resolve_within_base
 from shared.utils.platform_only import features_added, features_of, has_code_folder, is_agent_name
 from shared.utils.models import DEFAULT_WORKSPACE_ID
 from shared.utils.workspaces import (
-    agent_names_of, agent_workspace, agents_outside, caller_access, config_workspace,
+    agent_names_of, agent_workspace_for, agents_outside, caller_access, config_workspace,
     in_projects_of, is_reserved_user_id, project_in_workspace, roles_allow, rows_of, store_workspace,
     test_case_workspace, version_workspace, workspace_of_project,
 )
@@ -968,17 +968,14 @@ class DashboardServer:
         """404 unless each row named belongs to the caller's workspace, so the answer
         doesn't confirm that another workspace's row exists. An agent name with no
         config (a hardcoded agent) belongs to the installation: it is reached from the
-        default workspace, by a platform administrator."""
+        default workspace, by a platform administrator (agent_workspace_for)."""
         session = self.db_client.get_session() if self.db_client else None
         if not session:
             raise HTTPException(status_code=503, detail="Database unavailable")
         try:
             found = []
             if agent_name is not None:
-                workspace_id = agent_workspace(session, agent_name)
-                if workspace_id is None and ctx.is_platform_admin:
-                    workspace_id = DEFAULT_WORKSPACE_ID
-                found.append(("Agent", workspace_id))
+                found.append(("Agent", agent_workspace_for(session, agent_name, ctx.is_platform_admin)))
             if config_id is not None:
                 found.append(("Agent", config_workspace(session, config_id)))
             if project_id is not None:
@@ -1062,7 +1059,8 @@ class DashboardServer:
                 self.AgentConfig.name == name, self.AgentConfig.id != config_id).first()
             if not taken and name != current:
                 taken = self._name_unavailable(session, name, ctx.workspace_id, ctx.is_platform_admin)
-            outside = agents_outside(session, ctx.workspace_id, parents)
+            outside = agents_outside(session, ctx.workspace_id, parents,
+                                     is_platform_admin=ctx.is_platform_admin)
         finally:
             session.close()
         if taken:
@@ -1278,14 +1276,15 @@ class DashboardServer:
             session.close()
 
     def _traces_in_workspace(self, session: Session, spans: List[Dict[str, Any]],
-                             workspace_id: Optional[int]) -> Set[str]:
+                             workspace_id: Optional[int], is_platform_admin: bool) -> Set[str]:
         """The ids of the traces among `spans` that are the workspace's. A trace whose
         spans record a workspace (mate.workspace.id, set when a model call starts) is
         that workspace's, whatever names it holds: a name may have passed to another
         workspace since, and a runtime sub-agent's has no config. A trace that records
         none is the default workspace's, unless it names an agent of another one:
         traces from before 2.0, of hardcoded agents, and of turns that never reached a
-        model. None keeps every trace."""
+        model. One that names an agent with no config is a platform administrator's
+        only (agents_outside). None keeps every trace."""
         from shared.utils.tracing.genai_attributes import MATE_WORKSPACE_ID
         from shared.utils.tracing.replay import AGENT_ATTRS
         named: Dict[str, Set[str]] = {}
@@ -1303,12 +1302,14 @@ class DashboardServer:
         keep = {trace for trace, workspaces in recorded.items() if workspaces == {str(workspace_id)}}
         if workspace_id == DEFAULT_WORKSPACE_ID and unrecorded:
             outside = set(agents_outside(session, workspace_id,
-                                         sorted(set().union(*unrecorded.values()))))
+                                         sorted(set().union(*unrecorded.values())),
+                                         is_platform_admin=is_platform_admin))
             keep |= {trace for trace, agents in unrecorded.items() if not agents & outside}
         return keep
 
     def _get_traces(self, hours: int = 24, limit: int = 50, trace_id: Optional[str] = None,
-                    workspace_id: Optional[int] = None) -> Dict[str, Any]:
+                    workspace_id: Optional[int] = None,
+                    is_platform_admin: bool = False) -> Dict[str, Any]:
         """Get traces from trace_spans table. Returns list of traces with span trees,
         only `workspace_id`'s when it is given."""
         if not self.db_client:
@@ -1338,7 +1339,8 @@ class DashboardServer:
                 if workspace_id is None:
                     return rows
                 keep = self._traces_in_workspace(session, [
-                    {"trace_id": r[0], "attributes": _parse_attrs(r[8])} for r in rows], workspace_id)
+                    {"trace_id": r[0], "attributes": _parse_attrs(r[8])} for r in rows], workspace_id,
+                    is_platform_admin)
                 return [r for r in rows if r[0] in keep]
 
             if trace_id:
@@ -1475,7 +1477,8 @@ class DashboardServer:
 
     def _list_replay_sessions(self, hours: int = 24, limit: int = 50,
                               project_id: Optional[int] = None,
-                              workspace_id: Optional[int] = None) -> Dict[str, Any]:
+                              workspace_id: Optional[int] = None,
+                              is_platform_admin: bool = False) -> Dict[str, Any]:
         """Sessions with traced turns in the last `hours`, most recent first.
 
         With `project_id`, only sessions in which an agent of that project ran, so the
@@ -1502,7 +1505,7 @@ class DashboardServer:
                  "workspace": "%mate.workspace.id%"},
             )
             if workspace_id is not None:
-                keep = self._traces_in_workspace(session, spans, workspace_id)
+                keep = self._traces_in_workspace(session, spans, workspace_id, is_platform_admin)
                 spans = [s for s in spans if s["trace_id"] in keep]
             found: Dict[str, Dict[str, Any]] = {}
             for s in spans:
@@ -1551,7 +1554,8 @@ class DashboardServer:
                 for name, config_id in ids.items()}
 
     def _get_session_replay(self, session_id: str, hours: int = 168,
-                            workspace_id: Optional[int] = None) -> Dict[str, Any]:
+                            workspace_id: Optional[int] = None,
+                            is_platform_admin: bool = False) -> Dict[str, Any]:
         """Every traced turn of one session, built into a replay timeline; only the
         workspace's turns when `workspace_id` is given."""
         from datetime import timedelta
@@ -1572,7 +1576,7 @@ class DashboardServer:
                 return {"session_id": session_id, "turns": []}
             spans = self._replay_spans(session, "trace_id IN :tids", {"tids": trace_ids})
             if workspace_id is not None:
-                keep = self._traces_in_workspace(session, spans, workspace_id)
+                keep = self._traces_in_workspace(session, spans, workspace_id, is_platform_admin)
                 spans = [s for s in spans if s["trace_id"] in keep]
                 if not spans:
                     return {"session_id": session_id, "turns": []}
@@ -2324,7 +2328,8 @@ class DashboardServer:
                         errors.append(f"Agent '{agent_data['name']}': project {project_id} not found")
                         continue
                     # A parent this file creates is checked as it stands in the file
-                    outside = [p for p in agents_outside(session, workspace_id, agent_data.get("parent_agents") or [])
+                    outside = [p for p in agents_outside(session, workspace_id, agent_data.get("parent_agents") or [],
+                                                         is_platform_admin=platform_admin)
                                if p not in new_names]
                     if outside:
                         skipped_count += 1
@@ -3422,12 +3427,13 @@ class DashboardServer:
     def _get_sessions(self, runtime: str = "all", app_name: Optional[str] = None,
                       user_id: Optional[str] = None, search: Optional[str] = None,
                       page: int = 1, limit: int = 50,
-                      workspace_id: Optional[int] = None) -> Dict[str, Any]:
+                      workspace_id: Optional[int] = None,
+                      is_platform_admin: bool = False) -> Dict[str, Any]:
         """Fetch and aggregate active and historical sessions from LangGraph and ADK stores with optimized pagination.
 
         With `workspace_id`, only the sessions of the workspace's agents (app_name is the
-        root agent); a session of an agent with no config counts as the default
-        workspace's."""
+        root agent); a session of an agent with no config is the default workspace's,
+        for a platform administrator only (agents_outside)."""
         import json
         from datetime import datetime, timezone
 
@@ -3536,7 +3542,8 @@ class DashboardServer:
             db_session = self.db_client.get_session()
             try:
                 outside = set(agents_outside(db_session, workspace_id,
-                                             sorted({item["app_name"] for item in raw_items})))
+                                             sorted({item["app_name"] for item in raw_items}),
+                                             is_platform_admin=is_platform_admin))
             finally:
                 db_session.close()
             raw_items = [item for item in raw_items if item["app_name"] not in outside]
@@ -4022,6 +4029,7 @@ class DashboardServer:
                 page=page,
                 limit=limit,
                 workspace_id=ctx.workspace_id,
+                is_platform_admin=ctx.is_platform_admin,
             )
 
         @self.app.get("/dashboard/api/sessions/detail", tags=["Dashboard - Sessions"])
@@ -4554,7 +4562,8 @@ class DashboardServer:
             trace_id: Optional[str] = None,
         ):
             """Get traces from trace_spans table for dashboard viewer."""
-            return self._get_traces(hours, limit, trace_id, workspace_id=ctx.workspace_id)
+            return self._get_traces(hours, limit, trace_id, workspace_id=ctx.workspace_id,
+                                    is_platform_admin=ctx.is_platform_admin)
 
         @self.app.get("/dashboard/api/traces/sessions", tags=["Dashboard - Traces"])
         async def get_replay_sessions_api(
@@ -4565,7 +4574,8 @@ class DashboardServer:
             project_id: Optional[int] = None,
         ):
             """Sessions with traced turns, for the Visual Builder's replay picker; a project's only with project_id."""
-            return self._list_replay_sessions(hours, limit, project_id, workspace_id=ctx.workspace_id)
+            return self._list_replay_sessions(hours, limit, project_id, workspace_id=ctx.workspace_id,
+                                              is_platform_admin=ctx.is_platform_admin)
 
         @self.app.get("/dashboard/api/traces/replay", tags=["Dashboard - Traces"])
         async def get_session_replay_api(
@@ -4575,7 +4585,8 @@ class DashboardServer:
             hours: int = Query(168, ge=1, le=24 * 90),
         ):
             """One session's traced turns as replay timelines: agents, model calls, tools, fallbacks."""
-            return self._get_session_replay(session_id, hours, workspace_id=ctx.workspace_id)
+            return self._get_session_replay(session_id, hours, workspace_id=ctx.workspace_id,
+                                            is_platform_admin=ctx.is_platform_admin)
 
         @self.app.get("/dashboard/api/users", tags=["Dashboard - Users"])
         async def get_users(request: Request, ctx: RequestContext = Depends(get_request_context)):
@@ -7464,9 +7475,7 @@ class DashboardServer:
             if not session:
                 raise HTTPException(status_code=503, detail="Database session not available")
             try:
-                workspace_id = agent_workspace(session, agent_name)
-                if workspace_id is None and ctx.is_platform_admin:
-                    workspace_id = DEFAULT_WORKSPACE_ID  # a hardcoded agent, as _require_in_workspace
+                workspace_id = agent_workspace_for(session, agent_name, ctx.is_platform_admin)
                 if workspace_id != ctx.workspace_id:
                     raise HTTPException(status_code=404, detail="Agent not found")
                 if source_feedback_id is not None:
