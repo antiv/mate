@@ -122,8 +122,8 @@ listing and switching one's workspaces.
 administrator access required" to anyone else, a workspace's owner included. They act
 on the whole installation (`documents/design/workspaces.md`, "What stays
 platform-only"): migrations, server control, `/settings/*`, system jobs, the wizard
-and shop, users, audit-log retention, creating and deleting templates, reloading every
-agent, and binary builds, which pack the installation's `agents/` folder. The
+and shop, users, Platform → Workspaces (`/platform/`), audit-log retention, creating
+and deleting templates, reloading every agent, and binary builds, which pack the installation's `agents/` folder. The
 patterns match by prefix, so a new route under `/settings/` or `/users` is
 platform-only from the start. A request naming a workspace the caller can't open is
 a 404, and one nobody signed in to is left to the route's dependency.
@@ -292,7 +292,17 @@ stops everywhere, for a platform administrator too:
 - its triggers are skipped (`status: skipped`), cron and webhook alike, and the
   alert evaluator passes over its rules.
 
-Nothing sets either column from the dashboard before 3d.
+Platform → Workspaces sets them (`server/platform_workspace_routes.py`): **Suspend**
+sets `suspended_at` and **Resume** clears it; **Close** sets `deleted_at`, only for a
+workspace with no projects, and nothing clears it. Both refuse the default workspace
+with 409, as does a change to its `platform_features`, and no route changes a closed
+workspace. The same routes create a workspace,
+with a first owner who is an existing user and not `pending` or a widget visitor
+(the membership's `agent_roles` are that user's roles without `admin`), and change
+its name, `allow_platform_keys` and `platform_features`. The slug is set once. Each
+change writes an audit entry (`workspace.create`, `.update`, `.suspend`, `.resume`,
+`.close`) in the workspace it changed. `allow_platform_keys` is stored only; nothing
+reads it before phase 4.
 
 ### What only a platform administrator may give an agent
 

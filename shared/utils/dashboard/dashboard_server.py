@@ -3844,6 +3844,18 @@ class DashboardServer:
                 "is_admin": True,
             })
 
+        @self.app.get("/dashboard/workspaces", response_class=HTMLResponse, tags=["Dashboard - Pages"])
+        async def dashboard_workspaces(request: Request, ctx: RequestContext = Depends(get_request_context)):
+            """Platform → Workspaces (server/platform_workspace_routes.py)"""
+            if not ctx.is_platform_admin:
+                return RedirectResponse(url="/dashboard/workroom", status_code=302)
+            return self.templates.TemplateResponse(request, "dashboard/workspaces.html", {
+                "request": request,
+                "page_title": "Workspaces",
+                "username": ctx.user_id,
+                "is_admin": True,
+            })
+
         @self.app.get("/dashboard/agents", response_class=HTMLResponse, tags=["Dashboard - Pages"])
         async def dashboard_agents(request: Request, ctx: RequestContext = Depends(get_request_context)):
             """Dashboard agents page"""

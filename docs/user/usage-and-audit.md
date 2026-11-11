@@ -26,7 +26,8 @@ installation healthy, how are the agents being used, and who changed what.
 The figures, the request list and the audit log are those of the workspace you are
 working in. Usage of an agent with no configuration in the database (one defined in
 code), and audit entries about the installation rather than a project, such as
-sign-ins and user changes, are in the default workspace.
+sign-ins and user changes, are in the default workspace. A change made on
+**Workspaces** is in the workspace it changed.
 
 ## Platform Overview
 

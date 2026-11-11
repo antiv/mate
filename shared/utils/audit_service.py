@@ -78,6 +78,14 @@ RESOURCE_FILE_STORE = "file_store"
 RESOURCE_MEMORY_BLOCK = "memory_block"
 RESOURCE_TEMPLATE = "template"
 RESOURCE_AUTH = "auth"
+RESOURCE_WORKSPACE = "workspace"
+
+# Platform → Workspaces (server/platform_workspace_routes.py)
+ACTION_WORKSPACE_CREATE = "workspace.create"
+ACTION_WORKSPACE_UPDATE = "workspace.update"
+ACTION_WORKSPACE_SUSPEND = "workspace.suspend"
+ACTION_WORKSPACE_RESUME = "workspace.resume"
+ACTION_WORKSPACE_CLOSE = "workspace.close"
 
 
 def _client_ip(request: Any) -> Optional[str]:
