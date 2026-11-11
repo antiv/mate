@@ -24,6 +24,11 @@ def parse_roles(raw: Optional[str]) -> list:
 # The workspace every 1.x row belongs to (V046). Code that does not know the
 # caller's workspace yet writes this one; phase 2 of the 2.0 plan replaces it.
 DEFAULT_WORKSPACE_ID = 1
+# Platform-only features a platform administrator enables per workspace (V048):
+# the code executor, stdio MCP servers and hardcoded agents; the tools that use the
+# installation's credentials; email through the server's SMTP account. The default
+# workspace has them all, as 1.x does.
+PLATFORM_FEATURES = ("code", "server_credentials", "email")
 
 
 class User(Base):
@@ -200,9 +205,11 @@ class Project(Base):
     """Model for grouping agents under projects."""
     
     __tablename__ = 'projects'
-    
+    # A name is unique within its workspace (V048)
+    __table_args__ = (UniqueConstraint('workspace_id', 'name', name='uq_projects_workspace_name'),)
+
     id = Column(Integer, primary_key=True, autoincrement=True)
-    name = Column(String(255), nullable=False, unique=True)
+    name = Column(String(255), nullable=False)
     description = Column(Text, nullable=True)
     template_id = Column(String(255), nullable=True)  # Source template ID (e.g., "jira-worklog-assistant")
     template_version = Column(String(50), nullable=True)  # Template version at import/sync (e.g., "3.0")
@@ -243,16 +250,20 @@ class Workspace(Base):
     slug = Column(String(40), nullable=False, unique=True)
     # Whether the workspace may call models on the installation's provider keys
     allow_platform_keys = Column(Boolean, nullable=False, default=True)
+    # JSON list of the PLATFORM_FEATURES enabled for the workspace (V048)
+    platform_features = Column(Text, nullable=False, default='[]')
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc),
                         onupdate=lambda: datetime.now(timezone.utc), nullable=False)
-    deleted_at = Column(DateTime, nullable=True)
+    deleted_at = Column(DateTime, nullable=True)  # closed
+    suspended_at = Column(DateTime, nullable=True)  # stopped until resumed (V048)
 
 
 @event.listens_for(Workspace.__table__, "after_create")
 def _create_default_workspace(table: Table, connection: Connection, **kw: Any) -> None:
     """A schema built by create_all gets the default workspace, as V046 gives a migrated one."""
-    connection.execute(table.insert().values(id=DEFAULT_WORKSPACE_ID, name="Default", slug="default"))
+    connection.execute(table.insert().values(id=DEFAULT_WORKSPACE_ID, name="Default", slug="default",
+                                             platform_features=json.dumps(list(PLATFORM_FEATURES))))
     if connection.dialect.name == "postgresql":
         # The explicit id leaves the sequence at 1; the next workspace must get 2
         connection.execute(text("SELECT setval(pg_get_serial_sequence('workspaces', 'id'), "
@@ -277,6 +288,28 @@ class WorkspaceMember(Base):
     role = Column(String(20), nullable=False, default='member')
     agent_roles = Column(Text, nullable=False, default='["user"]')
     invited_by = Column(String(255), nullable=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+
+
+class WorkspaceInvitation(Base):
+    """An invitation for one email to join one workspace with a role (V048).
+
+    Only the hash of the link's token is stored. accepted_at and accepted_by are set
+    when it is used, which it can be once, before expires_at.
+    """
+
+    __tablename__ = 'workspace_invitations'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    workspace_id = Column(Integer, ForeignKey('workspaces.id', ondelete='CASCADE'), nullable=False,
+                          index=True)
+    email = Column(String(255), nullable=False)
+    role = Column(String(20), nullable=False, default='member')
+    token_hash = Column(String(64), nullable=False, unique=True)
+    expires_at = Column(DateTime, nullable=False)
+    accepted_at = Column(DateTime, nullable=True)
+    accepted_by = Column(String(255), nullable=True)
+    created_by = Column(String(255), nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
 
 

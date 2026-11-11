@@ -2789,8 +2789,15 @@ class DashboardServer:
                 name_map[old_name] = new_name
         session = self.db_client.get_session() if self.db_client else None
         try:
+            # An agent name is unique across the installation (D1), and project names only
+            # within a workspace (V048): another workspace may hold this project name and
+            # so these agent names. Refused before the project is made, or it would be
+            # made empty.
+            taken = {name for (name,) in session.query(self.AgentConfig.name).filter(
+                self.AgentConfig.name.in_(list(name_map.values())))} if session and name_map else set()
             coded = [n for n in name_map.values()
-                     if self._name_unavailable(session, n, workspace_id, platform_admin)] if session else []
+                     if n in taken or self._name_unavailable(session, n, workspace_id, platform_admin)
+                     ] if session else []
         finally:
             if session:
                 session.close()

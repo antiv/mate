@@ -279,7 +279,9 @@ class WizardProvisioningService:
             if new_name.startswith("trial_"):
                 new_name = "agent_" + new_name[len("trial_"):]
 
-            clash = session.query(Project).filter(Project.name == new_name, Project.id != project_id).first()
+            clash = session.query(Project).filter(
+                Project.name == new_name, Project.workspace_id == proj.workspace_id,
+                Project.id != project_id).first()
             if clash:
                 return {"error": f"A project named '{new_name}' already exists. Choose another name."}
 

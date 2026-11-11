@@ -27,8 +27,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 
 from shared.utils import log_projects, workspaces
 from shared.utils.models import (
-    AgentConfig, AuditLog, Base, GuardrailLog, Project, TokenUsageLog, User, Workspace,
-    WorkspaceMember,
+    PLATFORM_FEATURES, AgentConfig, AuditLog, Base, GuardrailLog, Project, TokenUsageLog, User,
+    Workspace, WorkspaceMember,
 )
 
 LOG_TABLES = ("token_usage_logs", "guardrail_logs", "agent_responses", "audit_logs")
@@ -112,6 +112,95 @@ class TestMigration(unittest.TestCase):
         # and the migrations still apply over it
         self.migrate()
         self.assertEqual(self.sql("SELECT COUNT(*) FROM workspaces"), [(1,)])
+
+
+class TestManagementSchema(unittest.TestCase):
+    """V048 (phase 3b): invitations, suspended and platform features, project names per
+    workspace."""
+
+    setUp = TestMigration.setUp
+    migrate = TestMigration.migrate
+    sql = TestMigration.sql
+
+    def migrate_with_foreign_keys(self, up_to=None):
+        """Migrate as the database client does: on its engine, whose connections turn
+        foreign keys on."""
+        from sqlalchemy import event
+        from shared.utils.migration_system import MigrationSystem
+        engine = create_engine(f"sqlite:///{self.db_path}")
+        self.addCleanup(engine.dispose)
+
+        @event.listens_for(engine, "connect")
+        def foreign_keys_on(dbapi_connection, _record):
+            dbapi_connection.execute("PRAGMA foreign_keys=ON")
+
+        system = MigrationSystem(MagicMock(_engine=engine))
+        files = system._get_migration_files()
+        if up_to:
+            files = [f for f in files if f[0] <= up_to]
+        with patch.object(system, "_get_migration_files", return_value=files):
+            self.assertTrue(system.run_migrations())
+        with engine.connect() as conn:
+            self.assertEqual(conn.exec_driver_sql("PRAGMA foreign_keys").scalar(), 1)
+
+    def test_rebuilding_projects_keeps_every_child_row(self):
+        # With foreign keys on, DROP TABLE projects would delete the seeded agents,
+        # memory blocks and the rest through ON DELETE CASCADE
+        self.migrate_with_foreign_keys(up_to="047")
+        children = ("agents_config", "memory_blocks")
+        before = {table: self.sql(f"SELECT COUNT(*) FROM {table}") for table in children}
+        projects = self.sql("SELECT id, name, workspace_id FROM projects ORDER BY id")
+        self.assertTrue(all(count[0][0] for count in before.values()))
+
+        self.migrate_with_foreign_keys()
+
+        self.assertEqual({table: self.sql(f"SELECT COUNT(*) FROM {table}") for table in children},
+                         before)
+        self.assertEqual(self.sql("SELECT id, name, workspace_id FROM projects ORDER BY id"), projects)
+        self.assertEqual(self.sql("PRAGMA foreign_key_check"), [])
+        # The ids go on from where they were
+        self.sql("INSERT INTO projects (name) VALUES ('Next')")
+        self.assertEqual(self.sql("SELECT id FROM projects WHERE name = 'Next'"),
+                         [(max(p[0] for p in projects) + 1,)])
+
+    def test_project_names_are_unique_per_workspace(self):
+        self.migrate()
+        self.sql("INSERT INTO workspaces (id, name, slug) VALUES (2, 'B', 'b')")
+        self.sql("INSERT INTO projects (name, workspace_id) VALUES ('Shared name', 1)")
+        self.sql("INSERT INTO projects (name, workspace_id) VALUES ('Shared name', 2)")
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.sql("INSERT INTO projects (name, workspace_id) VALUES ('Shared name', 2)")
+
+    def test_the_default_workspace_has_every_platform_feature(self):
+        self.migrate()
+        self.sql("INSERT INTO workspaces (id, name, slug) VALUES (2, 'B', 'b')")
+        self.assertEqual(self.sql("SELECT id, platform_features, suspended_at FROM workspaces"),
+                         [(1, json.dumps(list(PLATFORM_FEATURES)), None), (2, "[]", None)])
+
+    def test_an_invitation_token_is_used_once(self):
+        self.migrate()
+        insert = ("INSERT INTO workspace_invitations (workspace_id, email, token_hash, expires_at) "
+                  "VALUES (1, 'ana@example.com', 'h', '2026-12-01')")
+        self.sql(insert)
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.sql(insert)
+        self.assertEqual(self.sql("SELECT role, accepted_at FROM workspace_invitations"),
+                         [("member", None)])
+
+    def test_a_create_all_schema_matches(self):
+        engine = create_engine(f"sqlite:///{self.db_path}")
+        Base.metadata.create_all(engine)
+        engine.dispose()
+        self.assertEqual(self.sql("SELECT platform_features FROM workspaces"),
+                         [(json.dumps(list(PLATFORM_FEATURES)),)])
+        self.sql("INSERT INTO workspaces (id, name, slug, allow_platform_keys, platform_features, "
+                 "created_at, updated_at) VALUES (2, 'B', 'b', 1, '[]', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)")
+        self.sql("INSERT INTO projects (name, workspace_id, created_at, updated_at) "
+                 "VALUES ('Shared name', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)")
+        self.sql("INSERT INTO projects (name, workspace_id, created_at, updated_at) "
+                 "VALUES ('Shared name', 2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)")
+        self.migrate()
+        self.assertEqual(self.sql("SELECT COUNT(*) FROM projects WHERE name = 'Shared name'"), [(2,)])
 
 
 class _Db(unittest.TestCase):

@@ -10,9 +10,11 @@ import os
 import logging
 import re
 import json
-from typing import List, Dict, Optional, Tuple
+from contextlib import contextmanager
+from typing import Iterator, List, Dict, Optional, Tuple
 from datetime import datetime
 from sqlalchemy import text, create_engine, MetaData, Table, Column, Integer, String, DateTime
+from sqlalchemy.engine import Connection
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import sessionmaker
 from dotenv import load_dotenv
@@ -309,6 +311,31 @@ class MigrationSystem:
             content = f.read()
             return hashlib.md5(content).hexdigest()
     
+    @staticmethod
+    @contextmanager
+    def _sqlite_foreign_keys_off(conn: Connection) -> Iterator[None]:
+        """Foreign keys off on a SQLite connection for one migration, then as they were.
+
+        SQLite changes a table's constraints by rebuilding it: create a new table, copy,
+        DROP the old one, rename. With foreign keys on, as the database client's
+        connections have them, the DROP first deletes every row and cascades to the
+        child tables. SQLite's own procedure turns them off around the transaction:
+        the pragma does nothing inside one. Other databases are left alone."""
+        if conn.dialect.name != "sqlite":
+            yield
+            return
+        was_on = bool(conn.exec_driver_sql("PRAGMA foreign_keys").scalar())
+        conn.exec_driver_sql("PRAGMA foreign_keys=OFF")
+        conn.commit()
+        try:
+            yield
+        finally:
+            if was_on:
+                if conn.in_transaction():
+                    conn.rollback()
+                conn.exec_driver_sql("PRAGMA foreign_keys=ON")
+                conn.commit()
+
     def _apply_migration(self, engine, version: str, name: str, filepath: str) -> bool:
         """Apply a single migration."""
         try:
@@ -323,7 +350,7 @@ class MigrationSystem:
             checksum = self._calculate_file_checksum(filepath)
             
             # Execute migration in transaction
-            with engine.connect() as conn:
+            with engine.connect() as conn, self._sqlite_foreign_keys_off(conn):
                 trans = conn.begin()
                 try:
                     # Split SQL into individual statements for SQLite compatibility

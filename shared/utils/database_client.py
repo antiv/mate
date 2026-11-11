@@ -245,11 +245,12 @@ class DatabaseClient:
             logger.warning("No session factory available for creating default configs")
             return
         
-        from .models import AgentConfig, Project
+        from .models import DEFAULT_WORKSPACE_ID, AgentConfig, Project
         
         session = self._session_factory()
         try:
-            default_project = session.query(Project).filter(Project.name == 'Default Project').first()
+            default_project = session.query(Project).filter(
+                Project.name == 'Default Project', Project.workspace_id == DEFAULT_WORKSPACE_ID).first()
             if not default_project:
                 default_project = Project(
                     name='Default Project',

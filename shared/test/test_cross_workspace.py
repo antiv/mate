@@ -585,6 +585,36 @@ class TestProjects(_TwoWorkspaces):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["project"]["workspace_id"], B)
 
+    def test_a_project_name_is_unique_within_its_workspace_only(self):
+        with patch("shared.utils.audit_service.log"):
+            # A's project name, in B (V048)
+            response = self.client.post("/dashboard/api/projects", data={"name": "ws-a-project"},
+                                        headers=_platform_admin(B))
+            self.assertEqual(response.status_code, 200, response.text)
+            again = self.client.post("/dashboard/api/projects", data={"name": "ws-a-project"},
+                                     headers=_platform_admin(B))
+        self.assertEqual((again.status_code, again.json()["detail"]),
+                         (400, "Project name must be unique"))
+
+    def test_a_template_whose_agent_names_another_workspace_holds_makes_no_project(self):
+        # The project name is free in the default workspace, but the agent names it makes
+        # are B's (D1). Outside the default workspace left_behind() refused it already.
+        template = {"project": {"name": "zz ws b"},
+                    "template_meta": {"agent_prefix": "tpl_", "root_agent": "tpl_root"},
+                    "agents": [{"name": "tpl_root", "type": "llm"}]}
+        dashboard = auth_server.dashboard_server
+        with patch.object(dashboard.template_service, "get_template", return_value=template), \
+                patch.object(dashboard, "_copy_template_agent"), patch("shared.utils.audit_service.log"):
+            response = self.client.post("/dashboard/api/templates/import", headers=_platform_admin(A),
+                                        json={"template_id": "t"})
+        self.assertEqual(response.status_code, 409, response.text)
+        self.assertIn(f"This name is taken: {B_ROOT}", response.text)
+        session = self.Session()
+        try:
+            self.assertIsNone(session.query(Project).filter_by(name="zz ws b").first())
+        finally:
+            session.close()
+
     def test_deleting_a_project_audits_its_workspace(self):
         project_b = self.ids["project_b"]
         response = self.client.delete(f"/dashboard/api/projects/{project_b}",
