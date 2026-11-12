@@ -33,13 +33,54 @@
             </table>
         </div>
     </div>
+
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 space-y-3">
+        <div>
+            <h3 class="text-sm font-semibold text-gray-900 dark:text-white">Invitations</h3>
+            <p id="invitationsHint" class="text-xs text-gray-500 dark:text-gray-400">An invitation link works once, for the address it names.</p>
+        </div>
+        <form id="inviteForm" class="hidden flex flex-wrap items-end gap-2">
+            <div>
+                <label for="inviteEmail" class="block text-xs text-gray-500 dark:text-gray-400">Email</label>
+                <input id="inviteEmail" type="email" required placeholder="name@example.com" class="border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1 text-xs w-64">
+            </div>
+            <div>
+                <label for="inviteRole" class="block text-xs text-gray-500 dark:text-gray-400">Role</label>
+                <select id="inviteRole" class="border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-1.5 py-1 text-xs"></select>
+            </div>
+            <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 text-xs rounded-lg flex items-center space-x-1.5">
+                <i class="fas fa-paper-plane"></i><span>Invite</span>
+            </button>
+        </form>
+        <div id="inviteLink" class="hidden text-xs bg-gray-50 dark:bg-gray-700 rounded p-2 space-y-1">
+            <div id="inviteLinkNote" class="text-gray-700 dark:text-gray-300"></div>
+            <div class="flex items-center gap-2">
+                <input id="inviteLinkValue" type="text" readonly class="flex-1 border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-white rounded px-2 py-1 text-xs font-mono">
+                <button id="inviteLinkCopy" type="button" class="bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 text-gray-800 dark:text-gray-100 px-2 py-1 rounded"><i class="fas fa-copy"></i> Copy</button>
+            </div>
+        </div>
+        <div class="overflow-auto table-responsive">
+            <table class="w-full divide-y divide-gray-200 dark:divide-gray-700 table-cards-mobile">
+                <thead class="bg-gray-50 dark:bg-gray-700">
+                    <tr>
+                        <th class="px-3 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Email</th>
+                        <th class="px-3 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Role</th>
+                        <th class="px-3 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Invited by</th>
+                        <th class="px-3 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Expires</th>
+                        <th class="px-3 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="invitationsBody" class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700"></tbody>
+            </table>
+        </div>
+    </div>
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script nonce="{{ request.state.csp_nonce }}">
 (function () {
-    mateActions.allow('saveMember', 'removeMember');
+    mateActions.allow('saveMember', 'removeMember', 'revokeInvitation');
 
     const API = '/dashboard/api/members';
     let state = {members: [], me: null, roles: [], can_manage: false};
@@ -122,7 +163,74 @@
         } catch (e) { showNotification(e.message, 'error'); }
     };
 
+    // Invitations (server/invitation_routes.py)
+    const INVITATIONS = '/dashboard/api/invitations';
+    let invitations = {invitations: [], roles: [], can_manage: false, emails: false};
+
+    function renderInvitations() {
+        const form = document.getElementById('inviteForm');
+        form.classList.toggle('hidden', !invitations.can_manage);
+        const select = document.getElementById('inviteRole');
+        if (!select.options.length) {
+            select.innerHTML = invitations.roles.map(r => `<option value="${r}" ${r === 'member' ? 'selected' : ''}>${r}</option>`).join('');
+        }
+        document.getElementById('invitationsHint').textContent = invitations.can_manage
+            ? `An invitation link works once, for the address it names, for ${invitations.days} days.`
+              + (invitations.emails ? ' It is emailed to that address.' : ' Send it yourself: this server has no SMTP set.')
+            : 'Only an owner of the workspace invites people.';
+        document.getElementById('invitationsBody').innerHTML = invitations.invitations.map(inv => `<tr>
+                <td class="px-3 py-1.5 text-xs text-gray-900 dark:text-white" data-label="Email">${esc(inv.email)}</td>
+                <td class="px-3 py-1.5 text-xs text-gray-700 dark:text-gray-300" data-label="Role">${esc(inv.role)}</td>
+                <td class="px-3 py-1.5 text-xs text-gray-700 dark:text-gray-300" data-label="Invited by">${esc(inv.invited_by || '')}</td>
+                <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400" data-label="Expires">${inv.status === 'expired' ? '<span class="text-red-600 dark:text-red-400">expired</span>' : esc(inv.expires_at.slice(0, 10))}</td>
+                <td class="px-3 py-1.5 text-xs font-medium" data-label="Actions">${invitations.can_manage
+                    ? `<button data-click="revokeInvitation" data-args="${mateActions.attr([inv.id])}" class="text-red-600 dark:text-red-400 hover:text-red-900 min-h-[44px] touch-target px-2"><i class="fas fa-ban"></i> Revoke</button>` : ''}</td>
+            </tr>`).join('') || `<tr><td colspan="5" class="px-3 py-4 text-xs text-center text-gray-500 dark:text-gray-400">No open invitations.</td></tr>`;
+    }
+
+    async function loadInvitations() {
+        try {
+            invitations = await call(INVITATIONS, 'GET');
+            renderInvitations();
+        } catch (e) { showNotification(e.message, 'error'); }
+    }
+
+    document.getElementById('inviteForm').addEventListener('submit', async function (event) {
+        event.preventDefault();
+        const email = document.getElementById('inviteEmail').value.trim();
+        try {
+            const result = await call(INVITATIONS, 'POST', {email, role: document.getElementById('inviteRole').value});
+            document.getElementById('inviteEmail').value = '';
+            document.getElementById('inviteLinkNote').textContent = result.emailed
+                ? `Emailed to ${email}. The link, in case it doesn't arrive:`
+                : `Send this link to ${email}. It is shown once:`;
+            document.getElementById('inviteLinkValue').value = result.link;
+            document.getElementById('inviteLink').classList.remove('hidden');
+            loadInvitations();
+        } catch (e) { showNotification(e.message, 'error'); }
+    });
+
+    document.getElementById('inviteLinkCopy').addEventListener('click', async function () {
+        const input = document.getElementById('inviteLinkValue');
+        try {
+            await navigator.clipboard.writeText(input.value);
+            showNotification('Link copied');
+        } catch (e) { input.select(); }
+    });
+
+    window.revokeInvitation = async function (id) {
+        const inv = invitations.invitations.find(i => i.id === id);
+        if (!inv || !await showConfirm(`Revoke the invitation of ${inv.email}? Its link stops working.`,
+                                       'Revoke invitation', 'Revoke', 'Cancel', 'danger')) return;
+        try {
+            await call(`${INVITATIONS}/${id}`, 'DELETE');
+            showNotification(`Invitation of ${inv.email} revoked`);
+            loadInvitations();
+        } catch (e) { showNotification(e.message, 'error'); }
+    };
+
     load();
+    loadInvitations();
 })();
 </script>
 {% endblock %}

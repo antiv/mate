@@ -15,6 +15,11 @@
         </button>
     </div>
 
+    <div id="ownerInvite" class="hidden bg-blue-50 dark:bg-gray-700 rounded-lg p-3 text-xs space-y-1">
+        <div id="ownerInviteNote" class="text-gray-700 dark:text-gray-200"></div>
+        <input id="ownerInviteLink" type="text" readonly class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-white rounded px-2 py-1 font-mono">
+    </div>
+
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow">
         <div class="p-4 overflow-auto table-responsive">
             <table class="w-full divide-y divide-gray-200 dark:divide-gray-700 table-cards-mobile">
@@ -62,7 +67,7 @@
                             <label for="wsOwner" class="block text-sm font-medium text-gray-700 dark:text-gray-300">First owner</label>
                             <input type="text" id="wsOwner" list="wsOwnerOptions" autocomplete="off" class="mt-1 block w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
                             <datalist id="wsOwnerOptions"></datalist>
-                            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">The id of an existing user, who becomes the workspace's owner.</p>
+                            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">The id of an existing user, who becomes the workspace's owner, or the email address of someone with no account yet, who is invited as its owner.</p>
                         </div>
                     </div>
                     <div>
@@ -113,6 +118,7 @@
     };
     let workspaces = [];
     let ownersLoaded = false;
+    let knownUsers = new Set();
 
     function esc(s) {
         return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;')
@@ -152,7 +158,7 @@
                     <div class="text-gray-400 dark:text-gray-500 font-mono">${esc(w.slug)}</div>
                 </td>
                 <td class="px-3 py-1.5 text-xs" data-label="Status">${badge(w.status, STATUS_BADGE[w.status])}</td>
-                <td class="px-3 py-1.5 text-xs text-gray-700 dark:text-gray-300" data-label="Owners">${w.owners.map(esc).join('<br>') || '—'}</td>
+                <td class="px-3 py-1.5 text-xs text-gray-700 dark:text-gray-300" data-label="Owners">${w.owners.map(esc).concat(w.invited_owners.map(e => `${esc(e)} <span class="text-gray-400">(invited)</span>`)).join('<br>') || '—'}</td>
                 <td class="px-3 py-1.5 text-xs text-gray-700 dark:text-gray-300" data-label="Members">${w.members}</td>
                 <td class="px-3 py-1.5 text-xs text-gray-700 dark:text-gray-300" data-label="Projects">${w.projects}</td>
                 <td class="px-3 py-1.5 text-xs text-gray-700 dark:text-gray-300" data-label="Platform keys">${w.allow_platform_keys ? 'Yes' : 'No'}</td>
@@ -173,6 +179,7 @@
         if (ownersLoaded) return;
         try {
             const users = (await call('/dashboard/api/users', 'GET')).users;
+            knownUsers = new Set(users.map(u => u.user_id));
             document.getElementById('wsOwnerOptions').innerHTML = users
                 .filter(u => !u.user_id.startsWith('widget_') && !u.roles.includes('widget') && !u.roles.includes('pending'))
                 .map(u => `<option value="${esc(u.user_id)}">${esc(u.display_name || u.email || '')}</option>`).join('');
@@ -232,13 +239,23 @@
         }
         if (!id) {
             body.slug = document.getElementById('wsSlug').value.trim();
-            body.owner = document.getElementById('wsOwner').value.trim();
+            // An address that is no user's id is invited as the owner
+            const owner = document.getElementById('wsOwner').value.trim();
+            if (owner.includes('@') && !knownUsers.has(owner)) body.owner_email = owner;
+            else body.owner = owner;
         }
         const button = document.getElementById('wsSubmit');
         button.disabled = true;
         try {
-            await call(id ? `${API}/${id}` : API, id ? 'PUT' : 'POST', body);
+            const result = await call(id ? `${API}/${id}` : API, id ? 'PUT' : 'POST', body);
             showNotification(id ? 'Workspace updated' : 'Workspace created');
+            if (result.invitation) {
+                document.getElementById('ownerInviteNote').textContent = result.invitation.emailed
+                    ? `${body.name}: the owner invitation was emailed to ${body.owner_email}. The link, in case it doesn't arrive:`
+                    : `${body.name}: send this owner invitation to ${body.owner_email}. It is shown once:`;
+                document.getElementById('ownerInviteLink').value = result.invitation.link;
+                document.getElementById('ownerInvite').classList.remove('hidden');
+            }
             hideWorkspaceModal();
             load();
         } catch (err) { showNotification(err.message, 'error'); }

@@ -114,7 +114,7 @@ Every environment variable the code reads: **136** in total. Descriptions come f
 | `SESSION_DB_URL` | `sqlite+aiosqlite:///standalone_session.db` | Session store URL (standalone builds) | `standalone_server.py` |
 | `SESSION_SECURE_COOKIE` | `false` | Set to true behind TLS in production | `auth_server.py` |
 | `SMTP_FROM` | `(computed)` | From address (defaults to SMTP_USER) | `shared/utils/notify.py`, `shared/utils/shop_service.py` |
-| `SMTP_HOST` | — | SMTP server for alert and trigger emails; empty disables sending | `shared/utils/notify.py`, `shared/utils/shop_service.py`, `shared/utils/trigger_runner.py` |
+| `SMTP_HOST` | — | SMTP server for alert and trigger emails; empty disables sending | `server/invitation_routes.py`, `shared/utils/notify.py`, `shared/utils/shop_service.py` +1 more |
 | `SMTP_PASS` | — | SMTP login password | `shared/utils/notify.py`, `shared/utils/shop_service.py` |
 | `SMTP_PORT` | `587` | SMTP port (587 = STARTTLS) | `shared/utils/notify.py`, `shared/utils/shop_service.py` |
 | `SMTP_USER` | — | SMTP login username | `shared/utils/notify.py`, `shared/utils/shop_service.py` |

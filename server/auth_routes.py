@@ -32,7 +32,8 @@ project_root = Path(__file__).parent.parent
 @router.get("/login", tags=["Dashboard - Pages"])
 async def login_page(request: Request):
     """Login page for dashboard (no auth required)."""
-    from server.oauth_routes import google_enabled, github_enabled
+    from urllib.parse import quote
+    from server.oauth_routes import _safe_next, google_enabled, github_enabled
     templates_dir = project_root / "templates"
     templates = Jinja2Templates(directory=str(templates_dir))
     error_map = {
@@ -43,11 +44,15 @@ async def login_page(request: Request):
         "unknown_provider": "Unknown OAuth provider.",
     }
     error_key = request.query_params.get("error", "")
+    # Single sign-on returns to the page that sent here, such as an invitation's
+    next_url = _safe_next(request.query_params.get("redirect", ""))
+    sso_next = "" if next_url == "/dashboard" else f"?next={quote(next_url, safe='')}"
     return templates.TemplateResponse(request, "login.html", {
         "request": request,
         "google_enabled": google_enabled(),
         "github_enabled": github_enabled(),
         "oauth_error": error_map.get(error_key, ""),
+        "sso_next": sso_next,
     })
 
 

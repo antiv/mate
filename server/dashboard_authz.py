@@ -42,6 +42,7 @@ USER_WRITABLE_PATHS = [
     re.compile(r"^/dashboard/api/workroom/title/?$"),
     re.compile(r"^/dashboard/api/workspaces/current/?$"),
     re.compile(r"^/dashboard/api/members/leave/?$"),
+    re.compile(r"^/dashboard/api/invitations/accept/?$"),
     re.compile(r"^/dashboard/api/feedback/?$"),
     re.compile(r"^/dashboard/api/tokens/?$"),
     re.compile(r"^/dashboard/api/tokens/\d+/?$"),

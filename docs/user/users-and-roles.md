@@ -14,6 +14,8 @@ covers:
   - server/workspace_routes.py
   - server/member_routes.py
   - templates/dashboard/members.html
+  - server/invitation_routes.py
+  - templates/dashboard/invitation.html
   - templates/base.html
 ---
 
@@ -119,6 +121,38 @@ workspace.
 Every change is written to the workspace's audit log, as `member.update`,
 `member.remove` or `member.leave`.
 
+## Invitations
+
+An owner brings someone into the workspace with an invitation, under **Invitations**
+on the **Members** page.
+
+1. Enter their **Email** and choose a **Role** (owner, admin or member), then click
+   **Invite**.
+2. When the server has SMTP set (`SMTP_HOST`), the link is emailed to that address.
+   Either way the page shows the link once, with **Copy**, so you can send it
+   yourself.
+3. They open the link and sign in, with Google or GitHub, as that address. The page
+   shows the workspace, the role and who invited them, and **Join** makes them a
+   member, with the `user` agent role. Their dashboard then opens in that workspace.
+   Change their agent roles on **Members** afterwards.
+
+- A link works once and for 7 days, and only for a signed-in user whose id or email
+  is the invited address. Someone signed in as another person is told to sign out
+  and sign in as that address.
+- Accepting takes a new sign-up out of `pending`. It makes them a member of this
+  workspace only, not of the Default workspace.
+- Sign-in restrictions (`OAUTH_ALLOWED_DOMAINS`, `OAUTH_ALLOWED_EMAILS`) still apply:
+  an address they refuse can't sign in to accept.
+- The list shows the invitations not accepted yet, expired ones marked. **Revoke**
+  stops a link. Inviting the same address again replaces its open invitation, so
+  the earlier link stops working. Inviting a member is refused.
+- An invitation to a suspended or closed workspace can't be accepted.
+- Admins of the workspace see the list; only owners and platform administrators
+  invite and revoke.
+
+Each invitation, revocation and acceptance is written to the workspace's audit log,
+as `invitation.create`, `invitation.revoke` or `invitation.accept`.
+
 ## Open an agent to people
 
 Each agent has an **Allowed Roles** list. A member can use the agent when at least
@@ -138,9 +172,11 @@ written to the audit log.
 
 ## Let a new person in
 
-When someone signs in through Google or GitHub for the first time, MATE creates
-their user record with the `pending` role. They can sign in but cannot use any
-agent.
+To bring someone into a workspace, invite them (see [Invitations](#invitations)).
+
+When someone signs in through Google or GitHub for the first time without an
+invitation, MATE creates their user record with the `pending` role. They can sign in
+but cannot use any agent.
 
 1. Open **Control Room → Users**. Filter by **Provider** or search for their email.
 2. Click edit on their row.

@@ -3868,6 +3868,26 @@ class DashboardServer:
                 "is_admin": True,
             })
 
+        @self.app.get("/dashboard/invite/{token}", response_class=HTMLResponse, tags=["Dashboard - Pages"])
+        async def dashboard_invitation(request: Request, token: str,
+                                       ctx: RequestContext = Depends(get_request_context)):
+            """An invitation to a workspace, to accept as the signed-in user
+            (server/invitation_routes.py). Signing in first comes back here."""
+            from server.invitation_routes import invitation_for_page
+            invitation = await asyncio.to_thread(invitation_for_page, token, ctx.user_id)
+            is_admin = await asyncio.to_thread(lambda: ctx.is_admin)
+            response = self.templates.TemplateResponse(request, "dashboard/invitation.html", {
+                "request": request,
+                "page_title": "Invitation",
+                "username": ctx.user_id,
+                "is_admin": is_admin,
+                "invitation": invitation,
+                "token": token,
+            })
+            # The token is in the address: keep it out of the Referer of what the page loads
+            response.headers["Referrer-Policy"] = "no-referrer"
+            return response
+
         @self.app.get("/dashboard/agents", response_class=HTMLResponse, tags=["Dashboard - Pages"])
         async def dashboard_agents(request: Request, ctx: RequestContext = Depends(get_request_context)):
             """Dashboard agents page"""

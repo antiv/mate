@@ -49,7 +49,7 @@ What it owns:
 | Authentication and the login page | `server/auth.py`, `server/auth_routes.py`, `server/oauth_routes.py` |
 | Dashboard pages and their JSON API | `shared/utils/dashboard/dashboard_server.py` (`DashboardServer`, registered on the same app) |
 | Proxy to the agent server | `server/proxy_routes.py` |
-| Widget, wizard, Slack, OpenAI-compatible API, docs, workspaces, members | `server/*_routes.py`, one router each |
+| Widget, wizard, Slack, OpenAI-compatible API, docs, workspaces, members, invitations | `server/*_routes.py`, one router each |
 | MCP endpoints (images, Google Drive, exposed agents) | `shared/utils/mcp/` |
 | Trigger scheduler and system jobs | `shared/utils/trigger_runner.py` |
 
