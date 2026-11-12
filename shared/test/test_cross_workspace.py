@@ -21,6 +21,7 @@ The agent runtime is checked the same way: the RBAC check, the proxy and
 B's agents.
 """
 
+import asyncio
 import base64
 import hashlib
 import json
@@ -3384,6 +3385,102 @@ class TestInvitations(_TwoWorkspaces):
             # Only to a page of this site
             page = self.client.get("/login", params={"redirect": "//evil.example/x"}).text
             self.assertIn('href="/auth/login/google"', page)
+
+
+class TestWorkspaceBudgets(_TwoWorkspaces):
+    """Workspace budgets and alerts (#277, 3g): a budget of scope workspace counts every
+    agent of its workspace and no other, and a whole-workspace (global) alert rule
+    measures it."""
+
+    def setUp(self):
+        super().setUp()
+        self.bob = TestClient(auth_server.app, cookies=_signed_in(BOB))
+
+    def _use(self, workspace_id: int, agent: str, tokens: int, cost: float = None) -> None:
+        session = self.Session()
+        session.add(TokenUsageLog(request_id="r", session_id="s", user_id="someone", agent_name=agent,
+                                  model_name="m", status="SUCCESS", prompt_tokens=tokens, response_tokens=0,
+                                  cost_usd=cost, workspace_id=workspace_id,
+                                  timestamp=datetime.now(timezone.utc)))
+        session.commit()
+        session.close()
+
+    # B's root has a budget of its own in the fixture; its sub-agent has none
+    B_SUB = "zz_ws_b_sub"
+
+    def _check(self, user_id: str, agent: str):
+        return asyncio.run(rate_limit_service.get_rate_limit_service().check_request_limit(user_id, agent))[0]
+
+    def test_a_workspace_budget_counts_every_agent_of_its_workspace(self):
+        response = self.bob.post("/dashboard/api/rate-limits", json={
+            "scope": "workspace", "scope_id": "1", "tokens_per_day": 100, "action_on_limit": "block"})
+        self.assertEqual(response.status_code, 200, response.text)
+        session = self.Session()
+        try:
+            config = session.query(RateLimitConfig).filter_by(scope="workspace").one()
+            # The caller's workspace, whatever scope_id said
+            self.assertEqual((config.scope_id, config.workspace_id), (str(B), B))
+        finally:
+            session.close()
+        # A's use is not B's
+        self._use(A, A_ROOT, 10_000)
+        self.assertTrue(self._check(BOB, self.B_SUB).allowed)
+        # Another agent's use, by another user: only the workspace's count sees it
+        self._use(B, B_ROOT, 150)
+        result = self._check("anyone@b.example", self.B_SUB)
+        self.assertFalse(result.allowed)
+        self.assertIn("Workspace budget exceeded", result.message)
+        # and B's budget is not A's
+        self.assertTrue(self._check(ALICE, A_ROOT).allowed)
+
+    def test_a_workspace_budget_in_dollars(self):
+        self.bob.post("/dashboard/api/rate-limits", json={"scope": "workspace", "usd_per_day": 1.0})
+        self._use(A, A_ROOT, 1, cost=50.0)
+        self.assertTrue(self._check(BOB, self.B_SUB).allowed)
+        self._use(B, B_ROOT, 1, cost=1.5)
+        result = self._check(BOB, self.B_SUB)
+        self.assertFalse(result.allowed)
+        self.assertIn("Workspace budget exceeded: $1.50", result.message)
+
+    def test_a_workspace_budget_has_no_per_caller_limits(self):
+        for key in ("requests_per_minute", "max_tokens_per_request"):
+            response = self.bob.post("/dashboard/api/rate-limits",
+                                     json={"scope": "workspace", key: 10, "tokens_per_day": 1})
+            self.assertEqual(response.status_code, 400, key)
+
+    def test_the_usage_of_the_whole_workspace(self):
+        self._use(A, A_ROOT, 1000, cost=3.0)
+        self._use(B, B_ROOT, 70, cost=0.25)
+        usage = self.bob.get("/dashboard/api/rate-limits/usage", params={"workspace": "true"}).json()
+        # The fixture's log of B holds 2 tokens
+        self.assertEqual((usage["tokens_last_day"], usage["usd_last_day"]), (72, 0.25))
+        usage = self.client.get("/dashboard/api/rate-limits/usage", params={"workspace": "true"},
+                                headers=_platform_admin(A)).json()
+        self.assertEqual((usage["tokens_last_day"], usage["usd_last_day"]), (1000, 3.0))
+
+    def test_only_the_workspace_deletes_its_budget(self):
+        self.bob.post("/dashboard/api/rate-limits", json={"scope": "workspace", "tokens_per_day": 5})
+        response = self.client.delete(f"/dashboard/api/rate-limits/workspace/{B}", headers=_platform_admin(A))
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(self.bob.delete(f"/dashboard/api/rate-limits/workspace/{B}").status_code, 200)
+
+    def test_a_whole_workspace_alert_measures_its_budget(self):
+        self.bob.post("/dashboard/api/rate-limits", json={"scope": "workspace", "usd_per_month": 2.0,
+                                                          "tokens_per_day": 1000})
+        self._use(A, A_ROOT, 5000, cost=100.0)
+        self._use(B, B_ROOT, 498, cost=1.0)
+        service = alert_service.AlertService()
+        session = self.Session()
+        try:
+            for config, value in (({"unit": "usd", "period": "month"}, 50),
+                                  ({"period": "day"}, 50)):
+                rule = AlertRule(name="r", scope="global", condition_type="budget_threshold",
+                                 destination_type="http", workspace_id=B,
+                                 condition_config=json.dumps(config))
+                measured = service._measure(session, rule)
+                self.assertEqual(measured["value"], value, config)
+        finally:
+            session.close()
 
 
 if __name__ == "__main__":

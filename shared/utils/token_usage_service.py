@@ -439,6 +439,28 @@ class TokenUsageService:
         finally:
             session.close()
 
+    def get_workspace_tokens_since(self, workspace_id: int, since: datetime) -> int:
+        """Total tokens every agent of the workspace used since the given datetime."""
+        session = self._get_session()
+        if not session:
+            return 0
+        try:
+            row = session.query(
+                func.coalesce(func.sum(
+                    func.coalesce(TokenUsageLog.prompt_tokens, 0) +
+                    func.coalesce(TokenUsageLog.response_tokens, 0)
+                ), 0)
+            ).filter(
+                TokenUsageLog.timestamp >= since,
+                *rows_of(TokenUsageLog, workspace_id),
+            ).scalar()
+            return int(row or 0)
+        except SQLAlchemyError as e:
+            logger.error("Failed to get workspace tokens since: %s", e)
+            return 0
+        finally:
+            session.close()
+
     def get_spend_since(self, scope: str, scope_id: str, since: datetime,
                         include_sub_agents: bool = False,
                         workspace_id: Optional[int] = None) -> Optional[Tuple[float, int]]:
@@ -447,7 +469,8 @@ class TokenUsageService:
         None when the database could not be read, so a caller can tell an error
         from no spend. include_sub_agents widens an agent scope to its sub-agents.
         workspace_id narrows a user scope to what the user spent in that workspace;
-        an agent or project scope counts what was spent in its own workspace.
+        an agent or project scope counts what was spent in its own workspace. A
+        workspace scope (scope_id the workspace's id) counts all of it.
         """
         session = self._get_session()
         if not session:
@@ -478,6 +501,11 @@ class TokenUsageService:
                     return (0.0, 0)
                 query = query.filter(TokenUsageLog.agent_name.in_(agent_names),
                                      *_spent_in(session, project_id=project_id))
+            elif scope == "workspace":
+                try:
+                    query = query.filter(*rows_of(TokenUsageLog, int(scope_id)))
+                except (TypeError, ValueError):
+                    return (0.0, 0)
             else:
                 return (0.0, 0)
             cost, unpriced = query.one()

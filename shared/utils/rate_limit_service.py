@@ -1,7 +1,7 @@
 """
 Rate limit and budget service.
 
-Enforces per-user, per-agent, per-project limits:
+Enforces per-user, per-agent, per-project and per-workspace limits:
 - requests/min (in-memory)
 - tokens/hour, tokens/day, tokens/month (from DB)
 - US dollars per day and per month (from DB), each measured in its own scope:
@@ -10,6 +10,9 @@ Enforces per-user, per-agent, per-project limits:
   when the spend cannot be read, a block budget refuses the request
 - an agent's budgets can include its sub-agents (include_sub_agents)
 - max_tokens_per_request (agent only, enforced at callback)
+- a workspace's tokens per hour, day and month and its dollars per day and month
+  count every agent of the workspace (scope "workspace", scope_id the workspace's
+  id); requests per minute and max tokens per request don't apply to it
 
 Actions: warn (log), throttle (delay), block (429).
 """
@@ -31,6 +34,10 @@ from .token_usage_service import get_token_usage_service
 from .workspaces import workspace_of_project
 
 logger = logging.getLogger(__name__)
+
+SCOPES = ("user", "agent", "project", "workspace")
+# The limits a workspace budget can't have: both are per caller or per request
+NOT_FOR_WORKSPACE = ("requests_per_minute", "max_tokens_per_request")
 
 # In-memory: key -> deque of timestamps (sliding window for requests/min)
 _request_timestamps: Dict[str, deque] = {}
@@ -300,6 +307,23 @@ class RateLimitService:
             unpriced_calls_month=unpriced_month,
         )
 
+    def get_workspace_usage(self, workspace_id: int) -> UsageSnapshot:
+        """What every agent of the workspace used and spent, as a workspace budget
+        counts it."""
+        now = datetime.now(timezone.utc)
+        hour, day, month = (self.token_service.get_workspace_tokens_since(workspace_id, now - window)
+                            for window in (timedelta(hours=1), timedelta(days=1), timedelta(days=30)))
+        spend_day = self.token_service.get_spend_since("workspace", str(workspace_id),
+                                                       now - timedelta(days=1))
+        spend_month = self.token_service.get_spend_since("workspace", str(workspace_id),
+                                                         now - timedelta(days=30))
+        usd_day, unpriced_day = spend_day or (0.0, 0)
+        usd_month, unpriced_month = spend_month or (0.0, 0)
+        return UsageSnapshot(requests_last_min=0, tokens_last_hour=hour, tokens_last_day=day,
+                             tokens_last_month=month, tokens_this_request=None,
+                             usd_last_day=usd_day, usd_last_month=usd_month,
+                             unpriced_calls_day=unpriced_day, unpriced_calls_month=unpriced_month)
+
     def _collect_limit_data_sync(
         self,
         user_id: str,
@@ -328,7 +352,16 @@ class RateLimitService:
                 project_id = _get_agent_project_id(session, agent_name)
             workspace_id = workspace_of_project(session, project_id) or DEFAULT_WORKSPACE_ID
 
-            def _plain(cfg: RateLimitConfig) -> SimpleNamespace:
+            def _workspace_tokens(cfg: RateLimitConfig, scope: str) -> Optional[Tuple[int, int, int]]:
+                """A workspace budget's own (hour, day, month) tokens, when it limits
+                tokens; other scopes share the figures computed below."""
+                if scope != "workspace" or all(
+                        v is None for v in (cfg.tokens_per_hour, cfg.tokens_per_day, cfg.tokens_per_month)):
+                    return None
+                return tuple(self.token_service.get_workspace_tokens_since(workspace_id, now - window)
+                             for window in (timedelta(hours=1), timedelta(days=1), timedelta(days=30)))
+
+            def _plain(cfg: RateLimitConfig, scope: str) -> SimpleNamespace:
                 # A dollar budget is measured in its own scope, so its spend is
                 # read here, only when the config has one: (dollars, unpriced
                 # calls), or None when it could not be read
@@ -353,29 +386,35 @@ class RateLimitService:
                     usd_spent_month=spent_month,
                     block_unpriced=bool(cfg.block_unpriced),
                     action_on_limit=cfg.action_on_limit,
+                    tokens=_workspace_tokens(cfg, scope),
                 )
 
             user_cfg = _get_config(session, "user", user_id, workspace_id)
             if user_cfg:
-                configs.append(("user", user_id, _plain(user_cfg)))
+                configs.append(("user", user_id, _plain(user_cfg, "user")))
 
             agent_sub_agents = False
             if agent_name:
                 agent_cfg = _get_config(session, "agent", agent_name, workspace_id)
                 if agent_cfg:
-                    configs.append(("agent", agent_name, _plain(agent_cfg)))
+                    configs.append(("agent", agent_name, _plain(agent_cfg, "agent")))
                     agent_sub_agents = bool(agent_cfg.include_sub_agents)
 
             if project_id is not None:
                 proj_cfg = _get_config(session, "project", str(project_id), workspace_id)
                 if proj_cfg:
-                    configs.append(("project", str(project_id), _plain(proj_cfg)))
+                    configs.append(("project", str(project_id), _plain(proj_cfg, "project")))
 
             # Fallback: rate limit by auth user if no user-specific config
             if not configs and auth_username:
                 auth_cfg = _get_config(session, "user", auth_username, workspace_id)
                 if auth_cfg:
-                    configs.append(("user", auth_username, _plain(auth_cfg)))
+                    configs.append(("user", auth_username, _plain(auth_cfg, "user")))
+
+            # The whole workspace's budget, after the fallback, which it doesn't replace
+            workspace_cfg = _get_config(session, "workspace", str(workspace_id), workspace_id)
+            if workspace_cfg:
+                configs.append(("workspace", str(workspace_id), _plain(workspace_cfg, "workspace")))
 
             if not configs:
                 return ([], (0, 0, 0))
@@ -455,9 +494,13 @@ class RateLimitService:
         # Check each config
         for scope, sid, cfg in configs:
             action = cfg.action_on_limit
+            # A workspace budget counts its own tokens; the others share these
+            used_hour, used_day, used_month = getattr(cfg, "tokens", None) or (
+                usage.tokens_last_hour, usage.tokens_last_day, usage.tokens_last_month)
+            budget = "Workspace budget" if scope == "workspace" else "Token budget"
 
-            # Requests per minute
-            if cfg.requests_per_minute is not None:
+            # Requests per minute (per caller, so never a workspace's)
+            if cfg.requests_per_minute is not None and scope != "workspace":
                 if requests_last_min >= cfg.requests_per_minute:
                     if action == "block":
                         return (
@@ -476,58 +519,59 @@ class RateLimitService:
                         scope, sid, requests_last_min, cfg.requests_per_minute,
                     )
 
-            # Tokens per hour (user)
-            if cfg.tokens_per_hour is not None and scope == "user":
-                if usage.tokens_last_hour >= cfg.tokens_per_hour:
+            # Tokens per hour (user, workspace)
+            if cfg.tokens_per_hour is not None and scope in ("user", "workspace"):
+                if used_hour >= cfg.tokens_per_hour:
                     if action == "block":
                         return (
                             RateLimitResult(
                                 allowed=False,
                                 action="block",
-                                message=f"Token budget exceeded: {usage.tokens_last_hour} tokens this hour (limit: {cfg.tokens_per_hour})",
+                                message=f"{budget} exceeded: {used_hour} tokens this hour (limit: {cfg.tokens_per_hour})",
                                 retry_after_seconds=3600.0,
                             ),
                             usage,
                         )
                     logger.warning(
-                        "[RATE_LIMIT] user %s: tokens/hour %s/%s (action=warn)",
-                        sid, usage.tokens_last_hour, cfg.tokens_per_hour,
+                        "[RATE_LIMIT] %s %s: tokens/hour %s/%s (action=warn)",
+                        scope, sid, used_hour, cfg.tokens_per_hour,
                     )
 
             # Tokens per day
             if cfg.tokens_per_day is not None:
-                if usage.tokens_last_day >= cfg.tokens_per_day:
+                if used_day >= cfg.tokens_per_day:
                     if action == "block":
                         return (
                             RateLimitResult(
                                 allowed=False,
                                 action="block",
-                                message=f"Token budget exceeded: {usage.tokens_last_day} tokens today (limit: {cfg.tokens_per_day})",
+                                message=f"{budget} exceeded: {used_day} tokens today (limit: {cfg.tokens_per_day})",
                                 retry_after_seconds=86400.0,
                             ),
                             usage,
                         )
                     logger.warning(
                         "[RATE_LIMIT] %s %s: tokens/day %s/%s (action=warn)",
-                        scope, sid, usage.tokens_last_day, cfg.tokens_per_day,
+                        scope, sid, used_day, cfg.tokens_per_day,
                     )
 
-            # Tokens per month (project)
-            if cfg.tokens_per_month is not None and scope == "project":
-                if usage.tokens_last_month >= cfg.tokens_per_month:
+            # Tokens per month (project, workspace)
+            if cfg.tokens_per_month is not None and scope in ("project", "workspace"):
+                if used_month >= cfg.tokens_per_month:
                     if action == "block":
                         return (
                             RateLimitResult(
                                 allowed=False,
                                 action="block",
-                                message=f"Project budget exceeded: {usage.tokens_last_month} tokens this month (limit: {cfg.tokens_per_month})",
+                                message=(f"{'Workspace' if scope == 'workspace' else 'Project'} budget exceeded: "
+                                         f"{used_month} tokens this month (limit: {cfg.tokens_per_month})"),
                                 retry_after_seconds=86400.0,
                             ),
                             usage,
                         )
                     logger.warning(
-                        "[RATE_LIMIT] project %s: tokens/month %s/%s (action=warn)",
-                        sid, usage.tokens_last_month, cfg.tokens_per_month,
+                        "[RATE_LIMIT] %s %s: tokens/month %s/%s (action=warn)",
+                        scope, sid, used_month, cfg.tokens_per_month,
                     )
 
             # US dollars per day and per month, in this config's own scope
@@ -553,10 +597,11 @@ class RateLimitService:
                     )
                     continue
                 usd, unpriced = spent
+                label = "Workspace budget" if scope == "workspace" else "Budget"
                 if usd >= limit:
-                    message = f"Budget exceeded: ${usd:.2f} spent {period} (limit: ${limit:.2f})"
+                    message = f"{label} exceeded: ${usd:.2f} spent {period} (limit: ${limit:.2f})"
                 elif unpriced and cfg.block_unpriced:
-                    message = (f"Budget exceeded: {unpriced} calls without a price {period} "
+                    message = (f"{label} exceeded: {unpriced} calls without a price {period} "
                                f"count as over the ${limit:.2f} budget")
                 else:
                     continue

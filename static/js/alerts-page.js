@@ -88,7 +88,7 @@ const AlertPage = (function () {
             <tr class="text-gray-700 dark:text-gray-300">
                 <td class="px-3 py-2">${esc(rule.name)}</td>
                 <td class="px-3 py-2">${esc(CONDITION_LABELS[rule.condition_type] || rule.condition_type)}<div class="text-gray-500">${_describeCondition(rule)}</div></td>
-                <td class="px-3 py-2">${esc(rule.scope)}${rule.scope_id ? ': ' + esc(rule.scope_id) : ''}</td>
+                <td class="px-3 py-2">${rule.scope === 'global' ? 'Whole workspace' : esc(rule.scope)}${rule.scope_id && rule.scope !== 'global' ? ': ' + esc(rule.scope_id) : ''}</td>
                 <td class="px-3 py-2 max-w-[16rem] truncate">${_describeDestination(rule)}</td>
                 <td class="px-3 py-2">${esc(rule.cooldown_seconds)}s</td>
                 <td class="px-3 py-2">${esc(lastFired)}<div class="text-gray-500">${esc(rule.fire_count)} fired</div>${error}</td>

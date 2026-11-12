@@ -4495,7 +4495,8 @@ class DashboardServer:
 
         @self.app.get("/dashboard/api/rate-limits", tags=["Dashboard - Rate Limits"])
         async def get_rate_limits_api(request: Request, ctx: RequestContext = Depends(get_request_context), scope: Optional[str] = None):
-            """Get rate limit configs, optionally filtered by scope (user, agent, project)."""
+            """Get rate limit configs, optionally filtered by scope (user, agent, project,
+            workspace)."""
             from shared.utils.rate_limit_service import get_rate_limit_service
             svc = get_rate_limit_service()
             configs = svc.get_configs(scope=scope, workspace_id=ctx.workspace_id)
@@ -4509,18 +4510,23 @@ class DashboardServer:
             agent_name: Optional[str] = None,
             project_id: Optional[int] = None,
             include_sub_agents: bool = False,
+            workspace: bool = False,
         ):
-            """Get current usage vs limits for user/agent/project; a user's in this workspace."""
+            """Get current usage vs limits for user/agent/project, a user's in this
+            workspace; with workspace=true, the whole workspace's."""
             from shared.utils.rate_limit_service import get_rate_limit_service
-            self._require_in_workspace(ctx, agent_name=agent_name, project_id=project_id)
             svc = get_rate_limit_service()
-            usage = svc.get_usage_snapshot(
-                user_id=user_id,
-                agent_name=agent_name,
-                project_id=project_id,
-                include_sub_agents=include_sub_agents,
-                workspace_id=ctx.workspace_id,
-            )
+            if workspace:
+                usage = await asyncio.to_thread(svc.get_workspace_usage, ctx.workspace_id)
+            else:
+                self._require_in_workspace(ctx, agent_name=agent_name, project_id=project_id)
+                usage = svc.get_usage_snapshot(
+                    user_id=user_id,
+                    agent_name=agent_name,
+                    project_id=project_id,
+                    include_sub_agents=include_sub_agents,
+                    workspace_id=ctx.workspace_id,
+                )
             return {
                 "requests_last_min": usage.requests_last_min,
                 "tokens_last_hour": usage.tokens_last_hour,
@@ -4537,15 +4543,22 @@ class DashboardServer:
             request: Request,
             ctx: RequestContext = Depends(get_request_context),
         ):
-            """Create or update rate limit config."""
-            from shared.utils.rate_limit_service import get_rate_limit_service
+            """Create or update rate limit config. A workspace budget (scope workspace)
+            is the current workspace's, whatever scope_id says."""
+            from shared.utils.rate_limit_service import NOT_FOR_WORKSPACE, SCOPES, get_rate_limit_service
             body = await request.json()
             scope = body.get("scope")
+            if scope == "workspace":
+                body["scope_id"] = str(ctx.workspace_id)
+                given = [key for key in NOT_FOR_WORKSPACE if body.get(key) not in (None, "")]
+                if given:
+                    raise HTTPException(status_code=400,
+                                        detail=f"A workspace budget can't have {', '.join(given)}")
             scope_id = body.get("scope_id")
             if not scope or not scope_id:
                 raise HTTPException(status_code=400, detail="scope and scope_id required")
-            if scope not in ("user", "agent", "project"):
-                raise HTTPException(status_code=400, detail="scope must be user, agent, or project")
+            if scope not in SCOPES:
+                raise HTTPException(status_code=400, detail="scope must be user, agent, project or workspace")
             self._require_scope_in_workspace(ctx, scope, str(scope_id))
             import math
             budgets = {}
@@ -4596,9 +4609,9 @@ class DashboardServer:
             ctx: RequestContext = Depends(get_request_context),
         ):
             """Delete rate limit config."""
-            from shared.utils.rate_limit_service import get_rate_limit_service
-            if scope not in ("user", "agent", "project"):
-                raise HTTPException(status_code=400, detail="scope must be user, agent, or project")
+            from shared.utils.rate_limit_service import SCOPES, get_rate_limit_service
+            if scope not in SCOPES:
+                raise HTTPException(status_code=400, detail="scope must be user, agent, project or workspace")
             svc = get_rate_limit_service()
             if not svc.delete_config(scope=scope, scope_id=scope_id, workspace_id=ctx.workspace_id):
                 raise HTTPException(status_code=404, detail="Config not found")
