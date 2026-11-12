@@ -23,7 +23,8 @@ with the password `mate` until someone changes it.
 
 If single sign-on is enabled, the login page also offers Google or GitHub. A person
 who signs in that way for the first time has no access to any agent until an
-administrator gives them a role on the **Users** page.
+administrator gives them a role on the **Users** page, or until they accept an
+invitation to a workspace. Signing in from an invitation's link comes back to it.
 
 ## The three spaces
 

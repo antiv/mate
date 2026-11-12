@@ -10,7 +10,7 @@ generated: true
 
 # HTTP API reference
 
-Every HTTP route declared in the code: **281** routes. 36 have no docstring and so no summary here.
+Every HTTP route declared in the code: **286** routes. 36 have no docstring and so no summary here.
 
 This page lists what exists and where it is implemented. For request and response schemas, and to try a call, use the live Swagger UI under **Documentation → API** in the dashboard.
 
@@ -18,7 +18,7 @@ Requests to `/dashboard/api/*` require an admin, apart from the short allowlist 
 
 ## Auth server and dashboard
 
-Port 8000. Everything a browser or an external client talks to. 261 routes.
+Port 8000. Everything a browser or an external client talks to. 266 routes.
 
 ### Authentication
 
@@ -162,6 +162,10 @@ Documentation pages and search, served from the docs/ folder.
 
 | Method | Path | Summary | Implemented in |
 |---|---|---|---|
+| `GET` | `/dashboard/api/invitations` | The current workspace's invitations not accepted yet, newest first | server/invitation_routes.py · list_invitations |
+| `POST` | `/dashboard/api/invitations` | Invite an email address to the current workspace: email, and role (owner, admin or member; default member) | server/invitation_routes.py · invite |
+| `POST` | `/dashboard/api/invitations/accept` | Accept an invitation as the signed-in user, whose id or email must be the invited address | server/invitation_routes.py · accept_invitation |
+| `DELETE` | `/dashboard/api/invitations/{invitation_id}` | Revoke an invitation of the current workspace that was not accepted yet | server/invitation_routes.py · revoke_invitation |
 | `GET` | `/dashboard/api/members` | The current workspace's members, and whether the caller may change them | server/member_routes.py · list_members |
 | `POST` | `/dashboard/api/members/leave` | Leave the current workspace | server/member_routes.py · leave_workspace |
 | `DELETE` | `/dashboard/api/members/{user_id}` | Remove a member from the workspace | server/member_routes.py · remove_member |
@@ -206,6 +210,7 @@ Web interface pages for system management.
 | `GET` | `/dashboard/evals` | — | shared/utils/dashboard/dashboard_server.py · dashboard_evals |
 | `GET` | `/dashboard/guardrail-logs` | Dashboard guardrail trigger log viewer | shared/utils/dashboard/dashboard_server.py · dashboard_guardrail_logs |
 | `GET` | `/dashboard/integrations` | — | shared/utils/dashboard/dashboard_server.py · dashboard_integrations |
+| `GET` | `/dashboard/invite/{token}` | An invitation to a workspace, to accept as the signed-in user (server/invitation_routes.py) | shared/utils/dashboard/dashboard_server.py · dashboard_invitation |
 | `GET` | `/dashboard/members` | Workspace settings → Members (server/member_routes.py) | shared/utils/dashboard/dashboard_server.py · dashboard_members |
 | `GET` | `/dashboard/migrations` | Dashboard migrations page | shared/utils/dashboard/dashboard_server.py · dashboard_migrations |
 | `GET` | `/dashboard/overview` | Platform Overview — Control Room landing page | shared/utils/dashboard/dashboard_server.py · dashboard_overview |
@@ -230,7 +235,7 @@ Web interface pages for system management.
 | Method | Path | Summary | Implemented in |
 |---|---|---|---|
 | `GET` | `/dashboard/api/platform/workspaces` | Every workspace, closed ones included, with its owners and counts | server/platform_workspace_routes.py · list_workspaces |
-| `POST` | `/dashboard/api/platform/workspaces` | Create a workspace: name, slug, owner (an existing user's id), and optionally allow_platform_keys (default true) and platform_features (default none) | server/platform_workspace_routes.py · create_workspace |
+| `POST` | `/dashboard/api/platform/workspaces` | Create a workspace: name, slug, its first owner as either owner (an existing user's id) or owner_email (an address invited as owner), and optionally allow_platform_keys (default | server/platform_workspace_routes.py · create_workspace |
 | `PUT` | `/dashboard/api/platform/workspaces/{workspace_id}` | Change any of name, allow_platform_keys and platform_features | server/platform_workspace_routes.py · update_workspace |
 | `POST` | `/dashboard/api/platform/workspaces/{workspace_id}/close` | Close a workspace with no projects, for good | server/platform_workspace_routes.py · close_workspace |
 | `POST` | `/dashboard/api/platform/workspaces/{workspace_id}/resume` | Undo a suspension | server/platform_workspace_routes.py · resume_workspace |

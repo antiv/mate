@@ -6,6 +6,7 @@ order: 112
 covers:
   - templates/dashboard/workspaces.html
   - server/platform_workspace_routes.py
+  - server/invitation_routes.py::create_invitation
   - shared/utils/dashboard/dashboard_server.py::dashboard_workspaces
 ---
 
@@ -28,7 +29,7 @@ Every workspace is listed, closed ones too, with:
 |---|---|
 | **Name** | The name, and under it the slug. Default is marked. |
 | **Status** | **open**, **suspended** or **closed**. |
-| **Owners** | The members with the owner role. |
+| **Owners** | The members with the owner role, and addresses invited as owner who haven't accepted yet, marked *(invited)*. |
 | **Members**, **Projects** | How many of each it has. |
 | **Platform keys** | Whether it may call models on the installation's provider keys. |
 | **Features** | The platform features it may use (below). |
@@ -40,15 +41,20 @@ Every workspace is listed, closed ones too, with:
    included, ignoring case.
 3. Check the **Slug**, which is filled in from the name: lowercase letters, digits
    and hyphens, at most 40. It can't be changed later.
-4. Choose the **First owner**: the id of an existing user, as on the **Users** page.
-   A pending sign-up or a widget visitor can't be one. Someone who has never signed
-   in has to sign in once, or be added on **Users**, first.
+4. Choose the **First owner**: the id of an existing user, as on the **Users** page,
+   or the email address of someone who has no user yet. A pending sign-up or a widget
+   visitor can't be chosen by id.
+   - An address that is no user's id is invited as the owner. The invitation is
+     emailed when the server has SMTP set, and its link is shown above the list once,
+     to copy. The workspace has no member until they open the link and sign in as
+     that address (see [Invitations](users-and-roles.md#invitations)).
 5. Set **May use platform keys** and the **Platform features**, and click **Save**.
 
-The owner can now open the workspace from the workspace menu in the top bar, and
+Once they are a member, the owner can open the workspace from the workspace menu in the top bar, and
 has its whole dashboard: they create its projects and agents, and add people on its
 **Members** page (see [Users and roles](users-and-roles.md#members)). Their agent
-roles there are those they have in the Default workspace, or `user`. You see the workspace menu too, since you may open
+roles there are those they have in the Default workspace, or `user`; an invited
+owner's are `user`. You see the workspace menu too, since you may open
 every workspace.
 
 ## What a workspace may use

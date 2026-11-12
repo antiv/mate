@@ -11,6 +11,7 @@ covers:
   - server/dashboard_authz.py
   - server/request_context.py
   - server/workspace_routes.py
+  - server/invitation_routes.py
   - shared/utils/platform_only.py
   - shared/utils/outbound.py
   - shared/utils/auth_utils.py
@@ -114,14 +115,32 @@ never a platform role (`admin`, `pending`, `widget`). Each change writes `member
 `member.remove` or `member.leave` in the workspace. The Users page sets platform roles
 only.
 
+Invitations (`server/invitation_routes.py`) add members. An owner or platform
+administrator creates one with `POST /dashboard/api/invitations` (email, role) and
+revokes it with `DELETE /dashboard/api/invitations/{id}`; workspace admins only list
+them. The token is `secrets.token_urlsafe(32)`, and `workspace_invitations` keeps its
+SHA-256 only. It lasts 7 days and is used once: `POST /dashboard/api/invitations/accept`,
+allowlisted for non-admins, claims it with an `UPDATE ... WHERE accepted_at IS NULL`.
+Accepting needs a dashboard session whose user id, or `users.email`, is the invited
+address, and a workspace that is open. It inserts the membership with the `user` agent
+role, flushes, and only then drops `pending` from `users.roles`, since the `User`
+listener adds a user who leaves `pending` as a member nowhere to the default
+workspace. The session then switches to the workspace. The page `/dashboard/invite/{token}`
+sends `Referrer-Policy: no-referrer`. A signed-out visitor goes to
+`/login?redirect=...`, whose Google and GitHub buttons carry it on as `?next=`, which
+`_safe_next` keeps to this site. Single sign-on checks `OAUTH_ALLOWED_DOMAINS` and
+`OAUTH_ALLOWED_EMAILS` before any session exists, so an invitation doesn't get around
+them. Platform → Workspaces creates a workspace with `owner_email` instead of `owner`
+through the same `create_invitation`.
+
 ## Layer 1: the dashboard API
 
 `DashboardAuthzMiddleware` requires an administrator (`ctx.is_admin`, of the
 request's workspace) for every request under `/dashboard/api/`, reads included. The
 exceptions are two short allowlists in `server/dashboard_authz.py`, for what the Work
 Room and the account menu need: renaming a conversation, rating a reply, reading one's
-own ratings, listing, creating and revoking one's own personal access tokens, and
-listing and switching one's workspaces.
+own ratings, listing, creating and revoking one's own personal access tokens,
+listing and switching one's workspaces, leaving one, and accepting an invitation.
 
 `PLATFORM_ONLY_PATHS` need a platform administrator, and answer 403 "Platform
 administrator access required" to anyone else, a workspace's owner included. They act

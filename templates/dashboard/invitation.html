@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+
+{% block title %}Invitation - MATE{% endblock %}
+
+{% block content %}
+<div class="max-w-lg mx-auto mt-8 bg-white dark:bg-gray-800 rounded-lg shadow p-6 space-y-4">
+    <h2 class="text-xl font-bold text-gray-900 dark:text-white flex items-center space-x-2">
+        <i class="fas fa-envelope-open-text text-blue-600 dark:text-blue-400"></i>
+        <span>Invitation</span>
+    </h2>
+    {% if invitation.state == "invalid" %}
+    <p class="text-sm text-gray-700 dark:text-gray-300">This invitation is not valid. It may have been revoked, or its workspace is no longer open.</p>
+    {% elif invitation.state == "accepted" %}
+    <p class="text-sm text-gray-700 dark:text-gray-300">This invitation to <strong>{{ invitation.workspace }}</strong> was used already. An invitation works once: ask for a new one if you still need it.</p>
+    {% elif invitation.state == "expired" %}
+    <p class="text-sm text-gray-700 dark:text-gray-300">This invitation to <strong>{{ invitation.workspace }}</strong> has expired. Ask {{ invitation.invited_by or "the workspace's owner" }} for a new one.</p>
+    {% else %}
+    <p class="text-sm text-gray-700 dark:text-gray-300">
+        {{ invitation.invited_by or "An owner" }} invited <strong>{{ invitation.email }}</strong> to the workspace
+        <strong>{{ invitation.workspace }}</strong>, as <strong>{{ invitation.role }}</strong>.
+    </p>
+    {% if invitation.member %}
+    <p class="text-sm text-gray-700 dark:text-gray-300">You are a member of this workspace already.</p>
+    <a href="/dashboard" class="inline-block bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 text-sm rounded-lg">Open the dashboard</a>
+    {% elif invitation.for_you %}
+    <button id="acceptInvitation" data-token="{{ token }}" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 text-sm rounded-lg flex items-center space-x-2">
+        <i class="fas fa-check"></i><span>Join {{ invitation.workspace }}</span>
+    </button>
+    {% else %}
+    <p class="text-sm text-gray-700 dark:text-gray-300">You are signed in as <strong>{{ username }}</strong>. Sign out, then open this link again and sign in as {{ invitation.email }} to accept it.</p>
+    {% endif %}
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script nonce="{{ request.state.csp_nonce }}">
+(function () {
+    const button = document.getElementById('acceptInvitation');
+    if (!button) return;
+    button.addEventListener('click', async function () {
+        button.disabled = true;
+        try {
+            const r = await fetch('/dashboard/api/invitations/accept', {
+                method: 'POST', credentials: 'same-origin',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({token: button.dataset.token}),
+            });
+            const data = await r.json().catch(() => ({}));
+            if (!r.ok) throw new Error(data.detail || `Request failed (${r.status})`);
+            window.location.href = '/dashboard';
+        } catch (e) {
+            button.disabled = false;
+            showNotification(e.message, 'error');
+        }
+    });
+})();
+</script>
+{% endblock %}

@@ -93,6 +93,12 @@ ACTION_MEMBER_UPDATE = "member.update"
 ACTION_MEMBER_REMOVE = "member.remove"
 ACTION_MEMBER_LEAVE = "member.leave"
 
+# Workspace invitations (server/invitation_routes.py)
+RESOURCE_INVITATION = "workspace_invitation"
+ACTION_INVITATION_CREATE = "invitation.create"
+ACTION_INVITATION_REVOKE = "invitation.revoke"
+ACTION_INVITATION_ACCEPT = "invitation.accept"
+
 
 def _client_ip(request: Any) -> Optional[str]:
     """Extract client IP from a FastAPI Request.

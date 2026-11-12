@@ -22,13 +22,14 @@ B's agents.
 """
 
 import base64
+import hashlib
 import json
 import os
 import sys
 import tempfile
 import unittest
 from pathlib import Path
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Set, Tuple
 from unittest.mock import MagicMock, patch
 
@@ -60,7 +61,7 @@ from shared.utils.models import (
     AgentConfig, AgentConfigVersion, AgentResponse, AgentTrigger, AlertRule, AuditLog, Base,
     ChannelIntegration, EvalResult, FileSearchStore, GuardrailLog, LangGraphSession, MemoryBlock,
     PersonalAccessToken, Project, RateLimitConfig, ResponseFeedback, TestCase, TokenUsageLog, User,
-    WidgetApiKey, Workspace, WorkspaceMember,
+    WidgetApiKey, Workspace, WorkspaceInvitation, WorkspaceMember,
 )
 from shared.utils.rbac_middleware import RBACMiddleware
 from shared.utils.tools import mcp_tools
@@ -209,6 +210,8 @@ COVERED_BY_TEST: Dict[Route, str] = {
     ("POST", "/dashboard/api/tokens"): "test_a_token_acts_in_the_current_workspace",
     ("PUT", "/dashboard/api/workspaces/current"): "test_the_session_works_in_the_workspace_it_switched_to",
     ("POST", "/dashboard/api/members/leave"): "test_a_member_leaves_the_current_workspace",
+    ("POST", "/dashboard/api/invitations"): "test_an_owner_invites_to_the_current_workspace",
+    ("POST", "/dashboard/api/invitations/accept"): "test_an_invitation_is_accepted_once",
     **{route: "test_every_body_naming_a_row_of_b_is_a_404" for route in BODIES_NAMING_B},
 }
 
@@ -350,6 +353,10 @@ class _TwoWorkspaces(unittest.TestCase):
                                                  label=B_MARKER, team_id="T_B"),
             "rate_limit": RateLimitConfig(scope="agent", scope_id=B_ROOT, tokens_per_day=1,
                                           workspace_id=B),
+            "invitation_id": WorkspaceInvitation(
+                workspace_id=B, email=f"invitee@{B_MARKER}.example", role="member", token_hash="0" * 64,
+                expires_at=datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(days=7),
+                created_by=BOB),
         }
         session.add_all(b_ops.values())
         session.commit()
@@ -3166,6 +3173,217 @@ class TestMembers(_TwoWorkspaces):
         self.assertTrue(response.json()["success"], response.text)
         # Her membership and agent roles stay as they were
         self.assertEqual(self._member(A, ALICE), ("member", ["user", "developer"]))
+
+
+class TestInvitations(_TwoWorkspaces):
+    """Invitations (#277, 3f): an owner invites an address with a role; the link works
+    once, for 7 days, for whoever signs in with that address, and makes them a member of
+    that workspace only. Revoking, replacing and every acceptance are audited."""
+
+    DAVE = "dave@new.example"
+
+    def setUp(self):
+        super().setUp()
+        self.bob = TestClient(auth_server.app, cookies=_signed_in(BOB))
+        self.dave = TestClient(auth_server.app, cookies=_signed_in(self.DAVE))
+
+    def _sign_up(self, user_id: str) -> None:
+        """A first single sign-on, as the OAuth callback writes it: pending."""
+        session = self.Session()
+        session.add(User(user_id=user_id, email=user_id, roles='["pending"]'))
+        session.commit()
+        session.close()
+
+    def _invite(self, email: str = DAVE, role: str = "admin", client: TestClient = None) -> str:
+        response = (client or self.bob).post("/dashboard/api/invitations", json={"email": email, "role": role})
+        self.assertEqual(response.status_code, 200, response.text)
+        return response.json()["link"].rsplit("/", 1)[1]
+
+    def _accept(self, token: str, client: TestClient = None) -> httpx.Response:
+        return (client or self.dave).post("/dashboard/api/invitations/accept", json={"token": token})
+
+    def _rows(self, model: type, **filters) -> list:
+        session = self.Session()
+        try:
+            return session.query(model).filter_by(**filters).all()
+        finally:
+            session.close()
+
+    def test_an_owner_invites_to_the_current_workspace(self):
+        response = self.bob.post("/dashboard/api/invitations", json={"email": " Dave@New.example ", "role": "admin"})
+        self.assertEqual(response.status_code, 200, response.text)
+        body = response.json()
+        self.assertFalse(body["emailed"])
+        self.assertTrue(body["link"].startswith("http://testserver/dashboard/invite/"))
+        token = body["link"].rsplit("/", 1)[1]
+        row, = self._rows(WorkspaceInvitation, email=self.DAVE)
+        self.assertEqual((row.workspace_id, row.role, row.created_by), (B, "admin", BOB))
+        # Only the token's hash is kept
+        self.assertEqual(row.token_hash, hashlib.sha256(token.encode()).hexdigest())
+        self.assertNotIn(token, json.dumps(body["invitation"]))
+        self.assertAlmostEqual((row.expires_at - row.created_at).days, 7)
+        entry, = self._rows(AuditLog, action="invitation.create")
+        self.assertEqual((entry.workspace_id, entry.actor, json.loads(entry.details)["email"]), (B, BOB, self.DAVE))
+        listed = [i["email"] for i in self.bob.get("/dashboard/api/invitations").json()["invitations"]]
+        self.assertIn(self.DAVE, listed)
+        in_a = self.client.get("/dashboard/api/invitations", headers=_platform_admin(A)).json()["invitations"]
+        self.assertEqual(in_a, [])
+
+    def test_an_invitation_is_accepted_once(self):
+        token = self._invite()
+        self._sign_up(self.DAVE)
+        page = self.dave.get(f"/dashboard/invite/{token}")
+        self.assertEqual(page.status_code, 200)
+        self.assertIn("Join ", page.text)
+        self.assertEqual(page.headers["Referrer-Policy"], "no-referrer")
+        response = self._accept(token)
+        self.assertEqual(response.status_code, 200, response.text)
+        member, = self._rows(WorkspaceMember, user_id=self.DAVE)
+        self.assertEqual((member.workspace_id, member.role, json.loads(member.agent_roles), member.invited_by),
+                         (B, "admin", ["user"], BOB))
+        # No longer pending, and a member of B only: not of the default workspace
+        user, = self._rows(User, user_id=self.DAVE)
+        self.assertEqual(user.get_roles(), [])
+        # The session works in B from now on
+        signer = itsdangerous.TimestampSigner(str(auth_server._SECRET_KEY))
+        cookie = json.loads(base64.b64decode(signer.unsign(response.cookies["session"])))
+        self.assertEqual(cookie[SESSION_WORKSPACE_KEY], B)
+        invitation, = self._rows(WorkspaceInvitation, email=self.DAVE)
+        self.assertEqual(invitation.accepted_by, self.DAVE)
+        entry, = self._rows(AuditLog, action="invitation.accept")
+        self.assertEqual((entry.workspace_id, entry.actor), (B, self.DAVE))
+        # Once
+        self.assertEqual(self._accept(token).status_code, 410)
+        self.assertIn("used already", self.dave.get(f"/dashboard/invite/{token}").text)
+        self.assertEqual(len(self._rows(WorkspaceMember, user_id=self.DAVE)), 1)
+
+    def test_only_the_invited_address_accepts(self):
+        token = self._invite()
+        alice = TestClient(auth_server.app, cookies=_signed_in(ALICE))
+        self.assertIn("sign in as dave@new.example", alice.get(f"/dashboard/invite/{token}").text)
+        self.assertEqual(self._accept(token, alice).status_code, 403)
+        self.assertEqual(self._rows(WorkspaceMember, workspace_id=B, user_id=ALICE), [])
+        # A user whose email is the address, under another id, may
+        session = self.Session()
+        session.query(User).filter_by(user_id=ALICE).update({"email": self.DAVE})
+        session.commit()
+        session.close()
+        self.assertEqual(self._accept(token, alice).status_code, 200)
+        member, = self._rows(WorkspaceMember, workspace_id=B, user_id=ALICE)
+        self.assertEqual(member.role, "admin")
+
+    def test_an_expired_or_revoked_invitation_is_refused(self):
+        self._sign_up(self.DAVE)
+        token = self._invite()
+        session = self.Session()
+        session.query(WorkspaceInvitation).filter_by(email=self.DAVE).update(
+            {"expires_at": datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(minutes=1)})
+        session.commit()
+        session.close()
+        self.assertEqual(self._accept(token).status_code, 410)
+        self.assertIn("has expired", self.dave.get(f"/dashboard/invite/{token}").text)
+        token = self._invite()
+        invitation_id = self._rows(WorkspaceInvitation, email=self.DAVE)[0].id
+        self.assertEqual(self.bob.delete(f"/dashboard/api/invitations/{invitation_id}").status_code, 200)
+        self.assertEqual(self._accept(token).status_code, 404)
+        self.assertEqual(self._rows(WorkspaceMember, user_id=self.DAVE), [])
+        entry, = self._rows(AuditLog, action="invitation.revoke")
+        self.assertEqual((entry.workspace_id, json.loads(entry.details)["email"]), (B, self.DAVE))
+
+    def test_only_an_owner_invites_or_revokes(self):
+        carol = "carol@b.example"
+        session = self.Session()
+        user = User(user_id=carol, roles='["user"]')
+        user.home_workspace_id = B
+        session.add(user)
+        session.commit()
+        session.close()
+        self.bob.put(f"/dashboard/api/members/{carol}", json={"role": "admin"})
+        carol_client = TestClient(auth_server.app, cookies=_signed_in(carol))
+        invitation_id = self.b_rows["invitation_id"]
+        listed = carol_client.get("/dashboard/api/invitations").json()
+        self.assertFalse(listed["can_manage"])
+        self.assertEqual(carol_client.post("/dashboard/api/invitations", json={"email": self.DAVE}).status_code, 403)
+        self.assertEqual(carol_client.delete(f"/dashboard/api/invitations/{invitation_id}").status_code, 403)
+        # A member of A: the middleware's 403
+        alice = TestClient(auth_server.app, cookies=_signed_in(ALICE))
+        self.assertEqual(alice.get("/dashboard/api/invitations").status_code, 403)
+        self.assertEqual(len(self._rows(WorkspaceInvitation, workspace_id=B)), 1)
+
+    def test_a_suspended_workspace_s_invitation_is_refused(self):
+        self._sign_up(self.DAVE)
+        token = self._invite()
+        session = self.Session()
+        session.query(Workspace).filter_by(id=B).update({"suspended_at": datetime.now(timezone.utc)})
+        session.commit()
+        session.close()
+        self.assertEqual(self._accept(token).status_code, 404)
+        self.assertIn("not valid", self.dave.get(f"/dashboard/invite/{token}").text)
+        self.assertEqual(self._rows(WorkspaceMember, user_id=self.DAVE), [])
+
+    def test_what_an_invitation_refuses(self):
+        for body in ({"email": "not an address"}, {"email": self.DAVE, "role": "god"}, {}):
+            with self.subTest(body=body):
+                self.assertEqual(self.bob.post("/dashboard/api/invitations", json=body).status_code, 400)
+        # A member, by id or by email
+        self.assertEqual(self.bob.post("/dashboard/api/invitations", json={"email": BOB}).status_code, 409)
+        # Inviting again replaces the open invitation: the first link stops working
+        self._sign_up(self.DAVE)
+        first = self._invite()
+        second = self._invite(role="member")
+        self.assertEqual(len(self._rows(WorkspaceInvitation, email=self.DAVE)), 1)
+        self.assertEqual(self._accept(first).status_code, 404)
+        self.assertEqual(self._accept(second).status_code, 200)
+        # Already a member: not used up
+        token = self._invite(email="other@new.example")
+        session = self.Session()
+        session.query(User).filter_by(user_id=self.DAVE).update({"email": "other@new.example"})
+        session.commit()
+        session.close()
+        self.assertEqual(self._accept(token).status_code, 409)
+        self.assertIsNone(self._rows(WorkspaceInvitation, email="other@new.example")[0].accepted_at)
+        for token in ("", "x" * 43, None):
+            self.assertEqual(self._accept(token).status_code, 404)
+
+    def test_the_link_is_emailed_when_smtp_is_set(self):
+        with patch.dict(os.environ, {"SMTP_HOST": "smtp.example"}), \
+                patch("shared.utils.notify.send_email", return_value=(True, "sent")) as send:
+            response = self.bob.post("/dashboard/api/invitations", json={"email": self.DAVE})
+        self.assertTrue(response.json()["emailed"])
+        to, subject, text = send.call_args.args
+        self.assertEqual(to, self.DAVE)
+        self.assertIn(B_MARKER, subject)
+        self.assertIn(response.json()["link"], text)
+
+    def test_a_workspace_is_created_with_an_invited_owner(self):
+        api = "/dashboard/api/platform/workspaces"
+        both = {"name": "Dave's team", "slug": "dave", "owner": ALICE, "owner_email": self.DAVE}
+        self.assertEqual(self.client.post(api, headers=_platform_admin(A), json=both).status_code, 400)
+        del both["owner"]
+        response = self.client.post(api, headers=_platform_admin(A), json=both)
+        self.assertEqual(response.status_code, 200, response.text)
+        created = response.json()["workspace"]
+        self.assertEqual((created["owners"], created["invited_owners"], created["members"]), ([], [self.DAVE], 0))
+        listed = {w["id"]: w for w in self.client.get(api, headers=_platform_admin(A)).json()["workspaces"]}
+        self.assertEqual(listed[created["id"]]["invited_owners"], [self.DAVE])
+        self.assertEqual(json.loads(self._rows(AuditLog, action="workspace.create")[0].details)["owner_invited"],
+                         self.DAVE)
+        self._sign_up(self.DAVE)
+        token = response.json()["invitation"]["link"].rsplit("/", 1)[1]
+        self.assertEqual(self._accept(token).status_code, 200)
+        member, = self._rows(WorkspaceMember, user_id=self.DAVE)
+        self.assertEqual((member.workspace_id, member.role), (created["id"], "owner"))
+
+    def test_signing_in_comes_back_to_the_invitation(self):
+        response = TestClient(auth_server.app).get("/dashboard/invite/abc", follow_redirects=False)
+        self.assertEqual(response.status_code, 307)
+        self.assertIn("/login?redirect=%2Fdashboard%2Finvite%2Fabc", response.headers["location"])
+        with patch.dict(os.environ, {"GOOGLE_CLIENT_ID": "id", "GOOGLE_CLIENT_SECRET": "secret"}):
+            page = self.client.get("/login", params={"redirect": "/dashboard/invite/abc"}).text
+            self.assertIn('href="/auth/login/google?next=%2Fdashboard%2Finvite%2Fabc"', page)
+            # Only to a page of this site
+            page = self.client.get("/login", params={"redirect": "//evil.example/x"}).text
+            self.assertIn('href="/auth/login/google"', page)
 
 
 if __name__ == "__main__":

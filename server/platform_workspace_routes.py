@@ -3,13 +3,15 @@ Platform → Workspaces (documents/design/2.0-plan.md, phase 3d): the installati
 workspaces, for platform administrators.
 
 A platform administrator lists every workspace, closed ones included, creates one
-with a first owner chosen from the existing users, renames it, sets "may use
+with a first owner, renames it, sets "may use
 platform keys" and its platform features, suspends and resumes it, and closes it.
 - Suspending sets suspended_at and closing sets deleted_at. Either stops the
   workspace (shared/utils/workspaces.py, open_filters); resuming undoes a suspension,
   and nothing undoes closing.
 - The default workspace can't be suspended or closed, and keeps every platform
   feature, as 1.x has them. A workspace that still has projects can't be closed.
+- The first owner is an existing user, or an email address invited as owner
+  (server/invitation_routes.py): the workspace has no member until it is accepted.
 - "May use platform keys" is stored only; nothing reads it before phase 4.
 
 Every change is written to the audit log, in the workspace it changed.
@@ -30,8 +32,12 @@ from sqlalchemy.orm import Session
 
 from server.request_context import RequestContext, get_api_request_context
 from shared.utils import audit_service
+from server.invitation_routes import (
+    create_invitation, invitation_link, invited_email, send_invitation,
+)
 from shared.utils.models import (
-    DEFAULT_WORKSPACE_ID, PLATFORM_FEATURES, Project, User, Workspace, WorkspaceMember,
+    DEFAULT_WORKSPACE_ID, PLATFORM_FEATURES, Project, User, Workspace, WorkspaceInvitation,
+    WorkspaceMember,
 )
 from shared.utils.workspaces import (
     DEFAULT_AGENT_ROLES, NON_MEMBER_ROLES, ROLE_OWNER, is_reserved_user_id,
@@ -77,13 +83,15 @@ def _iso(value: Optional[datetime]) -> Optional[str]:
     return value.isoformat() if value else None
 
 
-def _describe(workspace: Workspace, owners: List[str], members: int, projects: int) -> Dict[str, Any]:
+def _describe(workspace: Workspace, owners: List[str], members: int, projects: int,
+              invited_owners: Optional[List[str]] = None) -> Dict[str, Any]:
     return {
         "id": workspace.id, "name": workspace.name, "slug": workspace.slug,
         "status": _status(workspace), "is_default": workspace.id == DEFAULT_WORKSPACE_ID,
         "allow_platform_keys": bool(workspace.allow_platform_keys),
         "platform_features": _features(workspace),
-        "owners": owners, "members": members, "projects": projects,
+        "owners": owners, "invited_owners": invited_owners or [], "members": members,
+        "projects": projects,
         "created_at": _iso(workspace.created_at), "suspended_at": _iso(workspace.suspended_at),
         "closed_at": _iso(workspace.deleted_at),
     }
@@ -99,8 +107,20 @@ def _list(session: Session) -> List[Dict[str, Any]]:
                                   .filter(WorkspaceMember.role == ROLE_OWNER)
                                   .order_by(WorkspaceMember.user_id)):
         owners.setdefault(workspace_id, []).append(user_id)
-    return [_describe(w, owners.get(w.id, []), members.get(w.id, 0), projects.get(w.id, 0))
+    invited: Dict[int, List[str]] = {}
+    for workspace_id, email in (session.query(WorkspaceInvitation.workspace_id, WorkspaceInvitation.email)
+                                .filter(WorkspaceInvitation.role == ROLE_OWNER,
+                                        WorkspaceInvitation.accepted_at.is_(None),
+                                        WorkspaceInvitation.expires_at > _utc_now())
+                                .order_by(WorkspaceInvitation.email)):
+        invited.setdefault(workspace_id, []).append(email)
+    return [_describe(w, owners.get(w.id, []), members.get(w.id, 0), projects.get(w.id, 0),
+                      invited.get(w.id))
             for w in session.query(Workspace).order_by(Workspace.id)]
+
+
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 def _one(session: Session, workspace_id: int) -> Workspace:
@@ -180,7 +200,8 @@ async def list_workspaces(ctx: RequestContext = Depends(_platform_admin)):
 @router.post("")
 async def create_workspace(request: Request, body: Dict[str, Any] = Body(...),
                            ctx: RequestContext = Depends(_platform_admin)):
-    """Create a workspace: name, slug, owner (an existing user's id), and optionally
+    """Create a workspace: name, slug, its first owner as either owner (an existing
+    user's id) or owner_email (an address invited as owner), and optionally
     allow_platform_keys (default true) and platform_features (default none)."""
     name = _name(body.get("name"))
     slug = body.get("slug")
@@ -189,32 +210,52 @@ async def create_workspace(request: Request, body: Dict[str, Any] = Body(...),
                                                     "and hyphens, starting and ending with a letter or digit")
     allow_keys = _flag(body.get("allow_platform_keys", True), "allow_platform_keys")
     features = _feature_list(body.get("platform_features", []))
+    if ("owner" in body) == ("owner_email" in body):
+        raise HTTPException(status_code=400, detail="Give owner (a user id) or owner_email, not both")
+    owner_email = invited_email(body["owner_email"]) if "owner_email" in body else None
     session = _session()
     try:
         _name_taken(session, name)
         if session.query(Workspace.id).filter(Workspace.slug == slug).first():
             raise HTTPException(status_code=409, detail="Another workspace has this slug")
-        owner = body.get("owner")
-        agent_roles = _owner_agent_roles(session, owner)
-        owner = owner.strip()
+        owner = None
+        if owner_email is None:
+            agent_roles = _owner_agent_roles(session, body.get("owner"))
+            owner = body["owner"].strip()
         workspace = Workspace(name=name, slug=slug, allow_platform_keys=allow_keys,
                               platform_features=json.dumps(features))
         session.add(workspace)
         session.flush()
-        session.add(WorkspaceMember(workspace_id=workspace.id, user_id=owner, role=ROLE_OWNER,
-                                    agent_roles=agent_roles, invited_by=ctx.user_id))
+        token = None
+        if owner is not None:
+            session.add(WorkspaceMember(workspace_id=workspace.id, user_id=owner, role=ROLE_OWNER,
+                                        agent_roles=agent_roles, invited_by=ctx.user_id))
+        else:
+            invitation, token, _ = create_invitation(session, workspace.id, owner_email, ROLE_OWNER,
+                                                     ctx.user_id)
         session.commit()
         workspace_id = workspace.id
-        result = _describe(workspace, [owner], 1, 0)
+        invitation_id = invitation.id if token else None
+        result = _describe(workspace, [owner] if owner else [], 1 if owner else 0, 0,
+                           [owner_email] if token else None)
     except IntegrityError:
         session.rollback()
         raise HTTPException(status_code=409, detail="Another workspace has this name or slug")
     finally:
         session.close()
-    _audit(ctx, audit_service.ACTION_WORKSPACE_CREATE, workspace_id,
-           {"name": name, "slug": slug, "owner": owner, "allow_platform_keys": allow_keys,
-            "platform_features": features}, request)
-    return {"workspace": result}
+    details = {"name": name, "slug": slug, "allow_platform_keys": allow_keys,
+               "platform_features": features}
+    details.update({"owner": owner} if owner else {"owner_invited": owner_email})
+    _audit(ctx, audit_service.ACTION_WORKSPACE_CREATE, workspace_id, details, request)
+    if token is None:
+        return {"workspace": result}
+    link = invitation_link(request, token)
+    emailed = await send_invitation(owner_email, name, ROLE_OWNER, ctx.user_id, link)
+    audit_service.log(ctx.user_id, audit_service.ACTION_INVITATION_CREATE,
+                      audit_service.RESOURCE_INVITATION, resource_id=invitation_id,
+                      details={"email": owner_email, "role": ROLE_OWNER, "emailed": emailed, "replaced": 0},
+                      request=request, workspace_id=workspace_id)
+    return {"workspace": result, "invitation": {"link": link, "emailed": emailed}}
 
 
 @router.put("/{workspace_id}")
