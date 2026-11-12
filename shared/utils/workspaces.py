@@ -2,27 +2,29 @@
 Workspaces (documents/design/2.0-plan.md): memberships, and the lookups that scope a
 request to its workspace (server/request_context.py).
 
-Every 1.x row belongs to the default workspace (V046). Until memberships are edited on
-their own (phase 3), a user's membership of it is derived from users.roles
-(documents/design/workspaces.md, D3):
-- the admin role makes the user an owner, anything else a member;
-- agent_roles are the user's roles without admin;
-- a widget visitor or a pending sign-up is no member at all. A widget reaches its
-  workspace through its key's project, and a pending user has not been let in yet;
-  approving them replaces 'pending' and so adds the membership.
+A user's role in a workspace (owner, admin or member) and their agent roles there,
+matched against an agent's allowed_for_roles, are their workspace_members row. Owners
+edit them on the Members page (server/member_routes.py). users.roles keeps only the
+platform roles (PLATFORM_ROLES): admin (platform administrator), pending (not let in
+yet) and widget (a widget visitor). The server's own callers (SYSTEM_CALLERS) belong
+to no workspace and keep their agent roles in users.roles.
 
-A user the platform creates on its own, for an agent of another workspace (an end
-user an API client runs through /run_sse, an A2A or a Slack user), joins that
-workspace instead: get_or_create_user() sets home_workspace_id on the new User, and
-the membership is derived in that workspace. Such a user, a member somewhere but not of
-the default workspace, isn't added to it. Until phase 3 every membership's
-agent_roles follow users.roles.
-
-sync_default_members() brings every membership in line when the auth server starts,
-which also adds the users of an installation that has just migrated. Listeners on the
-User model do the same for each user inserted, or whose roles change, after that.
-Both write through _write_members(). models.py imports this module, so the listeners
-are registered wherever users are written.
+Until phase 3e every membership was derived from users.roles (D3). What is left of it:
+- A user inserted with agent roles in users.roles, as 1.x code and the Users page
+  create them, becomes a member of their home workspace with those agent roles, and
+  users.roles keeps the platform ones (_member_for_new_user). The home workspace is
+  the default one, or the workspace a user the platform creates for an agent of
+  another workspace joins (get_or_create_user sets home_workspace_id). An admin
+  becomes its owner, anyone else a member.
+- A pending user or a widget visitor is no member anywhere: becoming one removes every
+  membership. Approving a pending user who is a member nowhere adds them to the
+  default workspace (_member_for_changed_roles).
+- Agent roles written to users.roles later move to the user's membership of the
+  default workspace.
+- move_roles_to_members() runs when the auth server starts. Once per installation it
+  derives the memberships from users.roles as 2.0 before 3e did, which also adds the
+  users of a 1.x installation, and empties users.roles of agent roles. Every start it
+  removes the memberships of pending users and widget visitors.
 
 caller_access() decides who may use a workspace's agents; the RBAC check
 (rbac_middleware.py) and the entry points ask it.
@@ -31,6 +33,7 @@ caller_access() decides who may use a workspace's agents; the RBAC check
 import json
 import logging
 import re
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Dict, List, Optional, Set, Tuple
 
 from sqlalchemy import delete, event, insert, or_, select, update
@@ -40,8 +43,8 @@ from sqlalchemy.sql.selectable import ScalarSelect
 from sqlalchemy.orm import Mapper, Session, attributes
 
 from .models import (
-    DEFAULT_WORKSPACE_ID, AgentConfig, AgentConfigVersion, FileSearchStore, Project, TestCase,
-    User, WidgetApiKey, Workspace, WorkspaceMember, parse_roles,
+    DEFAULT_WORKSPACE_ID, AgentConfig, AgentConfigVersion, FileSearchStore, Project, SystemSetting,
+    TestCase, User, WidgetApiKey, Workspace, WorkspaceMember, parse_roles,
 )
 
 if TYPE_CHECKING:
@@ -52,8 +55,15 @@ logger = logging.getLogger(__name__)
 ROLE_OWNER = "owner"
 ROLE_ADMIN = "admin"
 ROLE_MEMBER = "member"
+MEMBER_ROLES = (ROLE_OWNER, ROLE_ADMIN, ROLE_MEMBER)
+# The roles users.roles keeps; every other role is an agent role, per membership
+PLATFORM_ROLES = ("admin", "pending", "widget")
 # Users with one of these roles belong to no workspace (see the module docstring)
 NON_MEMBER_ROLES = {"widget", "pending"}
+# The agent roles of a member added with none given (workspace_members' default)
+DEFAULT_AGENT_ROLES = ["user"]
+# system_settings row set once move_roles_to_members() has moved users.roles
+ROLES_MOVED_SETTING = "workspaces.roles_moved_to_members"
 
 # (role, agent_roles as stored) of a membership; None for no membership
 Membership = Optional[Tuple[str, str]]
@@ -62,12 +72,22 @@ _DELETE_CHUNK = 500
 
 
 def membership_from_roles(roles: List[str]) -> Optional[Tuple[str, List[str]]]:
-    """(role, agent_roles) in the default workspace for a user with these roles, or
-    None when such a user is no member."""
+    """(role, agent_roles) for a user who has these roles in users.roles, as phase 2
+    derived it, or None when such a user is no member."""
     if NON_MEMBER_ROLES.intersection(roles):
         return None
     role = ROLE_OWNER if "admin" in roles else ROLE_MEMBER
     return role, [r for r in roles if r != "admin"]
+
+
+def platform_roles(roles: List[str]) -> List[str]:
+    """The roles users.roles keeps."""
+    return [r for r in roles if r in PLATFORM_ROLES]
+
+
+def agent_roles(roles: List[str]) -> List[str]:
+    """The roles that belong to a membership."""
+    return [r for r in roles if r not in PLATFORM_ROLES]
 
 
 def _membership(raw_roles: Optional[str]) -> Membership:
@@ -88,22 +108,13 @@ def _write_members(connection: Connection, changes: Dict[str, Tuple[Membership, 
     removed = [user_id for user_id, (current, wanted) in changes.items() if current and not wanted]
     if added:
         connection.execute(insert(members), added)
-    for user_id, (role, agent_roles) in updated.items():
+    for user_id, (role, roles) in updated.items():
         connection.execute(update(members).where(in_workspace, members.c.user_id == user_id)
-                           .values(role=role, agent_roles=agent_roles))
+                           .values(role=role, agent_roles=roles))
     for i in range(0, len(removed), _DELETE_CHUNK):
         connection.execute(delete(members).where(
             in_workspace, members.c.user_id.in_(removed[i:i + _DELETE_CHUNK])))
     return {"added": len(added), "updated": len(updated), "removed": len(removed)}
-
-
-def _current_membership(connection: Connection, user_id: str) -> Membership:
-    members = WorkspaceMember.__table__
-    row = connection.execute(
-        select(members.c.role, members.c.agent_roles)
-        .where(members.c.workspace_id == DEFAULT_WORKSPACE_ID, members.c.user_id == user_id)
-    ).first()
-    return tuple(row) if row else None
 
 
 def _members_elsewhere(connection: Connection, user_ids: Optional[List[str]] = None) -> Set[str]:
@@ -115,89 +126,130 @@ def _members_elsewhere(connection: Connection, user_ids: Optional[List[str]] = N
     return {row[0] for row in connection.execute(query)}
 
 
+def _keep_platform_roles(connection: Connection, user: User) -> List[str]:
+    """Leave users.roles the platform roles, unless the user is one of the server's own
+    callers; returns the agent roles taken out."""
+    roles = parse_roles(user.roles)
+    taken = agent_roles(roles)
+    if not taken or is_reserved_user_id(user.user_id):
+        return []
+    kept = json.dumps(platform_roles(roles))
+    users = User.__table__
+    connection.execute(update(users).where(users.c.user_id == user.user_id).values(roles=kept))
+    attributes.set_committed_value(user, "roles", kept)
+    return taken
+
+
 @event.listens_for(User, "after_insert")
 def _member_for_new_user(mapper: Mapper, connection: Connection, user: User) -> None:
     workspace_id = getattr(user, "home_workspace_id", None) or DEFAULT_WORKSPACE_ID
     _write_members(connection, {user.user_id: (None, _membership(user.roles))}, workspace_id)
+    _keep_platform_roles(connection, user)
 
 
 @event.listens_for(User, "after_update")
 def _member_for_changed_roles(mapper: Mapper, connection: Connection, user: User) -> None:
     if not attributes.get_history(user, "roles").has_changes():
         return
-    wanted = _membership(user.roles)
-    current = _current_membership(connection, user.user_id)
-    elsewhere = bool(_members_elsewhere(connection, [user.user_id]))
-    if current or not elsewhere:
-        _write_members(connection, {user.user_id: (current, wanted)})
-    if elsewhere and wanted:
-        members = WorkspaceMember.__table__
+    roles = parse_roles(user.roles)
+    members = WorkspaceMember.__table__
+    if NON_MEMBER_ROLES.intersection(roles):
+        # pending or widget: no member anywhere
+        connection.execute(delete(members).where(members.c.user_id == user.user_id))
+        return
+    if is_reserved_user_id(user.user_id):
+        return
+    taken = _keep_platform_roles(connection, user)
+    member_anywhere = connection.execute(
+        select(members.c.id).where(members.c.user_id == user.user_id).limit(1)).first()
+    if member_anywhere is None:
+        # An approved sign-up joins the default workspace
+        role = ROLE_OWNER if "admin" in roles else ROLE_MEMBER
+        connection.execute(insert(members).values(
+            workspace_id=DEFAULT_WORKSPACE_ID, user_id=user.user_id, role=role,
+            agent_roles=json.dumps(taken or ([] if "admin" in roles else DEFAULT_AGENT_ROLES))))
+    elif taken:
         connection.execute(update(members).where(
-            members.c.user_id == user.user_id, members.c.workspace_id != DEFAULT_WORKSPACE_ID,
-        ).values(agent_roles=wanted[1]))
-    elif elsewhere:
-        # pending or widget: no member anywhere, not only in the default workspace
-        _remove_elsewhere(connection, [user.user_id])
+            members.c.workspace_id == DEFAULT_WORKSPACE_ID, members.c.user_id == user.user_id,
+        ).values(agent_roles=json.dumps(taken)))
 
 
-def _remove_elsewhere(connection: Connection, user_ids: List[str]) -> int:
-    """Delete the users' memberships outside the default workspace; returns how many."""
+def _derive_default_members(connection: Connection, users: List[Tuple[str, Optional[str]]],
+                            elsewhere: Set[str]) -> Dict[str, int]:
+    """Phase 2's sync: every user's membership of the default workspace from users.roles.
+    A user who is a member of another workspace only is left out of it."""
     members = WorkspaceMember.__table__
-    removed = 0
-    for i in range(0, len(user_ids), _DELETE_CHUNK):
-        removed += connection.execute(delete(members).where(
-            members.c.workspace_id != DEFAULT_WORKSPACE_ID,
-            members.c.user_id.in_(user_ids[i:i + _DELETE_CHUNK]))).rowcount
-    return removed
-
-
-def sync_default_members(session: Session) -> Dict[str, int]:
-    """Make every user's membership of the default workspace match users.roles.
-
-    Reads users and members as plain rows, since widget visitors can make users a
-    large table, and writes only what differs. A user who is a member of another
-    workspace only is left out of it, and one whose roles make them no member
-    (pending, widget) loses the memberships of the other workspaces too. Returns how
-    many memberships were added, updated and removed. Safe to run on every start.
-    """
-    connection = session.connection()
-    members = WorkspaceMember.__table__
-    current = {user_id: (role, agent_roles) for user_id, role, agent_roles in connection.execute(
+    current = {user_id: (role, roles) for user_id, role, roles in connection.execute(
         select(members.c.user_id, members.c.role, members.c.agent_roles)
         .where(members.c.workspace_id == DEFAULT_WORKSPACE_ID))}
-    elsewhere = _members_elsewhere(connection)
-    users = User.__table__
     changes = {}
-    no_member = []
-    for user_id, raw_roles in connection.execute(select(users.c.user_id, users.c.roles)):
-        wanted = _membership(raw_roles)
-        if wanted is None and user_id in elsewhere:
-            no_member.append(user_id)
+    for user_id, raw_roles in users:
         if user_id in elsewhere and user_id not in current:
             continue
+        wanted = _membership(raw_roles)
         if current.get(user_id) != wanted:
             changes[user_id] = (current.get(user_id), wanted)
-    counts = _write_members(connection, changes)
-    counts["removed"] += _remove_elsewhere(connection, no_member)
+    return _write_members(connection, changes)
+
+
+def move_roles_to_members(session: Session) -> Dict[str, int]:
+    """Memberships from users.roles, once per installation; then every start, no
+    membership for a pending user or a widget visitor.
+
+    The first run derives every user's membership of the default workspace as phase 2
+    did, and leaves users.roles the platform roles (the server's own callers excepted),
+    so that memberships hold the agent roles from then on. Reads users as plain rows,
+    since widget visitors can make the table large. Returns how many memberships were
+    added, updated and removed, and how many users' roles were moved."""
+    connection = session.connection()
+    users = User.__table__
+    rows = [(user_id, raw) for user_id, raw in connection.execute(select(users.c.user_id, users.c.roles))]
+    elsewhere = _members_elsewhere(connection)
+    counts = {"added": 0, "updated": 0, "removed": 0, "moved": 0}
+    if session.get(SystemSetting, ROLES_MOVED_SETTING) is None:
+        counts.update(_derive_default_members(connection, rows, elsewhere))
+        for user_id, raw in rows:
+            roles = parse_roles(raw)
+            if agent_roles(roles) and not is_reserved_user_id(user_id):
+                connection.execute(update(users).where(users.c.user_id == user_id)
+                                   .values(roles=json.dumps(platform_roles(roles))))
+                counts["moved"] += 1
+        session.add(SystemSetting(setting_key=ROLES_MOVED_SETTING,
+                                  value=datetime.now(timezone.utc).isoformat(), updated_by="system"))
+    no_member = [user_id for user_id, raw in rows if NON_MEMBER_ROLES.intersection(parse_roles(raw))]
+    members = WorkspaceMember.__table__
+    for i in range(0, len(no_member), _DELETE_CHUNK):
+        counts["removed"] += connection.execute(delete(members).where(
+            members.c.user_id.in_(no_member[i:i + _DELETE_CHUNK]))).rowcount
     session.commit()
     return counts
 
 
 def run_member_sync(db_client: Optional["DatabaseClient"]) -> None:
-    """sync_default_members() at startup. Never raises."""
+    """move_roles_to_members() at startup. Never raises."""
     session = db_client.get_session() if db_client else None
     if not session:
         return
     try:
-        counts = sync_default_members(session)
+        counts = move_roles_to_members(session)
         if any(counts.values()):
-            logger.info("Default workspace members: %s added, %s updated, %s removed",
-                        counts["added"], counts["updated"], counts["removed"])
+            logger.info("Workspace members: %s added, %s updated, %s removed; roles of %s "
+                        "users moved to their memberships", counts["added"], counts["updated"],
+                        counts["removed"], counts["moved"])
     except Exception as e:
         session.rollback()
-        logger.error("Could not sync the default workspace members: %s", e)
+        logger.error("Could not sync the workspace members: %s", e)
     finally:
         session.close()
+
+
+def agent_roles_in(session: Session, workspace_id: Optional[int], user_id: str) -> List[str]:
+    """The user's agent roles in the workspace; none when they are no member."""
+    if workspace_id is None:
+        return []
+    raw = session.query(WorkspaceMember.agent_roles).filter(
+        WorkspaceMember.workspace_id == workspace_id, WorkspaceMember.user_id == user_id).scalar()
+    return parse_roles(raw) if raw else []
 
 
 def workspace_of_project(session: Session, project_id: Optional[int]) -> Optional[int]:

@@ -41,9 +41,12 @@ class TestBuiltinAdminRoles(unittest.TestCase):
         self.mw.user_service = self.service
 
     def _roles(self, user_id: str) -> list:
+        """The user's platform roles, and their agent roles in the default workspace."""
+        from shared.utils.workspaces import agent_roles_in
         session = self.Session()
         try:
-            return session.query(User).filter(User.user_id == user_id).first().get_roles()
+            user = session.query(User).filter(User.user_id == user_id).first()
+            return user.get_roles() + agent_roles_in(session, 1, user_id)
         finally:
             session.close()
 
@@ -60,7 +63,7 @@ class TestBuiltinAdminRoles(unittest.TestCase):
 
         ok, msg = self.mw.check_agent_access("boss", {"name": "a", "allowed_for_roles": []})
         self.assertTrue(ok, msg)
-        self.assertEqual(self._roles("boss"), ["user", "admin"])
+        self.assertEqual(self._roles("boss"), ["admin", "user"])
         self.assertIn("admin", self.service.get_user_roles("boss"))
 
     def test_other_users_still_get_user_role(self) -> None:

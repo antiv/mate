@@ -225,15 +225,34 @@ class _Db(unittest.TestCase):
 
 
 class TestMembers(_Db):
+    """Memberships hold a user's role and agent roles; users.roles keeps the platform
+    roles (#277, 3e)."""
 
     def _add_users_without_members(self, **roles):
-        """Users as a 1.x installation has them: no memberships yet."""
+        """Users as a 1.x installation has them: agent roles in users.roles, no
+        memberships yet."""
         session = self.Session()
         session.add_all([User(user_id=user_id, roles=json.dumps(r)) for user_id, r in roles.items()])
         session.commit()
         session.query(WorkspaceMember).delete()
+        for user_id, r in roles.items():
+            session.query(User).filter_by(user_id=user_id).update({"roles": json.dumps(r)})
         session.commit()
         session.close()
+
+    def _move(self) -> dict:
+        session = self.Session()
+        try:
+            return workspaces.move_roles_to_members(session)
+        finally:
+            session.close()
+
+    def roles(self, user_id: str) -> list:
+        session = self.Session()
+        try:
+            return session.query(User).filter_by(user_id=user_id).one().get_roles()
+        finally:
+            session.close()
 
     def test_roles_map_to_owner_and_member(self):
         self.assertEqual(workspaces.membership_from_roles(["admin", "user"]), ("owner", ["user"]))
@@ -242,24 +261,34 @@ class TestMembers(_Db):
         self.assertIsNone(workspaces.membership_from_roles(["widget"]))
         self.assertIsNone(workspaces.membership_from_roles(["pending"]))
 
-    def test_the_startup_sync_adds_every_user(self):
-        self._add_users_without_members(boss=["admin", "user"], ana=["user", "developer"])
-        session = self.Session()
-        self.assertEqual(workspaces.sync_default_members(session), {"added": 2, "updated": 0, "removed": 0})
-        session.close()
+    def test_the_first_start_moves_every_user_s_roles_to_a_membership(self):
+        self._add_users_without_members(boss=["admin", "user"], ana=["user", "developer"],
+                                        trigger_runner=["user"])
+        self.assertEqual(self._move(), {"added": 3, "updated": 0, "removed": 0, "moved": 2})
         self.assertEqual(self.members(), {"boss": (1, "owner", ["user"]),
-                                          "ana": (1, "member", ["user", "developer"])})
+                                          "ana": (1, "member", ["user", "developer"]),
+                                          "trigger_runner": (1, "member", ["user"])})
+        self.assertEqual((self.roles("boss"), self.roles("ana")), (["admin"], []))
+        # The server's own caller has no workspace to hold its roles
+        self.assertEqual(self.roles("trigger_runner"), ["user"])
+        # Once: a member removed later stays removed, and agent roles set on a
+        # membership stay
         session = self.Session()
-        self.assertEqual(workspaces.sync_default_members(session), {"added": 0, "updated": 0, "removed": 0})
+        session.query(WorkspaceMember).filter_by(user_id="ana").delete()
+        session.query(WorkspaceMember).filter_by(user_id="boss").update({"agent_roles": '["finance"]'})
+        session.commit()
         session.close()
+        self.assertEqual(self._move(), {"added": 0, "updated": 0, "removed": 0, "moved": 0})
+        self.assertNotIn("ana", self.members())
+        self.assertEqual(self.members()["boss"], (1, "owner", ["finance"]))
 
-    def test_the_startup_sync_corrects_a_member(self):
+    def test_the_first_start_corrects_a_member_from_before(self):
         self._add_users_without_members(ana=["user"])
         session = self.Session()
         session.add(WorkspaceMember(workspace_id=1, user_id="ana", role="owner", agent_roles="[]"))
         session.commit()
-        self.assertEqual(workspaces.sync_default_members(session), {"added": 0, "updated": 1, "removed": 0})
         session.close()
+        self.assertEqual(self._move(), {"added": 0, "updated": 1, "removed": 0, "moved": 1})
         self.assertEqual(self.members(), {"ana": (1, "member", ["user"])})
 
     def test_a_new_user_becomes_a_member(self):
@@ -267,14 +296,33 @@ class TestMembers(_Db):
         with patch("shared.utils.user_service.get_database_client", return_value=self.db):
             UserService().get_or_create_user("ana")
         self.assertEqual(self.members(), {"ana": (1, "member", ["user"])})
+        self.assertEqual(self.roles("ana"), [])
 
-    def test_a_role_change_follows(self):
+    def test_a_user_written_with_agent_roles_keeps_the_platform_ones(self):
+        session = self.Session()
+        session.add(User(user_id="boss", roles='["admin", "user", "developer"]'))
+        session.commit()
+        session.close()
+        self.assertEqual(self.members(), {"boss": (1, "owner", ["user", "developer"])})
+        self.assertEqual(self.roles("boss"), ["admin"])
+
+    def test_platform_roles_no_longer_change_the_membership(self):
         from shared.utils.user_service import UserService
         with patch("shared.utils.user_service.get_database_client", return_value=self.db):
             service = UserService()
             service.get_or_create_user("ana")
-            service.update_user_roles("ana", ["admin", "user"])
-        self.assertEqual(self.members(), {"ana": (1, "owner", ["user"])})
+            service.update_user_roles("ana", ["admin"])
+        self.assertEqual(self.members(), {"ana": (1, "member", ["user"])})
+        self.assertEqual(self.roles("ana"), ["admin"])
+
+    def test_agent_roles_written_later_go_to_the_default_membership(self):
+        from shared.utils.user_service import UserService
+        with patch("shared.utils.user_service.get_database_client", return_value=self.db):
+            service = UserService()
+            service.get_or_create_user("ana")
+            service.update_user_roles("ana", ["admin", "finance"])
+        self.assertEqual(self.members(), {"ana": (1, "member", ["finance"])})
+        self.assertEqual(self.roles("ana"), ["admin"])
 
     def test_widget_visitors_and_pending_users_are_no_members(self):
         from shared.utils.user_service import UserService
@@ -285,19 +333,43 @@ class TestMembers(_Db):
         session.commit()
         session.close()
         self.assertEqual(self.members(), {})
+        self.assertEqual(self.roles("widget_3_visitor"), ["widget"])
 
     def test_approving_a_pending_user_adds_the_member_and_the_reverse_removes_it(self):
         session = self.Session()
         user = User(user_id="sso@corp.com", roles='["pending"]')
         session.add(user)
         session.commit()
-        user.set_roles(["user"])
+        user.set_roles([])
         session.commit()
         self.assertEqual(self.members(), {"sso@corp.com": (1, "member", ["user"])})
         user.set_roles(["pending"])
         session.commit()
         session.close()
         self.assertEqual(self.members(), {})
+
+    def test_approving_with_agent_roles_gives_them(self):
+        session = self.Session()
+        user = User(user_id="sso@corp.com", roles='["pending"]')
+        session.add(user)
+        session.commit()
+        user.set_roles(["support"])
+        session.commit()
+        session.close()
+        self.assertEqual(self.members(), {"sso@corp.com": (1, "member", ["support"])})
+        self.assertEqual(self.roles("sso@corp.com"), [])
+
+    def test_a_member_of_another_workspace_isn_t_added_to_the_default_one(self):
+        session = self.Session()
+        session.add(Workspace(id=2, name="Other", slug="other"))
+        user = User(user_id="bo", roles='["user"]')
+        user.home_workspace_id = 2
+        session.add(user)
+        session.commit()
+        user.set_roles(["admin"])
+        session.commit()
+        session.close()
+        self.assertEqual(self.members(), {"bo": (2, "member", ["user"])})
 
     def test_blocking_a_user_removes_them_from_every_workspace(self):
         # A member of another workspace too, or of another workspace only (#277)
@@ -315,28 +387,31 @@ class TestMembers(_Db):
         session.close()
         self.assertEqual(self.members(), {})
 
-    def test_the_startup_sync_removes_a_blocked_user_from_every_workspace(self):
+    def test_every_start_removes_a_blocked_user_from_every_workspace(self):
         # A user blocked before the role change removed the other memberships
         self._add_users_without_members(ana=["pending"], bo=["user"])
         session = self.Session()
         session.add_all([WorkspaceMember(workspace_id=2, user_id="ana", role="member", agent_roles="[]"),
                          WorkspaceMember(workspace_id=2, user_id="bo", role="member", agent_roles="[]")])
         session.commit()
-        self.assertEqual(workspaces.sync_default_members(session),
-                         {"added": 0, "updated": 0, "removed": 1})
         session.close()
+        self.assertEqual(self._move(), {"added": 0, "updated": 0, "removed": 1, "moved": 1})
         self.assertEqual(self.members(), {"bo": (2, "member", [])})
+        session = self.Session()
+        session.add(WorkspaceMember(workspace_id=2, user_id="ana", role="member", agent_roles="[]"))
+        session.commit()
+        session.close()
+        self.assertEqual(self._move()["removed"], 1)
 
-    def test_the_startup_sync_removes_a_widget_visitor(self):
+    def test_every_start_removes_a_widget_visitor(self):
         # A membership written before visitors were left out
         self._add_users_without_members(widget_3_visitor=["widget"], ana=["user"])
         session = self.Session()
         session.add(WorkspaceMember(workspace_id=1, user_id="widget_3_visitor", role="member",
                                     agent_roles='["widget"]'))
         session.commit()
-        self.assertEqual(workspaces.sync_default_members(session),
-                         {"added": 1, "updated": 0, "removed": 1})
         session.close()
+        self.assertEqual(self._move(), {"added": 1, "updated": 0, "removed": 1, "moved": 1})
         self.assertEqual(self.members(), {"ana": (1, "member", ["user"])})
 
     def test_other_changes_leave_the_member_alone(self):

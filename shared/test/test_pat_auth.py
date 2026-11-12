@@ -83,6 +83,10 @@ class TestGetPatUser(unittest.TestCase):
         self._db_patch = patch("server.pat_auth.get_database_client", return_value=db)
         self._db_patch.start()
         self.addCleanup(self._db_patch.stop)
+        # The user's platform roles only: no agent roles in the request's workspace
+        roles = patch("server.pat_auth.api_roles", side_effect=lambda user, workspace_id: user.get_roles())
+        roles.start()
+        self.addCleanup(roles.stop)
 
     def _call(self, request):
         return asyncio.run(get_pat_user(request))
@@ -197,11 +201,12 @@ class TestDashboardUserMayHoldToken(unittest.TestCase):
     """The account menu offers a token only to users the API would accept."""
 
     def _may(self, user_id, admin, roles):
-        service = MagicMock()
-        service.get_user_roles.return_value = roles
+        """roles: the user's platform roles and agent roles in the current workspace."""
         with patch("server.auth.get_dashboard_auth_user", return_value=user_id), \
                 patch("server.auth.is_admin_user", return_value=admin), \
-                patch("shared.utils.user_service.get_user_service", return_value=service), \
+                patch("shared.utils.user_service.get_user_service", return_value=MagicMock()), \
+                patch("server.request_context.context_for", return_value=MagicMock(workspace_id=1)), \
+                patch("server.pat_auth.api_roles", return_value=roles), \
                 patch.dict(os.environ, {"ALLOWED_API_ROLES": "developer"}):
             return dashboard_user_may_hold_token(MagicMock())
 
@@ -219,7 +224,7 @@ class TestDashboardUserMayHoldToken(unittest.TestCase):
 
     def test_roles_that_cannot_be_read_refuse(self):
         service = MagicMock()
-        service.get_user_roles.side_effect = RuntimeError("database down")
+        service.get_user_by_id.side_effect = RuntimeError("database down")
         with patch("server.auth.get_dashboard_auth_user", return_value="dev@example.com"), \
                 patch("server.auth.is_admin_user", return_value=False), \
                 patch("shared.utils.user_service.get_user_service", return_value=service):

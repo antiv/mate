@@ -81,11 +81,12 @@ Invite the bot to a channel with `/invite @YourBot`, then write
 Before 1.6 the id was `slack_<user id>`, without the workspace. After the upgrade:
 
 - A Slack user's first message creates the new id with the roles you gave the old
-  one, so nobody loses access to a restricted agent. This holds for an agent of the
+  one (its platform roles, and its agent roles in the Default workspace), so nobody
+  loses access to a restricted agent. This holds for an agent of the
   Default workspace, where the old id was used; an agent of another workspace starts
   each Slack user with the default role. The **Audit Log** records it as
-  a user created by `system`, naming the old id. Change roles on the new id from
-  then on; the old id is no longer used.
+  a user created by `system`, naming the old id. Change the new id's agent roles on
+  the **Members** page from then on; the old id is no longer used.
 - The bot starts every existing thread and direct-message conversation afresh: it
   does not see what was said before the upgrade.
 - The old id keeps its conversations, usage and audit entries, so they are still

@@ -19,11 +19,12 @@ talk to the agents you are allowed to use, in two ways:
 
 ## Who can have one
 
-Admins, and people with a role that may use the API. By default that is the
-`developer` role; your administrator can change the list with the
-`ALLOWED_API_ROLES` setting. Ask an administrator to give you `developer` on the
-**Users** page if **Personal Tokens** is missing from your account menu. See
-[Users and roles](users-and-roles.md).
+Admins, and people with an agent role that may use the API in the workspace they
+work in. By default that is the `developer` role; your administrator can change the
+list with the `ALLOWED_API_ROLES` setting. Ask an owner of the workspace to give you
+`developer` on its **Members** page if **Personal Tokens** is missing from your
+account menu. A token works in the workspace it was created in, and checks your
+agent roles there each time it is used. See [Users and roles](users-and-roles.md).
 
 A token does not widen what you may do. Every agent still checks your roles against
 its **Allowed Roles**, as in the Work Room.

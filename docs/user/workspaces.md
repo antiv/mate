@@ -46,8 +46,9 @@ Every workspace is listed, closed ones too, with:
 5. Set **May use platform keys** and the **Platform features**, and click **Save**.
 
 The owner can now open the workspace from the workspace menu in the top bar, and
-has its whole dashboard: they create its projects and agents. Their agent roles there
-are their roles, without `admin`. You see the workspace menu too, since you may open
+has its whole dashboard: they create its projects and agents, and add people on its
+**Members** page (see [Users and roles](users-and-roles.md#members)). Their agent
+roles there are those they have in the Default workspace, or `user`. You see the workspace menu too, since you may open
 every workspace.
 
 ## What a workspace may use

@@ -10,7 +10,7 @@ generated: true
 
 # HTTP API reference
 
-Every HTTP route declared in the code: **276** routes. 36 have no docstring and so no summary here.
+Every HTTP route declared in the code: **281** routes. 36 have no docstring and so no summary here.
 
 This page lists what exists and where it is implemented. For request and response schemas, and to try a call, use the live Swagger UI under **Documentation → API** in the dashboard.
 
@@ -18,7 +18,7 @@ Requests to `/dashboard/api/*` require an admin, apart from the short allowlist 
 
 ## Auth server and dashboard
 
-Port 8000. Everything a browser or an external client talks to. 256 routes.
+Port 8000. Everything a browser or an external client talks to. 261 routes.
 
 ### Authentication
 
@@ -158,6 +158,15 @@ Documentation pages and search, served from the docs/ folder.
 |---|---|---|---|
 | `GET` | `/dashboard/api/guardrail-logs` | Get guardrail trigger logs with optional filters | shared/utils/dashboard/dashboard_server.py · get_guardrail_logs |
 
+### Dashboard - Members
+
+| Method | Path | Summary | Implemented in |
+|---|---|---|---|
+| `GET` | `/dashboard/api/members` | The current workspace's members, and whether the caller may change them | server/member_routes.py · list_members |
+| `POST` | `/dashboard/api/members/leave` | Leave the current workspace | server/member_routes.py · leave_workspace |
+| `DELETE` | `/dashboard/api/members/{user_id}` | Remove a member from the workspace | server/member_routes.py · remove_member |
+| `PUT` | `/dashboard/api/members/{user_id}` | Change a member's role, agent roles or both | server/member_routes.py · update_member |
+
 ### Dashboard - Memory Blocks
 
 | Method | Path | Summary | Implemented in |
@@ -197,6 +206,7 @@ Web interface pages for system management.
 | `GET` | `/dashboard/evals` | — | shared/utils/dashboard/dashboard_server.py · dashboard_evals |
 | `GET` | `/dashboard/guardrail-logs` | Dashboard guardrail trigger log viewer | shared/utils/dashboard/dashboard_server.py · dashboard_guardrail_logs |
 | `GET` | `/dashboard/integrations` | — | shared/utils/dashboard/dashboard_server.py · dashboard_integrations |
+| `GET` | `/dashboard/members` | Workspace settings → Members (server/member_routes.py) | shared/utils/dashboard/dashboard_server.py · dashboard_members |
 | `GET` | `/dashboard/migrations` | Dashboard migrations page | shared/utils/dashboard/dashboard_server.py · dashboard_migrations |
 | `GET` | `/dashboard/overview` | Platform Overview — Control Room landing page | shared/utils/dashboard/dashboard_server.py · dashboard_overview |
 | `GET` | `/dashboard/rate-limits` | Dashboard rate limits and budgets page | shared/utils/dashboard/dashboard_server.py · dashboard_rate_limits |
@@ -337,7 +347,7 @@ User management API endpoints.
 | `POST` | `/dashboard/api/users` | Create a new user | shared/utils/dashboard/dashboard_server.py · create_user |
 | `POST` | `/dashboard/api/users/cleanup` | Manually trigger temporary user cleanup | shared/utils/dashboard/dashboard_server.py · trigger_user_cleanup |
 | `DELETE` | `/dashboard/api/users/{user_id}` | Delete a user | shared/utils/dashboard/dashboard_server.py · delete_user |
-| `PUT` | `/dashboard/api/users/{user_id}` | Update user roles and profile data | shared/utils/dashboard/dashboard_server.py · update_user |
+| `PUT` | `/dashboard/api/users/{user_id}` | Update a user's platform roles (admin, pending) and profile data | shared/utils/dashboard/dashboard_server.py · update_user |
 
 ### Dashboard - Widget Keys
 

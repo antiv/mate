@@ -24,6 +24,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 
 from server import slack_routes
 from shared.utils.models import Base, User
+from shared.utils.workspaces import agent_roles_in
 
 
 class _Slack(unittest.TestCase):
@@ -58,10 +59,11 @@ class _Slack(unittest.TestCase):
         session.close()
 
     def _roles(self, user_id):
+        """The user's platform roles, and their agent roles in the default workspace."""
         session = self.Session()
         try:
             user = session.query(User).filter(User.user_id == user_id).first()
-            return user.get_roles() if user else None
+            return user.get_roles() + agent_roles_in(session, 1, user_id) if user else None
         finally:
             session.close()
 

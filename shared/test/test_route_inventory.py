@@ -44,6 +44,7 @@ USER_ROUTES = {
     ("POST", "/dashboard/api/workroom/title"),
     ("GET", "/dashboard/api/workspaces"),
     ("PUT", "/dashboard/api/workspaces/current"),
+    ("POST", "/dashboard/api/members/leave"),
 }
 
 _PARAM = re.compile(r"\{(\w+)(?::(\w+))?\}")
