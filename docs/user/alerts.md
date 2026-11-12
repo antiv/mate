@@ -39,7 +39,8 @@ the rule does not fire that round.
 
 For a budget rule, leave the limit empty to use the budget already configured
 for the same scope on the [Rate Limits](rate-limits.md) page, so the number lives in
-one place.
+one place. A **Whole workspace** budget rule measures what every agent of the
+workspace used or spent, against the workspace budget there.
 
 A person being refused by an agent's role check is not counted as an agent error.
 
@@ -62,7 +63,7 @@ answers.
    | **Agent** | the agent's name | that agent |
    | **Project** | the project id | every agent in the project |
    | **User** | the user id | that person's requests |
-   | **Global** | none | every agent of the workspace |
+   | **Whole workspace** | none | every agent of the workspace |
 
    A rule belongs to the workspace it was made in and watches only what happens
    there: an agent or project of another workspace is refused as not found, and a
@@ -103,10 +104,10 @@ and send a test notification to check the destination.
 
 ## Rules worth having
 
-- **Agent errors**, scope Global, 5 in 15 minutes: something is broken, often a
+- **Agent errors**, scope Whole workspace, 5 in 15 minutes: something is broken, often a
   provider key or an outage.
 - **Budget threshold**, 80% of the monthly project budget: time to look before the
-  limit blocks people.
+  limit blocks people. Scope Whole workspace does the same for the workspace budget.
 - **Guardrail hits**, on the agent behind a public widget: someone may be probing it.
-- **Fallback model used**, scope Global, 10 in 15 minutes: a provider is failing and
+- **Fallback model used**, scope Whole workspace, 10 in 15 minutes: a provider is failing and
   the fallback is carrying the load.

@@ -8,7 +8,7 @@
         <div class="min-w-0">
             <h2 class="text-xl font-bold text-gray-900 dark:text-white">Rate Limits</h2>
             <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                Configure per-user, per-agent, and per-project limits. Enable with <code class="bg-gray-100 dark:bg-gray-700 px-1 rounded">RATE_LIMIT_ENABLED=true</code>.
+                Configure per-user, per-agent, per-project and whole-workspace limits. Enable with <code class="bg-gray-100 dark:bg-gray-700 px-1 rounded">RATE_LIMIT_ENABLED=true</code>.
             </p>
             <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
                 Budget notifications live on the <a href="/dashboard/alerts" class="text-blue-600 hover:underline">Alerts</a> page now.
@@ -37,6 +37,7 @@
                 <input type="text" id="usageAgentName" aria-label="Agent name" placeholder="agent_name" class="w-full sm:flex-1 min-w-0 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-sm">
                 <input type="number" id="usageProjectId" aria-label="Project ID" placeholder="project_id" class="w-full sm:w-24 min-w-0 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-sm">
                 <button data-click="loadUsage" class="bg-gray-600 hover:bg-gray-700 text-white px-3 py-1.5 rounded text-sm min-h-[44px] touch-target w-full sm:w-auto">Load</button>
+                <button data-click="loadWorkspaceUsage" class="bg-gray-600 hover:bg-gray-700 text-white px-3 py-1.5 rounded text-sm min-h-[44px] touch-target w-full sm:w-auto">Whole workspace</button>
             </div>
         </div>
     </div>
@@ -53,9 +54,11 @@
                     <option value="user">User</option>
                     <option value="agent">Agent</option>
                     <option value="project">Project</option>
+                    <option value="workspace">Whole workspace</option>
                 </select>
+                <p id="formWorkspaceNote" class="hidden text-[11px] text-gray-500 dark:text-gray-400 mt-1">Counts every agent of this workspace. Requests/min and max tokens/request don't apply.</p>
             </div>
-            <div>
+            <div id="formScopeIdRow">
                 <label for="formScopeId" class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Scope ID (user_id, agent_name, or project_id)</label>
                 <input type="text" id="formScopeId" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 rounded px-2 py-1.5 text-sm" required placeholder="e.g. user123 or chess_mate_root">
             </div>
@@ -124,7 +127,7 @@
 <script nonce="{{ request.state.csp_nonce }}">
     // Handlers this page's markup calls through data-click (csp-actions.js)
     mateActions.allow('closeModal', 'deleteConfig', 'editConfigByIndex', 'loadUsage',
-                      'loadUsageFor', 'openAddModal');
+                      'loadUsageFor', 'loadWorkspaceUsage', 'openAddModal');
 
     let editingId = null;
     let configsCache = [];
@@ -141,7 +144,7 @@
         list.innerHTML = configsCache.map((c, i) => `
             <div class="flex items-center justify-between p-2 rounded bg-gray-50 dark:bg-gray-700/50">
                 <div>
-                    <span class="font-medium text-gray-900 dark:text-white">${esc(c.scope)}:${esc(c.scope_id)}</span>
+                    <span class="font-medium text-gray-900 dark:text-white">${c.scope === 'workspace' ? 'Whole workspace' : esc(c.scope) + ':' + esc(c.scope_id)}</span>
                     <span class="text-xs text-gray-500 dark:text-gray-400 ml-2">
                         ${c.requests_per_minute ? c.requests_per_minute + '/min' : ''}
                         ${c.tokens_per_day ? '| ' + c.tokens_per_day + ' tokens/day' : ''}
@@ -170,6 +173,10 @@
 
     function loadUsageFor(scope, scopeId) {
         usageConfig = configsCache.find(c => c.scope === scope && c.scope_id === scopeId) || null;
+        if (scope === 'workspace') {
+            loadWorkspaceUsage(true);
+            return;
+        }
         if (scope === 'user') {
             document.getElementById('usageUserId').value = scopeId;
             document.getElementById('usageAgentName').value = '';
@@ -186,8 +193,17 @@
         loadUsage(true);
     }
 
-    async function loadUsage(fromConfig) {
+    function loadWorkspaceUsage(fromConfig) {
+        if (fromConfig !== true) usageConfig = configsCache.find(c => c.scope === 'workspace') || null;
+        loadUsage(true, true);
+    }
+
+    async function loadUsage(fromConfig, wholeWorkspace) {
         if (fromConfig !== true) usageConfig = null;
+        if (wholeWorkspace === true) {
+            showUsage(await apiCall('/dashboard/api/rate-limits/usage?workspace=true'), true);
+            return;
+        }
         const userId = document.getElementById('usageUserId').value.trim() || null;
         const agentName = document.getElementById('usageAgentName').value.trim() || null;
         const projectId = document.getElementById('usageProjectId').value ? parseInt(document.getElementById('usageProjectId').value) : null;
@@ -200,7 +216,10 @@
         if (agentName) params.set('agent_name', agentName);
         if (projectId) params.set('project_id', projectId);
         if (usageConfig && usageConfig.include_sub_agents) params.set('include_sub_agents', 'true');
-        const res = await apiCall('/dashboard/api/rate-limits/usage?' + params.toString());
+        showUsage(await apiCall('/dashboard/api/rate-limits/usage?' + params.toString()), false);
+    }
+
+    function showUsage(res, wholeWorkspace) {
         // Calls without a price add nothing to the spend, so a dollar budget can't see them
         const unpriced = Math.max(res.unpriced_calls_day ?? 0, res.unpriced_calls_month ?? 0);
         let unpricedNote = '';
@@ -213,7 +232,8 @@
         }
         document.getElementById('usagePanel').innerHTML = `
             <div class="space-y-1">
-                <div>Requests (last min): <strong>${res.requests_last_min ?? 0}</strong></div>
+                ${wholeWorkspace ? '<div class="font-medium text-gray-900 dark:text-white">Whole workspace</div>'
+                                 : `<div>Requests (last min): <strong>${res.requests_last_min ?? 0}</strong></div>`}
                 <div>Tokens (last hour): <strong>${(res.tokens_last_hour ?? 0).toLocaleString()}</strong></div>
                 <div>Tokens (last day): <strong>${(res.tokens_last_day ?? 0).toLocaleString()}</strong></div>
                 <div>Tokens (last 30 days): <strong>${(res.tokens_last_month ?? 0).toLocaleString()}</strong></div>
@@ -227,8 +247,23 @@
         editingId = null;
         document.getElementById('modalTitle').textContent = 'Add Rate Limit Config';
         document.getElementById('configForm').reset();
+        syncScope();
         document.getElementById('configModal').classList.remove('hidden');
     }
+
+    // A workspace budget names no scope id, and has no per-caller limits
+    function syncScope() {
+        const workspace = document.getElementById('formScope').value === 'workspace';
+        document.getElementById('formScopeIdRow').classList.toggle('hidden', workspace);
+        document.getElementById('formScopeId').required = !workspace;
+        document.getElementById('formWorkspaceNote').classList.toggle('hidden', !workspace);
+        for (const id of ['formRequestsPerMin', 'formMaxTokensPerRequest']) {
+            const input = document.getElementById(id);
+            input.disabled = workspace;
+            if (workspace) input.value = '';
+        }
+    }
+    document.getElementById('formScope').addEventListener('change', syncScope);
 
     function editConfig(c) {
         editingId = c.id;
@@ -248,6 +283,7 @@
         document.getElementById('formBlockUnpriced').checked = !!c.block_unpriced;
         document.getElementById('formIncludeSubAgents').checked = !!c.include_sub_agents;
         document.getElementById('formActionOnLimit').value = c.action_on_limit || 'block';
+        syncScope();
         document.getElementById('configModal').classList.remove('hidden');
     }
 

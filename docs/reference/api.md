@@ -256,9 +256,9 @@ Rate limit and budget configuration API endpoints.
 
 | Method | Path | Summary | Implemented in |
 |---|---|---|---|
-| `GET` | `/dashboard/api/rate-limits` | Get rate limit configs, optionally filtered by scope (user, agent, project) | shared/utils/dashboard/dashboard_server.py · get_rate_limits_api |
+| `GET` | `/dashboard/api/rate-limits` | Get rate limit configs, optionally filtered by scope (user, agent, project, workspace) | shared/utils/dashboard/dashboard_server.py · get_rate_limits_api |
 | `POST` | `/dashboard/api/rate-limits` | Create or update rate limit config | shared/utils/dashboard/dashboard_server.py · upsert_rate_limit_api |
-| `GET` | `/dashboard/api/rate-limits/usage` | Get current usage vs limits for user/agent/project; a user's in this workspace | shared/utils/dashboard/dashboard_server.py · get_rate_limit_usage_api |
+| `GET` | `/dashboard/api/rate-limits/usage` | Get current usage vs limits for user/agent/project, a user's in this workspace; with workspace=true, the whole workspace's | shared/utils/dashboard/dashboard_server.py · get_rate_limit_usage_api |
 | `DELETE` | `/dashboard/api/rate-limits/{scope}/{scope_id:path}` | Delete rate limit config | shared/utils/dashboard/dashboard_server.py · delete_rate_limit_api |
 
 ### Dashboard - Server Control

@@ -312,12 +312,12 @@ class TestMessage(_AlertTestCase):
                                   "used": 80, "limit": 100}}
         return self.service._build_payload(rule, measurement)["message"]
 
-    def test_a_global_rule_names_all_agents_not_none(self):
+    def test_a_global_rule_names_the_whole_workspace_not_none(self):
         for condition in ("agent_error_count", "guardrail_count",
                           "model_fallback_count", "budget_threshold"):
             message = self._message(condition, "global", None)
             self.assertNotIn("None", message, condition)
-            self.assertIn("all agents", message, condition)
+            self.assertIn("the whole workspace", message, condition)
 
     def test_a_scoped_rule_names_its_scope(self):
         self.assertEqual(self._message("agent_error_count", "agent", "a1"),

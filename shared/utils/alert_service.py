@@ -30,6 +30,7 @@ logger = logging.getLogger(__name__)
 CONDITION_TYPES = ('agent_error_count', 'budget_threshold', 'guardrail_count',
                    'model_fallback_count')
 DESTINATION_TYPES = ('http', 'email', 'slack', 'discord')
+# 'global' is the whole workspace of the rule ("Whole workspace" on the Alerts page)
 SCOPES = ('user', 'agent', 'project', 'global')
 
 # Chat incoming webhooks take a fixed body, not MATE's payload: Slack rejects a
@@ -324,7 +325,9 @@ class AlertService:
 
         since = datetime.now(timezone.utc) - _PERIOD_WINDOWS[period]
         service = get_token_usage_service()
-        if rule.scope == 'user':
+        if rule.scope == 'global':
+            used = service.get_workspace_tokens_since(rule.workspace_id or DEFAULT_WORKSPACE_ID, since)
+        elif rule.scope == 'user':
             used = service.get_user_tokens_since(rule.scope_id, since, rule.workspace_id)
         elif rule.scope == 'agent':
             used = service.get_agent_tokens_since(rule.scope_id, since)
@@ -349,7 +352,7 @@ class AlertService:
         """
         from .token_usage_service import get_token_usage_service
 
-        if period not in USD_PERIODS or rule.scope not in ('user', 'agent', 'project'):
+        if period not in USD_PERIODS or rule.scope not in SCOPES:
             return None
         limit = config.get('usd_limit')
         if limit is None:
@@ -362,7 +365,8 @@ class AlertService:
             # No limit anywhere, or 0, of which every cent would be "over 100%"
             return None
         since = datetime.now(timezone.utc) - _PERIOD_WINDOWS[period]
-        spend = get_token_usage_service().get_spend_since(rule.scope, rule.scope_id, since,
+        scope, scope_id = self._budget_scope(rule)
+        spend = get_token_usage_service().get_spend_since(scope, scope_id, since,
                                                           workspace_id=rule.workspace_id)
         if spend is None:
             return None
@@ -370,6 +374,12 @@ class AlertService:
         return {'value': int(100 * used / limit), 'threshold': threshold_pct,
                 'detail': {'period': period, 'unit': 'usd', 'used': round(used, 2), 'limit': limit,
                            'unpriced_calls': unpriced}}
+
+    def _budget_scope(self, rule: AlertRule) -> tuple:
+        """The rate-limit scope a budget rule measures: a global rule's is its workspace."""
+        if rule.scope == 'global':
+            return 'workspace', str(rule.workspace_id or DEFAULT_WORKSPACE_ID)
+        return rule.scope, rule.scope_id
 
     def _limit_from_rate_limit_config(self, session, rule: AlertRule,
                                       period: str, unit: str = 'tokens'):
@@ -383,10 +393,11 @@ class AlertService:
                       'month': RateLimitConfig.tokens_per_month}.get(period)
         if column is None:
             return None
+        scope, scope_id = self._budget_scope(rule)
         try:
             row = session.query(column).filter(
-                RateLimitConfig.scope == rule.scope,
-                RateLimitConfig.scope_id == rule.scope_id,
+                RateLimitConfig.scope == scope,
+                RateLimitConfig.scope_id == scope_id,
                 RateLimitConfig.workspace_id == rule.workspace_id,
             ).first()
             if not row or not row[0]:
@@ -437,7 +448,7 @@ class AlertService:
     def _build_payload(self, rule: AlertRule, measurement: Dict[str, Any]) -> Dict[str, Any]:
         detail = measurement.get('detail') or {}
         # A global rule has no scope_id; name what it covers instead of "global None"
-        subject = 'all agents' if rule.scope == 'global' else f"{rule.scope} {rule.scope_id}"
+        subject = 'the whole workspace' if rule.scope == 'global' else f"{rule.scope} {rule.scope_id}"
         if rule.condition_type == 'budget_threshold':
             # Keep the historical event name so webhooks written against the old
             # rate-limit alert keep working after the migration.

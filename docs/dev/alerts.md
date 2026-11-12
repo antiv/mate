@@ -41,7 +41,7 @@ matching `rate_limit_config` row for the same scope, so budgets stay configured 
 
 Dollar budgets: `budget_threshold` also accepts `{"unit": "usd", "threshold_pct": 90, "period": "day", "usd_limit": null}`.
 USD budget rules measure dollar cost from `token_usage_logs` via `_measure_usd_budget`. They support only `day` or `month`
-periods (not `hour`), and only `user`, `agent`, or `project` scopes. When `usd_limit` is null, it resolves from the
+periods (not `hour`). When `usd_limit` is null, it resolves from the
 matching `rate_limit_config` row (`usd_per_day` or `usd_per_month`). The spend comes from
 `TokenUsageService.get_spend_since`, which also returns the number of successful calls with
 no `cost_usd`; that count goes into the payload's `detail.unpriced_calls` and, when non-zero,
@@ -63,7 +63,12 @@ filter on `resource_id`, user scope on `actor`.
 project id, user id). Neither `token_usage_logs` nor `guardrail_logs` carries a project id,
 so a project-scoped rule is expanded into that project's agent names at evaluation time.
 
-A `global` budget rule never fires: `_measure_budget` returns `None` for global scope.
+`global` is the rule's whole workspace; the Alerts page calls it "Whole workspace". A
+`global` budget rule measures the workspace's tokens (`get_workspace_tokens_since`) or
+spend (`get_spend_since("workspace", ...)`), and a null limit resolves from the
+`rate_limit_config` row of scope `workspace` and `scope_id` the workspace's id
+(`_budget_scope`). The stored value stays `global`, which the API and existing rules
+have used since 1.x.
 
 Every rule has a `workspace_id`, set from the request on create, and the CRUD methods
 take a `workspace_id` that keeps them to that workspace's rules (`_rule`): another
@@ -119,7 +124,7 @@ Payload:
 against the old rate-limit alert keep working.
 
 `message` names the scope as `<scope> <scope_id>` (`agent support_root`, `project 5`),
-or `all agents` for a global rule, which has no `scope_id`.
+or `the whole workspace` for a global rule, which has no `scope_id`.
 
 ## Cooldown
 

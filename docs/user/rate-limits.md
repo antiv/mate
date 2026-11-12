@@ -1,6 +1,6 @@
 ---
 title: Rate limits and budgets
-summary: Cap how many requests, tokens and dollars a user, an agent or a project may use, and choose what happens at the cap.
+summary: Cap how many requests, tokens and dollars a user, an agent, a project or the whole workspace may use, and choose what happens at the cap.
 audience: user
 order: 100
 covers:
@@ -21,13 +21,15 @@ them. Limits put a ceiling on that. They are set in
 
 ## What can be limited
 
-A limit is attached to a **scope**: one user, one agent or one project.
+A limit is attached to a **scope**: one user, one agent, one project, or the whole
+workspace.
 
 | Scope | Scope ID | Limits you can set |
 |---|---|---|
 | **User** | the user id | Requests per minute, tokens per hour, tokens per day |
 | **Agent** | the agent's name | Tokens per day, maximum tokens per request |
 | **Project** | the project id | Tokens per month |
+| **Whole workspace** | none: the workspace you are working in | Tokens per hour, per day and per month |
 
 Any scope can also have a budget in **US dollars per day** and **per month**.
 
@@ -46,7 +48,8 @@ the last 30 days (**USD/month**). Spend is the sum of the [cost](usage-and-audit
 of each call, at the model's list price.
 
 - Each dollar budget is measured in its own scope: a user's budget against what that
-  user spent, an agent's against the agent's calls, a project's against all its agents.
+  user spent, an agent's against the agent's calls, a project's against all its agents,
+  and the workspace's against every agent of the workspace.
 - **Calls whose model has no price do not count**, unless you tick **Treat calls
   without a price as over the dollar budget**. If an agent uses a model without a
   price, set one under [Model prices](settings.md#model-prices), or its spend stays
@@ -70,6 +73,15 @@ every agent below it (following the parent agents set on each agent) in its dail
 token limit and its dollar budgets. The option does nothing for user and project
 configs; a project budget already counts every agent in the project.
 
+### The whole workspace
+
+A **Whole workspace** configuration is the ceiling over everything the workspace's
+agents do, whoever calls them: its token limits and dollar budgets count every call
+logged in the workspace, and nothing of another workspace. It has no scope id, since
+it is always the workspace you are working in, and no requests per minute or maximum
+tokens per request, which are per caller and per request. It applies on top of the
+user, agent and project limits: a request is refused when any of them is reached.
+
 Limits apply to chat in the dashboard, to the website widget, and to the
 OpenAI-compatible API.
 
@@ -89,7 +101,7 @@ looks like, then switch to Block with a limit comfortably above it.
 ## Add a limit
 
 1. Click **Add Config**.
-2. Choose the **Scope** and enter the **Scope ID**.
+2. Choose the **Scope** and enter the **Scope ID** (none for **Whole workspace**).
 3. Fill in the limits and the action, then **Save**.
 
 Saving a configuration for a scope and id that already has one replaces it.
@@ -103,7 +115,8 @@ dollars over the last day and 30 days, against its limits. For an agent config w
 scope had calls without a price, a warning under the spend gives their number and
 says whether this budget ignores them or treats them as over budget. To
 look up a scope that has no configuration, enter a user id, agent name or project id
-and click **Load**. A user's usage is what they used in this workspace.
+and click **Load**, or click **Whole workspace** for the workspace's own figures. A
+user's usage is what they used in this workspace.
 
 ## Being told before the limit
 
@@ -112,7 +125,8 @@ a budget rule on the **Alerts** page.
 
 ## A sensible setup for a public widget
 
-- A **project** monthly budget with **Block**, as the overall ceiling. In dollars
+- A **project** monthly budget with **Block**, as the overall ceiling (or a **Whole
+  workspace** one, when the workspace has several projects). In dollars
   it is easier to set from what you are willing to pay; in tokens it also covers
   models without a price.
 - An **agent** daily token limit with **Block**, so one bad day cannot use the month.
