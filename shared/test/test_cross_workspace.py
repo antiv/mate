@@ -933,6 +933,12 @@ class TestProxy(_TwoWorkspaces):
         self._as_member(BOB)
         self.assertEqual(self.client.get("/list-apps").json(), [B_ROOT])
 
+    def test_someone_who_is_no_member_lists_no_apps(self):
+        # A pending sign-up falls back to the default workspace, as no member of it
+        self._as_member("pending@nowhere.example")
+        self.assertEqual(self.client.get("/list-apps").json(), [])
+        self.assertEqual(self.client.get("/list-apps?detailed=true").json(), {"apps": []})
+
     def test_a_member_cannot_reach_another_workspace_s_agent(self):
         self._as_member(ALICE)
         for method, path, body in (
