@@ -9,6 +9,7 @@ import logging
 from typing import Dict, Any, Optional
 from .database_client import get_database_client
 from .user_service import get_user_service
+from .models import User, parse_roles
 from .workspaces import SYSTEM_CALLERS, agent_roles_in, agent_workspace, caller_access
 
 logger = logging.getLogger(__name__)
@@ -90,8 +91,10 @@ class RBACMiddleware:
         if not session:
             return []
         try:
-            roles = self.user_service.get_user_roles(user_id)
-            return roles + agent_roles_in(session, agent_workspace(session, agent_name), user_id)
+            # parse_roles reads a missing or empty value as ["user"]: a stranger has none
+            raw = session.query(User.roles).filter(User.user_id == user_id).scalar()
+            platform = parse_roles(raw) if raw else []
+            return platform + agent_roles_in(session, agent_workspace(session, agent_name), user_id)
         except Exception as e:
             logger.debug(f"RBAC: roles of {user_id} not read: {e}")
             return []

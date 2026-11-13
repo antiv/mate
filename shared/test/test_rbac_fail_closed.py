@@ -67,8 +67,7 @@ class TestAdkCallback(_Db):
         manager.get_root_agent_by_name.return_value = agent_row
         context = SimpleNamespace(_invocation_context=SimpleNamespace(user_id=user_id),
                                   agent_name=agent_row.name)
-        with patch.object(rbac_callback, "get_user_service", return_value=users), \
-                patch.object(rbac_callback, "get_rbac_middleware", return_value=middleware), \
+        with patch.object(rbac_callback, "get_rbac_middleware", return_value=middleware), \
                 patch("shared.utils.agent_manager.get_agent_manager", return_value=manager), \
                 patch("shared.utils.rbac_middleware.get_database_client", return_value=self.db_client), \
                 patch.object(rbac_callback, "_log_access_denied_event"):
@@ -88,7 +87,7 @@ class TestAdkCallback(_Db):
         from shared.callbacks import rbac_callback
         context = SimpleNamespace(_invocation_context=SimpleNamespace(user_id="u"),
                                   agent_name="some_bot")
-        with patch.object(rbac_callback, "get_user_service", side_effect=RuntimeError("db down")):
+        with patch.object(rbac_callback, "get_rbac_middleware", side_effect=RuntimeError("db down")):
             response = rbac_callback.rbac_before_model_callback(context, MagicMock())
         self.assertIsNotNone(response)
         self.assertEqual(response.error_code, "RBAC_ACCESS_DENIED")
@@ -101,9 +100,7 @@ class TestMissingContextDenies(_Db):
 
     def _call(self, context, manager):
         from shared.callbacks import rbac_callback
-        users = self._user_service()
-        with patch.object(rbac_callback, "get_user_service", return_value=users), \
-                patch("shared.utils.agent_manager.get_agent_manager", return_value=manager), \
+        with patch("shared.utils.agent_manager.get_agent_manager", return_value=manager), \
                 patch.object(rbac_callback, "_log_access_denied_event"):
             return rbac_callback.rbac_before_model_callback(context, MagicMock())
 
@@ -172,8 +169,7 @@ class TestSkipIsByClass(_Db):
         manager.get_root_agent_by_name.return_value = row
         context = SimpleNamespace(_invocation_context=SimpleNamespace(user_id="plain_user", agent=agent_obj),
                                   agent_name=name)
-        with patch.object(rbac_callback, "get_user_service", return_value=users), \
-                patch.object(rbac_callback, "get_rbac_middleware", return_value=middleware), \
+        with patch.object(rbac_callback, "get_rbac_middleware", return_value=middleware), \
                 patch("shared.utils.agent_manager.get_agent_manager", return_value=manager), \
                 patch.object(rbac_callback, "_log_access_denied_event"):
             return rbac_callback.rbac_before_model_callback(context, MagicMock())

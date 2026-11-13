@@ -36,7 +36,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Request
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
-from server.member_routes import _require_owner, _session
+from server.member_routes import _require_owner, open_session
 from server.request_context import (
     SESSION_WORKSPACE_KEY, RequestContext, get_api_request_context,
 )
@@ -56,7 +56,7 @@ EMAIL_MAX = 255
 TOKEN = re.compile(r"^[A-Za-z0-9_-]{20,100}$")
 
 
-def _now() -> datetime:
+def utc_now() -> datetime:
     """Now in UTC, naive, as the DateTime columns hold it."""
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
@@ -80,7 +80,7 @@ def invited_email(value: Any) -> str:
 def status_of(invitation: WorkspaceInvitation) -> str:
     if invitation.accepted_at is not None:
         return "accepted"
-    return "expired" if _naive(invitation.expires_at) <= _now() else "open"
+    return "expired" if _naive(invitation.expires_at) <= utc_now() else "open"
 
 
 def describe(invitation: WorkspaceInvitation) -> Dict[str, Any]:
@@ -113,7 +113,7 @@ def create_invitation(session: Session, workspace_id: int, email: str, role: str
         WorkspaceInvitation.accepted_at.is_(None),
     ).delete(synchronize_session=False)
     token = secrets.token_urlsafe(32)
-    now = _now()
+    now = utc_now()
     invitation = WorkspaceInvitation(workspace_id=workspace_id, email=email, role=role,
                                      token_hash=hash_token(token), created_by=created_by,
                                      created_at=now, expires_at=now + timedelta(days=INVITATION_DAYS))
@@ -167,7 +167,7 @@ def _addresses(user: Optional[User], user_id: str) -> Set[str]:
 def invitation_for_page(token: str, user_id: str) -> Dict[str, Any]:
     """What /dashboard/invite/{token} shows the signed-in user. state is open, accepted,
     expired or invalid (unknown, revoked, or its workspace suspended or closed)."""
-    session = _session()
+    session = open_session()
     try:
         invitation = _by_token(session, token)
         workspace = _open_workspace(session, invitation.workspace_id) if invitation else None
@@ -187,7 +187,7 @@ def invitation_for_page(token: str, user_id: str) -> Dict[str, Any]:
 @router.get("")
 async def list_invitations(ctx: RequestContext = Depends(get_api_request_context)):
     """The current workspace's invitations not accepted yet, newest first."""
-    session = _session()
+    session = open_session()
     try:
         rows = (session.query(WorkspaceInvitation)
                 .filter(WorkspaceInvitation.workspace_id == ctx.workspace_id,
@@ -211,7 +211,7 @@ async def invite(request: Request, body: Dict[str, Any] = Body(...),
     role = body.get("role", ROLE_MEMBER)
     if role not in MEMBER_ROLES:
         raise HTTPException(status_code=400, detail=f"role must be one of {', '.join(MEMBER_ROLES)}")
-    session = _session()
+    session = open_session()
     try:
         workspace_name = session.query(Workspace.name).filter(Workspace.id == ctx.workspace_id).scalar()
         invitation, token, replaced = create_invitation(session, ctx.workspace_id, email, role, ctx.user_id)
@@ -231,7 +231,7 @@ async def revoke_invitation(invitation_id: int, request: Request,
                             ctx: RequestContext = Depends(get_api_request_context)):
     """Revoke an invitation of the current workspace that was not accepted yet."""
     _require_owner(ctx)
-    session = _session()
+    session = open_session()
     try:
         invitation = session.query(WorkspaceInvitation).filter(
             WorkspaceInvitation.id == invitation_id,
@@ -255,7 +255,7 @@ async def accept_invitation(request: Request, body: Dict[str, Any] = Body(...),
                             ctx: RequestContext = Depends(get_api_request_context)):
     """Accept an invitation as the signed-in user, whose id or email must be the invited
     address. The session then works in the workspace joined."""
-    session = _session()
+    session = open_session()
     try:
         invitation = _by_token(session, body.get("token"))
         if invitation is None or _open_workspace(session, invitation.workspace_id) is None:
@@ -277,7 +277,7 @@ async def accept_invitation(request: Request, body: Dict[str, Any] = Body(...),
         # Used once, also by two requests at the same time
         claimed = session.query(WorkspaceInvitation).filter(
             WorkspaceInvitation.id == invitation.id, WorkspaceInvitation.accepted_at.is_(None),
-        ).update({"accepted_at": _now(), "accepted_by": ctx.user_id}, synchronize_session=False)
+        ).update({"accepted_at": utc_now(), "accepted_by": ctx.user_id}, synchronize_session=False)
         if claimed != 1:
             session.rollback()
             raise HTTPException(status_code=410, detail="This invitation was accepted. Ask for a new one.")

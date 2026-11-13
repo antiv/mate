@@ -3645,6 +3645,33 @@ class TestReviewOfPhase3(_TwoWorkspaces):
         # Not those of another workspace
         self.assertEqual(rbac.roles_for(BOB, A_ROOT), [])
 
+    def test_a_refusal_names_no_role_for_a_stranger(self):
+        # get_user_roles answers ['user'] for an unknown id; a refusal must not
+        self.assertEqual(RBACMiddleware().roles_for("stranger@x.example", B_ROOT), [])
+
+    def test_the_users_page_gives_a_reserved_id_no_platform_role(self):
+        self._users_page()
+        session = self.Session()
+        session.add(User(user_id="widget_7_visitor", roles='["widget"]'))
+        session.commit()
+        session.close()
+        for user_id, roles in (("widget_7_visitor", ["widget", "admin"]),
+                               ("nobody@x.example", ["user"])):
+            with self.subTest(user_id=user_id):
+                response = self.client.put(f"/dashboard/api/users/{user_id}", headers=_platform_admin(A),
+                                           data={"roles": json.dumps(roles)})
+                self.assertFalse(response.json()["success"], response.text)
+        session = self.Session()
+        try:
+            self.assertEqual(session.query(User).filter_by(user_id="widget_7_visitor").one().get_roles(),
+                             ["widget"])
+        finally:
+            session.close()
+        # Its profile can still be saved
+        response = self.client.put("/dashboard/api/users/widget_7_visitor", headers=_platform_admin(A),
+                                   data={"roles": json.dumps(["widget"]), "profile_data": "visitor"})
+        self.assertTrue(response.json()["success"], response.text)
+
     def test_the_users_page_adds_admin_or_pending_only(self):
         self._users_page()
         session = self.Session()

@@ -29,7 +29,7 @@ from server.request_context import (
     SESSION_WORKSPACE_KEY, RequestContext, get_api_request_context,
 )
 from shared.utils import audit_service
-from shared.utils.models import User, Workspace, WorkspaceMember, parse_roles
+from shared.utils.models import User, WorkspaceMember, parse_roles
 from shared.utils.workspaces import MEMBER_ROLES, PLATFORM_ROLES, ROLE_OWNER
 
 logger = logging.getLogger(__name__)
@@ -40,7 +40,8 @@ AGENT_ROLE = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")
 MAX_AGENT_ROLES = 50
 
 
-def _session() -> Session:
+def open_session() -> Session:
+    """A database session, or 503."""
     from shared.utils.database_client import get_database_client
     session = get_database_client().get_session()
     if not session:
@@ -62,14 +63,15 @@ def _member(session: Session, workspace_id: int, user_id: str) -> WorkspaceMembe
 
 
 def _keeps_an_owner(session: Session, member: WorkspaceMember) -> None:
-    """409 when the member is the workspace's last owner. Locks the workspace's row
-    first, so that two owners stepping down at once are counted one after the other."""
+    """409 when the member is the workspace's last owner. The owners are read with a
+    locking read, which waits for another owner stepping down and then reads what they
+    committed, not the transaction's snapshot (MySQL's REPEATABLE READ). SQLite takes
+    one writer at a time instead."""
     if member.role != ROLE_OWNER:
         return
-    session.query(Workspace.id).filter(Workspace.id == member.workspace_id).with_for_update().first()
-    owners = session.query(func.count(WorkspaceMember.id)).filter(
+    owners = len(session.query(WorkspaceMember.id).filter(
         WorkspaceMember.workspace_id == member.workspace_id,
-        WorkspaceMember.role == ROLE_OWNER).scalar()
+        WorkspaceMember.role == ROLE_OWNER).with_for_update().all())
     if owners <= 1:
         raise HTTPException(status_code=409, detail="The workspace's last owner can't be demoted, "
                                                     "removed or leave. Make someone else an owner first.")
@@ -100,7 +102,7 @@ def _audit(ctx: RequestContext, action: str, user_id: str, details: Dict[str, An
 @router.get("")
 async def list_members(ctx: RequestContext = Depends(get_api_request_context)):
     """The current workspace's members, and whether the caller may change them."""
-    session = _session()
+    session = open_session()
     try:
         rows = (session.query(WorkspaceMember, User.display_name, User.email)
                 .outerjoin(User, User.user_id == WorkspaceMember.user_id)
@@ -121,7 +123,7 @@ async def list_members(ctx: RequestContext = Depends(get_api_request_context)):
 @router.post("/leave")
 async def leave_workspace(request: Request, ctx: RequestContext = Depends(get_api_request_context)):
     """Leave the current workspace."""
-    session = _session()
+    session = open_session()
     try:
         member = _member(session, ctx.workspace_id, ctx.user_id)
         _keeps_an_owner(session, member)
@@ -140,7 +142,7 @@ async def update_member(user_id: str, request: Request, body: Dict[str, Any] = B
                         ctx: RequestContext = Depends(get_api_request_context)):
     """Change a member's role, agent roles or both."""
     _require_owner(ctx)
-    session = _session()
+    session = open_session()
     try:
         member = _member(session, ctx.workspace_id, user_id)
         if "role" not in body and "agent_roles" not in body:
@@ -172,7 +174,7 @@ async def remove_member(user_id: str, request: Request,
                         ctx: RequestContext = Depends(get_api_request_context)):
     """Remove a member from the workspace. Their account stays."""
     _require_owner(ctx)
-    session = _session()
+    session = open_session()
     try:
         member = _member(session, ctx.workspace_id, user_id)
         _keeps_an_owner(session, member)

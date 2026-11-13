@@ -10,7 +10,6 @@ from typing import Optional
 from google.adk.agents.callback_context import CallbackContext
 from google.adk.models.llm_request import LlmRequest
 from google.adk.models.llm_response import LlmResponse
-from ..utils.user_service import get_user_service
 from ..utils.rbac_middleware import get_rbac_middleware, AccessDeniedException
 
 logger = logging.getLogger(__name__)
@@ -91,9 +90,8 @@ def rbac_before_model_callback(callback_context: CallbackContext, llm_request: L
             logger.debug(f"Skipping RBAC check for agent: {agent_name}")
             return None
         
-        # Get user service and RBAC middleware. check_agent_access creates a new user,
-        # in the agent's workspace (shared/utils/workspaces.py)
-        user_service = get_user_service()
+        # check_agent_access creates a new user, in the agent's workspace
+        # (shared/utils/workspaces.py)
         rbac_middleware = get_rbac_middleware()
         
         # Get agent configuration to check allowed roles

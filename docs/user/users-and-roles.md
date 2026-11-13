@@ -83,7 +83,7 @@ There are two kinds of role.
 
 | Role | Meaning |
 |---|---|
-| `admin` | A platform administrator: the whole dashboard of every workspace, every agent whatever its **Allowed Roles**, and agents may change memory blocks on their behalf. Removing it also makes them a member, not an owner, of the Default workspace; ownership of other workspaces stays. |
+| `admin` | A platform administrator: the whole dashboard of every workspace, every agent whatever its **Allowed Roles**, and agents may change memory blocks on their behalf. Removing it also makes them a member, not an owner, of the Default workspace, even its last owner, since platform administrators manage Default; ownership of other workspaces stays. |
 | `pending` | Signed in, but not let in yet: no workspace, no agent. New single sign-on users start here. |
 | `widget` | Assigned automatically to visitors who chat through an embedded widget. |
 

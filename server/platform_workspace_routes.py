@@ -35,9 +35,9 @@ from sqlalchemy.orm import Session
 from server.request_context import RequestContext, get_api_request_context
 from shared.utils import audit_service
 from server.invitation_routes import (
-    _now, create_invitation, invitation_link, invited_email, send_invitation,
+    create_invitation, invitation_link, invited_email, send_invitation, utc_now,
 )
-from server.member_routes import _session
+from server.member_routes import open_session
 from shared.utils.models import (
     DEFAULT_WORKSPACE_ID, PLATFORM_FEATURES, Project, TokenUsageLog, User, Workspace,
     WorkspaceInvitation, WorkspaceMember,
@@ -111,7 +111,7 @@ def _list(session: Session) -> List[Dict[str, Any]]:
     for workspace_id, email in (session.query(WorkspaceInvitation.workspace_id, WorkspaceInvitation.email)
                                 .filter(WorkspaceInvitation.role == ROLE_OWNER,
                                         WorkspaceInvitation.accepted_at.is_(None),
-                                        WorkspaceInvitation.expires_at > _now())
+                                        WorkspaceInvitation.expires_at > utc_now())
                                 .order_by(WorkspaceInvitation.email)):
         invited.setdefault(workspace_id, []).append(email)
     usage = _usage(session)
@@ -199,7 +199,7 @@ def _audit(ctx: RequestContext, action: str, workspace_id: int, details: Dict[st
 @router.get("")
 async def list_workspaces(ctx: RequestContext = Depends(_platform_admin)):
     """Every workspace, closed ones included, with its owners and counts."""
-    session = _session()
+    session = open_session()
     try:
         return {"workspaces": _list(session), "features": list(PLATFORM_FEATURES)}
     finally:
@@ -222,7 +222,7 @@ async def create_workspace(request: Request, body: Dict[str, Any] = Body(...),
     if ("owner" in body) == ("owner_email" in body):
         raise HTTPException(status_code=400, detail="Give owner (a user id) or owner_email, not both")
     owner_email = invited_email(body["owner_email"]) if "owner_email" in body else None
-    session = _session()
+    session = open_session()
     try:
         _name_taken(session, name)
         if session.query(Workspace.id).filter(Workspace.slug == slug).first():
@@ -281,7 +281,7 @@ async def update_workspace(workspace_id: int, request: Request, body: Dict[str, 
     if not wanted:
         raise HTTPException(status_code=400,
                             detail="Give name, allow_platform_keys or platform_features")
-    session = _session()
+    session = open_session()
     try:
         workspace = _one(session, workspace_id)
         _not_closed(workspace)
@@ -313,7 +313,7 @@ async def update_workspace(workspace_id: int, request: Request, body: Dict[str, 
 
 def _set_state(workspace_id: int, request: Request, ctx: RequestContext, action: str) -> Dict[str, Any]:
     """Suspend, resume or close the workspace; a no-op when it is already so."""
-    session = _session()
+    session = open_session()
     try:
         workspace = _one(session, workspace_id)
         _not_closed(workspace)
