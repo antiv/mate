@@ -29,6 +29,12 @@ code), and audit entries about the installation rather than a project, such as
 sign-ins and user changes, are in the default workspace. A change made on
 **Workspaces** is in the workspace it changed.
 
+**All workspaces.** A platform administrator sees an **All workspaces** box under the
+page title. Ticking it shows every workspace's entries, each named with its workspace;
+the choice stays in the page's address, so a reload or a shared link keeps it. Owners
+and admins of a workspace don't have the box, and the API refuses them the view (403).
+The audit export then has two more columns, `workspace_id` and `workspace`.
+
 ## Platform Overview
 
 The landing page of the Control Room. It shows the last seven days at a glance
@@ -107,10 +113,10 @@ counts and status. Open a row for the details. This is where to look when one pe
 reports a problem, or when a cost spike needs explaining.
 
 People without the admin role see **My Usage** in the Work Room: the same figures for
-their own requests only. Satisfaction counts the ratings given in their own
-conversations, and cost covers their own calls. Their **Raw Data** view lists their own
-model calls from the last 24 hours; changing the period or page size there does not
-load more, since the API behind those controls is for admins.
+their own requests only, in the workspace they are working in. Satisfaction counts the
+ratings given in their own conversations, and cost covers their own calls. Their **Raw
+Data** view lists their own model calls; the period, page size and paging there load
+more of their own, and never anyone else's.
 
 ## Audit Logs
 

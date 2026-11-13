@@ -61,7 +61,7 @@ mateActions.allow('sessionsApp.closeSessionInspector', 'sessionsApp.copySessionI
         if (search) params.append('search', search);
 
         try {
-            const res = await fetch(`/dashboard/api/sessions?${params.toString()}`);
+            const res = await fetch(`/dashboard/api/sessions?${mateScope.params(params).toString()}`);
             if (!res.ok) {
                 throw new Error(`Server returned status ${res.status}`);
             }
@@ -175,7 +175,7 @@ mateActions.allow('sessionsApp.closeSessionInspector', 'sessionsApp.copySessionI
                 user_id: userId,
                 runtime: runtime
             });
-            const res = await fetch(`/dashboard/api/sessions/detail?${params.toString()}`);
+            const res = await fetch(`/dashboard/api/sessions/detail?${mateScope.params(params).toString()}`);
             if (!res.ok) throw new Error(`Status ${res.status}`);
             const data = await res.json();
             currentSessionData = data;
@@ -437,7 +437,7 @@ mateActions.allow('sessionsApp.closeSessionInspector', 'sessionsApp.copySessionI
                 user_id: userId,
                 runtime: runtime
             });
-            const res = await fetch(`/dashboard/api/sessions?${params.toString()}`, {
+            const res = await fetch(`/dashboard/api/sessions?${mateScope.params(params).toString()}`, {
                 method: 'DELETE'
             });
             if (!res.ok) {

@@ -140,7 +140,19 @@ request's workspace) for every request under `/dashboard/api/`, reads included. 
 exceptions are two short allowlists in `server/dashboard_authz.py`, for what the Work
 Room and the account menu need: renaming a conversation, rating a reply, reading one's
 own ratings, listing, creating and revoking one's own personal access tokens,
-listing and switching one's workspaces, leaving one, and accepting an invitation.
+listing and switching one's workspaces, leaving one, accepting an invitation, and
+reading one's own usage logs (`GET /dashboard/api/usage/logs`, which keeps a non-admin
+to their own `user_id`).
+
+The log views (`/stats`, `/usage/logs`, `/audit-logs` and its export, `/guardrail-logs`,
+`/traces`, `/sessions` and `/sessions/detail`, and the Usage page) take
+`all_workspaces=true`, which `_view_workspace` turns into `workspace_id=None`: every
+workspace's rows. It is a platform administrator's only; anyone else gets 403, a
+workspace owner included. It is a view switch, not a workspace id: the request still
+resolves its workspace as usual. In that view `_with_workspaces` adds `workspace_id`
+and `workspace` (its name) to each log row, with a row that has no workspace counted as
+the default one's, as `rows_of` counts it. The pages pass the switch on from their own
+address (`?all_workspaces=1`) through `window.mateScope` in `base.html`.
 
 `PLATFORM_ONLY_PATHS` need a platform administrator, and answer 403 "Platform
 administrator access required" to anyone else, a workspace's owner included. They act

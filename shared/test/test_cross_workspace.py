@@ -3483,5 +3483,107 @@ class TestWorkspaceBudgets(_TwoWorkspaces):
             session.close()
 
 
+class TestAllWorkspaces(_TwoWorkspaces):
+    """Usage and audit per workspace (#277, 3h): a platform administrator's "All
+    workspaces" view of the log pages, refused to anyone else; members' own usage; and
+    each workspace's usage on Platform -> Workspaces."""
+
+    VIEWS = ("/dashboard/api/stats", "/dashboard/api/usage/logs", "/dashboard/api/audit-logs",
+             "/dashboard/api/audit-logs/export", "/dashboard/api/guardrail-logs",
+             "/dashboard/api/traces", "/dashboard/api/sessions", "/dashboard/usage")
+    ALL = {"all_workspaces": "true"}
+
+    def test_a_platform_administrator_sees_every_workspace(self):
+        for path in self.VIEWS:
+            # The page's workspace menu names B to a platform administrator: look for
+            # B's agent there instead
+            markers = (B_ROOT,) if path == "/dashboard/usage" else B_MARKERS
+            with self.subTest(path=path):
+                response = self.client.get(path, params=self.ALL, headers=_platform_admin(A))
+                self.assertEqual(response.status_code, 200, response.text[:200])
+                if path != "/dashboard/api/traces":  # the fixture has no trace
+                    self.assertTrue(any(m in response.text for m in markers), path)
+                # and A's view still holds none of B's
+                response = self.client.get(path, headers=_platform_admin(A))
+                self.assertFalse(any(m in response.text for m in markers), path)
+
+    def test_a_session_of_another_workspace_opens_in_the_all_workspaces_view(self):
+        detail = {"session_id": f"{B_MARKER}-lg-session", "app_name": B_ROOT, "user_id": BOB,
+                  "runtime": "langgraph"}
+        path = "/dashboard/api/sessions/detail"
+        self.assertEqual(self.client.get(path, params=detail, headers=_platform_admin(A)).status_code, 404)
+        response = self.client.get(path, params={**detail, **self.ALL}, headers=_platform_admin(A))
+        self.assertEqual(response.status_code, 200, response.text[:200])
+
+    def test_each_row_names_its_workspace(self):
+        logs = self.client.get("/dashboard/api/audit-logs", params=self.ALL,
+                               headers=_platform_admin(A)).json()["logs"]
+        b_row, = [row for row in logs if row["action"] == B_MARKER]
+        self.assertEqual((b_row["workspace_id"], b_row["workspace"]), (B, f"{B_MARKER} workspace"))
+        logs = self.client.get("/dashboard/api/usage/logs", params=self.ALL,
+                               headers=_platform_admin(A)).json()["logs"]
+        self.assertEqual({row["workspace"] for row in logs if row["agent_name"] == B_ROOT},
+                         {f"{B_MARKER} workspace"})
+        csv = self.client.get("/dashboard/api/audit-logs/export", params={**self.ALL, "format": "csv"},
+                              headers=_platform_admin(A)).text
+        self.assertTrue(csv.splitlines()[0].endswith("workspace_id,workspace"))
+        # A workspace's own view keeps its columns
+        csv = self.client.get("/dashboard/api/audit-logs/export", params={"format": "csv"},
+                              headers=_platform_admin(B)).text
+        self.assertTrue(csv.splitlines()[0].endswith("details,ip_address"))
+
+    def test_only_a_platform_administrator_sees_every_workspace(self):
+        bob = TestClient(auth_server.app, cookies=_signed_in(BOB))  # B's owner
+        for path in self.VIEWS:
+            with self.subTest(path=path):
+                response = bob.get(path, params=self.ALL)
+                self.assertEqual(response.status_code, 403, response.text[:200])
+                self.assertFalse(any(m in response.text for m in ("ws-a", A_ROOT)))
+        session_detail = {"session_id": f"{B_MARKER}-lg-session", "app_name": B_ROOT,
+                          "user_id": BOB, "runtime": "langgraph", **self.ALL}
+        self.assertEqual(bob.get("/dashboard/api/sessions/detail", params=session_detail).status_code, 403)
+        self.assertEqual(bob.delete("/dashboard/api/sessions", params=session_detail).status_code, 403)
+
+    def test_a_member_sees_their_own_usage(self):
+        carol = "carol@b.example"
+        session = self.Session()
+        user = User(user_id=carol, roles='["user"]')
+        user.home_workspace_id = B
+        session.add(user)
+        for user_id, workspace_id in ((carol, B), (carol, A), (BOB, B)):
+            session.add(TokenUsageLog(request_id=f"{user_id}-{workspace_id}", session_id="s", user_id=user_id,
+                                      agent_name="x", model_name="m", status="SUCCESS", prompt_tokens=1,
+                                      response_tokens=1, workspace_id=workspace_id))
+        session.commit()
+        session.close()
+        member = TestClient(auth_server.app, cookies=_signed_in(carol))
+        response = member.get("/dashboard/api/usage/logs")
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual([log["request_id"] for log in response.json()["logs"]], [f"{carol}-{B}"])
+        self.assertEqual(member.get("/dashboard/api/usage/logs", params=self.ALL).status_code, 403)
+        # The other log views stay the workspace admins'
+        self.assertEqual(member.get("/dashboard/api/audit-logs").status_code, 403)
+
+    def test_platform_workspaces_shows_each_workspace_s_usage(self):
+        session = self.Session()
+        session.add(TokenUsageLog(request_id="old", session_id="s", user_id=BOB, agent_name=B_ROOT,
+                                  model_name="m", status="SUCCESS", prompt_tokens=1000, response_tokens=0,
+                                  cost_usd=9.0, workspace_id=B,
+                                  timestamp=datetime.now(timezone.utc) - timedelta(days=40)))
+        session.add(TokenUsageLog(request_id="new", session_id="s", user_id=BOB, agent_name=B_ROOT,
+                                  model_name="m", status="SUCCESS", prompt_tokens=10, response_tokens=5,
+                                  cost_usd=0.5, workspace_id=B))
+        session.add(TokenUsageLog(request_id="no-workspace", session_id="s", user_id=ALICE, agent_name="hard",
+                                  model_name="m", status="SUCCESS", prompt_tokens=7, response_tokens=0))
+        session.commit()
+        session.close()
+        listed = {w["id"]: w["usage"] for w in self.client.get(
+            "/dashboard/api/platform/workspaces", headers=_platform_admin(A)).json()["workspaces"]}
+        # The fixture's log of B holds 2 tokens; the 40-day-old one is out of the window
+        self.assertEqual((listed[B]["tokens"], listed[B]["cost_usd"]), (17, 0.5))
+        # A row with no workspace is the default one's
+        self.assertEqual(listed[A]["tokens"], 7)
+
+
 if __name__ == "__main__":
     unittest.main()

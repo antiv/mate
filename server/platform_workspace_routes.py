@@ -13,6 +13,8 @@ platform keys" and its platform features, suspends and resumes it, and closes it
 - The first owner is an existing user, or an email address invited as owner
   (server/invitation_routes.py): the workspace has no member until it is accepted.
 - "May use platform keys" is stored only; nothing reads it before phase 4.
+- The list shows each workspace's usage over the last 30 days: tokens and cost of
+  its token_usage_logs rows (a row with no workspace counts as the default one's).
 
 Every change is written to the audit log, in the workspace it changed.
 server/dashboard_authz.py makes /dashboard/api/platform/ platform-only, and each
@@ -22,8 +24,8 @@ route checks it again.
 import json
 import logging
 import re
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import datetime, timedelta, timezone
+from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request
 from sqlalchemy import func
@@ -36,8 +38,8 @@ from server.invitation_routes import (
     create_invitation, invitation_link, invited_email, send_invitation,
 )
 from shared.utils.models import (
-    DEFAULT_WORKSPACE_ID, PLATFORM_FEATURES, Project, User, Workspace, WorkspaceInvitation,
-    WorkspaceMember,
+    DEFAULT_WORKSPACE_ID, PLATFORM_FEATURES, Project, TokenUsageLog, User, Workspace,
+    WorkspaceInvitation, WorkspaceMember,
 )
 from shared.utils.workspaces import (
     DEFAULT_AGENT_ROLES, NON_MEMBER_ROLES, ROLE_OWNER, is_reserved_user_id,
@@ -83,15 +85,20 @@ def _iso(value: Optional[datetime]) -> Optional[str]:
     return value.isoformat() if value else None
 
 
+USAGE_DAYS = 30
+
+
 def _describe(workspace: Workspace, owners: List[str], members: int, projects: int,
-              invited_owners: Optional[List[str]] = None) -> Dict[str, Any]:
+              invited_owners: Optional[List[str]] = None,
+              usage: Optional[Tuple[int, float]] = None) -> Dict[str, Any]:
+    tokens, cost = usage or (0, 0.0)
     return {
         "id": workspace.id, "name": workspace.name, "slug": workspace.slug,
         "status": _status(workspace), "is_default": workspace.id == DEFAULT_WORKSPACE_ID,
         "allow_platform_keys": bool(workspace.allow_platform_keys),
         "platform_features": _features(workspace),
         "owners": owners, "invited_owners": invited_owners or [], "members": members,
-        "projects": projects,
+        "projects": projects, "usage": {"days": USAGE_DAYS, "tokens": tokens, "cost_usd": round(cost, 4)},
         "created_at": _iso(workspace.created_at), "suspended_at": _iso(workspace.suspended_at),
         "closed_at": _iso(workspace.deleted_at),
     }
@@ -114,9 +121,22 @@ def _list(session: Session) -> List[Dict[str, Any]]:
                                         WorkspaceInvitation.expires_at > _utc_now())
                                 .order_by(WorkspaceInvitation.email)):
         invited.setdefault(workspace_id, []).append(email)
+    usage = _usage(session)
     return [_describe(w, owners.get(w.id, []), members.get(w.id, 0), projects.get(w.id, 0),
-                      invited.get(w.id))
+                      invited.get(w.id), usage.get(w.id))
             for w in session.query(Workspace).order_by(Workspace.id)]
+
+
+def _usage(session: Session) -> Dict[int, Tuple[int, float]]:
+    """{workspace id: (tokens, dollars)} over the last USAGE_DAYS days."""
+    since = datetime.now(timezone.utc) - timedelta(days=USAGE_DAYS)
+    workspace = func.coalesce(TokenUsageLog.workspace_id, DEFAULT_WORKSPACE_ID)
+    rows = (session.query(workspace,
+                          func.sum(func.coalesce(TokenUsageLog.prompt_tokens, 0)
+                                   + func.coalesce(TokenUsageLog.response_tokens, 0)),
+                          func.sum(TokenUsageLog.cost_usd))
+            .filter(TokenUsageLog.timestamp >= since).group_by(workspace))
+    return {workspace_id: (int(tokens or 0), float(cost or 0.0)) for workspace_id, tokens, cost in rows}
 
 
 def _utc_now() -> datetime:

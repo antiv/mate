@@ -84,7 +84,7 @@ Agent configuration and management API endpoints.
 | Method | Path | Summary | Implemented in |
 |---|---|---|---|
 | `GET` | `/dashboard/api/audit-logs` | List audit logs with filters | shared/utils/dashboard/dashboard_server.py · get_audit_logs |
-| `GET` | `/dashboard/api/audit-logs/export` | Export audit logs as JSON or CSV for compliance reporting | shared/utils/dashboard/dashboard_server.py · export_audit_logs |
+| `GET` | `/dashboard/api/audit-logs/export` | Export audit logs as JSON or CSV for compliance reporting; every workspace's, each row with its workspace, with all_workspaces | shared/utils/dashboard/dashboard_server.py · export_audit_logs |
 | `POST` | `/dashboard/api/audit-logs/retention` | Run retention policy: delete entries older than AUDIT_RETENTION_DAYS | shared/utils/dashboard/dashboard_server.py · run_audit_retention |
 | `GET` | `/dashboard/api/audit-logs/retention-config` | Get configured retention days (0 = keep forever) | shared/utils/dashboard/dashboard_server.py · get_audit_retention_config |
 
@@ -221,7 +221,7 @@ Web interface pages for system management.
 | `GET` | `/dashboard/templates` | Dashboard templates gallery page | shared/utils/dashboard/dashboard_server.py · dashboard_templates |
 | `GET` | `/dashboard/traces` | Dashboard traces page - OpenTelemetry distributed tracing viewer | shared/utils/dashboard/dashboard_server.py · dashboard_traces |
 | `GET` | `/dashboard/triggers` | — | shared/utils/dashboard/dashboard_server.py · dashboard_triggers |
-| `GET` | `/dashboard/usage` | Dashboard usage page | shared/utils/dashboard/dashboard_server.py · dashboard_usage |
+| `GET` | `/dashboard/usage` | Dashboard usage page: a member's own usage in the current workspace, the workspace's for its admins, every workspace's for a platform administrator who asks (all_workspaces) | shared/utils/dashboard/dashboard_server.py · dashboard_usage |
 | `GET` | `/dashboard/users` | Dashboard users page | shared/utils/dashboard/dashboard_server.py · dashboard_users |
 | `GET` | `/dashboard/wizard-leads` | Dashboard page listing leads captured by the public Agent Builder Wizard | shared/utils/dashboard/dashboard_server.py · dashboard_wizard_leads |
 | `GET` | `/dashboard/wizard-pricing` | Dashboard page to edit Agent Builder Wizard tier prices and currencies | shared/utils/dashboard/dashboard_server.py · dashboard_wizard_pricing |
@@ -337,7 +337,7 @@ Token usage and analytics API endpoints.
 | Method | Path | Summary | Implemented in |
 |---|---|---|---|
 | `GET` | `/dashboard/api/stats` | Get usage statistics | shared/utils/dashboard/dashboard_server.py · get_stats |
-| `GET` | `/dashboard/api/usage/logs` | Get paginated token usage logs | shared/utils/dashboard/dashboard_server.py · get_usage_logs_api |
+| `GET` | `/dashboard/api/usage/logs` | Get paginated token usage logs: a member's own in the current workspace (My Usage), the workspace's for its admins | shared/utils/dashboard/dashboard_server.py · get_usage_logs_api |
 
 ### Dashboard - Users
 

@@ -1,0 +1,17 @@
+{# All workspaces: a platform administrator's switch on the log views (Usage, Audit
+   Logs, Guardrail Logs, Traces, Sessions). It reloads the page with
+   ?all_workspaces=1, which window.mateScope (base.html) passes on to the API. #}
+{% if is_platform_admin is defined and is_platform_admin(request) %}
+<label class="inline-flex items-center gap-1.5 mt-1 text-xs text-gray-600 dark:text-gray-300" title="Show every workspace's entries, each with its workspace">
+    <input type="checkbox" id="allWorkspacesToggle" class="rounded" {% if request.query_params.get('all_workspaces') in ('1', 'true') %}checked{% endif %}>
+    <span>All workspaces</span>
+</label>
+<script nonce="{{ request.state.csp_nonce }}">
+document.getElementById('allWorkspacesToggle').addEventListener('change', function () {
+    const url = new URL(window.location.href);
+    if (this.checked) url.searchParams.set('all_workspaces', '1');
+    else url.searchParams.delete('all_workspaces');
+    window.location.href = url.toString();
+});
+</script>
+{% endif %}

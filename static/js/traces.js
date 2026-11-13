@@ -14,7 +14,7 @@ async function loadTraces() {
     tbody.innerHTML = '<tr><td colspan="5" class="px-3 py-8 text-center text-gray-500 dark:text-gray-400">Loading...</td></tr>';
 
     try {
-        const resp = await fetch(`/dashboard/api/traces?hours=${hours}&limit=50`, { credentials: 'same-origin' });
+        const resp = await fetch(mateScope.url(`/dashboard/api/traces?hours=${hours}&limit=50`), { credentials: 'same-origin' });
         const data = await resp.json();
 
         if (data.error && !data.traces) {
@@ -56,7 +56,7 @@ async function showTraceDetail(traceId, hours) {
     contentEl.innerHTML = '<div class="text-gray-500 dark:text-gray-400">Loading...</div>';
 
     try {
-        const resp = await fetch(`/dashboard/api/traces?hours=${hours || 24}&trace_id=${encodeURIComponent(traceId)}`, { credentials: 'same-origin' });
+        const resp = await fetch(mateScope.url(`/dashboard/api/traces?hours=${hours || 24}&trace_id=${encodeURIComponent(traceId)}`), { credentials: 'same-origin' });
         const data = await resp.json();
         const traces = data.traces || [];
         const trace = traces.find(t => t.trace_id === traceId) || traces[0];

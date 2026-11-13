@@ -10,6 +10,7 @@
             <h2 class="text-xl font-bold text-gray-900 dark:text-white">
                 {% if view != "analytics" %}Token Usage Logs{% elif is_admin %}Usage Analytics{% else %}My Usage{% endif %}
             </h2>
+            {% include "dashboard/_all_workspaces.html" %}
             <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">
                 {% if view == "analytics" %}
                     Detailed usage statistics and trends (Last {{ days }} days)
@@ -835,7 +836,7 @@ function esc(value) {
         
         // Fetch logs with new filters
         try {
-            const response = await fetch(`/dashboard/api/usage/logs?hours=${hours}&limit=${pageSize}&page=${currentPageNum}`);
+            const response = await fetch(mateScope.url(`/dashboard/api/usage/logs?hours=${hours}&limit=${pageSize}&page=${currentPageNum}`));
             const data = await response.json();
             
             if (data.logs) {
@@ -902,7 +903,7 @@ function esc(value) {
                     ${esc(log.user_id || 'N/A')}
                 </td>
                 <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate" data-label="Agent">
-                    ${esc(log.agent_name || 'N/A')}
+                    ${esc(log.agent_name || 'N/A')}${mateScope.label(log) ? `<div class="text-gray-400">${esc(mateScope.label(log))}</div>` : ''}
                 </td>
                 <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate" data-label="Model">
                     ${esc(log.model_name || 'N/A')}
@@ -986,7 +987,7 @@ function esc(value) {
         }
         
         try {
-            const response = await fetch(`/dashboard/api/usage/logs?hours=${hours}&limit=${pageSize}&page=${currentPageNum}`);
+            const response = await fetch(mateScope.url(`/dashboard/api/usage/logs?hours=${hours}&limit=${pageSize}&page=${currentPageNum}`));
             const data = await response.json();
             
             if (data.logs) {
