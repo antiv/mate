@@ -27,7 +27,6 @@ def check_rbac(user_id: str, agent_name: str, session_id: Optional[str] = None) 
     if is_eval_run():
         return None
     try:
-        from shared.utils.user_service import get_user_service
         from shared.utils.rbac_middleware import get_rbac_middleware
 
         agent_config = _load_agent_config_row(agent_name)

@@ -468,11 +468,11 @@ class TokenUsageService:
             return (0, 0, 0)
         tokens = (func.coalesce(TokenUsageLog.prompt_tokens, 0)
                   + func.coalesce(TokenUsageLog.response_tokens, 0))
-        since = {"hour": now - timedelta(hours=1), "day": now - timedelta(days=1)}
+        hour_ago, day_ago = now - timedelta(hours=1), now - timedelta(days=1)
         try:
             row = session.query(
-                func.coalesce(func.sum(case((TokenUsageLog.timestamp >= since["hour"], tokens), else_=0)), 0),
-                func.coalesce(func.sum(case((TokenUsageLog.timestamp >= since["day"], tokens), else_=0)), 0),
+                func.coalesce(func.sum(case((TokenUsageLog.timestamp >= hour_ago, tokens), else_=0)), 0),
+                func.coalesce(func.sum(case((TokenUsageLog.timestamp >= day_ago, tokens), else_=0)), 0),
                 func.coalesce(func.sum(tokens), 0),
             ).filter(
                 TokenUsageLog.timestamp >= now - timedelta(days=30),

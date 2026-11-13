@@ -23,7 +23,9 @@ Until phase 3e every membership was derived from users.roles (D3). What is left 
   default workspace, which a user who is a member elsewhere only joins for them.
 - Losing the admin role takes away the default workspace's ownership that being a
   platform administrator gave (1.x's admins are its owners): an owner of it becomes a
-  member. Owners of other workspaces stay owners.
+  member, its last owner too, since taking a platform administrator's rights away
+  comes first and platform administrators (the built-in account always) manage the
+  default workspace. Owners of other workspaces stay owners.
 - move_roles_to_members() runs when the auth server starts. Once per installation it
   derives the memberships from users.roles as 2.0 before 3e did, which also adds the
   users of a 1.x installation, and empties users.roles of agent roles. Every start it

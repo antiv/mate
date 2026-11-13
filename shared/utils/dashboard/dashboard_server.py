@@ -4783,9 +4783,12 @@ class DashboardServer:
             roles (shared/utils/workspaces.py, SYSTEM_CALLERS)."""
             try:
                 import json
-                settable = ("admin", "pending")
+                from shared.utils.workspaces import is_reserved_user_id
+                # A widget visitor or a system caller is given no platform role here
+                settable = () if is_reserved_user_id(user_id) else ("admin", "pending")
                 roles_list = json.loads(roles) if roles else []
-                current = set(self.user_service.get_user_roles(user_id)) if self.user_service else set()
+                user = self.user_service.get_user_by_id(user_id) if self.user_service else None
+                current = set(user.get_roles()) if user else set()
                 if not isinstance(roles_list, list) or any(
                         not isinstance(r, str) or (r not in settable and r not in current) for r in roles_list):
                     return {"success": False,

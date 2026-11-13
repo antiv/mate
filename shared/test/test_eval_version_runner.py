@@ -171,10 +171,10 @@ class TestSnapshotAgent(unittest.TestCase):
         # No roles configured means admin-only; the eval user is not an admin.
         # The eval must run the agent, not collect RBAC's refusal as its answer.
         from shared.callbacks import rbac_callback
-        with patch.object(rbac_callback, "get_user_service") as users:
+        with patch.object(rbac_callback, "get_rbac_middleware") as rbac:
             reply = asyncio.run(self._ask(_snapshot("VERSION ONE", allowed_for_roles=None)))
         self.assertIn("VERSION ONE", reply)
-        users.assert_not_called()
+        rbac.assert_not_called()
 
     def test_rbac_is_skipped_only_inside_an_eval_run(self):
         from shared.callbacks.rbac_callback import _should_skip_rbac_check
