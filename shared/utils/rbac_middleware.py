@@ -91,9 +91,9 @@ class RBACMiddleware:
         if not session:
             return []
         try:
-            # parse_roles reads a missing or empty value as ["user"]: a stranger has none
-            raw = session.query(User.roles).filter(User.user_id == user_id).scalar()
-            platform = parse_roles(raw) if raw else []
+            # As caller_access reads them (an empty value is ["user"]); a stranger has none
+            row = session.query(User.roles).filter(User.user_id == user_id).first()
+            platform = parse_roles(row[0]) if row else []
             return platform + agent_roles_in(session, agent_workspace(session, agent_name), user_id)
         except Exception as e:
             logger.debug(f"RBAC: roles of {user_id} not read: {e}")
