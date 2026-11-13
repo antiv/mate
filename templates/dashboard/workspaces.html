@@ -30,13 +30,14 @@
                         <th class="px-3 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Owners</th>
                         <th class="px-3 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Members</th>
                         <th class="px-3 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Projects</th>
+                        <th class="px-3 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider" title="Tokens and cost of the workspace's agents over the last 30 days">Usage (30 days)</th>
                         <th class="px-3 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Platform keys</th>
                         <th class="px-3 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Features</th>
                         <th class="px-3 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Actions</th>
                     </tr>
                 </thead>
                 <tbody id="workspacesBody" class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                    <tr><td colspan="8" class="px-3 py-6 text-sm text-center text-gray-500 dark:text-gray-400">Loading…</td></tr>
+                    <tr><td colspan="9" class="px-3 py-6 text-sm text-center text-gray-500 dark:text-gray-400">Loading…</td></tr>
                 </tbody>
             </table>
         </div>
@@ -161,11 +162,12 @@
                 <td class="px-3 py-1.5 text-xs text-gray-700 dark:text-gray-300" data-label="Owners">${w.owners.map(esc).concat(w.invited_owners.map(e => `${esc(e)} <span class="text-gray-400">(invited)</span>`)).join('<br>') || '—'}</td>
                 <td class="px-3 py-1.5 text-xs text-gray-700 dark:text-gray-300" data-label="Members">${w.members}</td>
                 <td class="px-3 py-1.5 text-xs text-gray-700 dark:text-gray-300" data-label="Projects">${w.projects}</td>
+                <td class="px-3 py-1.5 text-xs text-gray-700 dark:text-gray-300" data-label="Usage (30 days)">${w.usage.tokens.toLocaleString()} tokens<br><span class="text-gray-400">$${w.usage.cost_usd.toFixed(2)}</span></td>
                 <td class="px-3 py-1.5 text-xs text-gray-700 dark:text-gray-300" data-label="Platform keys">${w.allow_platform_keys ? 'Yes' : 'No'}</td>
                 <td class="px-3 py-1.5 text-xs" data-label="Features">${w.platform_features.map(f => badge(FEATURE_LABELS[f] || f, 'bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200')).join('') || '—'}</td>
                 <td class="px-3 py-1.5 text-xs font-medium" data-label="Actions">${actions.join('')}</td>
             </tr>`;
-        }).join('') || `<tr><td colspan="8" class="px-3 py-6 text-sm text-center text-gray-500 dark:text-gray-400">No workspaces.</td></tr>`;
+        }).join('') || `<tr><td colspan="9" class="px-3 py-6 text-sm text-center text-gray-500 dark:text-gray-400">No workspaces.</td></tr>`;
     }
 
     async function load() {

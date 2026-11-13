@@ -1002,6 +1002,36 @@ class DashboardServer:
         except (TypeError, ValueError):
             raise HTTPException(status_code=400, detail="project_id must be a project's id")
 
+    def _view_workspace(self, ctx: RequestContext, all_workspaces: bool) -> Optional[int]:
+        """The workspace a log view reads: the current one, or None for every workspace
+        when a platform administrator asks for all of them (all_workspaces=true). 403
+        for anyone else who asks."""
+        if not all_workspaces:
+            return ctx.workspace_id
+        if not ctx.is_platform_admin:
+            raise HTTPException(status_code=403, detail="Platform administrator access required")
+        return None
+
+    def _with_workspaces(self, rows: List[Dict[str, Any]], workspace_ids: List[Optional[int]],
+                         view: Optional[int]) -> List[Dict[str, Any]]:
+        """In the all-workspaces view (view None), each row with its workspace's id and
+        name; a log row with no workspace is the default workspace's (rows_of)."""
+        if view is not None:
+            return rows
+        ids = [workspace_id or DEFAULT_WORKSPACE_ID for workspace_id in workspace_ids]
+        session = self.db_client.get_session() if self.db_client else None
+        names: Dict[int, str] = {}
+        if session:
+            from shared.utils.models import Workspace
+            try:
+                names = dict(session.query(Workspace.id, Workspace.name).filter(Workspace.id.in_(set(ids))))
+            finally:
+                session.close()
+        for row, workspace_id in zip(rows, ids):
+            row["workspace_id"] = workspace_id
+            row["workspace"] = names.get(workspace_id, f"#{workspace_id}")
+        return rows
+
     def _require_scope_in_workspace(self, ctx: RequestContext, scope: str, scope_id: str) -> None:
         """404 unless a budget's or an alert rule's agent or project is the workspace's.
         A user scope names a person, who may belong to several workspaces; a rule on
@@ -1262,7 +1292,8 @@ class DashboardServer:
                     'tool_use_tokens': log.tool_use_tokens,
                     'status': log.status,
                     'error_description': log.error_description,
-                    'timestamp': log.timestamp.isoformat() if log.timestamp else None
+                    'timestamp': log.timestamp.isoformat() if log.timestamp else None,
+                    'workspace_id': log.workspace_id,
                 } for log in logs],
                 "total_records": total_count,
                 "current_page": page,
@@ -3961,17 +3992,24 @@ class DashboardServer:
             })
 
         @self.app.get("/dashboard/usage", response_class=HTMLResponse, tags=["Dashboard - Pages"])
-        async def dashboard_usage(request: Request, days: int = 30, view: str = "analytics", origin: str = "interactive", ctx: RequestContext = Depends(get_request_context)):
-            """Dashboard usage page"""
+        async def dashboard_usage(request: Request, days: int = 30, view: str = "analytics", origin: str = "interactive",
+                                  all_workspaces: bool = False, ctx: RequestContext = Depends(get_request_context)):
+            """Dashboard usage page: a member's own usage in the current workspace, the
+            workspace's for its admins, every workspace's for a platform administrator
+            who asks (all_workspaces)."""
             is_admin = ctx.is_admin
+            workspace_view = self._view_workspace(ctx, all_workspaces)
             # Non-admin users see only their own usage
             current_user_id = ctx.user_id
             scope = None if is_admin else current_user_id
             stats = self._get_usage_stats(days, self.resolve_origins(origin), user_id=scope,
-                                          workspace_id=ctx.workspace_id)
+                                          workspace_id=workspace_view)
             logs = (self._get_token_usage_logs(24, limit=1000, user_id=scope,
-                                               workspace_id=ctx.workspace_id)
+                                               workspace_id=workspace_view)
                     if view == "logs" else {"logs": []})
+            if isinstance(logs, dict) and logs.get("logs"):
+                self._with_workspaces(logs["logs"], [log["workspace_id"] for log in logs["logs"]],
+                                      workspace_view)
             return self.templates.TemplateResponse(request, "dashboard/usage.html", {
                 "request": request,
                 "page_title": "Usage Analytics",
@@ -4069,7 +4107,8 @@ class DashboardServer:
             user_id: Optional[str] = None,
             search: Optional[str] = None,
             page: int = Query(1, ge=1),
-            limit: int = Query(50, ge=1, le=200)
+            limit: int = Query(50, ge=1, le=200),
+            all_workspaces: bool = False,
         ):
             """Get paginated session list across ADK and LangGraph runtimes."""
             return self._get_sessions(
@@ -4079,7 +4118,7 @@ class DashboardServer:
                 search=search,
                 page=page,
                 limit=limit,
-                workspace_id=ctx.workspace_id,
+                workspace_id=self._view_workspace(ctx, all_workspaces),
                 is_platform_admin=ctx.is_platform_admin,
             )
 
@@ -4090,11 +4129,13 @@ class DashboardServer:
             app_name: str = Query(""),
             user_id: str = Query(""),
             runtime: str = Query("auto"),
+            all_workspaces: bool = False,
             ctx: RequestContext = Depends(get_request_context)
         ):
             """Get complete history of prompts, responses, thoughts, tool calls, and state for a session."""
+            every_workspace = self._view_workspace(ctx, all_workspaces) is None
             detail = self._get_session_detail(runtime=runtime, app_name=app_name, user_id=user_id, session_id=session_id)
-            if not detail or not self._session_in_workspace(ctx, detail):
+            if not detail or not (every_workspace or self._session_in_workspace(ctx, detail)):
                 raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
             return detail
 
@@ -4105,11 +4146,13 @@ class DashboardServer:
             app_name: str = Query(""),
             user_id: str = Query(""),
             runtime: str = Query("auto"),
+            all_workspaces: bool = False,
             ctx: RequestContext = Depends(get_request_context)
         ):
             """Delete a specific session and its associated events."""
+            every_workspace = self._view_workspace(ctx, all_workspaces) is None
             detail = self._get_session_detail(runtime=runtime, app_name=app_name, user_id=user_id, session_id=session_id)
-            if not detail or not self._session_in_workspace(ctx, detail):
+            if not detail or not (every_workspace or self._session_in_workspace(ctx, detail)):
                 raise HTTPException(status_code=404, detail=f"Could not delete session {session_id}")
             # The session just checked, not whatever else the query matches
             deleted = self._delete_session(runtime=detail.get("runtime", runtime),
@@ -4477,10 +4520,11 @@ class DashboardServer:
 
         # API Endpoints for Dashboard
         @self.app.get("/dashboard/api/stats", tags=["Dashboard - Usage Analytics"])
-        async def get_stats(request: Request, ctx: RequestContext = Depends(get_request_context), days: int = 7, origin: str = "interactive"):
+        async def get_stats(request: Request, ctx: RequestContext = Depends(get_request_context), days: int = 7,
+                            origin: str = "interactive", all_workspaces: bool = False):
             """Get usage statistics. `origin` narrows the latency panel only."""
             return self._get_usage_stats(days, self.resolve_origins(origin),
-                                         workspace_id=ctx.workspace_id)
+                                         workspace_id=self._view_workspace(ctx, all_workspaces))
 
         @self.app.get("/dashboard/api/usage/logs", tags=["Dashboard - Usage Analytics"])
         async def get_usage_logs_api(
@@ -4488,10 +4532,18 @@ class DashboardServer:
             ctx: RequestContext = Depends(get_request_context),
             hours: int = 24,
             limit: int = 100,
-            page: int = 1
+            page: int = 1,
+            all_workspaces: bool = False,
         ):
-            """Get paginated token usage logs."""
-            return self._get_token_usage_logs(hours, limit, page, workspace_id=ctx.workspace_id)
+            """Get paginated token usage logs: a member's own in the current workspace
+            (My Usage), the workspace's for its admins."""
+            view = self._view_workspace(ctx, all_workspaces)
+            result = self._get_token_usage_logs(hours, limit, page,
+                                                user_id=None if ctx.is_admin else ctx.user_id,
+                                                workspace_id=view)
+            if "logs" in result:
+                self._with_workspaces(result["logs"], [log["workspace_id"] for log in result["logs"]], view)
+            return result
 
         @self.app.get("/dashboard/api/rate-limits", tags=["Dashboard - Rate Limits"])
         async def get_rate_limits_api(request: Request, ctx: RequestContext = Depends(get_request_context), scope: Optional[str] = None):
@@ -4624,9 +4676,11 @@ class DashboardServer:
             hours: int = 24,
             limit: int = 50,
             trace_id: Optional[str] = None,
+            all_workspaces: bool = False,
         ):
             """Get traces from trace_spans table for dashboard viewer."""
-            return self._get_traces(hours, limit, trace_id, workspace_id=ctx.workspace_id,
+            return self._get_traces(hours, limit, trace_id,
+                                    workspace_id=self._view_workspace(ctx, all_workspaces),
                                     is_platform_admin=ctx.is_platform_admin)
 
         @self.app.get("/dashboard/api/traces/sessions", tags=["Dashboard - Traces"])
@@ -6666,8 +6720,10 @@ class DashboardServer:
             phase: str = None,
             limit: int = 100,
             offset: int = 0,
+            all_workspaces: bool = False,
         ):
             """Get guardrail trigger logs with optional filters."""
+            view = self._view_workspace(ctx, all_workspaces)
             if not self.db_client:
                 return {"logs": [], "total": 0}
             session = self.db_client.get_session()
@@ -6676,7 +6732,7 @@ class DashboardServer:
             try:
                 from sqlalchemy import func
                 query = session.query(self.GuardrailLog).filter(
-                    *rows_of(self.GuardrailLog, ctx.workspace_id))
+                    *rows_of(self.GuardrailLog, view))
                 if agent_name:
                     query = query.filter(self.GuardrailLog.agent_name == agent_name)
                 if guardrail_type:
@@ -6692,7 +6748,9 @@ class DashboardServer:
                     .limit(limit)
                     .all()
                 )
-                return {"logs": [l.to_dict() for l in logs], "total": total}
+                return {"logs": self._with_workspaces([l.to_dict() for l in logs],
+                                                      [l.workspace_id for l in logs], view),
+                        "total": total}
             except Exception as e:
                 logger.error(f"Error fetching guardrail logs: {e}")
                 return {"logs": [], "total": 0, "error": str(e)}
@@ -6713,8 +6771,10 @@ class DashboardServer:
             date_to: Optional[str] = None,
             limit: int = 100,
             offset: int = 0,
+            all_workspaces: bool = False,
         ):
             """List audit logs with filters. Append-only, immutable."""
+            view = self._view_workspace(ctx, all_workspaces)
             if not self.db_client:
                 return {"logs": [], "total": 0}
             session = self.db_client.get_session()
@@ -6722,7 +6782,7 @@ class DashboardServer:
                 return {"logs": [], "total": 0}
             try:
                 from datetime import datetime as dt
-                query = session.query(self.AuditLog).filter(*rows_of(self.AuditLog, ctx.workspace_id))
+                query = session.query(self.AuditLog).filter(*rows_of(self.AuditLog, view))
                 if actor:
                     query = query.filter(self.AuditLog.actor == actor)
                 if action:
@@ -6748,7 +6808,9 @@ class DashboardServer:
                     .limit(limit)
                     .all()
                 )
-                return {"logs": [l.to_dict() for l in logs], "total": total}
+                return {"logs": self._with_workspaces([l.to_dict() for l in logs],
+                                                      [l.workspace_id for l in logs], view),
+                        "total": total}
             except Exception as e:
                 logger.error("Error fetching audit logs: %s", e)
                 return {"logs": [], "total": 0, "error": str(e)}
@@ -6767,8 +6829,11 @@ class DashboardServer:
             date_from: Optional[str] = None,
             date_to: Optional[str] = None,
             limit: int = 10000,
+            all_workspaces: bool = False,
         ):
-            """Export audit logs as JSON or CSV for compliance reporting."""
+            """Export audit logs as JSON or CSV for compliance reporting; every
+            workspace's, each row with its workspace, with all_workspaces."""
+            view = self._view_workspace(ctx, all_workspaces)
             if not self.db_client:
                 raise HTTPException(status_code=503, detail="Database unavailable")
             session = self.db_client.get_session()
@@ -6776,7 +6841,7 @@ class DashboardServer:
                 raise HTTPException(status_code=503, detail="Database unavailable")
             try:
                 from datetime import datetime as dt
-                query = session.query(self.AuditLog).filter(*rows_of(self.AuditLog, ctx.workspace_id))
+                query = session.query(self.AuditLog).filter(*rows_of(self.AuditLog, view))
                 if actor:
                     query = query.filter(self.AuditLog.actor == actor)
                 if action:
@@ -6796,13 +6861,16 @@ class DashboardServer:
                     except ValueError:
                         pass
                 rows = query.order_by(self.AuditLog.timestamp.asc()).limit(limit).all()
-                data = [r.to_dict() for r in rows]
+                data = self._with_workspaces([r.to_dict() for r in rows], [r.workspace_id for r in rows], view)
                 if format.lower() == "csv":
                     import csv
                     from io import StringIO
                     out = StringIO()
                     if data:
-                        writer = csv.DictWriter(out, fieldnames=["id", "timestamp", "actor", "action", "resource_type", "resource_id", "details", "ip_address"])
+                        fieldnames = ["id", "timestamp", "actor", "action", "resource_type", "resource_id", "details", "ip_address"]
+                        if view is None:
+                            fieldnames += ["workspace_id", "workspace"]
+                        writer = csv.DictWriter(out, fieldnames=fieldnames)
                         writer.writeheader()
                         for row in data:
                             row_flat = {k: (json.dumps(v) if isinstance(v, (dict, list)) else v) for k, v in row.items()}

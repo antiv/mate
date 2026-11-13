@@ -7,6 +7,7 @@
     <div class="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center">
         <div class="min-w-0">
             <h2 class="text-xl font-bold text-gray-900 dark:text-white">Guardrail Logs</h2>
+            {% include "dashboard/_all_workspaces.html" %}
             <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">
                 Every guardrail trigger: blocked prompts, redacted outputs, warnings. Configure guardrails per agent in the agent editor.
             </p>
@@ -123,7 +124,7 @@
         const tbody = document.getElementById('guardrailLogBody');
         tbody.innerHTML = '<tr><td colspan="8" class="px-3 py-4 text-sm text-gray-500">Loading...</td></tr>';
         try {
-            const url = '/dashboard/api/guardrail-logs?' + buildQuery().toString();
+            const url = '/dashboard/api/guardrail-logs?' + mateScope.params(buildQuery()).toString();
             const data = await apiCall(url);
             totalCount = data.total || 0;
             const logs = data.logs || [];
@@ -144,7 +145,8 @@
                 var details = esc(row.details);
                 return '<tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50">' +
                     '<td data-label="Time" class="px-3 py-2 text-xs text-gray-900 dark:text-white whitespace-nowrap">' + time + '</td>' +
-                    '<td data-label="Agent" class="px-3 py-2 text-xs text-gray-900 dark:text-white">' + esc(row.agent_name || '—') + '</td>' +
+                    '<td data-label="Agent" class="px-3 py-2 text-xs text-gray-900 dark:text-white">' + esc(row.agent_name || '—') +
+                        (mateScope.label(row) ? '<div class="text-gray-400">' + esc(mateScope.label(row)) + '</div>' : '') + '</td>' +
                     '<td data-label="User" class="px-3 py-2 text-xs text-gray-500 dark:text-gray-400 max-w-[120px] truncate" title="' + esc(row.user_id) + '">' + esc(row.user_id || '—') + '</td>' +
                     '<td data-label="Type" class="px-3 py-2 text-xs text-gray-900 dark:text-white">' + esc(row.guardrail_type || '—') + '</td>' +
                     '<td data-label="Phase" class="px-3 py-2 text-xs text-gray-500 dark:text-gray-400">' + esc(row.phase || '—') + '</td>' +

@@ -26,6 +26,13 @@ Room, widgets, Slack, the API and triggers. It shows the conversations with the 
 of the workspace you are working in; another workspace's session is not found, and
 cannot be deleted from here.
 
+**All workspaces.** A platform administrator sees an **All workspaces** box under the
+page title. Ticking it shows every workspace's entries, each named with its workspace;
+the choice stays in the page's address, so a reload or a shared link keeps it. Owners
+and admins of a workspace don't have the box, and the API refuses them the view (403).
+In that view a session of any workspace opens, and can be deleted. **Traces** has the
+same box.
+
 Filter by agent, by user, or search for words that appeared in the conversation or
 for a session id. Open a session to see the **Session Inspector**: each turn in
 order, with the prompt the model received, its reasoning where the model exposes

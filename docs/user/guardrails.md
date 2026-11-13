@@ -63,7 +63,8 @@ affects anyone.
 **Control Room → Guardrail Logs** lists every hit: when, which agent and user, which
 guardrail, whether it was on the way in or out, the action taken and what matched,
 for the agents of the workspace you are working in. Filter by agent, guardrail type,
-phase or action.
+phase or action. A platform administrator can tick **All workspaces** to see every
+workspace's hits, each named with its workspace.
 
 Use it to tune. Many **Log** hits on harmless messages mean a rule is too broad; no
 hits at all on a public agent may mean a rule is not doing anything.

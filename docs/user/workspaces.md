@@ -31,6 +31,7 @@ Every workspace is listed, closed ones too, with:
 | **Status** | **open**, **suspended** or **closed**. |
 | **Owners** | The members with the owner role, and addresses invited as owner who haven't accepted yet, marked *(invited)*. |
 | **Members**, **Projects** | How many of each it has. |
+| **Usage (30 days)** | Tokens and cost of its agents' calls over the last 30 days. Calls of agents with no configuration count as Default's. |
 | **Platform keys** | Whether it may call models on the installation's provider keys. |
 | **Features** | The platform features it may use (below). |
 

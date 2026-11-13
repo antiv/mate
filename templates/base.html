@@ -13,6 +13,24 @@
         tailwind.config = {
             darkMode: 'class',
         }
+        // All workspaces (dashboard/_all_workspaces.html): with ?all_workspaces=1 on the
+        // page, a platform administrator's log views ask their API for every workspace,
+        // and name each row's workspace
+        window.mateScope = (function () {
+            const value = new URLSearchParams(window.location.search).get('all_workspaces');
+            const all = value === '1' || value === 'true';
+            return {
+                all: all,
+                url: function (path) {
+                    return all ? path + (path.indexOf('?') >= 0 ? '&' : '?') + 'all_workspaces=true' : path;
+                },
+                params: function (params) {
+                    if (all) params.set('all_workspaces', 'true');
+                    return params;
+                },
+                label: function (row) { return all && row && row.workspace ? row.workspace : ''; },
+            };
+        })();
     </script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">

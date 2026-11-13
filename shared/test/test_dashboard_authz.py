@@ -180,7 +180,7 @@ class TestDashboardAuthz(unittest.TestCase):
     def test_allowlist_stays_small(self):
         # Every entry here is a route a non-admin may write to; keep it deliberate.
         self.assertEqual(len(USER_WRITABLE_PATHS), 7)
-        self.assertEqual(len(USER_READABLE_PATHS), 3)
+        self.assertEqual(len(USER_READABLE_PATHS), 4)
 
 
 if __name__ == "__main__":
