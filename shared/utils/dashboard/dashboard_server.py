@@ -4783,17 +4783,19 @@ class DashboardServer:
             roles (shared/utils/workspaces.py, SYSTEM_CALLERS)."""
             try:
                 import json
-                from shared.utils.workspaces import is_reserved_user_id
                 # A widget visitor or a system caller is given no platform role here
-                settable = () if is_reserved_user_id(user_id) else ("admin", "pending")
+                reserved = is_reserved_user_id(user_id)
+                settable = () if reserved else ("admin", "pending")
                 roles_list = json.loads(roles) if roles else []
                 user = self.user_service.get_user_by_id(user_id) if self.user_service else None
                 current = set(user.get_roles()) if user else set()
                 if not isinstance(roles_list, list) or any(
                         not isinstance(r, str) or (r not in settable and r not in current) for r in roles_list):
-                    return {"success": False,
-                            "message": f"Only the platform roles {', '.join(settable)} are set "
-                                       "here. Set agent roles on each workspace's Members page."}
+                    return {"success": False, "message": (
+                        "A widget visitor or a system caller is given no platform role; its "
+                        "roles stay as they are." if reserved else
+                        f"Only the platform roles {', '.join(settable)} are set here. Set agent "
+                        "roles on each workspace's Members page.")}
                 profile_data_value = profile_data if profile_data else None
                 success = self._update_user(user_id, roles_list, profile_data_value)
                 if success:

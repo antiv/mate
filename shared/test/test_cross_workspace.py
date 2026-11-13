@@ -26,6 +26,7 @@ import base64
 import hashlib
 import json
 import os
+import shutil
 import sys
 import tempfile
 import unittest
@@ -3661,6 +3662,8 @@ class TestReviewOfPhase3(_TwoWorkspaces):
                 response = self.client.put(f"/dashboard/api/users/{user_id}", headers=_platform_admin(A),
                                            data={"roles": json.dumps(roles)})
                 self.assertFalse(response.json()["success"], response.text)
+                if user_id.startswith("widget_"):
+                    self.assertIn("widget visitor", response.json()["message"])
         session = self.Session()
         try:
             self.assertEqual(session.query(User).filter_by(user_id="widget_7_visitor").one().get_roles(),
@@ -3671,6 +3674,49 @@ class TestReviewOfPhase3(_TwoWorkspaces):
         response = self.client.put("/dashboard/api/users/widget_7_visitor", headers=_platform_admin(A),
                                    data={"roles": json.dumps(["widget"]), "profile_data": "visitor"})
         self.assertTrue(response.json()["success"], response.text)
+
+    def test_a_refusal_reads_a_known_user_s_roles_as_the_check_does(self):
+        # trigger_runner keeps its roles in users.roles; an empty value is ["user"] to
+        # caller_access, and so to the refusal
+        session = self.Session()
+        session.add(User(user_id="trigger_runner", roles=""))
+        session.commit()
+        session.close()
+        self.assertEqual(RBACMiddleware().roles_for("trigger_runner", B_ROOT), ["user"])
+
+    def test_two_owners_stepping_down_at_once_on_sqlite(self):
+        # The owners are read outside any transaction on SQLite, so both count two; the
+        # count after the write catches the second
+        from server.member_routes import _an_owner_remains, _keeps_an_owner
+        directory = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, directory, True)
+        engine = create_engine(f"sqlite:///{directory}/race.db")
+        self.addCleanup(engine.dispose)
+        Base.metadata.create_all(engine)
+        Session = sessionmaker(bind=engine)
+        session = Session()
+        session.add(Workspace(id=7, name="Race", slug="race"))
+        session.flush()
+        for user_id in ("one@x.example", "two@x.example"):
+            session.add(WorkspaceMember(workspace_id=7, user_id=user_id, role="owner"))
+        session.commit()
+        session.close()
+        first, second = Session(), Session()
+        self.addCleanup(first.close)
+        self.addCleanup(second.close)
+        one = first.query(WorkspaceMember).filter_by(user_id="one@x.example").one()
+        two = second.query(WorkspaceMember).filter_by(user_id="two@x.example").one()
+        _keeps_an_owner(first, one)
+        _keeps_an_owner(second, two)
+        first.delete(one)
+        _an_owner_remains(first, 7)
+        first.commit()
+        second.delete(two)
+        with self.assertRaises(HTTPException) as refused:
+            _an_owner_remains(second, 7)
+        self.assertEqual(refused.exception.status_code, 409)
+        second.rollback()
+        self.assertEqual(Session().query(WorkspaceMember).filter_by(workspace_id=7, role="owner").count(), 1)
 
     def test_the_users_page_adds_admin_or_pending_only(self):
         self._users_page()

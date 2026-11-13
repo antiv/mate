@@ -116,7 +116,10 @@ workspace.
 - Anyone leaves the workspace with **Leave workspace** on the page, or **Leave this
   workspace** in the account menu, shown to people with more than one workspace.
 - The last owner can't be demoted, removed or leave: make someone else an owner
-  first.
+  first. On the **Users** page a platform administrator can still take them out,
+  by making them `pending`, deleting them, or removing `admin` from the Default
+  workspace's owner; the workspace then has no owner until a platform administrator
+  makes someone one on its **Members** page.
 
 Every change is written to the workspace's audit log, as `member.update`,
 `member.remove` or `member.leave`.
