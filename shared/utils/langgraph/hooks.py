@@ -49,10 +49,7 @@ def check_rbac(user_id: str, agent_name: str, session_id: Optional[str] = None) 
             logger.debug(f"RBAC: Access granted for user {user_id} to agent {agent_name}")
             return None
 
-        try:
-            user_roles = get_user_service().get_user_roles(user_id)
-        except Exception:
-            user_roles = []
+        user_roles = get_rbac_middleware().roles_for(user_id, agent_name)
 
         required_roles = config_dict.get("allowed_for_roles", [])
         logger.error(f"RBAC: Access DENIED for user '{user_id}' to agent '{agent_name}'. "

@@ -3591,5 +3591,102 @@ class TestAllWorkspaces(_TwoWorkspaces):
         self.assertEqual(listed[A]["tokens"], 7)
 
 
+class TestReviewOfPhase3(_TwoWorkspaces):
+    """What the review of phase 3 (3a-3i) found (#277, 3j)."""
+
+    def _member(self, workspace_id: int, user_id: str):
+        session = self.Session()
+        try:
+            row = session.query(WorkspaceMember).filter_by(workspace_id=workspace_id, user_id=user_id).first()
+            return (row.role, json.loads(row.agent_roles)) if row else None
+        finally:
+            session.close()
+
+    def _users_page(self):
+        users = patch.object(auth_server.dashboard_server, "user_service", UserService())
+        users.start()
+        self.addCleanup(users.stop)
+
+    def test_losing_the_admin_role_takes_the_default_workspace_s_ownership(self):
+        session = self.Session()
+        session.add(User(user_id="former@a.example", roles='["admin"]'))
+        session.commit()
+        session.close()
+        self.assertEqual(self._member(A, "former@a.example"), ("owner", []))
+        # bob owns B, which no platform role gave him
+        session = self.Session()
+        session.query(User).filter_by(user_id=BOB).one().set_roles(["admin"])
+        session.commit()
+        session.close()
+        self._users_page()
+        for user_id in ("former@a.example", BOB):
+            response = self.client.put(f"/dashboard/api/users/{user_id}", headers=_platform_admin(A),
+                                       data={"roles": "[]"})
+            self.assertTrue(response.json()["success"], response.text)
+        self.assertEqual(self._member(A, "former@a.example"), ("member", []))
+        former = TestClient(auth_server.app, cookies=_signed_in("former@a.example"))
+        self.assertEqual(former.get("/dashboard/api/agents").status_code, 403)
+        self.assertEqual(self._member(B, BOB)[0], "owner")
+
+    def test_agent_roles_written_for_a_member_of_another_workspace_are_kept(self):
+        self.assertIsNone(self._member(A, BOB))
+        self.assertTrue(UserService().update_user_roles(BOB, ["user", "support"]))
+        self.assertEqual(self._member(A, BOB), ("member", ["user", "support"]))
+        self.assertEqual(self._member(B, BOB), ("owner", ["user", "developer"]))
+        session = self.Session()
+        try:
+            self.assertEqual(session.query(User).filter_by(user_id=BOB).one().get_roles(), [])
+        finally:
+            session.close()
+
+    def test_a_refusal_names_the_agent_roles_of_the_agent_s_workspace(self):
+        rbac = RBACMiddleware()
+        self.assertEqual(rbac.roles_for(BOB, B_ROOT), ["user", "developer"])
+        # Not those of another workspace
+        self.assertEqual(rbac.roles_for(BOB, A_ROOT), [])
+
+    def test_the_users_page_adds_admin_or_pending_only(self):
+        self._users_page()
+        session = self.Session()
+        session.add(User(user_id="trigger_runner", roles='["user"]'))
+        session.commit()
+        session.close()
+        refused = self.client.put(f"/dashboard/api/users/{ALICE}", headers=_platform_admin(A),
+                                  data={"roles": json.dumps(["widget"])})
+        self.assertFalse(refused.json()["success"])
+        self.assertEqual(self._member(A, ALICE)[0], "member")
+        # A system caller's agent roles stay, so its profile can be saved
+        kept = self.client.put("/dashboard/api/users/trigger_runner", headers=_platform_admin(A),
+                               data={"roles": json.dumps(["user"]), "profile_data": "nightly jobs"})
+        self.assertTrue(kept.json()["success"], kept.text)
+
+    def test_a_workspace_s_token_windows(self):
+        session = self.Session()
+        now = datetime.now(timezone.utc)
+        for tokens, age in ((1, timedelta(minutes=30)), (10, timedelta(hours=5)),
+                            (100, timedelta(days=3)), (1000, timedelta(days=40))):
+            session.add(TokenUsageLog(request_id="r", session_id="s", user_id=BOB, agent_name=B_ROOT,
+                                      model_name="m", status="SUCCESS", prompt_tokens=tokens,
+                                      response_tokens=0, workspace_id=B, timestamp=now - age))
+        session.commit()
+        session.close()
+        service = token_usage_service.get_token_usage_service()
+        # The fixture's log of B holds 2 tokens, written now
+        self.assertEqual(service.get_workspace_tokens_windows(B, now + timedelta(seconds=5)), (3, 13, 113))
+
+    def test_the_usage_logs_page_size_is_bounded(self):
+        for params in ({"limit": 0}, {"limit": 5000}, {"page": 0}, {"hours": 0}):
+            with self.subTest(params=params):
+                response = self.client.get("/dashboard/api/usage/logs", params=params, headers=_platform_admin(A))
+                self.assertEqual(response.status_code, 422)
+
+    def test_api_roles_without_a_database_session(self):
+        from server import pat_auth
+        user = User(user_id=ALICE, roles='["admin"]')
+        with patch.object(pat_auth, "get_database_client") as db:
+            db.return_value.get_session.return_value = None
+            self.assertEqual(pat_auth.api_roles(user, A), ["admin"])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -29,7 +29,7 @@ from server.request_context import (
     SESSION_WORKSPACE_KEY, RequestContext, get_api_request_context,
 )
 from shared.utils import audit_service
-from shared.utils.models import User, WorkspaceMember, parse_roles
+from shared.utils.models import User, Workspace, WorkspaceMember, parse_roles
 from shared.utils.workspaces import MEMBER_ROLES, PLATFORM_ROLES, ROLE_OWNER
 
 logger = logging.getLogger(__name__)
@@ -62,9 +62,11 @@ def _member(session: Session, workspace_id: int, user_id: str) -> WorkspaceMembe
 
 
 def _keeps_an_owner(session: Session, member: WorkspaceMember) -> None:
-    """409 when the member is the workspace's last owner."""
+    """409 when the member is the workspace's last owner. Locks the workspace's row
+    first, so that two owners stepping down at once are counted one after the other."""
     if member.role != ROLE_OWNER:
         return
+    session.query(Workspace.id).filter(Workspace.id == member.workspace_id).with_for_update().first()
     owners = session.query(func.count(WorkspaceMember.id)).filter(
         WorkspaceMember.workspace_id == member.workspace_id,
         WorkspaceMember.role == ROLE_OWNER).scalar()

@@ -311,8 +311,7 @@ class RateLimitService:
         """What every agent of the workspace used and spent, as a workspace budget
         counts it."""
         now = datetime.now(timezone.utc)
-        hour, day, month = (self.token_service.get_workspace_tokens_since(workspace_id, now - window)
-                            for window in (timedelta(hours=1), timedelta(days=1), timedelta(days=30)))
+        hour, day, month = self.token_service.get_workspace_tokens_windows(workspace_id, now)
         spend_day = self.token_service.get_spend_since("workspace", str(workspace_id),
                                                        now - timedelta(days=1))
         spend_month = self.token_service.get_spend_since("workspace", str(workspace_id),
@@ -358,8 +357,7 @@ class RateLimitService:
                 if scope != "workspace" or all(
                         v is None for v in (cfg.tokens_per_hour, cfg.tokens_per_day, cfg.tokens_per_month)):
                     return None
-                return tuple(self.token_service.get_workspace_tokens_since(workspace_id, now - window)
-                             for window in (timedelta(hours=1), timedelta(days=1), timedelta(days=30)))
+                return self.token_service.get_workspace_tokens_windows(workspace_id, now)
 
             def _plain(cfg: RateLimitConfig, scope: str) -> SimpleNamespace:
                 # A dollar budget is measured in its own scope, so its spend is

@@ -153,10 +153,7 @@ def rbac_before_model_callback(callback_context: CallbackContext, llm_request: L
                     span.end()
                 except Exception:
                     pass
-            try:
-                user_roles = user_service.get_user_roles(user_id)
-            except Exception:
-                user_roles = []
+            user_roles = rbac_middleware.roles_for(user_id, agent_name)
             required_roles = config_dict.get('allowed_for_roles', [])
             logger.error(f"RBAC: Access DENIED for user '{user_id}' to agent '{agent_name}'. User roles: {user_roles}, Required: {required_roles}")
             

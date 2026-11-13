@@ -34,6 +34,8 @@ def api_roles(user: User, workspace_id: Optional[int]) -> list:
     their agent roles in the workspace (shared/utils/workspaces.py)."""
     from shared.utils.workspaces import agent_roles_in
     session = get_database_client().get_session()
+    if not session:
+        return user.get_roles()
     try:
         return user.get_roles() + agent_roles_in(session, workspace_id, user.user_id)
     finally:

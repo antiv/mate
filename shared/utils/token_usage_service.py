@@ -461,6 +461,30 @@ class TokenUsageService:
         finally:
             session.close()
 
+    def get_workspace_tokens_windows(self, workspace_id: int, now: datetime) -> Tuple[int, int, int]:
+        """The workspace's tokens over the last hour, day and 30 days, in one scan."""
+        session = self._get_session()
+        if not session:
+            return (0, 0, 0)
+        tokens = (func.coalesce(TokenUsageLog.prompt_tokens, 0)
+                  + func.coalesce(TokenUsageLog.response_tokens, 0))
+        since = {"hour": now - timedelta(hours=1), "day": now - timedelta(days=1)}
+        try:
+            row = session.query(
+                func.coalesce(func.sum(case((TokenUsageLog.timestamp >= since["hour"], tokens), else_=0)), 0),
+                func.coalesce(func.sum(case((TokenUsageLog.timestamp >= since["day"], tokens), else_=0)), 0),
+                func.coalesce(func.sum(tokens), 0),
+            ).filter(
+                TokenUsageLog.timestamp >= now - timedelta(days=30),
+                *rows_of(TokenUsageLog, workspace_id),
+            ).one()
+            return tuple(int(value or 0) for value in row)
+        except SQLAlchemyError as e:
+            logger.error("Failed to get workspace tokens: %s", e)
+            return (0, 0, 0)
+        finally:
+            session.close()
+
     def get_spend_since(self, scope: str, scope_id: str, since: datetime,
                         include_sub_agents: bool = False,
                         workspace_id: Optional[int] = None) -> Optional[Tuple[float, int]]:

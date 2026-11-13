@@ -9,7 +9,7 @@ import logging
 from typing import Dict, Any, Optional
 from .database_client import get_database_client
 from .user_service import get_user_service
-from .workspaces import SYSTEM_CALLERS, agent_workspace, caller_access
+from .workspaces import SYSTEM_CALLERS, agent_roles_in, agent_workspace, caller_access
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +82,22 @@ class RBACMiddleware:
         finally:
             session.close()
     
+    def roles_for(self, user_id: str, agent_name: str) -> list:
+        """The roles the agent's allowed_for_roles was matched against, for a refusal's
+        message and audit entry: the user's platform roles and their agent roles in the
+        agent's workspace (a system caller's are all in users.roles)."""
+        session = get_database_client().get_session()
+        if not session:
+            return []
+        try:
+            roles = self.user_service.get_user_roles(user_id)
+            return roles + agent_roles_in(session, agent_workspace(session, agent_name), user_id)
+        except Exception as e:
+            logger.debug(f"RBAC: roles of {user_id} not read: {e}")
+            return []
+        finally:
+            session.close()
+
     def get_user_roles(self, user_id: str) -> list:
         """Get user roles for a user."""
         return self.user_service.get_user_roles(user_id)
