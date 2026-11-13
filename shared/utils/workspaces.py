@@ -20,7 +20,10 @@ Until phase 3e every membership was derived from users.roles (D3). What is left 
   membership. Approving a pending user who is a member nowhere adds them to the
   default workspace (_member_for_changed_roles).
 - Agent roles written to users.roles later move to the user's membership of the
-  default workspace.
+  default workspace, which a user who is a member elsewhere only joins for them.
+- Losing the admin role takes away the default workspace's ownership that being a
+  platform administrator gave (1.x's admins are its owners): an owner of it becomes a
+  member. Owners of other workspaces stay owners.
 - move_roles_to_members() runs when the auth server starts. Once per installation it
   derives the memberships from users.roles as 2.0 before 3e did, which also adds the
   users of a 1.x installation, and empties users.roles of agent roles. Every start it
@@ -149,8 +152,10 @@ def _member_for_new_user(mapper: Mapper, connection: Connection, user: User) -> 
 
 @event.listens_for(User, "after_update")
 def _member_for_changed_roles(mapper: Mapper, connection: Connection, user: User) -> None:
-    if not attributes.get_history(user, "roles").has_changes():
+    history = attributes.get_history(user, "roles")
+    if not history.has_changes():
         return
+    before = parse_roles(history.deleted[0]) if history.deleted else []
     roles = parse_roles(user.roles)
     members = WorkspaceMember.__table__
     if NON_MEMBER_ROLES.intersection(roles):
@@ -168,10 +173,19 @@ def _member_for_changed_roles(mapper: Mapper, connection: Connection, user: User
         connection.execute(insert(members).values(
             workspace_id=DEFAULT_WORKSPACE_ID, user_id=user.user_id, role=role,
             agent_roles=json.dumps(taken or ([] if "admin" in roles else DEFAULT_AGENT_ROLES))))
-    elif taken:
-        connection.execute(update(members).where(
-            members.c.workspace_id == DEFAULT_WORKSPACE_ID, members.c.user_id == user.user_id,
-        ).values(agent_roles=json.dumps(taken)))
+        return
+    in_default = (members.c.workspace_id == DEFAULT_WORKSPACE_ID, members.c.user_id == user.user_id)
+    if "admin" in before and "admin" not in roles:
+        connection.execute(update(members).where(*in_default, members.c.role == ROLE_OWNER)
+                           .values(role=ROLE_MEMBER))
+    if taken:
+        moved = connection.execute(update(members).where(*in_default)
+                                   .values(agent_roles=json.dumps(taken))).rowcount
+        if not moved:
+            # A member of another workspace only: 1.x code means the default one
+            connection.execute(insert(members).values(
+                workspace_id=DEFAULT_WORKSPACE_ID, user_id=user.user_id, role=ROLE_MEMBER,
+                agent_roles=json.dumps(taken)))
 
 
 def _derive_default_members(connection: Connection, users: List[Tuple[str, Optional[str]]],

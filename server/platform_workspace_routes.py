@@ -35,8 +35,9 @@ from sqlalchemy.orm import Session
 from server.request_context import RequestContext, get_api_request_context
 from shared.utils import audit_service
 from server.invitation_routes import (
-    create_invitation, invitation_link, invited_email, send_invitation,
+    _now, create_invitation, invitation_link, invited_email, send_invitation,
 )
+from server.member_routes import _session
 from shared.utils.models import (
     DEFAULT_WORKSPACE_ID, PLATFORM_FEATURES, Project, TokenUsageLog, User, Workspace,
     WorkspaceInvitation, WorkspaceMember,
@@ -57,14 +58,6 @@ def _platform_admin(ctx: RequestContext = Depends(get_api_request_context)) -> R
     if not ctx.is_platform_admin:
         raise HTTPException(status_code=403, detail="Platform administrator access required")
     return ctx
-
-
-def _session() -> Session:
-    from shared.utils.database_client import get_database_client
-    session = get_database_client().get_session()
-    if not session:
-        raise HTTPException(status_code=503, detail="Database unavailable")
-    return session
 
 
 def _status(workspace: Workspace) -> str:
@@ -118,7 +111,7 @@ def _list(session: Session) -> List[Dict[str, Any]]:
     for workspace_id, email in (session.query(WorkspaceInvitation.workspace_id, WorkspaceInvitation.email)
                                 .filter(WorkspaceInvitation.role == ROLE_OWNER,
                                         WorkspaceInvitation.accepted_at.is_(None),
-                                        WorkspaceInvitation.expires_at > _utc_now())
+                                        WorkspaceInvitation.expires_at > _now())
                                 .order_by(WorkspaceInvitation.email)):
         invited.setdefault(workspace_id, []).append(email)
     usage = _usage(session)
@@ -137,10 +130,6 @@ def _usage(session: Session) -> Dict[int, Tuple[int, float]]:
                           func.sum(TokenUsageLog.cost_usd))
             .filter(TokenUsageLog.timestamp >= since).group_by(workspace))
     return {workspace_id: (int(tokens or 0), float(cost or 0.0)) for workspace_id, tokens, cost in rows}
-
-
-def _utc_now() -> datetime:
-    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 def _one(session: Session, workspace_id: int) -> Workspace:

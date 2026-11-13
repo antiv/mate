@@ -4530,9 +4530,9 @@ class DashboardServer:
         async def get_usage_logs_api(
             request: Request,
             ctx: RequestContext = Depends(get_request_context),
-            hours: int = 24,
-            limit: int = 100,
-            page: int = 1,
+            hours: int = Query(24, ge=1, le=24 * 366),
+            limit: int = Query(100, ge=1, le=1000),
+            page: int = Query(1, ge=1),
             all_workspaces: bool = False,
         ):
             """Get paginated token usage logs: a member's own in the current workspace
@@ -4778,14 +4778,18 @@ class DashboardServer:
         @self.app.put("/dashboard/api/users/{user_id}", tags=["Dashboard - Users"])
         async def update_user(user_id: str, request: Request, ctx: RequestContext = Depends(get_request_context), roles: str = Form(...), profile_data: str = Form(None)):
             """Update a user's platform roles (admin, pending) and profile data. Agent roles
-            are a workspace's, set on its Members page (server/member_routes.py)."""
+            are a workspace's, set on its Members page (server/member_routes.py). Roles the
+            user already has may stay: a widget visitor's widget, a system caller's agent
+            roles (shared/utils/workspaces.py, SYSTEM_CALLERS)."""
             try:
                 import json
-                from shared.utils.workspaces import PLATFORM_ROLES
+                settable = ("admin", "pending")
                 roles_list = json.loads(roles) if roles else []
-                if not isinstance(roles_list, list) or any(r not in PLATFORM_ROLES for r in roles_list):
+                current = set(self.user_service.get_user_roles(user_id)) if self.user_service else set()
+                if not isinstance(roles_list, list) or any(
+                        not isinstance(r, str) or (r not in settable and r not in current) for r in roles_list):
                     return {"success": False,
-                            "message": f"Only the platform roles {', '.join(PLATFORM_ROLES)} are set "
+                            "message": f"Only the platform roles {', '.join(settable)} are set "
                                        "here. Set agent roles on each workspace's Members page."}
                 profile_data_value = profile_data if profile_data else None
                 success = self._update_user(user_id, roles_list, profile_data_value)

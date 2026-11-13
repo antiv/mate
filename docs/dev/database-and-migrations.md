@@ -209,7 +209,10 @@ request context (`docs/dev/auth-and-access.md`, "The workspace of a request"):
     nowhere adds them to the default workspace, with the agent roles the change
     wrote or `["user"]`.
   - Agent roles written to `users.roles` later move to the user's membership of the
-    default workspace. A change of platform roles leaves the memberships alone.
+    default workspace; a user who is a member of another workspace only joins it, as a
+    `member`, for them. Losing `admin` makes an `owner` of the default workspace a
+    `member`, since 1.x's admins became its owners; owners of other workspaces stay.
+    Any other change of platform roles leaves the memberships alone.
   - The auth server runs `move_roles_to_members()` at startup, before it starts the
     agent server. The first time, it derives the default workspace's memberships as
     phase 2 did, which also adds the users of a database that has just migrated
