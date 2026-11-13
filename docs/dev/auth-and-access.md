@@ -564,7 +564,10 @@ no header and keep ADK's id.
 `/list-apps` answers with the agents of the request's workspace, for everyone: the
 one `X-MATE-Workspace` names, else the caller's default. An app with no
 `agents_config` row is listed to platform administrators in the default workspace.
-Both the plain list and `?detailed=true` are filtered.
+Someone who is no member of the workspace the request falls back to gets no app: a
+pending sign-up, or a member of only a suspended or closed workspace, both fall back
+to the default workspace as no member of it. Both the plain list and
+`?detailed=true` are filtered.
 
 ## Layer 3: the agent
 

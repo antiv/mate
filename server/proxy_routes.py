@@ -142,14 +142,16 @@ def _agent_refusal(app_name: str, identity: str, check_roles: bool) -> Optional[
 def _apps_of_workspace(request: Request, identity: str, content: bytes) -> bytes:
     """ADK's /list-apps answer cut down to the agents of the request's workspace
     (server/request_context.py). An app with no agent config is listed to platform
-    administrators, in the default workspace."""
+    administrators, in the default workspace. Someone who is no member of the workspace
+    the request falls back to (a pending sign-up, or a member of only a suspended or
+    closed workspace) gets no agent."""
     from server.auth import is_admin_user
     from server.request_context import resolve_workspace
     from shared.utils.database_client import get_database_client
     from shared.utils.models import DEFAULT_WORKSPACE_ID, AgentConfig, Project
 
     platform_admin = is_admin_user(request)
-    workspace_id, _ = resolve_workspace(request, identity, platform_admin)
+    workspace_id, role = resolve_workspace(request, identity, platform_admin)
     answer = json.loads(content)
     # A list of names, or {"apps": [{"name": ...}]} with ?detailed=true
     names = answer if isinstance(answer, list) else [a.get("name") for a in answer.get("apps", [])]
@@ -161,6 +163,8 @@ def _apps_of_workspace(request: Request, identity: str, content: bytes) -> bytes
         session.close()
 
     def listed(name: str) -> bool:
+        if role is None and not platform_admin:
+            return False
         if name in workspaces:
             return workspaces[name] == workspace_id
         return platform_admin and workspace_id == DEFAULT_WORKSPACE_ID
