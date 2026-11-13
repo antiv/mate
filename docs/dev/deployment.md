@@ -97,14 +97,15 @@ Things to adjust in `docker-compose.yml` before relying on it:
 ## Production checklist
 
 Set `MATE_ENV=production`. The server then refuses to start with the default
-password, without a `SECRET_KEY`, or without a reachable database, and forces the
-session cookie to HTTPS only.
+password, without a `SECRET_KEY` or a `MATE_SECRET_KEY`, or without a reachable
+database, and forces the session cookie to HTTPS only. `MATE_ALLOW_INSECURE_DEFAULTS`
+lets it start all the same.
 
 | Setting | Why |
 |---|---|
 | `AUTH_PASSWORD` | The default is public. |
 | `SECRET_KEY` | Signs the session cookie. Without it, sessions end at every restart. |
-| `MATE_SECRET_KEY` | Encrypts the secrets MATE stores; see [Secrets at rest](#secrets-at-rest). Without it they are stored in the clear, and the server logs a warning at startup. |
+| `MATE_SECRET_KEY` | Encrypts the secrets MATE stores; see [Secrets at rest](#secrets-at-rest). Without it they are stored in the clear: the server refuses to start in production, and logs a warning elsewhere. |
 | `DB_TYPE=postgresql` and its connection settings | SQLite is fine for one small installation; use a server database for anything shared. |
 | `ALLOWED_ORIGINS` | The CORS allowlist. The default is localhost. |
 | `TRUSTED_PROXY_HOSTS` | Your reverse proxy's address. The default `*` lets any client spoof `X-Forwarded-*`, and audit logs then record the socket address instead. |
@@ -154,9 +155,9 @@ python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().d
   with one key does not decrypt without it: it reads as empty, the server logs an
   error, Slack requests and signed webhooks to it are refused, and the secret has
   to be entered again. There is no key rotation yet.
-- **Without the key** nothing changes from earlier versions, and the startup
-  warning gives the number of secrets stored in the clear. 2.0 will require the key
-  in production.
+- **Without the key** the auth server refuses to start with `MATE_ENV=production`,
+  unless `MATE_ALLOW_INSECURE_DEFAULTS` is set. Elsewhere nothing changes from 1.x,
+  and the startup warning gives the number of secrets stored in the clear.
 
 A stored value is either plain text or `enc:v1:` followed by the Fernet token, so
 `shared/utils/secret_box.py` reads both. The columns use its `EncryptedText` type,

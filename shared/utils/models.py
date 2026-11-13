@@ -313,6 +313,40 @@ class WorkspaceInvitation(Base):
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
 
 
+class WorkspaceProviderKey(Base):
+    """A workspace's own key for one model provider, with an optional base URL (V049).
+
+    provider is one of the names the model code knows (google, openai, openrouter,
+    ...). api_key is encrypted with MATE_SECRET_KEY and reads as plain text.
+    """
+
+    __tablename__ = 'workspace_provider_keys'
+    __table_args__ = (UniqueConstraint('workspace_id', 'provider', name='uq_workspace_provider_keys'),)
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    workspace_id = Column(Integer, ForeignKey('workspaces.id', ondelete='CASCADE'), nullable=False)
+    provider = Column(String(50), nullable=False)
+    api_key = Column(EncryptedText, nullable=False)
+    base_url = Column(String(1024), nullable=True)
+    updated_by = Column(String(255), nullable=True)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc),
+                        onupdate=lambda: datetime.now(timezone.utc), nullable=False)
+
+
+class WorkspaceSetting(Base):
+    """A workspace's own value for a setting the installation keeps in system_settings,
+    such as the image model (V049). No row means the installation's value applies."""
+
+    __tablename__ = 'workspace_settings'
+
+    workspace_id = Column(Integer, ForeignKey('workspaces.id', ondelete='CASCADE'), primary_key=True)
+    setting_key = Column(String(100), primary_key=True)
+    value = Column(Text, nullable=True)
+    updated_by = Column(String(255), nullable=True)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc),
+                        onupdate=lambda: datetime.now(timezone.utc), nullable=False)
+
+
 class AgentConfig(Base):
     """Model for agent configuration."""
     

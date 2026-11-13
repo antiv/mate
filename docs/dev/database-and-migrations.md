@@ -190,6 +190,13 @@ request context (`docs/dev/auth-and-access.md`, "The workspace of a request"):
     which is what 1.x does; another workspace starts with none.
   - Both columns are read as `docs/dev/auth-and-access.md` describes ("A closed or
     suspended workspace", and the platform-only features after it).
+- **Phase 4 (V049).** Nothing reads these yet.
+  - `workspace_provider_keys`: a workspace's key for one model provider, unique per
+    workspace and provider, with an optional `base_url`. `api_key` is an
+    `EncryptedText` column, so the auth server's startup encrypts one stored in the
+    clear, as it does the other secrets.
+  - `workspace_settings`: a workspace's own value for a setting, keyed by
+    `(workspace_id, setting_key)`. No row means the installation's value applies.
 - **A membership holds the user's `role` and `agent_roles` in its workspace**, edited
   on the Members page (`server/member_routes.py`). `users.roles` keeps the platform
   roles (`workspaces.PLATFORM_ROLES`: `admin`, `pending`, `widget`). The server's own

@@ -99,13 +99,10 @@ if not _SECRET_KEY:
         "Set SECRET_KEY in .env for persistent OAuth sessions."
     )
 
-# Fails here, not on the first read, when MATE_SECRET_KEY is set but not a Fernet key
+# Fails here, not on the first read, when MATE_SECRET_KEY is set but not a Fernet key,
+# and in production when it is not set
 from shared.utils import secret_box
-if not secret_box.key_configured():
-    logger.warning(
-        "MATE_SECRET_KEY not set — Slack tokens, signing secrets and agent model keys are "
-        "stored in the clear. 2.0 requires it in production. See docs/dev/deployment.md."
-    )
+secret_box.check_key_at_startup(_ENFORCE_SECURE)
 
 if AUTH_PASSWORD == settings.DEFAULT_AUTH_PASSWORD:
     if _ENFORCE_SECURE:

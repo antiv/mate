@@ -2,7 +2,8 @@
 Secrets stored in the database, encrypted with MATE_SECRET_KEY.
 
 The columns that hold a secret MATE has to read back (a Slack bot token and
-signing secret, a trigger's signing secret, an agent's model API key) use the
+signing secret, a trigger's signing secret, an agent's model API key, a workspace's
+provider key) use the
 EncryptedText column type. It encrypts a value on its way into the database and
 decrypts it on its way out, so the code that reads and writes those columns
 sees plain text and does not change.
@@ -10,7 +11,8 @@ sees plain text and does not change.
 MATE_SECRET_KEY is a Fernet key, separate from SECRET_KEY so the session secret
 can be rotated without losing the stored secrets (documents/design/workspaces.md,
 D7). Without it values are stored in the clear, as before 1.6, and the auth server
-warns at startup. Values written before the key was set are encrypted by
+warns at startup; in production (MATE_ENV=production) it refuses to start, unless
+MATE_ALLOW_INSECURE_DEFAULTS is set. Values written before the key was set are encrypted by
 encrypt_stored_secrets() when the auth server next starts.
 
 A stored value is either plain text or "enc:v1:" followed by a Fernet token, so
@@ -57,6 +59,21 @@ def key_configured() -> bool:
     return _fernet() is not None
 
 
+def check_key_at_startup(enforce: bool) -> None:
+    """Refuse to start without MATE_SECRET_KEY when enforce is set (production, without
+    MATE_ALLOW_INSECURE_DEFAULTS); otherwise warn."""
+    if key_configured():
+        return
+    if enforce:
+        raise RuntimeError(
+            f"{ENV_VAR} is not set. Slack tokens, signing secrets and model keys would be "
+            f"stored in the clear. Set {ENV_VAR} (see docs/dev/deployment.md), or set "
+            "MATE_ALLOW_INSECURE_DEFAULTS=true to override.")
+    logger.warning(
+        "%s not set: Slack tokens, signing secrets and agent model keys are stored in the "
+        "clear. Production refuses to start without it. See docs/dev/deployment.md.", ENV_VAR)
+
+
 def is_encrypted(value: Optional[str]) -> bool:
     return isinstance(value, str) and value.startswith(PREFIX)
 
@@ -101,12 +118,13 @@ class EncryptedText(TypeDecorator):
 
 
 def _secret_columns():
-    from .models import AgentConfig, AgentTrigger, ChannelIntegration
+    from .models import AgentConfig, AgentTrigger, ChannelIntegration, WorkspaceProviderKey
     return [
         (ChannelIntegration, ChannelIntegration.bot_token),
         (ChannelIntegration, ChannelIntegration.signing_secret),
         (AgentTrigger, AgentTrigger.signing_secret),
         (AgentConfig, AgentConfig.model_api_key),
+        (WorkspaceProviderKey, WorkspaceProviderKey.api_key),
     ]
 
 

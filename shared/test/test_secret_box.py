@@ -2,7 +2,7 @@
 """
 Unit tests for secrets at rest (MATE_SECRET_KEY, shared/utils/secret_box.py).
 
-With a key, the four secret columns and the key in a version snapshot are stored
+With a key, the five secret columns and the key in a version snapshot are stored
 encrypted and read back as plain text. Without one they are stored in the clear,
 as before 1.6. Values written before the key was set stay readable and are
 encrypted by encrypt_stored_secrets(). A value that does not decrypt reads as None.
@@ -22,7 +22,9 @@ from sqlalchemy.pool import StaticPool
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from shared.utils import secret_box
-from shared.utils.models import AgentConfig, AgentConfigVersion, AgentTrigger, Base, ChannelIntegration
+from shared.utils.models import (
+    AgentConfig, AgentConfigVersion, AgentTrigger, Base, ChannelIntegration, WorkspaceProviderKey,
+)
 from shared.utils.trigger_runner import TriggerRunner
 
 KEY = Fernet.generate_key().decode()
@@ -77,6 +79,17 @@ class TestEncryptDecrypt(unittest.TestCase):
         with without_key(), self.assertLogs("shared.utils.secret_box", "ERROR"):
             self.assertIsNone(secret_box.decrypt(stored))
 
+    def test_production_refuses_to_start_without_a_key(self):
+        with without_key():
+            with self.assertRaises(RuntimeError) as raised:
+                secret_box.check_key_at_startup(enforce=True)
+            self.assertIn("MATE_ALLOW_INSECURE_DEFAULTS", str(raised.exception))
+            # Elsewhere, or with the override, it warns
+            with self.assertLogs("shared.utils.secret_box", "WARNING"):
+                secret_box.check_key_at_startup(enforce=False)
+        with with_key(KEY):
+            secret_box.check_key_at_startup(enforce=True)
+
     def test_an_invalid_key_fails_loudly(self):
         with with_key("not-a-fernet-key"):
             with self.assertRaises(RuntimeError) as raised:
@@ -101,7 +114,9 @@ class _Db(unittest.TestCase):
                                          bot_token=TOKEN, signing_secret="slack-signing")
         trigger = AgentTrigger(name="t", trigger_type="webhook", agent_name="a", project_id=1,
                                prompt="p", signing_secret="whsec_x")
-        session.add_all([agent, integration, trigger])
+        provider_key = WorkspaceProviderKey(workspace_id=1, provider="openrouter",
+                                            api_key="sk-or-workspace")
+        session.add_all([agent, integration, trigger, provider_key])
         session.commit()
         session.close()
 
@@ -115,6 +130,7 @@ class _Db(unittest.TestCase):
             self._raw("SELECT bot_token FROM channel_integrations"),
             self._raw("SELECT signing_secret FROM channel_integrations"),
             self._raw("SELECT signing_secret FROM agent_triggers"),
+            self._raw("SELECT api_key FROM workspace_provider_keys"),
         ]
 
     def _read_secrets(self):
@@ -126,6 +142,7 @@ class _Db(unittest.TestCase):
                 integration.bot_token,
                 integration.signing_secret,
                 session.query(AgentTrigger).one().signing_secret,
+                session.query(WorkspaceProviderKey).one().api_key,
             ]
         finally:
             session.close()
@@ -139,13 +156,13 @@ class TestColumns(_Db):
             for stored in self._raw_secrets():
                 self.assertTrue(stored.startswith(secret_box.PREFIX), stored)
             self.assertEqual(self._read_secrets(),
-                             ["sk-agent", TOKEN, "slack-signing", "whsec_x"])
+                             ["sk-agent", TOKEN, "slack-signing", "whsec_x", "sk-or-workspace"])
 
     def test_without_a_key_nothing_changes(self):
         with without_key():
             self._add_rows()
-            self.assertEqual(self._raw_secrets(), ["sk-agent", TOKEN, "slack-signing", "whsec_x"])
-            self.assertEqual(self._read_secrets(), ["sk-agent", TOKEN, "slack-signing", "whsec_x"])
+            self.assertEqual(self._raw_secrets(), ["sk-agent", TOKEN, "slack-signing", "whsec_x", "sk-or-workspace"])
+            self.assertEqual(self._read_secrets(), ["sk-agent", TOKEN, "slack-signing", "whsec_x", "sk-or-workspace"])
 
     def test_a_signature_verifies_against_the_decrypted_secret(self):
         with with_key(KEY):
@@ -191,10 +208,11 @@ class TestEncryptStoredSecrets(_Db):
                 "channel_integrations.signing_secret": 1,
                 "agent_triggers.signing_secret": 1,
                 "agents_config.model_api_key": 1,
+                "workspace_provider_keys.api_key": 1,
             })
             for stored in self._raw_secrets():
                 self.assertTrue(stored.startswith(secret_box.PREFIX), stored)
-            self.assertEqual(self._read_secrets(), ["sk-agent", TOKEN, "slack-signing", "whsec_x"])
+            self.assertEqual(self._read_secrets(), ["sk-agent", TOKEN, "slack-signing", "whsec_x", "sk-or-workspace"])
 
     def test_a_second_run_changes_nothing(self):
         with with_key(KEY):
@@ -210,9 +228,9 @@ class TestEncryptStoredSecrets(_Db):
             self._add_rows()
             session = self.Session()
             self.assertEqual(secret_box.encrypt_stored_secrets(session), {})
-            self.assertEqual(secret_box.count_unencrypted_secrets(session), 4)
+            self.assertEqual(secret_box.count_unencrypted_secrets(session), 5)
             session.close()
-            self.assertEqual(self._raw_secrets(), ["sk-agent", TOKEN, "slack-signing", "whsec_x"])
+            self.assertEqual(self._raw_secrets(), ["sk-agent", TOKEN, "slack-signing", "whsec_x", "sk-or-workspace"])
 
     def test_version_snapshots_written_before_the_key_are_encrypted(self):
         session = self.Session()

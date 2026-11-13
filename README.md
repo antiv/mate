@@ -303,6 +303,7 @@ GOOGLE_API_KEY=your_key_here          # or any supported provider
 AUTH_USERNAME=admin
 AUTH_PASSWORD=change-me
 MATE_ENV=production                   # refuses insecure defaults at startup
+MATE_SECRET_KEY=<fernet-key>          # encrypts stored secrets; required in production
 
 # SSO (optional)
 GOOGLE_CLIENT_ID=...
