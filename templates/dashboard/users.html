@@ -27,12 +27,12 @@
         <h3 class="text-sm font-semibold text-gray-900 dark:text-white mb-3">Filters</h3>
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             <div>
-                <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Search</label>
+                <label for="filterSearch" class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Search</label>
                 <input type="text" id="filterSearch" placeholder="User ID, name or email…"
                     class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-sm">
             </div>
             <div>
-                <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Provider</label>
+                <label for="filterProvider" class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Provider</label>
                 <select id="filterProvider" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-sm">
                     <option value="">All providers</option>
                     <option value="google">Google</option>
@@ -41,7 +41,7 @@
                 </select>
             </div>
             <div>
-                <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Role</label>
+                <label for="filterRole" class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Role</label>
                 <input type="text" id="filterRole" placeholder="e.g. admin"
                     class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-sm">
             </div>
@@ -140,19 +140,19 @@
                 <div class="space-y-4">
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
-                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">User ID</label>
+                            <label for="editUserIdDisplay" class="block text-sm font-medium text-gray-700 dark:text-gray-300">User ID</label>
                             <input type="text" id="editUserIdDisplay" disabled class="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 bg-gray-100 dark:bg-gray-600 dark:text-gray-400 text-sm">
                         </div>
                         <div>
-                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Provider</label>
+                            <div class="block text-sm font-medium text-gray-700 dark:text-gray-300">Provider</div>
                             <div id="editUserProviderBadge" class="mt-1 flex items-center h-[42px]"></div>
                         </div>
                         <div>
-                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Display Name</label>
+                            <label for="editUserDisplayName" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Display Name</label>
                             <input type="text" id="editUserDisplayName" disabled class="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 bg-gray-100 dark:bg-gray-600 dark:text-gray-400 text-sm">
                         </div>
                         <div>
-                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Email</label>
+                            <label for="editUserEmail" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Email</label>
                             <input type="text" id="editUserEmail" disabled class="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 bg-gray-100 dark:bg-gray-600 dark:text-gray-400 text-sm">
                         </div>
                     </div>

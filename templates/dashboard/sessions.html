@@ -25,7 +25,7 @@
         <h3 class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">Filter Sessions</h3>
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             <div>
-                <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Runtime</label>
+                <label for="filterRuntime" class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Runtime</label>
                 <select id="filterRuntime" data-change="sessionsApp.loadSessions" data-args="[1]" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-md px-2.5 py-1.5 text-xs focus:ring-2 focus:ring-blue-500">
                     <option value="all">All Runtimes (ADK &amp; LangGraph)</option>
                     <option value="adk">ADK Only</option>
@@ -33,15 +33,15 @@
                 </select>
             </div>
             <div>
-                <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">App / Agent Name</label>
+                <label for="filterAppName" class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">App / Agent Name</label>
                 <input type="text" id="filterAppName" placeholder="e.g. chess_mate" data-keyup="sessionsApp.loadOnEnter" data-args='["$event"]' class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-md px-2.5 py-1.5 text-xs focus:ring-2 focus:ring-blue-500">
             </div>
             <div>
-                <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">User ID</label>
+                <label for="filterUserId" class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">User ID</label>
                 <input type="text" id="filterUserId" placeholder="e.g. admin" data-keyup="sessionsApp.loadOnEnter" data-args='["$event"]' class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-md px-2.5 py-1.5 text-xs focus:ring-2 focus:ring-blue-500">
             </div>
             <div>
-                <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Search Keywords / Session ID</label>
+                <label for="filterSearch" class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Search Keywords / Session ID</label>
                 <input type="text" id="filterSearch" placeholder="Search prompt text or ID..." data-keyup="sessionsApp.loadOnEnter" data-args='["$event"]' class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-md px-2.5 py-1.5 text-xs focus:ring-2 focus:ring-blue-500">
             </div>
         </div>
@@ -100,7 +100,7 @@
                 <i class="fas fa-search-location text-blue-600 text-lg"></i>
                 <h3 class="text-lg font-bold text-gray-900 dark:text-white">Session Inspector</h3>
             </div>
-            <button type="button" data-click="sessionsApp.closeSessionInspector" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 p-1 rounded-md text-lg">
+            <button type="button" data-click="sessionsApp.closeSessionInspector" aria-label="Close" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 p-1 rounded-md text-lg">
                 <i class="fas fa-times"></i>
             </button>
         </div>
@@ -114,5 +114,5 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="/static/js/sessions.js?v=6"></script>
+<script src="/static/js/sessions.js?v=7"></script>
 {% endblock %}

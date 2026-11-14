@@ -19,7 +19,7 @@
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 space-y-4">
         <div class="flex flex-wrap items-end gap-4">
             <div>
-                <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Site / partner</label>
+                <label for="scopeSelect" class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Site / partner</label>
                 <select id="scopeSelect" data-change="onScopeChange" class="border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-sm min-w-[220px]"></select>
             </div>
             <button type="button" data-click="newPartner" class="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"><i class="fas fa-plus mr-1"></i>New partner</button>
@@ -29,15 +29,15 @@
         <!-- Partner settings (hidden for Global) -->
         <div id="partnerSettings" class="hidden grid grid-cols-1 sm:grid-cols-2 gap-3 border-t border-gray-100 dark:border-gray-700 pt-3">
             <div>
-                <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Name</label>
+                <label for="pName" class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Name</label>
                 <input type="text" id="pName" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-sm">
             </div>
             <div>
-                <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Contact email</label>
+                <label for="pContact" class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Contact email</label>
                 <input type="email" id="pContact" placeholder="sales@partner.com" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-sm">
             </div>
             <div>
-                <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Default language</label>
+                <label for="pLang" class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Default language</label>
                 <select id="pLang" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-sm">
                     <option value="">— (use embed/EN) —</option>
                     <option value="en">English</option>
@@ -50,7 +50,7 @@
                 </label>
             </div>
             <div class="sm:col-span-2">
-                <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Allowed origins (one per line; empty = any)</label>
+                <label for="pOrigins" class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Allowed origins (one per line; empty = any)</label>
                 <textarea id="pOrigins" rows="2" placeholder="https://partner-site.com" class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-sm font-mono"></textarea>
             </div>
             <div class="sm:col-span-2 flex items-center justify-between gap-3">
@@ -64,11 +64,11 @@
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 space-y-4">
         <div class="flex flex-wrap items-end gap-4">
             <div>
-                <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Default currency</label>
+                <label for="defaultCurrency" class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Default currency</label>
                 <select id="defaultCurrency" class="border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-sm"></select>
             </div>
             <div>
-                <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Add currency</label>
+                <label for="newCurrency" class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Add currency</label>
                 <div class="flex gap-2">
                     <input type="text" id="newCurrency" placeholder="e.g. USD" maxlength="8" class="border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-sm w-28 uppercase">
                     <button type="button" data-click="addCurrency" class="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">Add</button>
@@ -178,10 +178,10 @@ function render() {
         STATE.currencies.map(c => '<th class="text-left px-4 py-2 font-medium">' + esc(c) + '</th>').join("");
     document.getElementById("pricingBody").innerHTML = STATE.tiers.filter(t => t.priced).map(function (t) {
         const isFromChecked = (STATE.show_from && STATE.show_from[t.id]) ? "checked" : "";
-        const fromCell = '<td class="px-4 py-2 text-center"><input type="checkbox" data-from-tier="' + t.id + '" ' + isFromChecked + ' class="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"></td>';
+        const fromCell = '<td class="px-4 py-2 text-center"><input type="checkbox" aria-label="' + esc('Show "from" for ' + t.label) + '" data-from-tier="' + t.id + '" ' + isFromChecked + ' class="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"></td>';
         const cells = STATE.currencies.map(function (c) {
             const val = (STATE.prices[t.id] && STATE.prices[t.id][c]) || "";
-            return '<td class="px-4 py-2"><input type="text" data-tier="' + t.id + '" data-cur="' + c + '" value="' + esc(val) + '" class="w-32 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1"></td>';
+            return '<td class="px-4 py-2"><input type="text" aria-label="' + esc(t.label + ' price in ' + c) + '" data-tier="' + t.id + '" data-cur="' + c + '" value="' + esc(val) + '" class="w-32 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1"></td>';
         }).join("");
         return '<tr><td class="px-4 py-2 font-medium text-gray-900 dark:text-white whitespace-nowrap">' + esc(t.label) + ' <span class="text-gray-400 text-xs">(' + esc(t.id) + ')</span></td>' + fromCell + cells + '</tr>';
     }).join("");
