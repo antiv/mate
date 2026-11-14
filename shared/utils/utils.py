@@ -180,7 +180,10 @@ def create_model(model_name: str = None, api_key: str = None, base_url: str = No
 
     if _is_gemini_model(effective_model_name):
         logger.info(f"Creating Gemini model: {effective_model_name} ({context.describe()})")
-        return Gemini(model=effective_model_name)
+        # For an agent, each call takes its workspace's google key, or GOOGLE_API_KEY
+        # where the workspace may use it (shared/utils/provider_keys.py)
+        from .provider_keys import workspace_gemini
+        return workspace_gemini(effective_model_name, context)
 
     provider = _detect_provider(effective_model_name)
     litellm_kwargs = {'timeout': 1200}

@@ -110,9 +110,21 @@ it replaces `api_key` and `api_base`. `NoProviderKey` is raised before any reque
 and the fallback model doesn't answer it, since it isn't a provider outage. A model
 for no agent (`ModelContext()`) is left unwrapped and uses the environment.
 
-Not yet covered: a `gemini-*` model on ADK's native Gemini backend builds its client
-from `GOOGLE_API_KEY` (on LangGraph it goes through LiteLLM and is covered), and the
-calls that go to `litellm` directly (next paragraph).
+A `gemini-*` model on ADK's native Gemini backend is a `WorkspaceGemini`, a
+subclass of ADK's `Gemini`, so the built-in tools and the context cache still see a
+Gemini. Each `generate_content_async` and `connect` (`/run_live`) reads the
+workspace's `google` key; with one, it hands the call to a `Gemini` built with that
+key (`client_kwargs`, Vertex AI off, base URL `GOOGLE_API_ROOT` so
+`GOOGLE_GEMINI_BASE_URL` doesn't redirect it), kept until the key changes. Without
+one it runs as ADK's `Gemini`, on `GOOGLE_API_KEY`. File Search's `genai.Client` takes
+the same arguments from `google_client_kwargs()`: a query from the agent's context,
+creating a store from its project, an upload from the store's project. google.genai
+sends through aiohttp, outside the outbound guard, so `google_credentials()` refuses
+a workspace's own Google base URL outside the default workspace; a `gemini/` model
+reaches it through LiteLLM, guarded. On LangGraph, Gemini goes through LiteLLM
+already.
+
+Not yet covered: the calls that go to `litellm` directly (next paragraph).
 
 Calls that go to `litellm` directly do not go through `create_model()` and take
 no context yet: the eval judge, the agent improver, the hallucination guardrail,

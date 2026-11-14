@@ -12,6 +12,7 @@ import asyncio
 import json
 import os
 import sys
+import tempfile
 import threading
 import unittest
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -334,6 +335,186 @@ class TestEachCall(_Workspaces):
         self.assertIsNone(model_credentials(ModelContext(agent_name="department_agent"), "openai/m"))
         with self.assertRaises(NoProviderKey):
             model_credentials(ModelContext(agent_name="client_agent"), "openai/m")
+
+
+
+class _FakeGemini:
+    """The Gemini API on 127.0.0.1: records each call's key, answers "ok"."""
+
+    def __init__(self, test: unittest.TestCase):
+        self.keys = []
+        calls = self.keys
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_POST(self):
+                self.rfile.read(int(self.headers.get("Content-Length", 0)))
+                calls.append(self.headers.get("x-goog-api-key"))
+                body = json.dumps({"candidates": [{"content": {"role": "model", "parts": [{"text": "ok"}]},
+                                                   "finishReason": "STOP"}],
+                                   "usageMetadata": {"promptTokenCount": 1, "candidatesTokenCount": 1,
+                                                     "totalTokenCount": 2}}).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *args):
+                pass
+
+        server = HTTPServer(("127.0.0.1", 0), Handler)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        test.addCleanup(server.shutdown)
+        self.url = f"http://127.0.0.1:{server.server_port}"
+
+
+class TestNativeGemini(_Workspaces):
+    """gemini-* models on ADK's own Gemini backend (4c)."""
+
+    def setUp(self):
+        super().setUp()
+        env = environment_without_keys()
+        env["GOOGLE_API_KEY"] = "platform-google-key"
+        # It would turn the platform's client to Vertex AI; a workspace key never is
+        env["GOOGLE_GENAI_USE_VERTEXAI"] = "true"
+        env["GOOGLE_GEMINI_BASE_URL"] = "https://platform.example/"
+        patcher = patch.dict(os.environ, env, clear=True)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def ask(self, model) -> str:
+        from google.adk.models.llm_request import LlmRequest
+        from google.genai import types
+
+        async def run():
+            request = LlmRequest(model=model.model, contents=[
+                types.Content(role="user", parts=[types.Part(text="q")])])
+            return [r async for r in model.generate_content_async(request)]
+        return asyncio.run(run())[0].content.parts[0].text
+
+    def keyed_client(self, model):
+        """The google.genai client a call of the model is made with."""
+        credentials = provider_keys.google_credentials(model._context, model.model)
+        return model._with_key(credentials).api_client._api_client
+
+    def test_an_agent_s_gemini_calls_carry_the_workspace_s_key(self):
+        gemini = _FakeGemini(self)
+        self.set_key(DEFAULT, "google", "default-google-key", base_url=gemini.url)
+        model = create_model("gemini-2.5-flash", context=self.context(DEFAULT))
+        self.assertIsInstance(model, provider_keys.WorkspaceGemini)
+        self.assertEqual(self.ask(model), "ok")
+        self.set_key(DEFAULT, "google", "changed-google-key", base_url=gemini.url)
+        self.assertEqual(self.ask(model), "ok")
+        self.assertEqual(gemini.keys, ["default-google-key", "changed-google-key"])
+
+    def test_a_workspace_key_goes_to_google_not_to_the_environment_s_endpoint(self):
+        self.set_key(CLIENT, "google", "client-google-key")
+        model = create_model("gemini-2.5-flash", context=self.context(CLIENT))
+        client = self.keyed_client(model)
+        self.assertEqual(client.api_key, "client-google-key")
+        self.assertFalse(client.vertexai)
+        self.assertTrue(client._http_options.base_url.startswith("https://generativelanguage.googleapis.com"))
+
+    def test_a_workspace_without_a_key_makes_no_call(self):
+        model = create_model("gemini-2.5-flash", context=self.context(CLIENT))
+        with self.assertRaises(NoProviderKey):
+            self.ask(model)
+
+    def test_its_own_endpoint_is_refused_outside_the_default_workspace(self):
+        # google.genai sends through aiohttp, outside the outbound guard
+        self.set_key(CLIENT, "google", "client-google-key", base_url="https://gemini.client.example")
+        model = create_model("gemini-2.5-flash", context=self.context(CLIENT))
+        with self.assertRaises(NoProviderKey) as refused:
+            self.ask(model)
+        self.assertIn("base URL", str(refused.exception))
+
+    def test_where_the_environment_is_allowed_it_is_used(self):
+        model = create_model("gemini-2.5-flash", context=self.context(DEPARTMENT))
+        self.assertIsNone(provider_keys.google_credentials(model._context, model.model))
+        self.assertEqual(model.api_client._api_client.api_key, "platform-google-key")
+        # A model for no agent is the installation's plain Gemini
+        self.assertNotIsInstance(create_model("gemini-2.5-flash", context=ModelContext()),
+                                 provider_keys.WorkspaceGemini)
+
+    def test_the_live_connection_takes_the_key_too(self):
+        self.set_key(CLIENT, "google", "client-google-key")
+        model = create_model("gemini-2.5-flash", context=self.context(CLIENT))
+        opened = []
+
+        class Live:
+            async def __aenter__(self):
+                return "live"
+
+            async def __aexit__(self, *args):
+                return False
+
+        def connect(keyed, request):
+            opened.append(keyed.api_client._api_client.api_key)
+            return Live()
+
+        from google.adk.models.google_llm import Gemini
+
+        async def run():
+            async with model.connect(MagicMock()) as live:
+                return live
+        with patch.object(Gemini, "connect", autospec=True, side_effect=connect):
+            self.assertEqual(asyncio.run(run()), "live")
+        self.assertEqual(opened, ["client-google-key"])
+
+
+class TestFileSearch(_Workspaces):
+    """File Search (google.genai) on the store's or the agent's workspace key (4c)."""
+
+    def setUp(self):
+        super().setUp()
+        env = environment_without_keys()
+        env["GOOGLE_API_KEY"] = "platform-google-key"
+        patcher = patch.dict(os.environ, env, clear=True)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        from shared.utils.models import FileSearchStore
+        session = self.Session()
+        session.add(FileSearchStore(store_name="fileSearchStores/client", display_name="c",
+                                    project_id=self.projects[CLIENT]))
+        session.commit()
+        session.close()
+        from shared.utils.tools import file_search_tools
+        self.tools = file_search_tools
+        client = patch.object(file_search_tools.genai, "Client")
+        self.Client = client.start()
+        self.addCleanup(client.stop)
+
+    def key_used(self) -> str:
+        return self.Client.call_args.kwargs["api_key"]
+
+    def test_queries_creates_and_uploads_use_the_workspace_s_key(self):
+        self.set_key(CLIENT, "google", "client-google-key")
+        self.tools.query_file_search("q", ["fileSearchStores/client"], context=self.context(CLIENT))
+        self.assertEqual(self.key_used(), "client-google-key")
+        self.tools.create_file_search_store("store", project_id=self.projects[CLIENT])
+        self.assertEqual(self.key_used(), "client-google-key")
+        self.Client.return_value.file_search_stores.upload_to_file_search_store.return_value.done = True
+        with tempfile.NamedTemporaryFile(suffix=".txt") as upload:
+            self.tools.upload_file_to_store(upload.name, "fileSearchStores/client")
+        self.assertEqual(self.key_used(), "client-google-key")
+
+    def test_a_workspace_without_a_key_is_refused(self):
+        answer = self.tools.query_file_search("q", ["fileSearchStores/client"], context=self.context(CLIENT))
+        self.assertIn("no key for google", answer)
+        self.Client.assert_not_called()
+        self.assertFalse(self.tools.create_file_search_store("s", project_id=self.projects[CLIENT])["success"])
+
+    def test_the_agent_tool_passes_its_agent(self):
+        config = {"name": "client_agent", "project_id": self.projects[CLIENT],
+                  "tool_config": {"file_search": {"enabled": True, "store_names": ["fileSearchStores/client"]}}}
+        self.set_key(CLIENT, "google", "client-google-key")
+        [tool] = self.tools.create_file_search_tools_from_config(config)
+        tool("q")
+        self.assertEqual(self.key_used(), "client-google-key")
+
+    def test_the_default_workspace_uses_the_environment(self):
+        self.tools.create_file_search_store("store", project_id=self.projects[DEFAULT])
+        self.assertEqual(self.key_used(), "platform-google-key")
 
 
 if __name__ == "__main__":

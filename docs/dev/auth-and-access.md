@@ -439,7 +439,8 @@ tools are refused.
 The File Search tool queries only the stores of the agent's workspace
 (`file_search_tools.stores_of_workspace`): `tool_config.file_search.store_names` is
 written by whoever may edit the agent, and a store name reaches the store under the
-installation's Gemini key. A store MATE has no row for, made in Gemini directly as
+workspace's Google key, or the installation's where the workspace may use it
+([Agent runtime](agent-runtime.md#which-key-a-model-call-uses)). A store MATE has no row for, made in Gemini directly as
 1.x allowed, is kept in the default workspace only. A store left out is logged.
 
 ### Requests to the server's own network

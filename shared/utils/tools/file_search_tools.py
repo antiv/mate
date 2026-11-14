@@ -7,6 +7,8 @@ import time
 from typing import Dict, List, Any, Optional
 from google.adk.tools import ToolContext
 
+from shared.utils.utils import ModelContext, model_context_of
+
 logger = logging.getLogger(__name__)
 
 # Try to import Google Generative AI
@@ -19,19 +21,33 @@ except ImportError:
     logger.warning("Google Generative AI package not available. File Search tools will not work.")
 
 
-def get_file_search_client():
-    """Get authenticated Gemini File Search client."""
-    api_key = os.getenv('GOOGLE_API_KEY')
-    if not api_key:
-        raise Exception("GOOGLE_API_KEY not configured")
+def get_file_search_client(context: Optional[ModelContext] = None):
+    """A Gemini client on the key of the context's workspace (its google key, or
+    GOOGLE_API_KEY where it may use the platform's); the installation's for none."""
     if genai is None:
         raise Exception("Google Generative AI package not installed. Install with: pip install google-genai")
-    return genai.Client(api_key=api_key)
+    from shared.utils.provider_keys import google_client_kwargs
+    return genai.Client(**google_client_kwargs(context or ModelContext()))
+
+
+def store_context(store_name: str) -> ModelContext:
+    """The context of a store: its project's, the installation's when MATE has no row
+    for it (a store made in Gemini directly, which only the default workspace reaches)."""
+    from shared.utils.database_client import get_database_client
+    from shared.utils.models import FileSearchStore
+    session = get_database_client().get_session()
+    try:
+        project_id = session.query(FileSearchStore.project_id).filter(
+            FileSearchStore.store_name == store_name).scalar()
+    finally:
+        session.close()
+    return ModelContext(project_id=project_id) if project_id is not None else ModelContext()
 
 
 def create_file_search_store(
     display_name: str,
-    tool_context: ToolContext = None
+    tool_context: ToolContext = None,
+    project_id: Optional[int] = None,
 ) -> Dict[str, Any]:
     """
     Create a File Search store.
@@ -39,12 +55,13 @@ def create_file_search_store(
     Args:
         display_name: Human-readable name for the store
         tool_context: Optional tool context
+        project_id: The project the store is for: it is made on its workspace's key
     
     Returns:
         Dict with success status and store info
     """
     try:
-        client = get_file_search_client()
+        client = get_file_search_client(ModelContext(project_id=project_id) if project_id else None)
         
         file_search_store = client.file_search_stores.create(
             config={'display_name': display_name}
@@ -82,7 +99,7 @@ def upload_file_to_store(
         if not os.path.exists(file_path):
             return {"success": False, "error": f"File not found: {file_path}"}
         
-        client = get_file_search_client()
+        client = get_file_search_client(store_context(store_name))
         
         operation = client.file_search_stores.upload_to_file_search_store(
             file=file_path,
@@ -148,7 +165,8 @@ def query_file_search(
     question: str,
     store_names: List[str] = None,
     model: str = "gemini-2.5-flash",
-    tool_context: ToolContext = None
+    tool_context: ToolContext = None,
+    context: Optional[ModelContext] = None,
 ) -> str:
     """
     Query File Search stores using Gemini API with RAG.
@@ -162,6 +180,7 @@ def query_file_search(
                     If not provided, will try to get from agent's tool_config
         model: Gemini model to use (default: "gemini-2.5-flash")
         tool_context: Optional tool context
+        context: The agent the query is for: it runs on its workspace's key
     
     Returns:
         Response from Gemini API with File Search results
@@ -170,11 +189,11 @@ def query_file_search(
         if genai is None or types is None:
             return "Error: Google Generative AI package not available. Install with: pip install google-genai"
         
-        api_key = os.getenv('GOOGLE_API_KEY')
-        if not api_key:
-            return "Error: GOOGLE_API_KEY not configured"
-        
-        client = genai.Client(api_key=api_key)
+        from shared.utils.provider_keys import google_client_kwargs
+        try:
+            client = genai.Client(**google_client_kwargs(context or ModelContext(), model))
+        except Exception as e:
+            return f"Error: {e}"
         
         # If store_names not provided, try to get from tool_config
         if not store_names:
@@ -293,6 +312,7 @@ def create_file_search_tools_from_config(config: Dict[str, Any]) -> List[Any]:
         
         # Get model from config or use default
         model = file_search_config.get('model', 'gemini-2.5-flash')
+        context = model_context_of(config)
         
         # Create a tool function with store_names bound
         # We'll create one tool that can query all stores
@@ -303,7 +323,8 @@ def create_file_search_tools_from_config(config: Dict[str, Any]) -> List[Any]:
                 return query_file_search(
                     question=question,
                     store_names=stores,
-                    model=model_name
+                    model=model_name,
+                    context=context,
                 )
             
             # Set function metadata for ADK

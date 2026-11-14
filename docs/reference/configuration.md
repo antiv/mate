@@ -65,7 +65,7 @@ Every environment variable the code reads: **136** in total. Descriptions come f
 | `GEMINI_MODEL` | `gemini-2.5-flash` | Default Gemini model | `shared/utils/langgraph/model_factory.py`, `shared/utils/tools/subagent_delegation_tool.py`, `shared/utils/utils.py` |
 | `GITHUB_CLIENT_ID` | — | GitHub (OAuth 2.0) — create at https://github.com/settings/developers Authorization callback URL: https://<your-domain>/auth/callback/github | `server/oauth_routes.py` |
 | `GITHUB_CLIENT_SECRET` | — | — | `server/oauth_routes.py` |
-| `GOOGLE_API_KEY` | — | — | `shared/utils/embedding_service.py`, `shared/utils/langgraph/model_factory.py`, `shared/utils/tools/file_search_tools.py` +1 more |
+| `GOOGLE_API_KEY` | — | — | `shared/utils/embedding_service.py`, `shared/utils/langgraph/model_factory.py`, `shared/utils/provider_keys.py` +1 more |
 | `GOOGLE_CLIENT_ID` | — | OAuth 2.0 / OIDC Single Sign-On Leave blank to disable a provider; Basic Auth remains available regardless. Google (OIDC) — create at https://console.cloud.google.com/apis/credentials Authorized redirect URI: https://<your-domain>/auth/callback/google | `server/oauth_routes.py` |
 | `GOOGLE_CLIENT_SECRET` | — | — | `server/oauth_routes.py` |
 | `GOOGLE_CONF_URL` | `https://accounts.google.com/.well-known/openid-configuration` | — | `server/oauth_routes.py` |
