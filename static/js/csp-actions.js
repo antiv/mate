@@ -65,6 +65,12 @@
         return list.map((a) => (a === '$event' ? event : a === '$el' ? el : a === '$value' ? el.value : a));
     }
 
+    // A method keeps its object as `this`; a plain function gets `fallback`
+    function ownerOf(name, fallback) {
+        return name.includes('.') ? name.split('.').slice(0, -1)
+            .reduce((o, part) => (o == null ? o : o[part]), window) : fallback;
+    }
+
     function dispatch(event, attr) {
         let el = event.target instanceof Element ? event.target.closest(`[${attr}]`) : null;
         while (el) {
@@ -72,10 +78,7 @@
             if (el.hasAttribute('data-prevent')) event.preventDefault();
             const fn = resolve(name);
             if (fn) {
-                // A method keeps its object as `this`; a plain function gets the element
-                const owner = name.includes('.') ? name.split('.').slice(0, -1)
-                    .reduce((o, part) => (o == null ? o : o[part]), window) : el;
-                fn.apply(owner, name === 'stop' ? [event] : argsFor(el, event));
+                fn.apply(ownerOf(name, el), name === 'stop' ? [event] : argsFor(el, event));
             } else {
                 console.warn(`mateActions: "${name}" is not an allowed action`);
             }
@@ -100,6 +103,16 @@
         allow(...names) { names.forEach((n) => allowed.add(n)); },
         /** Whether an action name would run: allowed and defined. */
         can(name) { return resolve(name) !== null; },
+        /** Call an action by name, from code that read it from markup; false if it would not run. */
+        run(name, ...args) {
+            const fn = resolve(name);
+            if (!fn) {
+                console.warn(`mateActions: "${name}" is not an allowed action`);
+                return false;
+            }
+            fn.apply(ownerOf(name, window), args);
+            return true;
+        },
         attr,
     };
 })();

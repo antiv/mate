@@ -100,6 +100,10 @@ input, keyup and submits for the whole page through event delegation:
   gets injected into a page therefore cannot call an arbitrary global. Names are
   resolved when the event fires, so a page may allow a function before the
   script that defines it has run.
+- Code that reads an action name from markup calls it with
+  `mateActions.run(name, ...args)`, which goes through the same allowlist and
+  returns false when the name is not allowed. The agent panels do this with the
+  hide function their backdrop names in `data-cancel-fn` (`static/js/agent-utils.js`).
 - For HTML that JavaScript creates and keeps a reference to, adding a listener
   (`el.addEventListener('click', …)`) is simpler than `data-click`. The same
   goes for a modal that closes on a click on its backdrop

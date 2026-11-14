@@ -8,6 +8,7 @@ covers:
   - templates/dashboard/modals/agent_modal_macro.html
   - templates/dashboard/modals/config_modals.html
   - static/js/agent-forms.js
+  - static/js/agent-utils.js
   - static/js/agent-management.js
   - shared/utils/rbac_middleware.py
   - shared/utils/utils.py::create_model
@@ -25,6 +26,12 @@ project's agents as a tree.
 
 Click **Add Agent**, or the pencil in an agent's row. Saving an agent reloads it, so
 the next message already uses the new configuration.
+
+The form opens in a panel on the right. A click on the dimmed area beside it, or
+Escape, closes it; if you changed something and did not save, you are asked first
+whether to discard it. With a dialog open over the panel, such as a tool's
+configuration or the instruction editor, Escape closes only that dialog. The ×
+closes the panel without asking.
 
 ### The basics
 
