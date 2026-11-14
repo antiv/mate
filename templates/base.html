@@ -1041,8 +1041,10 @@
                 modal.querySelector('#confirmMessage').textContent = message;
                 const cancelBtn = modal.querySelector('#confirmCancelBtn');
                 const okBtn = modal.querySelector('#confirmOkBtn');
-                cancelBtn.textContent = cancelText;
                 okBtn.textContent = confirmText;
+                // A message to read, not a question: one button (cancelText null)
+                if (cancelText === null) cancelBtn.remove();
+                else cancelBtn.textContent = cancelText;
 
                 document.body.appendChild(modal);
 

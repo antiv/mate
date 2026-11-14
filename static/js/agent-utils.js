@@ -114,11 +114,7 @@ function toggleJsonEditor(textareaId, editorId, language = 'json') {
 
 function showCreateAgentModal() {
     if (typeof window.selectedProjectId === 'undefined' || window.selectedProjectId === null) {
-        if (typeof showNotification === 'function') {
-            showNotification('Select a project before creating agents.', 'warning');
-        } else {
-            alert('Select a project before creating agents.');
-        }
+        showNotification('Select a project before creating agents.', 'warning');
         return;
     }
 

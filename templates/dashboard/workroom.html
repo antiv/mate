@@ -1649,9 +1649,9 @@
                     _browserUrlInput.value = msg.url === "about:blank" ? "" : msg.url;
                 }
             } else if (msg.type === "info") {
-                alert(msg.message);
+                showNotification(msg.message, 'info');
             } else if (msg.type === "error") {
-                alert(msg.message);
+                showNotification(msg.message, 'error');
             }
         };
     }

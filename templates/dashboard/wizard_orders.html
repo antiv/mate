@@ -203,7 +203,7 @@ function updateStatus(id, status) {
     })
         .then(r => { if (!r.ok) throw new Error(); return r.json(); })
         .then(() => loadOrders())
-        .catch(() => alert("Could not update status"));
+        .catch(() => showNotification("Could not update status", 'error'));
 }
 
 async function deleteOrder(id) {
@@ -211,7 +211,7 @@ async function deleteOrder(id) {
     fetch("/dashboard/api/shop/orders/" + id, { method: "DELETE" })
         .then(r => r.json().then(d => { if (!r.ok) throw new Error(d.detail || "Failed"); return d; }))
         .then(() => loadOrders())
-        .catch(e => alert("Delete failed: " + e.message));
+        .catch(e => showNotification("Delete failed: " + e.message, 'error'));
 }
 
 document.addEventListener("DOMContentLoaded", function () {
