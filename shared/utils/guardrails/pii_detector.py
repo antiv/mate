@@ -68,6 +68,7 @@ def check_pii(
     action: GuardrailAction,
     phase: GuardrailPhase,
     config: Dict[str, Any],
+    context: Any = None,
 ) -> GuardrailResult:
     """Run PII detection on text."""
     patterns = _get_enabled_patterns(config)

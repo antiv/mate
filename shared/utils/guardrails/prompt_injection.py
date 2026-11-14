@@ -47,6 +47,7 @@ def check_prompt_injection(
     action: GuardrailAction,
     phase: GuardrailPhase,
     config: Dict[str, Any],
+    context: Any = None,
 ) -> GuardrailResult:
     """Check text for prompt injection patterns."""
     sensitivity = config.get("sensitivity", "medium")

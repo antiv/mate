@@ -142,6 +142,11 @@ On Gemini's own backend and File Search, a workspace's Google key with a base UR
 its own works in Default only; elsewhere use a `gemini/` model name, which goes
 through the same checks as any other provider.
 
+File Search stores live in the Google project of the key they were made with. A
+workspace that adds a Google key of its own after making stores on the
+installation's, or deletes its key, can no longer reach the stores made before:
+make them again, and upload their files again.
+
 A workspace's own keys are set by its owners on **Models and keys** (below).
 
 ### Edit, suspend, resume, close

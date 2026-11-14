@@ -34,8 +34,9 @@ import asyncio
 import contextlib
 import logging
 import os
+import re
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, AsyncIterator, Dict, Iterator, Optional, Tuple
 
 from google.adk.models.google_llm import Gemini
 from pydantic import PrivateAttr
@@ -312,7 +313,7 @@ def litellm_credentials(context: ModelContext, model_name: str) -> Tuple[Dict[st
 
 
 @contextlib.contextmanager
-def guarded(workspace_id: Optional[int]):
+def guarded(workspace_id: Optional[int]) -> Iterator[None]:
     """While the block runs, the outbound guard checks every httpx request, as a guarded
     model call does (outbound.GuardedCompletions); nothing for None."""
     if workspace_id is None:
@@ -327,7 +328,7 @@ def guarded(workspace_id: Optional[int]):
 
 
 @contextlib.contextmanager
-def redacting(api_key: Optional[str]):
+def redacting(api_key: Optional[str]) -> Iterator[None]:
     """An error raised in the block has the key masked (redact)."""
     try:
         yield
@@ -382,9 +383,24 @@ def google_client_kwargs(context: ModelContext, model_name: str = "gemini-2.5-fl
             raise RuntimeError("GOOGLE_API_KEY not configured")
         return {"api_key": api_key}
     from google.genai import types
-    base_url = credentials.base_url if credentials.own_endpoint else GOOGLE_API_ROOT
+    base_url, api_version = google_endpoint(credentials)
     return {"api_key": credentials.api_key, "vertexai": False,
-            "http_options": types.HttpOptions(base_url=base_url)}
+            "http_options": types.HttpOptions(base_url=base_url, api_version=api_version)}
+
+
+_API_VERSION = re.compile(r"^(?P<base>.*?)/(?P<version>v1(?:alpha|beta)?)/?$")
+
+
+def google_endpoint(credentials: Credentials) -> Tuple[str, Optional[str]]:
+    """(base URL, API version) for google.genai's client. LiteLLM takes a Gemini base URL
+    with its version (.../v1beta, the field's placeholder), google.genai without it and
+    the version apart, or it asks for .../v1beta/v1beta/..."""
+    if not credentials.own_endpoint:
+        return GOOGLE_API_ROOT, None
+    found = _API_VERSION.match(credentials.base_url or "")
+    if not found:
+        return credentials.base_url, None
+    return found.group("base") + "/", found.group("version")
 
 
 class WorkspaceGemini(Gemini):
@@ -401,12 +417,23 @@ class WorkspaceGemini(Gemini):
         if self._keyed is None or self._keyed[0] != key:
             fields = {name: getattr(self, name) for name in Gemini.model_fields
                       if name not in ("client", "client_kwargs", "base_url")}
-            base_url = credentials.base_url if credentials.own_endpoint else GOOGLE_API_ROOT
+            base_url, api_version = google_endpoint(credentials)
+            if api_version:
+                fields["api_version"] = api_version
             self._keyed = (key, Gemini(**fields, base_url=base_url, client_kwargs={
                 "api_key": credentials.api_key, "vertexai": False}))
         return self._keyed[1]
 
-    async def generate_content_async(self, llm_request: Any, stream: bool = False):
+    @property
+    def _api_backend(self) -> Any:
+        """The backend ADK's live flow asks about (session resumption): the Gemini API on
+        the workspace's key, not what the environment's client would say."""
+        credentials = google_credentials(self._context, self.model)
+        if credentials is None:
+            return Gemini._api_backend.__get__(self, type(self))
+        return self._with_key(credentials)._api_backend
+
+    async def generate_content_async(self, llm_request: Any, stream: bool = False) -> AsyncIterator[Any]:
         credentials = await asyncio.to_thread(google_credentials, self._context, self.model)
         if credentials is None:
             responses = super().generate_content_async(llm_request, stream)
@@ -417,13 +444,14 @@ class WorkspaceGemini(Gemini):
                 yield response
 
     @contextlib.asynccontextmanager
-    async def connect(self, llm_request: Any):
-        """The live connection (/run_live), on the same key."""
+    async def connect(self, llm_request: Any) -> AsyncIterator[Any]:
+        """The live connection (/run_live), on the same key, its errors masked."""
         credentials = await asyncio.to_thread(google_credentials, self._context, self.model)
         target = super().connect(llm_request) if credentials is None else \
             self._with_key(credentials).connect(llm_request)
-        async with target as live:
-            yield live
+        with redacting(credentials.api_key if credentials else None):
+            async with target as live:
+                yield live
 
 
 def workspace_gemini(model_name: str, context: ModelContext) -> Any:

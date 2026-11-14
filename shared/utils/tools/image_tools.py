@@ -264,9 +264,9 @@ def validate_image_generation_setup(context: Optional[ModelContext] = None) -> T
     """
     from ..provider_keys import NoProviderKey, workspace_of_context
     context = context or ModelContext()
-    source = default_image_model(workspace_of_context(context))[1]
+    default, source = default_image_model(workspace_of_context(context))
     try:
-        model, kwargs = resolve_image_model(None, context)
+        model, kwargs = resolve_image_model(default, context)
     except NoProviderKey as e:
         return False, str(e), {"default_model": None, "source": source,
                                "provider": None, "missing_keys": []}
