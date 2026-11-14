@@ -22,12 +22,13 @@ from typing import Any, Dict, Optional
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request
+from sqlalchemy.exc import IntegrityError
 
 from server.member_routes import open_session
 from server.request_context import RequestContext, get_api_request_context
 from shared.utils import audit_service, secret_box
 from shared.utils.models import DEFAULT_WORKSPACE_ID, Workspace, WorkspaceProviderKey, WorkspaceSetting
-from shared.utils.provider_keys import PROVIDERS
+from shared.utils.provider_keys import PROVIDERS, masked
 from shared.utils.system_settings import IMAGE_MODEL
 from shared.utils.workspaces import ROLE_OWNER
 
@@ -43,13 +44,6 @@ KEYLESS = ("ollama",)
 def _require_owner(ctx: RequestContext) -> None:
     if not (ctx.is_platform_admin or ctx.workspace_role == ROLE_OWNER):
         raise HTTPException(status_code=403, detail="Only an owner of the workspace changes its keys")
-
-
-def masked(api_key: Optional[str]) -> str:
-    """What the list shows of a stored key: its last four characters."""
-    if not api_key:
-        return ""
-    return "••••" + api_key[-4:] if len(api_key) > 8 else "••••"
 
 
 def _audit(ctx: RequestContext, action: str, resource: str, resource_id: str,
@@ -96,15 +90,14 @@ def _api_key(value: Any, provider: str) -> str:
 
 
 def _image_model(workspace_id: int) -> Dict[str, Any]:
-    from shared.utils.system_settings import get_workspace_setting
     from shared.utils.tools.image_tools import default_image_model
     effective, source = default_image_model(workspace_id)
-    return {"own": get_workspace_setting(workspace_id, IMAGE_MODEL) or "",
-            "effective": effective, "source": source}
+    return {"own": effective if source == "workspace" else "", "effective": effective, "source": source}
 
 
+# Plain functions, which FastAPI runs in its threadpool: they read the database
 @router.get("")
-async def list_models_and_keys(ctx: RequestContext = Depends(get_api_request_context)):
+def list_models_and_keys(ctx: RequestContext = Depends(get_api_request_context)):
     """The workspace's provider keys (masked), the providers it can hold a key for, its
     image model, and what the caller may change."""
     session = open_session()
@@ -112,7 +105,8 @@ async def list_models_and_keys(ctx: RequestContext = Depends(get_api_request_con
         rows = (session.query(WorkspaceProviderKey)
                 .filter(WorkspaceProviderKey.workspace_id == ctx.workspace_id)
                 .order_by(WorkspaceProviderKey.provider).all())
-        keys = [{"provider": row.provider, "key": masked(row.api_key), "readable": row.api_key is not None,
+        keys = [{"provider": row.provider, "key": masked(row.api_key) if row.api_key else "",
+                 "readable": row.api_key is not None,
                  "base_url": row.base_url, "updated_by": row.updated_by,
                  "updated_at": row.updated_at.isoformat() if row.updated_at else None} for row in rows]
         allowed = session.query(Workspace.allow_platform_keys).filter(
@@ -153,11 +147,17 @@ def set_provider_key(request: Request, body: Dict[str, Any] = Body(...),
         row.api_key, row.base_url, row.updated_by = api_key, base_url, ctx.user_id
         row.updated_at = datetime.now(timezone.utc)
         session.commit()
+    except IntegrityError:
+        # Another request added this provider's key between the read and the write
+        session.rollback()
+        raise HTTPException(status_code=409, detail="The key was saved by another request at the same "
+                                                    "time; reload and try again")
     finally:
         session.close()
     _audit(ctx, audit_service.ACTION_PROVIDER_KEY_SET, audit_service.RESOURCE_PROVIDER_KEY, provider,
            {"provider": provider, "base_url": base_url, "replaced": replaced}, request)
-    return {"success": True, "provider": provider, "key": masked(api_key), "base_url": base_url}
+    return {"success": True, "provider": provider, "key": masked(api_key) if api_key else "",
+            "base_url": base_url}
 
 
 @router.delete("/keys/{provider}")

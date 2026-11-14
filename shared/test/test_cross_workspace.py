@@ -3108,6 +3108,13 @@ class TestModelsAndKeys(_TwoWorkspaces):
         self.assertEqual({w["id"]: w["provider_keys"] for w in workspaces["workspaces"]}[B],
                          ["anthropic", "openrouter"])
 
+    def test_two_saves_of_a_new_key_at_once_are_a_409_not_a_500(self):
+        from sqlalchemy.exc import IntegrityError
+        with patch("sqlalchemy.orm.Session.commit", side_effect=IntegrityError("INSERT", {}, Exception("unique"))):
+            response = self.bob.put(f"{self.API}/keys", json={"provider": "openai", "api_key": "sk-openai-bob"})
+        self.assertEqual(response.status_code, 409, response.text)
+        self.assertEqual(self._audit("provider_key.set"), [])
+
     def test_a_key_is_deleted(self):
         self.assertEqual(self.bob.delete(f"{self.API}/keys/anthropic").status_code, 404)
         self.assertEqual(self.bob.delete(f"{self.API}/keys/openrouter").status_code, 200)

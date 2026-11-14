@@ -452,6 +452,34 @@ class TestNativeGemini(_Workspaces):
         self.assertNotIsInstance(create_model("gemini-2.5-flash", context=ModelContext()),
                                  provider_keys.WorkspaceGemini)
 
+    def test_a_base_url_with_its_version_works_on_every_path(self):
+        # The field's placeholder (LiteLLM's form) carries /v1beta; google.genai takes it apart
+        from shared.utils.provider_keys import Credentials, google_endpoint
+        own = lambda url: Credentials("k", url, DEFAULT, True)
+        self.assertEqual(google_endpoint(own("https://generativelanguage.googleapis.com/v1beta")),
+                         ("https://generativelanguage.googleapis.com/", "v1beta"))
+        self.assertEqual(google_endpoint(own("https://proxy.example/gemini/v1/")),
+                         ("https://proxy.example/gemini/", "v1"))
+        self.assertEqual(google_endpoint(own("https://proxy.example/gemini")),
+                         ("https://proxy.example/gemini", None))
+        self.assertEqual(google_endpoint(Credentials("k", "x", CLIENT, False))[0],
+                         provider_keys.GOOGLE_API_ROOT)
+        self.set_key(DEFAULT, "google", "default-google-key",
+                     base_url="https://generativelanguage.googleapis.com/v1beta")
+        options = provider_keys.google_client_kwargs(self.context(DEFAULT))["http_options"]
+        self.assertEqual((options.base_url, options.api_version),
+                         ("https://generativelanguage.googleapis.com/", "v1beta"))
+
+    def test_the_live_flow_sees_the_workspace_key_s_backend(self):
+        # GOOGLE_GENAI_USE_VERTEXAI makes the environment's client Vertex AI; the
+        # workspace's key is the Gemini API, which refuses Vertex-only options
+        from google.adk.models.google_llm import GoogleLLMVariant
+        self.set_key(CLIENT, "google", "client-google-key")
+        model = create_model("gemini-2.5-flash", context=self.context(CLIENT))
+        self.assertEqual(model._api_backend, GoogleLLMVariant.GEMINI_API)
+        department = create_model("gemini-2.5-flash", context=self.context(DEPARTMENT))
+        self.assertEqual(department._api_backend, GoogleLLMVariant.VERTEX_AI)
+
     def test_the_live_connection_takes_the_key_too(self):
         self.set_key(CLIENT, "google", "client-google-key")
         model = create_model("gemini-2.5-flash", context=self.context(CLIENT))
@@ -476,6 +504,19 @@ class TestNativeGemini(_Workspaces):
         with patch.object(Gemini, "connect", autospec=True, side_effect=connect):
             self.assertEqual(asyncio.run(run()), "live")
         self.assertEqual(opened, ["client-google-key"])
+
+        # An error from the live session has the key masked
+        class Refused:
+            async def __aenter__(self):
+                raise RuntimeError("API key not valid: client-google-key")
+
+            async def __aexit__(self, *args):
+                return False
+
+        with patch.object(Gemini, "connect", autospec=True, side_effect=lambda keyed, request: Refused()):
+            with self.assertRaises(RuntimeError) as raised:
+                asyncio.run(run())
+        self.assertEqual(str(raised.exception), "API key not valid: ••••-key")
 
 
 class TestFileSearch(_Workspaces):

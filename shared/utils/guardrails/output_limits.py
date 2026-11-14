@@ -13,6 +13,7 @@ def check_output_length(
     action: GuardrailAction,
     phase: GuardrailPhase,
     config: Dict[str, Any],
+    context: Any = None,
 ) -> GuardrailResult:
     """Check if output exceeds configured length limits."""
     max_characters = config.get("max_characters")

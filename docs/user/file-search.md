@@ -132,7 +132,10 @@ If you see these messages, File Search is properly configured and the agent can 
 2. **Verify stores**: Ensure stores are actually assigned to the agent in the database
 3. **Check the Google key**: File Search uses the workspace's Google key, or the
    `GOOGLE_API_KEY` environment variable where the workspace may use the platform's
-   keys. Without either, the tool answers "This workspace has no key for google"
+   keys. Without either, the tool answers "This workspace has no key for google".
+   A store lives in the Google project of the key it was made with: after the
+   workspace's Google key is added or deleted, the stores made before can't be
+   reached, and have to be made again
 4. **Check tool availability**: The agent should have a `query_file_search` tool available
 
 ### Files uploaded but not visible?

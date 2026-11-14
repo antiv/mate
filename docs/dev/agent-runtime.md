@@ -139,6 +139,15 @@ a workspace's own Google base URL outside the default workspace; a `gemini/` mod
 reaches it through LiteLLM, guarded. On LangGraph, Gemini goes through LiteLLM
 already.
 
+- A Google base URL of the workspace's own is given as LiteLLM takes it, with its
+  version (`.../v1beta`, the field's placeholder). `google_endpoint()` takes the
+  version apart for google.genai, which adds it itself.
+- ADK's live flow asks the model for `_api_backend` (session resumption); a
+  `WorkspaceGemini` answers for the workspace's key, the Gemini API, not for the
+  environment's client, which `GOOGLE_GENAI_USE_VERTEXAI` may make Vertex AI.
+- `connect` masks the key in a live session's errors, as `generate_content_async`
+  does.
+
 Calls that go to `litellm` directly don't go through `create_model()`. They take
 their context and call through `provider_keys.completion()`, or add
 `litellm_credentials()`'s arguments themselves, under `guarded()` when those name
@@ -149,7 +158,7 @@ the workspace's own endpoint outside the default workspace:
 | The eval judge | The test case's agent |
 | The improver (**Suggest a fix**) | The case's or rating's agent |
 | Work Room session titles | The session's agent |
-| The hallucination guardrail | The agent (`GuardrailEngine(..., context)`, both runtimes) |
+| The hallucination guardrail | The agent (`GuardrailEngine(..., context)`, both runtimes; every check is given it, so a new one that calls a model has it too) |
 | Memory block embeddings | The block's project |
 | The image tool | Its agent; also picks the workspace's image model |
 | The murder-mystery game master | Its agent |

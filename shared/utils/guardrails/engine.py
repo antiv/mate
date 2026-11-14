@@ -18,9 +18,6 @@ from .hallucination import check_hallucination
 logger = logging.getLogger(__name__)
 
 # Map guardrail type strings to checker functions
-# Checks that call a model, and take the agent's context for its key
-_CALLS_A_MODEL = {"hallucination_check"}
-
 _CHECKERS = {
     "pii_detection": check_pii,
     "prompt_injection": check_prompt_injection,
@@ -139,10 +136,9 @@ class GuardrailEngine:
             g_config = guardrail_def.get("config", {})
 
             try:
-                if g_type in _CALLS_A_MODEL:
-                    result = checker(text, action, phase, g_config, context=self.context)
-                else:
-                    result = checker(text, action, phase, g_config)
+                # Every check takes the agent's context: one that calls a model does
+                # so on the agent's workspace's key
+                result = checker(text, action, phase, g_config, context=self.context)
                 summary.results.append(result)
             except Exception as e:
                 logger.error(f"Error running guardrail {g_type}: {e}")

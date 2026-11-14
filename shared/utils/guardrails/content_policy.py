@@ -14,6 +14,7 @@ def check_content_policy(
     action: GuardrailAction,
     phase: GuardrailPhase,
     config: Dict[str, Any],
+    context: Any = None,
 ) -> GuardrailResult:
     """Check text against content policy blocklist and regex patterns."""
     case_sensitive = config.get("case_sensitive", False)

@@ -8626,8 +8626,8 @@ class DashboardServer:
             if model:
                 try:
                     import litellm
-                    from shared.utils.tools.image_tools import resolve_image_model
-                    litellm.get_llm_provider(resolve_image_model(model)[0])
+                    from shared.utils.tools.image_tools import image_model_name
+                    litellm.get_llm_provider(image_model_name(model))
                 except Exception:
                     raise HTTPException(status_code=400,
                                         detail=f"Unknown model '{model}': write it as provider/model, e.g. gemini/gemini-2.5-flash-image")
