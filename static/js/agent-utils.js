@@ -124,6 +124,7 @@ function showCreateAgentModal() {
     }
 
     document.getElementById('createAgentModal').classList.remove('hidden');
+    rememberAgentPanel('createAgentModal');
 }
 
 function hideCreateAgentModal() {
@@ -136,6 +137,7 @@ function hideCreateAgentModal() {
 
 function showEditAgentModal() {
     document.getElementById('editAgentModal').classList.remove('hidden');
+    rememberAgentPanel('editAgentModal');
 }
 
 function hideEditAgentModal() {
@@ -149,6 +151,7 @@ function hideEditAgentModal() {
 
 function showCopyAgentModal() {
     document.getElementById('copyAgentModal').classList.remove('hidden');
+    rememberAgentPanel('copyAgentModal');
 }
 
 function hideCopyAgentModal() {
@@ -158,6 +161,107 @@ function hideCopyAgentModal() {
         updateConfigSummaries('copyAgent');
     }
 }
+
+// --- Closing the agent panels (#312) ------------------------------------
+// The Create, Edit and Copy panels (agent_modal_macro.html) close on a click
+// outside them and on Escape, asking first when the form has unsaved changes.
+// Their backdrop names its hide function in data-cancel-fn.
+
+const agentPanelSnapshots = {};
+let agentPanelAsking = false;
+
+function agentPanelValues(modal) {
+    const form = modal.querySelector('form');
+    return JSON.stringify(Array.from(form ? form.elements : [])
+        .filter((el) => el.id || el.name)
+        .map((el) => [el.id || el.name,
+            el.type === 'checkbox' || el.type === 'radio' ? el.checked
+                : el.multiple ? Array.from(el.selectedOptions, (o) => o.value) : el.value]));
+}
+
+// Called once the panel is filled and shown
+function rememberAgentPanel(modalId) {
+    const modal = document.getElementById(modalId);
+    if (modal) agentPanelSnapshots[modalId] = agentPanelValues(modal);
+}
+
+function agentPanelChanged(modal) {
+    if (agentPanelValues(modal) !== agentPanelSnapshots[modal.id]) return true;
+    // A Monaco editor writes back to its field (the id without "Editor") only
+    // when it is toggled off
+    return Object.entries(monacoEditors).some(([editorId, editor]) => {
+        const container = document.getElementById(editorId);
+        const field = document.getElementById(editorId.replace(/Editor$/, ''));
+        return editor && container && field && modal.contains(container)
+            && container.style.display !== 'none' && editor.getValue() !== field.value;
+    });
+}
+
+function openAgentPanel() {
+    return document.querySelector('[data-cancel-fn]:not(.hidden)');
+}
+
+async function requestCloseAgentPanel(modal) {
+    if (agentPanelAsking) return;
+    if (agentPanelChanged(modal)) {
+        agentPanelAsking = true;
+        try {
+            const discard = await showConfirm('This agent has changes that are not saved. Close it and discard them?',
+                'Unsaved changes', 'Discard', 'Keep editing', 'danger');
+            if (!discard) return;
+        } finally {
+            agentPanelAsking = false;
+        }
+    }
+    if (!modal.classList.contains('hidden')) mateActions.run(modal.dataset.cancelFn);
+}
+
+// The dialogs open over the panel (tool and MCP config, parent agents, the
+// instruction editor, version history...): fixed overlays above its z-index
+function dialogOverAgentPanel(modal) {
+    const base = parseInt(getComputedStyle(modal).zIndex, 10) || 0;
+    let top = null;
+    let topZ = base;
+    document.querySelectorAll('.fixed.inset-0:not(.hidden)').forEach((el) => {
+        if (el === modal || modal.contains(el) || !el.getClientRects().length) return;
+        const z = parseInt(getComputedStyle(el).zIndex, 10) || 0;
+        // The highest; of equals, the one later in the page
+        if (z > base && z >= topZ) { top = el; topZ = z; }
+    });
+    return top;
+}
+
+function initAgentPanelClosing() {
+    // Where the press started: a drag that selects text in the panel and ends
+    // outside it is not a click outside
+    let pressedOutside = false;
+    const outside = (modal, target) => target === modal || target === modal.firstElementChild;
+
+    document.addEventListener('mousedown', (event) => {
+        const modal = openAgentPanel();
+        pressedOutside = !!modal && outside(modal, event.target);
+    });
+    document.addEventListener('click', (event) => {
+        const modal = openAgentPanel();
+        if (modal && pressedOutside && outside(modal, event.target)) requestCloseAgentPanel(modal);
+        pressedOutside = false;
+    });
+    document.addEventListener('keydown', (event) => {
+        if (event.key !== 'Escape' || event.defaultPrevented) return;
+        const modal = openAgentPanel();
+        // The shared confirm dialog closes itself on Escape
+        if (!modal || document.getElementById('customConfirmModal')) return;
+        const dialog = dialogOverAgentPanel(modal);
+        if (dialog) {
+            const close = dialog.querySelector('[aria-label="Close"]');
+            if (close) close.click();
+            return;
+        }
+        requestCloseAgentPanel(modal);
+    });
+}
+
+initAgentPanelClosing();
 
 // --- Clone agent tree to another project (#19) -------------------------
 
@@ -1200,36 +1304,7 @@ function initializeSearchAndFilter(configs) {
         widgetKeysButton.dataset.listenerAttached = 'true';
     }
 
-    // Add backdrop click handlers for agent modals
-    const editAgentModal = document.getElementById('editAgentModal');
-    if (editAgentModal && !editAgentModal.dataset.listenerAttached) {
-        editAgentModal.addEventListener('click', (event) => {
-            if (event.target === editAgentModal) {
-                hideEditAgentModal();
-            }
-        });
-        editAgentModal.dataset.listenerAttached = 'true';
-    }
-
-    const createAgentModal = document.getElementById('createAgentModal');
-    if (createAgentModal && !createAgentModal.dataset.listenerAttached) {
-        createAgentModal.addEventListener('click', (event) => {
-            if (event.target === createAgentModal) {
-                hideCreateAgentModal();
-            }
-        });
-        createAgentModal.dataset.listenerAttached = 'true';
-    }
-
-    const copyAgentModal = document.getElementById('copyAgentModal');
-    if (copyAgentModal && !copyAgentModal.dataset.listenerAttached) {
-        copyAgentModal.addEventListener('click', (event) => {
-            if (event.target === copyAgentModal) {
-                hideCopyAgentModal();
-            }
-        });
-        copyAgentModal.dataset.listenerAttached = 'true';
-    }
+    // A click outside the agent panels and Escape close them: initAgentPanelClosing()
 
     initializeInstructionFieldModal();
 
