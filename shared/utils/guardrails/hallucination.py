@@ -50,7 +50,10 @@ def check_hallucination(
     action: GuardrailAction,
     phase: GuardrailPhase,
     config: Dict[str, Any],
+    context: Any = None,
 ) -> GuardrailResult:
+    """Judged on the key of the context's workspace (the agent's); fails open, as on
+    any model error, when it has none."""
     model = config.get("model")
     threshold = float(config.get("threshold", 0.7))
 
@@ -65,9 +68,11 @@ def check_hallucination(
         )
 
     try:
-        import litellm  # type: ignore
+        from shared.utils.provider_keys import completion
+        from shared.utils.utils import ModelContext
 
-        response = litellm.completion(
+        response = completion(
+            context or ModelContext(),
             model=model,
             messages=[{"role": "user", "content": _PROMPT.format(text=text)}],
             temperature=0.0,

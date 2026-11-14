@@ -27,6 +27,7 @@ from google.adk.tools.tool_context import ToolContext
 from .. import settings
 from ..outbound import is_internal_address
 from ..content_marking import is_marked_as_ai_generated, mark_png_as_ai_generated
+from ..utils import ModelContext, model_context_of
 
 logger = logging.getLogger(__name__)
 
@@ -161,14 +162,18 @@ _MIME_SIGNATURES = (
 )
 
 
-def default_image_model() -> Tuple[str, str]:
+def default_image_model(workspace_id: Optional[int] = None) -> Tuple[str, str]:
     """The model for agents that name none, and where it comes from.
 
-    The dashboard's Settings page wins, then IMAGE_MODEL, then dall-e-3. Read on
-    every call: the agent runtime is another process than the dashboard.
-    Returns (model, source) with source "dashboard", "IMAGE_MODEL" or "default".
+    The workspace's own (workspace_settings) wins, then the dashboard's Settings page,
+    then IMAGE_MODEL, then dall-e-3. Read on every call: the agent runtime is another
+    process than the dashboard. Returns (model, source) with source "workspace",
+    "dashboard", "IMAGE_MODEL" or "default".
     """
-    from ..system_settings import IMAGE_MODEL, get_setting
+    from ..system_settings import IMAGE_MODEL, get_setting, get_workspace_setting
+    own = (get_workspace_setting(workspace_id, IMAGE_MODEL) or "").strip()
+    if own:
+        return own, "workspace"
     stored = (get_setting(IMAGE_MODEL) or "").strip()
     if stored:
         return stored, "dashboard"
@@ -178,17 +183,37 @@ def default_image_model() -> Tuple[str, str]:
     return DEFAULT_IMAGE_MODEL, "default"
 
 
-def resolve_image_model(model: Optional[str] = None) -> Tuple[str, Dict[str, Any]]:
-    """The LiteLLM model name and the credentials to call it with.
-
-    Without a model, the default from default_image_model(). Credentials come from the provider's
-    usual env var, as for agents, with two exceptions kept from before: a bare
-    OpenAI name falls back to OPENAI_API_KEY_BACKUP, then to OpenRouter's endpoint
-    with OPENROUTER_API_KEY; and Gemini takes GOOGLE_API_KEY, which LiteLLM's
-    image call does not read on its own.
-    """
-    name = (model or default_image_model()[0]).strip()
+def _resolve(model: Optional[str], context: Optional[ModelContext]) -> Tuple[str, Dict[str, Any], Optional[int]]:
+    """resolve_image_model(), and the workspace to guard the call for (provider_keys)."""
+    from ..provider_keys import litellm_credentials, workspace_of_context
+    context = context or ModelContext()
+    name = (model or default_image_model(workspace_of_context(context))[0]).strip()
     name = _MODEL_ALIASES.get(name, name)
+    credentials, guard = litellm_credentials(context, name)
+    if credentials:
+        return name, credentials, guard
+    return name, _environment_credentials(name), None
+
+
+def resolve_image_model(model: Optional[str] = None,
+                        context: Optional[ModelContext] = None) -> Tuple[str, Dict[str, Any]]:
+    """The LiteLLM model name and the credentials to call it with, for the agent in
+    context (None: the installation).
+
+    Without a model, the default from default_image_model() for the agent's
+    workspace. Credentials are the workspace's key for the model's provider
+    (provider_keys); where the environment applies, the provider's usual env var, as
+    for agents, with two exceptions kept from before: a bare OpenAI name falls back
+    to OPENAI_API_KEY_BACKUP, then to OpenRouter's endpoint with OPENROUTER_API_KEY;
+    and Gemini takes GOOGLE_API_KEY, which LiteLLM's image call does not read on its
+    own. Raises NoProviderKey for a workspace that may use neither.
+    """
+    name, credentials, _ = _resolve(model, context)
+    return name, credentials
+
+
+def _environment_credentials(name: str) -> Dict[str, Any]:
+    """The credentials from the environment for an image model name."""
     kwargs: Dict[str, Any] = {}
     if "/" not in name and not os.getenv("OPENAI_API_KEY"):
         if os.getenv("OPENAI_API_KEY_BACKUP"):
@@ -200,12 +225,12 @@ def resolve_image_model(model: Optional[str] = None) -> Tuple[str, Dict[str, Any
         key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
         if key:
             kwargs["api_key"] = key
-    return name, kwargs
+    return kwargs
 
 
 def image_tool_name(model: str) -> str:
     """The tool name an agent sees for an image model."""
-    name, _ = resolve_image_model(model)
+    name = _MODEL_ALIASES.get(model.strip(), model.strip())
     if name in _LEGACY_TOOL_NAMES:
         return _LEGACY_TOOL_NAMES[name]
     return "generate_image_" + (re.sub(r"[^A-Za-z0-9]+", "_", model).strip("_") or "default")
@@ -221,9 +246,10 @@ def _sniff_image(data: bytes) -> Tuple[str, str]:
     return "image/png", "png"
 
 
-def validate_image_generation_setup() -> Tuple[bool, str, Dict[str, Any]]:
+def validate_image_generation_setup(context: Optional[ModelContext] = None) -> Tuple[bool, str, Dict[str, Any]]:
     """
-    Check that the default image model (see default_image_model) can be called.
+    Check that the default image model (see default_image_model) can be called, for
+    the agent or project in context (None: the installation).
 
     Only looks for its provider's key; it makes no request, so a wrong key or an
     unknown model shows up on the first generation, not here.
@@ -231,8 +257,15 @@ def validate_image_generation_setup() -> Tuple[bool, str, Dict[str, Any]]:
     Returns:
         Tuple of (is_available, error_message, details)
     """
-    model, kwargs = resolve_image_model(None)
-    details: Dict[str, Any] = {"default_model": model, "source": default_image_model()[1],
+    from ..provider_keys import NoProviderKey, workspace_of_context
+    context = context or ModelContext()
+    source = default_image_model(workspace_of_context(context))[1]
+    try:
+        model, kwargs = resolve_image_model(None, context)
+    except NoProviderKey as e:
+        return False, str(e), {"default_model": None, "source": source,
+                               "provider": None, "missing_keys": []}
+    details: Dict[str, Any] = {"default_model": model, "source": source,
                                "provider": None, "missing_keys": []}
     try:
         import litellm
@@ -362,7 +395,8 @@ async def _openrouter_image(model: str, prompt: str, params: Dict[str, Any],
 
 
 async def _generate_image_internal(prompt: str, tool_context: ToolContext = None,
-                                   model: Optional[str] = None, model_config: dict = None) -> dict:
+                                   model: Optional[str] = None, model_config: dict = None,
+                                   context: Optional[ModelContext] = None) -> dict:
     """
     Generate one image through LiteLLM and save it as an artifact.
 
@@ -371,21 +405,25 @@ async def _generate_image_internal(prompt: str, tool_context: ToolContext = None
         tool_context: Optional tool context for artifact management.
         model: Any LiteLLM image model; None for the default.
         model_config: Request parameters from the agent's tool_config.
+        context: The agent the image is for: its workspace's model and key.
 
     Returns:
         A dictionary describing the saved image, or an error. Never the image
         bytes: they would flood the agent's context.
     """
-    model, credentials = resolve_image_model(model)
     try:
         import litellm
+        from ..provider_keys import guarded
 
+        model, credentials, guard = _resolve(model, context)
         params = get_model_config(model, model_config)
         if model.startswith("openrouter/"):
-            image_url, image_b64 = await _openrouter_image(model, prompt, params, credentials)
+            with guarded(guard):
+                image_url, image_b64 = await _openrouter_image(model, prompt, params, credentials)
         else:
-            response = await litellm.aimage_generation(
-                model=model, prompt=prompt, drop_params=True, **params, **credentials)
+            with guarded(guard):
+                response = await litellm.aimage_generation(
+                    model=model, prompt=prompt, drop_params=True, **params, **credentials)
             if not response.data:
                 raise ValueError("the provider returned no image")
             image_data = response.data[0]
@@ -540,7 +578,22 @@ def create_image_tools_from_config(config: Dict[str, Any]) -> list:
         return tools
 
     image_tools_config = tool_config_dict.get('image_tools')
+    # The agent's workspace picks the default model and the key
+    context = model_context_of(config)
     if isinstance(image_tools_config, bool) and image_tools_config:
+        async def generate_image(prompt: str, tool_context: ToolContext = None) -> dict:
+            """
+            Generate an image with the default model (the workspace's, the Settings page,
+            IMAGE_MODEL, else dall-e-3).
+
+            Args:
+                prompt: The text prompt to generate the image from.
+                tool_context: Optional tool context for artifact management.
+
+            Returns:
+                A dictionary describing the saved image, or an error.
+            """
+            return await _generate_image_internal(prompt, tool_context, None, {}, context)
         tools.append(generate_image)
         logger.info(f"Created image generation tool with default model for agent {config.get('name', 'unknown')}")
     elif isinstance(image_tools_config, dict):
@@ -558,14 +611,15 @@ def create_image_tools_from_config(config: Dict[str, Any]) -> list:
                 Returns:
                     Where the image was saved, or an error.
                 """
-                return await _generate_image_internal(prompt, tool_context, model_name, config_params)
+                return await _generate_image_internal(prompt, tool_context, model_name, config_params,
+                                                      context)
             return model_specific_generate_image
 
         model_tool = create_model_specific_tool(model, model_config)
         model_tool.__name__ = image_tool_name(model) if model else "generate_image"
         tools.append(model_tool)
         logger.info(f"Created image generation tool {model_tool.__name__} "
-                    f"(model={resolve_image_model(model)[0]!r}) for agent {config.get('name', 'unknown')}")
+                    f"(model={model or 'default'!r}) for agent {config.get('name', 'unknown')}")
 
     return tools
 

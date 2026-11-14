@@ -63,8 +63,9 @@ cannot rewrite it. The role is the one on the person's user record; see
 [Users and roles](users-and-roles.md). The built-in account always has it. This keeps
 a visitor from talking an agent into changing its own rules.
 
-Search by meaning uses an embedding model. If none is available on the server, the
-agent falls back to matching words in labels and values.
+Search by meaning uses an embedding model, on the key of the project's workspace for
+its provider. If none is available, or the workspace has no key for it, the agent
+falls back to matching words in labels and values.
 
 ### One block per person
 

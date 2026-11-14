@@ -14,6 +14,8 @@ from typing import Dict, Any, List, Optional
 
 from sqlalchemy.exc import IntegrityError
 
+from shared.utils.utils import ModelContext
+
 logger = logging.getLogger(__name__)
 
 # Values that stand in for stored ones while a suggested fix is checked:
@@ -177,7 +179,7 @@ class MemoryBlocksService:
             model = emb.get_embedding_model()
             if row.embedding and row.embedding_model == model and row.embedding_hash == new_hash:
                 return
-            vectors = emb.embed_texts([text])
+            vectors = emb.embed_texts([text], ModelContext(project_id=row.project_id))
             if vectors:
                 row.embedding = json.dumps(vectors[0])
                 row.embedding_model = model
@@ -392,7 +394,7 @@ class MemoryBlocksService:
         from shared.utils import embedding_service as emb
 
         with _memory_blocks_span("semantic_search"):
-            query_vectors = emb.embed_texts([query])
+            query_vectors = emb.embed_texts([query], ModelContext(project_id=project_id))
             if not query_vectors:
                 return None
             query_vec = query_vectors[0]
@@ -412,7 +414,8 @@ class MemoryBlocksService:
                     if not row.embedding or row.embedding_model != model or row.embedding_hash != text_hash:
                         stale.append((row, text, text_hash))
                 if stale:
-                    vectors = emb.embed_texts([text for _, text, _ in stale])
+                    vectors = emb.embed_texts([text for _, text, _ in stale],
+                                              ModelContext(project_id=project_id))
                     if vectors:
                         for (row, _, text_hash), vector in zip(stale, vectors):
                             row.embedding = json.dumps(vector)

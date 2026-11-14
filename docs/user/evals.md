@@ -45,7 +45,10 @@ Click **Add Test Case** and fill in:
 | **LLM Judge** | A model reads the question, the expected answer and the real answer, and gives a score with a one-sentence reason. | Open answers, where wording and length vary. |
 
 An LLM Judge case needs a judge model, either on the case or set for the whole
-server. With neither, the case is skipped rather than scored.
+server. With neither, the case is skipped rather than scored. The judge runs on the
+key of the agent's workspace for its provider; a workspace with no key for it, and
+no use of the server's keys, gets an error on the case, so name a judge model its
+keys cover.
 
 How good Semantic Similarity is depends on the server: with a sentence-embedding
 library installed it compares meaning; without one it only compares the text.
@@ -90,7 +93,8 @@ mistake is checked on every future run.
 ## Suggest a fix
 
 On a failing case, or on a rated-down answer, **Suggest a fix** asks a model to
-rewrite the agent's instruction so the case would pass.
+rewrite the agent's instruction so the case would pass. The model runs on the key of
+the agent's workspace, as the judge does.
 
 1. It shows the current and the suggested instruction side by side, with the reason.
    You can edit the suggestion, and tick memory blocks the agent read if their

@@ -124,12 +124,25 @@ a workspace's own Google base URL outside the default workspace; a `gemini/` mod
 reaches it through LiteLLM, guarded. On LangGraph, Gemini goes through LiteLLM
 already.
 
-Not yet covered: the calls that go to `litellm` directly (next paragraph).
+Calls that go to `litellm` directly don't go through `create_model()`. They take
+their context and call through `provider_keys.completion()`, or add
+`litellm_credentials()`'s arguments themselves, under `guarded()` when those name
+the workspace's own endpoint outside the default workspace:
 
-Calls that go to `litellm` directly do not go through `create_model()` and take
-no context yet: the eval judge, the agent improver, the hallucination guardrail,
-image generation, embeddings, the wizard, Work Room session titles and the
-murder-mystery demo.
+| Call | Context |
+|---|---|
+| The eval judge | The test case's agent |
+| The improver (**Suggest a fix**) | The case's or rating's agent |
+| Work Room session titles | The session's agent |
+| The hallucination guardrail | The agent (`GuardrailEngine(..., context)`, both runtimes) |
+| Memory block embeddings | The block's project |
+| The image tool | Its agent; also picks the workspace's image model |
+| The murder-mystery game master | Its agent |
+
+A bare model name there is LiteLLM's to place (`litellm_provider_of`: `dall-e-3` is
+`openai`), where `create_model()` sends it to Gemini. Where a call fails open today
+(embeddings, the hallucination check, titles) a missing key fails it the same way.
+The wizard's site analyzer stays on the environment: it is the platform's own.
 
 ### Reloading
 

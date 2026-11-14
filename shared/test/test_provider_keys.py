@@ -30,6 +30,8 @@ from shared.utils.provider_keys import NoProviderKey, model_credentials, provide
 from shared.utils.utils import ModelContext, create_model
 
 DEFAULT, CLIENT, DEPARTMENT = 1, 2, 3
+# A 1x1 PNG, as an image provider returns it
+PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
 # Variables a provider's key or endpoint could be read from
 PROVIDER_VARIABLES = ("OPENROUTER", "OPENAI", "ANTHROPIC", "GEMINI", "GOOGLE", "DEEPSEEK",
                       "MISTRAL", "GROQ", "XAI", "OLLAMA", "LM_STUDIO")
@@ -178,13 +180,23 @@ class _FakeProvider:
 
     def __init__(self, test: unittest.TestCase):
         self.keys = []
+        self.content = "ok"
         calls = self.keys
+        provider = self
 
         class Handler(BaseHTTPRequestHandler):
             def do_POST(self):
                 request = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}")
                 calls.append(self.headers.get("Authorization"))
-                if request.get("stream"):
+                if self.path.endswith("/embeddings"):
+                    body = json.dumps({"object": "list", "model": "m", "usage": {"prompt_tokens": 1, "total_tokens": 1},
+                                       "data": [{"object": "embedding", "index": i, "embedding": [1.0, 0.0]}
+                                                for i in range(len(request.get("input") or [1]))]}).encode()
+                    content_type = "application/json"
+                elif self.path.endswith("/images/generations"):
+                    body = json.dumps({"created": 0, "data": [{"b64_json": PNG}]}).encode()
+                    content_type = "application/json"
+                elif request.get("stream"):
                     chunk = {"id": "x", "object": "chat.completion.chunk", "created": 0, "model": "m",
                              "choices": [{"index": 0, "delta": {"role": "assistant", "content": "ok"},
                                           "finish_reason": "stop"}]}
@@ -193,7 +205,7 @@ class _FakeProvider:
                 else:
                     body = json.dumps({"id": "x", "object": "chat.completion", "created": 0, "model": "m",
                                        "choices": [{"index": 0, "finish_reason": "stop", "message": {
-                                           "role": "assistant", "content": "ok"}}],
+                                           "role": "assistant", "content": provider.content}}],
                                        "usage": {"prompt_tokens": 1, "completion_tokens": 1,
                                                  "total_tokens": 2}}).encode()
                     content_type = "application/json"
@@ -212,8 +224,8 @@ class _FakeProvider:
         self.url = f"http://127.0.0.1:{server.server_port}/v1"
 
 
-class TestEachCall(_Workspaces):
-    """Both runtimes' models, called over HTTP, with the environment cleared."""
+class _OverHttp(_Workspaces):
+    """A fake provider, and the environment cleared of provider keys."""
 
     def setUp(self):
         super().setUp()
@@ -225,6 +237,10 @@ class TestEachCall(_Workspaces):
         patcher = patch.dict(os.environ, env, clear=True)
         patcher.start()
         self.addCleanup(patcher.stop)
+
+
+class TestEachCall(_OverHttp):
+    """Both runtimes' models, called over HTTP, with the environment cleared."""
 
     def ask_adk(self, model) -> str:
         async def run():
@@ -515,6 +531,103 @@ class TestFileSearch(_Workspaces):
     def test_the_default_workspace_uses_the_environment(self):
         self.tools.create_file_search_store("store", project_id=self.projects[DEFAULT])
         self.assertEqual(self.key_used(), "platform-google-key")
+
+
+class TestDirectCalls(_OverHttp):
+    """The calls that go to litellm directly (4d), on the client workspace's OpenAI key
+    at the fake provider, with the environment cleared."""
+
+    def setUp(self):
+        super().setUp()
+        self.set_key(CLIENT, "openai", "sk-client", base_url=self.provider.url)
+
+    def test_the_eval_judge(self):
+        from types import SimpleNamespace
+        from shared.utils.eval_runner import EvalRunner
+        self.provider.content = '{"score": 0.9, "reasoning": "close"}'
+        case = SimpleNamespace(id=1, eval_method="llm_judge", threshold=0.5, judge_model="openai/judge",
+                               input="q", expected_output="a", agent_name="client_agent")
+        result = EvalRunner().score_output(case, "a", 1)
+        self.assertTrue(result.passed, result.details)
+        self.assertEqual(self.provider.keys, ["Bearer sk-client"])
+
+    def test_the_improver(self):
+        from shared.utils.agent_improver import propose_instruction
+        self.provider.content = '{"instruction": "Be brief.", "reason": "shorter"}'
+        proposal = propose_instruction("Be.", "", "q", "a", None, None, model="openai/m",
+                                       context=self.context(CLIENT))
+        self.assertEqual(proposal["instruction"], "Be brief.")
+        self.assertEqual(self.provider.keys, ["Bearer sk-client"])
+
+    def test_memory_block_embeddings(self):
+        from shared.utils import embedding_service
+        context = ModelContext(project_id=self.projects[CLIENT])
+        with patch.dict(os.environ, {"EMBEDDING_MODEL": "openai/text-embedding-3-small"}):
+            self.assertEqual(embedding_service.embed_texts(["a", "b"], context), [[1.0, 0.0], [1.0, 0.0]])
+            # A workspace without a key gets None: memory search falls back to keywords
+            self.delete_key(CLIENT, "openai")
+            self.assertIsNone(embedding_service.embed_texts(["a"], context))
+        self.assertEqual(self.provider.keys, ["Bearer sk-client"])
+
+    def test_the_hallucination_guardrail(self):
+        from shared.utils.guardrails.engine import GuardrailEngine
+        self.provider.content = '{"score": 0.2, "reasoning": "made up"}'
+        engine = GuardrailEngine({"guardrails": [{"type": "hallucination_check", "enabled": True,
+                                                  "action": "block", "config": {"model": "openai/m"}}]},
+                                 self.context(CLIENT))
+        self.assertTrue(engine.check_output("The moon is cheese.").results[0].triggered)
+        self.assertEqual(self.provider.keys, ["Bearer sk-client"])
+
+    def test_the_mystery_game(self):
+        from shared.utils.tools import mystery_game
+        self.provider.content = "not a case"
+        with self.assertRaises(ValueError):
+            mystery_game._generate_case_llm("English", model="openai/m", context=self.context(CLIENT))
+        self.assertEqual(self.provider.keys, ["Bearer sk-client"] * 2)
+        # A valid case goes on to the difficulty probe, on the same key
+        self.provider.content = '{"dossier": "d", "suspects": [], "evidence": []}'
+        with patch.object(mystery_game, "validate_case", return_value=None):
+            mystery_game._generate_case_llm("English", model="openai/m", context=self.context(CLIENT))
+        self.assertEqual(self.provider.keys, ["Bearer sk-client"] * 4)
+
+    def test_the_image_tool_with_the_workspace_s_model_and_key(self):
+        from shared.utils.models import WorkspaceSetting
+        from shared.utils.tools import image_tools
+        session = self.Session()
+        session.add(WorkspaceSetting(workspace_id=CLIENT, setting_key="image_model", value="openai/gpt-image-1"))
+        session.commit()
+        session.close()
+        config = {"name": "client_agent", "project_id": self.projects[CLIENT],
+                  "tool_config": json.dumps({"image_tools": True})}
+        [tool] = image_tools.create_image_tools_from_config(config)
+        self.assertEqual(tool.__name__, "generate_image")
+        result = asyncio.run(tool("a cat"))
+        self.assertNotIn("error", json.dumps(result).lower(), result)
+        self.assertEqual(self.provider.keys, ["Bearer sk-client"])
+        self.assertEqual(image_tools.default_image_model(CLIENT), ("openai/gpt-image-1", "workspace"))
+        self.assertEqual(image_tools.default_image_model(DEPARTMENT)[1], "default")
+
+    def test_the_image_setup_check_is_per_workspace(self):
+        from shared.utils.tools import image_tools
+        self.assertTrue(image_tools.validate_image_generation_setup(self.context(CLIENT))[0])
+        self.delete_key(CLIENT, "openai")
+        ok, error, _ = image_tools.validate_image_generation_setup(self.context(CLIENT))
+        self.assertFalse(ok)
+        self.assertIn("no key for openai", error)
+
+    def test_a_workspace_without_a_key_makes_no_direct_call(self):
+        from shared.utils.provider_keys import completion
+        with self.assertRaises(NoProviderKey):
+            completion(self.context(CLIENT), model="anthropic/claude", messages=[])
+        self.assertEqual(self.provider.keys, [])
+
+    def test_a_direct_call_to_its_own_endpoint_is_guarded(self):
+        from shared.utils.provider_keys import completion
+        with patch.dict(os.environ, {"OUTBOUND_ALLOW_PRIVATE_NETWORK": "false"}):
+            with self.assertRaises(Exception):
+                completion(self.context(CLIENT), model="openai/m", messages=[{"role": "user", "content": "q"}],
+                           num_retries=0)
+        self.assertEqual(self.provider.keys, [])
 
 
 if __name__ == "__main__":

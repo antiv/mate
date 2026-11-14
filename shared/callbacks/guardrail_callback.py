@@ -98,7 +98,10 @@ def _get_guardrail_engine(callback_context: CallbackContext,
                 AgentConfig.disabled.is_(False),
             ).first()
             if config and config.guardrail_config:
-                engine = GuardrailEngine.from_json(config.guardrail_config)
+                from ..utils.utils import ModelContext
+                engine = GuardrailEngine.from_json(
+                    config.guardrail_config,
+                    ModelContext(agent_name=config.name, project_id=config.project_id))
                 if engine.has_guardrails:
                     return engine
         finally:

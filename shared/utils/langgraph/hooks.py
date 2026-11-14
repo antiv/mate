@@ -138,7 +138,10 @@ def build_guardrail_engines(configs_by_agent: Dict[str, Dict[str, Any]]) -> Dict
         if not raw:
             continue
         try:
-            engine = GuardrailEngine.from_json(raw if isinstance(raw, str) else json.dumps(raw))
+            from shared.utils.utils import ModelContext
+            engine = GuardrailEngine.from_json(
+                raw if isinstance(raw, str) else json.dumps(raw),
+                ModelContext(agent_name=agent_name, project_id=config.get("project_id")))
             if engine.has_guardrails:
                 engines[agent_name] = engine
         except Exception as e:

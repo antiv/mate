@@ -132,7 +132,7 @@ class TestSemanticSearch(unittest.TestCase):
             self.assertIsNone(self.service.semantic_search_blocks(project_id=1, query="cats"))
 
     def test_backfills_and_ranks_by_similarity(self):
-        def fake_embed(texts):
+        def fake_embed(texts, context=None):
             if len(texts) == 1:  # the query
                 return [[1.0, 0.0]]
             # backfill batch for alpha, beta, gamma (creation order)
@@ -151,7 +151,7 @@ class TestSemanticSearch(unittest.TestCase):
         # Embeddings persisted: a second search only embeds the query.
         calls = []
 
-        def count_embed(texts):
+        def count_embed(texts, context=None):
             calls.append(texts)
             return [[1.0, 0.0]]
 
@@ -161,7 +161,7 @@ class TestSemanticSearch(unittest.TestCase):
         self.assertEqual(len(calls), 1)
 
     def test_scoped_to_project(self):
-        def fake_embed(texts):
+        def fake_embed(texts, context=None):
             return [[1.0, 0.0]] * len(texts)
 
         with patch("shared.utils.embedding_service.embed_texts", side_effect=fake_embed):

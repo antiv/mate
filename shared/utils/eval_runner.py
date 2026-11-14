@@ -14,6 +14,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Optional
 
+from .utils import ModelContext
+
 logger = logging.getLogger(__name__)
 
 JUDGE_PROMPT_TEMPLATE = """\
@@ -62,14 +64,17 @@ class EvalRunner:
         return difflib.SequenceMatcher(None, expected.lower(), actual.lower()).ratio()
 
     @staticmethod
-    def llm_judge_eval(input_text: str, expected: str, actual: str, model: str) -> tuple[float, str]:
-        """Returns (score, reasoning). Raises on model error."""
-        import litellm  # type: ignore
+    def llm_judge_eval(input_text: str, expected: str, actual: str, model: str,
+                       context: Optional[ModelContext] = None) -> tuple[float, str]:
+        """Returns (score, reasoning), judged on the key of the context's workspace.
+        Raises on model error, and on a workspace with no key for the judge."""
+        from .provider_keys import completion
 
         prompt = JUDGE_PROMPT_TEMPLATE.format(
             input=input_text, expected=expected, actual=actual
         )
-        response = litellm.completion(
+        response = completion(
+            context or ModelContext(),
             model=model,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.0,
@@ -115,7 +120,8 @@ class EvalRunner:
                         details="Skipped: EVAL_JUDGE_MODEL not configured",
                     )
                 score, reasoning = self.llm_judge_eval(
-                    test_case.input, test_case.expected_output, actual_output, judge_model
+                    test_case.input, test_case.expected_output, actual_output, judge_model,
+                    ModelContext(agent_name=test_case.agent_name),
                 )
                 details = f"score={score:.3f} model={judge_model} reasoning={reasoning}"
             else:

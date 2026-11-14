@@ -18,6 +18,8 @@ from typing import Any, Dict, List, Optional
 
 from google.adk.tools import ToolContext
 
+from shared.utils.utils import ModelContext, model_context_of
+
 logger = logging.getLogger(__name__)
 
 STATE_KEY = "mystery_case"
@@ -639,11 +641,13 @@ def _player_visible_material(case: Dict[str, Any]) -> str:
     return (f"CASE FILE:\n{case['dossier']}\n\nSUSPECT CARDS:\n{cards}\n\nEVIDENCE:\n{reports}")
 
 
-def _probe_transparency(case: Dict[str, Any], model: str) -> Optional[str]:
+def _probe_transparency(case: Dict[str, Any], model: str,
+                        context: Optional[ModelContext] = None) -> Optional[str]:
     """Return what gives the case away, or None when its surface holds up."""
-    import litellm  # type: ignore
+    from shared.utils.provider_keys import completion
 
-    resp = litellm.completion(
+    resp = completion(
+        context or ModelContext(),
         model=model,
         messages=[{"role": "user",
                    "content": _PROBE_PROMPT.format(material=_player_visible_material(case))}],
@@ -667,15 +671,17 @@ def _probe_transparency(case: Dict[str, Any], model: str) -> Optional[str]:
     return str(verdict.get("reason") or "the material points at one suspect only")
 
 
-def _revise_surface(case: Dict[str, Any], giveaway: str, model: str) -> bool:
+def _revise_surface(case: Dict[str, Any], giveaway: str, model: str,
+                    context: Optional[ModelContext] = None) -> bool:
     """Rewrite dossier, suspect cards and evidence in place. Returns True if applied.
 
     Only the surface is sent back for a rewrite — the solution, the secrets and the
     testimony stay exactly as generated, so a revision cannot quietly change whodunit.
     """
-    import litellm  # type: ignore
+    from shared.utils.provider_keys import completion
 
-    resp = litellm.completion(
+    resp = completion(
+        context or ModelContext(),
         model=model,
         messages=[{"role": "user", "content": _REVISION_PROMPT.format(
             giveaway=giveaway,
@@ -708,10 +714,10 @@ def _revise_surface(case: Dict[str, Any], giveaway: str, model: str) -> bool:
     return True
 
 
-def _harden_case(case: Dict[str, Any], model: str) -> None:
+def _harden_case(case: Dict[str, Any], model: str, context: Optional[ModelContext] = None) -> None:
     """Best-effort difficulty gate — never blocks the player from getting a game."""
     try:
-        giveaway = _probe_transparency(case, model)
+        giveaway = _probe_transparency(case, model, context)
     except Exception as e:
         logger.warning(f"mystery_game: difficulty probe failed: {e}")
         return
@@ -719,7 +725,7 @@ def _harden_case(case: Dict[str, Any], model: str) -> None:
         return
     logger.info(f"mystery_game: case gives itself away ({giveaway}); rewriting the surface")
     try:
-        if not _revise_surface(case, giveaway, model):
+        if not _revise_surface(case, giveaway, model, context):
             logger.warning("mystery_game: surface revision produced nothing usable")
     except Exception as e:
         logger.warning(f"mystery_game: surface revision failed: {e}")
@@ -753,9 +759,11 @@ def _shuffle_suspects(case: Dict[str, Any]) -> None:
         suspect["id"] = i
 
 
-def _generate_case_llm(language: str, theme: str = "", model: Optional[str] = None) -> Dict[str, Any]:
-    """Call the LLM to write a new case; raises ValueError if the result is invalid."""
-    import litellm  # type: ignore
+def _generate_case_llm(language: str, theme: str = "", model: Optional[str] = None,
+                       context: Optional[ModelContext] = None) -> Dict[str, Any]:
+    """Call the LLM to write a new case, on the key of the context's workspace (the
+    game master agent's); raises ValueError if the result is invalid."""
+    from shared.utils.provider_keys import completion
 
     # A player's wish outranks the random setting; the method is always drawn so two
     # cases in the same setting still play differently.
@@ -779,7 +787,8 @@ def _generate_case_llm(language: str, theme: str = "", model: Optional[str] = No
             f"{prompt}\n\nYour previous attempt was rejected: {last_error}. "
             f"Fix exactly that and return the complete JSON object again."
         )
-        resp = litellm.completion(
+        resp = completion(
+            context or ModelContext(),
             model=model or _default_model(),
             messages=[{"role": "user", "content": attempt_prompt}],
             temperature=0.9,
@@ -791,7 +800,7 @@ def _generate_case_llm(language: str, theme: str = "", model: Optional[str] = No
         error = validate_case(case) if case is not None else "reply was not valid JSON"
         if error is None:
             _shuffle_suspects(case)
-            _harden_case(case, model=model or _default_model())
+            _harden_case(case, model=model or _default_model(), context=context)
             return case
         last_error = error
         logger.warning(f"mystery_game: generated case invalid (attempt {attempt + 1}): {error}")
@@ -823,6 +832,7 @@ def _gen_model_from_config(config: Dict[str, Any]) -> Optional[str]:
 def create_mystery_gm_tools_from_config(config: Dict[str, Any]) -> List[Any]:
     """Game-master (inspector) tools: case brief, evidence, accusation, generation."""
     gen_model = _gen_model_from_config(config)
+    context = model_context_of(config)
 
     def get_case_brief(tool_context: ToolContext = None, **kwargs) -> Dict[str, Any]:
         """Get the active case: title, dossier, suspects and available evidence. Call this first in every session. Never returns the solution."""
@@ -883,7 +893,7 @@ def create_mystery_gm_tools_from_config(config: Dict[str, Any]) -> List[Any]:
         """Generate a brand-new mystery (new plot, victim, suspects, evidence) for THIS player only, replacing the current case. language = the language the player writes in (e.g. 'Serbian', 'English'); theme = optional player wish."""
         try:
             case = _generate_case_llm(language=language or "Serbian", theme=theme or "",
-                                      model=gen_model)
+                                      model=gen_model, context=context)
         except Exception as e:
             logger.warning(f"mystery_game: case generation failed: {e}")
             return {"status": "error",

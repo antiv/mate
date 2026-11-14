@@ -91,7 +91,7 @@ Score how well the actual output satisfies the expected output.
 Respond ONLY with valid JSON: {"score": <float 0.0-1.0>, "reasoning": "<brief explanation>"}
 ```
 
-The judge model comes from the test case, or from `EVAL_JUDGE_MODEL` when the case names none; with neither, the case is skipped rather than scored. Any LiteLLM model string works (e.g. `openai/gpt-4o`, `anthropic/claude-haiku-4-5-20251001`). Markdown code fences are stripped before JSON parsing. The score is clamped to `[0.0, 1.0]`.
+The judge model comes from the test case, or from `EVAL_JUDGE_MODEL` when the case names none; with neither, the case is skipped rather than scored. The call goes through `provider_keys.completion()` with the case's agent as context, so it runs on that agent's workspace key ([Agent runtime](agent-runtime.md#which-key-a-model-call-uses)); `propose_instruction()` takes the agent's context the same way. Any LiteLLM model string works (e.g. `openai/gpt-4o`, `anthropic/claude-haiku-4-5-20251001`). Markdown code fences are stripped before JSON parsing. The score is clamped to `[0.0, 1.0]`.
 
 ## Agent Auto-Invocation
 

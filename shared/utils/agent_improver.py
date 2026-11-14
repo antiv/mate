@@ -19,6 +19,8 @@ import logging
 import os
 from typing import Any, Dict, Iterable, List, Optional
 
+from .utils import ModelContext
+
 logger = logging.getLogger(__name__)
 
 MAX_INSTRUCTION_CHARS = 20000
@@ -141,7 +143,8 @@ def _parse(content: str) -> Dict[str, Any]:
 def propose_instruction(current_instruction: str, description: str, question: str,
                         answer: Optional[str], expected: Optional[str],
                         comment: Optional[str], model: Optional[str] = None,
-                        blocks: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
+                        blocks: Optional[Dict[str, str]] = None,
+                        context: Optional[ModelContext] = None) -> Dict[str, Any]:
     """
     A revised instruction, revised values for any of *blocks* ({label: value}), and
     the reason: {"instruction": ..., "blocks": {label: value}, "reason": ...}.
@@ -151,8 +154,6 @@ def propose_instruction(current_instruction: str, description: str, question: st
     model = model or improve_model()
     if not model:
         raise ImproveError("Set EVAL_IMPROVE_MODEL (or EVAL_JUDGE_MODEL) to suggest fixes")
-
-    import litellm  # type: ignore
 
     blocks = blocks or {}
     blocks_text = "\n\n".join(
@@ -169,8 +170,11 @@ def propose_instruction(current_instruction: str, description: str, question: st
         expected=expected or "(not given)",
         comment=comment or "(none)",
     )
+    from .provider_keys import completion
     try:
-        response = litellm.completion(
+        # On the key of the agent's workspace
+        response = completion(
+            context or ModelContext(),
             model=model,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.2,

@@ -38,10 +38,12 @@ suggests common ones. This is stored in `tool_config`:
 {"image_tools": {"model": "gpt-image-1", "size": "1536x1024", "quality": "high"}}
 ```
 
-- `true`, or an empty model, uses the server default: the model set on the dashboard's
+- `true`, or an empty model, uses the default: the agent's workspace's own
+  (`workspace_settings` row `image_model`), else the model set on the dashboard's
   [Settings](../user/settings.md) page (`system_settings` row `image_model`), else
   `IMAGE_MODEL`, else `dall-e-3`. It is read on every generation, so a change applies
-  without a restart; `default_image_model()` returns it with its source.
+  without a restart; `default_image_model(workspace_id)` returns it with its source
+  (`workspace`, `dashboard`, `IMAGE_MODEL` or `default`).
 - Only these other keys are passed on, as request parameters: `size`, `quality`, `n`,
   `style`, `response_format`, `aspect_ratio`, `seed`, `negative_prompt`,
   `output_format`, `background`, `output_compression`, `moderation`
@@ -52,7 +54,8 @@ suggests common ones. This is stored in `tool_config`:
   returns as the image), logging callbacks and their hosts, cloud endpoints,
   `ssl_verify`. An agent can write `tool_config` through `update_agent` when a chat
   steers it, so where the request goes and with which key is set only by the
-  server's environment (`AZURE_API_BASE`, `OPENAI_API_BASE`, ...).
+  workspace's provider key or the server's environment (`AZURE_API_BASE`,
+  `OPENAI_API_BASE`, ...).
 - A bare name (`dall-e-3`, `gpt-image-1`) is an OpenAI model, with `size: 1024x1024`
   and `n: 1` as defaults (plus `quality: standard` for DALL-E 3), as before.
 - `nano-banana`, the value older agent forms saved, means
@@ -66,7 +69,15 @@ name it still work. The tool takes only the prompt.
 
 ## Keys
 
-Each provider reads its usual environment variable, as for agents:
+The tool is built for its agent (`model_context_of(config)`), and its key follows
+the agent's workspace, as an agent's model does
+([Agent runtime](agent-runtime.md#which-key-a-model-call-uses)): the workspace's key
+for the model's provider, else the environment where the workspace may use it, else
+the generation fails with "This workspace has no key for ...". A bare name is
+placed by LiteLLM (`dall-e-3` is `openai`). With a workspace key, nothing below
+applies.
+
+Where the environment applies, each provider reads its usual variable, as for agents:
 `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, `BFL_API_KEY`, `STABILITY_API_KEY`,
 `XAI_API_KEY`, the AWS and Vertex credentials, and so on. Two cases differ:
 
@@ -76,8 +87,9 @@ Each provider reads its usual environment variable, as for agents:
   `OPENAI_API_KEY_BACKUP`. Failing that, they use OpenRouter's endpoint with
   `OPENROUTER_API_KEY`, as the tool did before LiteLLM.
 
-`validate_image_generation_setup()` reports whether the default model has a key,
-without making a request; the Settings page shows it. A wrong
+`validate_image_generation_setup(context)` reports whether the default model has a
+key, for an agent or project (none: the installation), without making a request; the
+Settings page shows the installation's. A wrong
 key, or a model the provider does not have, shows up on the first generation as an
 `error_type` of `authentication_error` or `model_not_found_error`.
 
