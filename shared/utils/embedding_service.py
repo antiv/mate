@@ -36,18 +36,25 @@ def embedding_hash_for_text(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-def embed_texts(texts: List[str]) -> Optional[List[List[float]]]:
-    """Embed texts via litellm. Returns None on any failure (caller falls back)."""
+def embed_texts(texts: List[str], context: Optional["ModelContext"] = None) -> Optional[List[List[float]]]:
+    """Embed texts via litellm, on the key of the context's workspace (the project the
+    blocks belong to). Returns None on any failure, a missing key included (caller
+    falls back)."""
     if not texts:
         return []
     try:
         import litellm
+        from .provider_keys import guarded, litellm_credentials
+        from .utils import ModelContext
 
+        model = get_embedding_model()
+        credentials, guard = litellm_credentials(context or ModelContext(), model)
         # litellm's Gemini provider reads GEMINI_API_KEY; MATE configures GOOGLE_API_KEY.
-        if not os.getenv("GEMINI_API_KEY") and os.getenv("GOOGLE_API_KEY"):
+        if not credentials and not os.getenv("GEMINI_API_KEY") and os.getenv("GOOGLE_API_KEY"):
             os.environ["GEMINI_API_KEY"] = os.environ["GOOGLE_API_KEY"]
 
-        response = litellm.embedding(model=get_embedding_model(), input=texts)
+        with guarded(guard):
+            response = litellm.embedding(model=model, input=texts, **credentials)
         vectors: List[Optional[List[float]]] = [None] * len(texts)
         for item in response.data:
             index = item["index"] if isinstance(item, dict) else item.index

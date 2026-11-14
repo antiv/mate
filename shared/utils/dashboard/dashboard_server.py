@@ -26,6 +26,7 @@ from ..ai_disclosure import resolve_disclosure, validate_waiver
 from shared.utils.path_safety import resolve_within_base
 from shared.utils.platform_only import features_added, features_of, has_code_folder, is_agent_name
 from shared.utils.models import DEFAULT_WORKSPACE_ID
+from shared.utils.utils import ModelContext
 from shared.utils.workspaces import (
     agent_names_of, agent_workspace_for, agents_outside, caller_access, config_workspace,
     in_projects_of, is_reserved_user_id, project_in_workspace, roles_allow, rows_of, store_workspace,
@@ -7275,7 +7276,8 @@ class DashboardServer:
             try:
                 proposal = await asyncio.to_thread(
                     propose_instruction, current, description, found["question"], found["answer"],
-                    found["expected"], found["comment"], None, selected)
+                    found["expected"], found["comment"], None, selected,
+                    ModelContext(agent_name=found["agent_name"]))
             except ImproveError as e:
                 raise HTTPException(status_code=400, detail=str(e))
             return {"agent_name": found["agent_name"], "source": found["source"],
@@ -8102,8 +8104,10 @@ class DashboardServer:
                 title = session_id
             else:
                 try:
-                    import litellm  # type: ignore
-                    gen_resp = litellm.completion(
+                    from shared.utils.provider_keys import completion
+                    # On the key of the agent's workspace
+                    gen_resp = await asyncio.to_thread(
+                        completion, ModelContext(agent_name=agent),
                         model=model,
                         messages=[{"role": "user", "content": (
                             "Generate a concise 4-6 word title for this conversation. "

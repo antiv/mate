@@ -18,6 +18,9 @@ from .hallucination import check_hallucination
 logger = logging.getLogger(__name__)
 
 # Map guardrail type strings to checker functions
+# Checks that call a model, and take the agent's context for its key
+_CALLS_A_MODEL = {"hallucination_check"}
+
 _CHECKERS = {
     "pii_detection": check_pii,
     "prompt_injection": check_prompt_injection,
@@ -67,20 +70,23 @@ class GuardrailEngine:
     }
     """
 
-    def __init__(self, guardrail_config: Optional[Dict[str, Any]] = None):
+    def __init__(self, guardrail_config: Optional[Dict[str, Any]] = None, context: Any = None):
         self.config = guardrail_config or {}
+        # The agent the checks are for (a ModelContext): a check that calls a model
+        # does so on its workspace's key
+        self.context = context
         self.guardrails: List[Dict[str, Any]] = self.config.get("guardrails", [])
 
     @classmethod
-    def from_json(cls, json_str: Optional[str]) -> "GuardrailEngine":
-        """Create engine from JSON string (as stored in DB)."""
+    def from_json(cls, json_str: Optional[str], context: Any = None) -> "GuardrailEngine":
+        """Create engine from JSON string (as stored in DB), for the agent in context."""
         if not json_str:
-            return cls()
+            return cls(context=context)
         try:
-            return cls(json.loads(json_str))
+            return cls(json.loads(json_str), context)
         except (json.JSONDecodeError, TypeError):
             logger.warning("Invalid guardrail_config JSON, using empty config")
-            return cls()
+            return cls(context=context)
 
     @property
     def has_guardrails(self) -> bool:
@@ -133,7 +139,10 @@ class GuardrailEngine:
             g_config = guardrail_def.get("config", {})
 
             try:
-                result = checker(text, action, phase, g_config)
+                if g_type in _CALLS_A_MODEL:
+                    result = checker(text, action, phase, g_config, context=self.context)
+                else:
+                    result = checker(text, action, phase, g_config)
                 summary.results.append(result)
             except Exception as e:
                 logger.error(f"Error running guardrail {g_type}: {e}")

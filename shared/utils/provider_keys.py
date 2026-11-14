@@ -24,7 +24,10 @@ call without reloading agents:
 - with_provider_keys() wraps a LiteLLM client (ADK's LiteLlm.llm_client, or
   ChatLiteLLM.client on LangGraph);
 - WorkspaceGemini is ADK's native Gemini backend (gemini-* models);
-- google_client_kwargs() builds google.genai's client for File Search.
+- google_client_kwargs() builds google.genai's client for File Search;
+- completion() and litellm_credentials() serve the calls that go to litellm
+  directly: the image tool, embeddings, the eval judge, the improver, Work Room
+  titles, the hallucination guardrail and the mystery game.
 """
 
 import asyncio
@@ -32,13 +35,13 @@ import contextlib
 import logging
 import os
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 from google.adk.models.google_llm import Gemini
 from pydantic import PrivateAttr
 
 from .models import DEFAULT_WORKSPACE_ID, Workspace, WorkspaceProviderKey
-from .outbound import GuardedCompletions, _install_guard, private_network_allowed
+from .outbound import _GUARDED, GuardedCompletions, _install_guard, private_network_allowed
 from .utils import ModelContext, _detect_provider, _is_gemini_model
 
 logger = logging.getLogger(__name__)
@@ -103,15 +106,48 @@ def _workspace_of(session: Any, context: ModelContext) -> Optional[int]:
     return agent_workspace(session, context.agent_name) or DEFAULT_WORKSPACE_ID
 
 
-def model_credentials(context: ModelContext, model_name: Optional[str]) -> Optional[Credentials]:
+def litellm_provider_of(model_name: Optional[str]) -> str:
+    """provider_of() for a name LiteLLM is called with directly: there a bare name is
+    LiteLLM's to place (dall-e-3 and text-embedding-3-small are OpenAI's), where
+    create_model() sends it to Gemini's own backend."""
+    name = (model_name or "").strip()
+    if "/" in name:
+        return provider_of(name)
+    try:
+        import litellm
+        prefix = litellm.get_llm_provider(name)[1]
+    except Exception:
+        return ""
+    return provider_of(f"{prefix}/{name}")
+
+
+def workspace_of_context(context: ModelContext) -> Optional[int]:
+    """The workspace of an agent or project; None for the installation, or when the
+    database can't say."""
+    if not context.agent_name and context.project_id is None:
+        return None
+    from .database_client import get_database_client
+    db = get_database_client()
+    session = db.get_session() if db else None
+    if session is None:
+        return None
+    try:
+        return _workspace_of(session, context)
+    finally:
+        session.close()
+
+
+def model_credentials(context: ModelContext, model_name: Optional[str],
+                      provider: Optional[str] = None) -> Optional[Credentials]:
     """The workspace's key for this model call, or None when the call uses the
-    environment. Raises NoProviderKey when it may do neither.
+    environment. Raises NoProviderKey when it may do neither. provider, when given,
+    is used instead of provider_of(model_name).
 
     A model built for no agent (ModelContext()) is the installation's: None.
     """
     if not context.agent_name and context.project_id is None:
         return None
-    provider = provider_of(model_name)
+    provider = provider if provider is not None else provider_of(model_name)
     from .database_client import get_database_client
     db = get_database_client()
     session = db.get_session() if db else None
@@ -184,6 +220,43 @@ class ProviderKeyCompletions:
 
     def __getattr__(self, name: str) -> Any:
         return getattr(self._inner, name)
+
+
+def litellm_credentials(context: ModelContext, model_name: str) -> Tuple[Dict[str, Any], Optional[int]]:
+    """For a call to litellm made directly (embedding, image, judge, ...): the
+    arguments it adds ({} where the environment applies), and the workspace to guard it
+    for when they name the workspace's own endpoint outside the default one (else
+    None). Raises NoProviderKey."""
+    credentials = model_credentials(context, model_name, provider=litellm_provider_of(model_name))
+    if credentials is None:
+        return {}, None
+    guard = credentials.workspace_id if (
+        credentials.own_endpoint and credentials.workspace_id != DEFAULT_WORKSPACE_ID
+        and not private_network_allowed()) else None
+    return {"api_key": credentials.api_key, "api_base": credentials.base_url}, guard
+
+
+@contextlib.contextmanager
+def guarded(workspace_id: Optional[int]):
+    """While the block runs, the outbound guard checks every httpx request, as a guarded
+    model call does (outbound.GuardedCompletions); nothing for None."""
+    if workspace_id is None:
+        yield
+        return
+    _install_guard()
+    token = _GUARDED.set(workspace_id)
+    try:
+        yield
+    finally:
+        _GUARDED.reset(token)
+
+
+def completion(context: ModelContext, **kwargs: Any) -> Any:
+    """litellm.completion(**kwargs) on the context's key (litellm_credentials)."""
+    import litellm
+    extra, guard = litellm_credentials(context, kwargs["model"])
+    with guarded(guard):
+        return litellm.completion(**kwargs, **extra)
 
 
 def with_provider_keys(model: Any, attribute: str, context: ModelContext, model_name: str) -> Any:

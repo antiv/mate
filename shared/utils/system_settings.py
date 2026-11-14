@@ -35,6 +35,26 @@ def get_setting(key: str) -> Optional[str]:
         session.close()
 
 
+def get_workspace_setting(workspace_id: Optional[int], key: str) -> Optional[str]:
+    """A workspace's own value (workspace_settings, V049), or None when it has none,
+    for no workspace, or when the database is unavailable. Never raises."""
+    if workspace_id is None:
+        return None
+    from .models import WorkspaceSetting
+    db = get_database_client()
+    session = db.get_session() if db else None
+    if not session:
+        return None
+    try:
+        row = session.get(WorkspaceSetting, (workspace_id, key))
+        return row.value if row and row.value else None
+    except Exception as e:
+        logger.warning("Could not read setting %s of workspace %s: %s", key, workspace_id, e)
+        return None
+    finally:
+        session.close()
+
+
 def set_setting(key: str, value: Optional[str], actor: str) -> bool:
     """Store a value, or delete the row when value is empty. Returns success."""
     db = get_database_client()

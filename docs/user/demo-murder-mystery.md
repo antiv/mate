@@ -48,7 +48,9 @@ confessing. Trying to jailbreak a suspect into revealing the culprit is part of 
    - The same page works hosted on any external site — only the widget `<script>` tag talks
      to the MATE server (set an origin allowlist on the key for production).
 
-Requires `OPENROUTER_API_KEY` in `.env` (all five models go through OpenRouter). To use other
+Requires `OPENROUTER_API_KEY` in `.env`, or an OpenRouter key on the workspace the
+game is imported into (all five models go through OpenRouter, case generation
+included). To use other
 providers, just change each agent's `model_name` in the dashboard.
 
 ## How to play
