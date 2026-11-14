@@ -53,7 +53,10 @@ The prefix of the model name selects the provider:
 | any other `provider/model` | that provider, through LiteLLM |
 
 Each provider needs its API key set on the server; the
-[configuration reference](../reference/configuration.md) lists them.
+[configuration reference](../reference/configuration.md) lists them. A workspace
+that may not use the server's keys calls a model only with a key of its own, and
+otherwise fails with "This workspace has no key for" and the provider; see
+[Workspaces](workspaces.md).
 
 Three optional fields change where the model comes from:
 
