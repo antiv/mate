@@ -38,7 +38,9 @@ In the agent modal, or via `POST /dashboard/api/agents`:
 | Model API Key | `${MY_AGENT_KEY}` | Optional. See below |
 
 Leave both endpoint fields empty and the agent behaves exactly as before,
-resolving its provider from environment variables.
+resolving its provider from environment variables, or from its workspace's key for
+that provider. With either field set, the agent uses its own endpoint and key
+whatever its workspace has.
 
 ## Secrets
 

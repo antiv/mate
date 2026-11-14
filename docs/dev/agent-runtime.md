@@ -8,6 +8,7 @@ covers:
   - shared/callbacks/**
   - shared/utils/fallback_agent.py
   - shared/utils/langgraph/**
+  - shared/utils/provider_keys.py
 ---
 
 # Agent runtime
@@ -63,16 +64,55 @@ Every call to `create_model()` and `create_chat_model()` passes a `ModelContext`
 | An agent's own model (both runtimes) | The agent, from its row (`model_context_of(config)`) |
 | Its fallback model | The same agent |
 | A subagent started by `subagent_delegation` | The parent agent: the subagent works for it |
-| The fallback agent shown when configuration fails to load, and the context-compaction summarizer | `ModelContext()`, the installation |
+| The context-compaction summarizer | The root agent, by name (`ModelContext(agent_name=...)`): its workspace is the agent's |
+| The fallback agent shown when configuration fails to load | `ModelContext()`, the installation |
 
-Provider keys still come from the environment, whatever the context. Beyond the
-"Creating ... model" log line, the context decides one thing: a model with a base
-URL, for an agent outside the default workspace, gets its completion client wrapped
-so that no redirect is followed into the server's network
-([Requests to the server's own network](auth-and-access.md#requests-to-the-servers-own-network)). It is where per-workspace keys
-will be looked up in 2.0. `shared/test/test_model_context.py` reads the source and
-fails on a call to either function that leaves `context=` out, so pass
-`ModelContext()` when a model serves no agent.
+The context decides two things:
+
+- which key a model call uses (below);
+- whether a model with a base URL, for an agent outside the default workspace, gets
+  its completion client wrapped so that no redirect is followed into the server's
+  network ([Requests to the server's own network](auth-and-access.md#requests-to-the-servers-own-network)).
+
+`shared/test/test_model_context.py` reads the source and fails on a call to either
+function that leaves `context=` out, so pass `ModelContext()` when a model serves no
+agent.
+
+### Which key a model call uses
+
+`shared/utils/provider_keys.py::model_credentials` decides, in this order:
+
+1. The agent's own `model_api_key` or `model_base_url`. `create_model()` and
+   `create_chat_model()` receive them and leave the model as it is.
+2. The workspace's key for the model's provider (`workspace_provider_keys`, V049),
+   sent to the row's base URL, else to the provider's public endpoint
+   (`PROVIDERS`). The public endpoint is passed explicitly, so a variable such as
+   `OPENAI_BASE_URL` doesn't redirect a workspace's key.
+3. The environment, as 1.x does, when the workspace may use platform keys
+   (`workspaces.allow_platform_keys`). The default workspace always may, whatever
+   the column says, and Platform → Workspaces refuses to turn it off for it.
+4. Otherwise `NoProviderKey`: `This workspace has no key for <provider>`. A key
+   that doesn't decrypt, and an `ollama` entry with no base URL, fail the same way
+   instead of falling back to the environment.
+
+`provider_of()` maps a model name to a provider: `gemini-*`, `models/*` and
+`gemini/` are `google`, `ollama/` and `ollama_chat/` are `ollama`, and any other
+prefix names itself. A provider outside `PROVIDERS` (`lm_studio`, `together_ai`, ...)
+can't have a workspace key, so only the environment serves it.
+
+The lookup runs on every call, not when the agent is built: `with_provider_keys()`
+wraps the LiteLLM client (ADK's `llm_client`, ChatLiteLLM's `client`) in
+`ProviderKeyCompletions`, which reads the workspace and its key (one indexed read
+and a decryption) before each `completion` or `acompletion`. A saved, changed or
+deleted key, and the workspace's flag, apply to the next call without a reload.
+With the environment allowed it passes the call on unchanged; with a workspace key
+it replaces `api_key` and `api_base`. `NoProviderKey` is raised before any request,
+and the fallback model doesn't answer it, since it isn't a provider outage. A model
+for no agent (`ModelContext()`) is left unwrapped and uses the environment.
+
+Not yet covered: a `gemini-*` model on ADK's native Gemini backend builds its client
+from `GOOGLE_API_KEY` (on LangGraph it goes through LiteLLM and is covered), and the
+calls that go to `litellm` directly (next paragraph).
 
 Calls that go to `litellm` directly do not go through `create_model()` and take
 no context yet: the eval judge, the agent improver, the hallucination guardrail,

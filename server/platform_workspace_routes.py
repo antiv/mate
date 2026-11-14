@@ -292,6 +292,9 @@ async def update_workspace(workspace_id: int, request: Request, body: Dict[str, 
         if "platform_features" in changes and workspace_id == DEFAULT_WORKSPACE_ID:
             raise HTTPException(status_code=409,
                                 detail="The default workspace keeps every platform feature")
+        if "allow_platform_keys" in changes and workspace_id == DEFAULT_WORKSPACE_ID:
+            raise HTTPException(status_code=409,
+                                detail="The default workspace always may use the platform keys")
         if "name" in changes:
             _name_taken(session, wanted["name"], workspace_id)
             workspace.name = wanted["name"]

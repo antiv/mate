@@ -4,8 +4,8 @@ Unit tests for the context create_model() takes (1.6.0 item 5).
 
 Every model is built for someone: an agent in a project, or the installation.
 create_model() and the LangGraph runtime's create_chat_model() take that as a
-ModelContext, so 2.0 can look up a workspace's provider keys from it in one place.
-Provider keys still come from the environment.
+ModelContext, from which the workspace's provider keys are looked up on each call
+(shared/utils/provider_keys.py, test_provider_keys.py).
 
 The inventory test reads the source and fails on a call that does not pass a
 context, so a new caller cannot forget it.

@@ -3010,8 +3010,12 @@ class TestPlatformWorkspaces(_TwoWorkspaces):
         for verb in ("suspend", "close"):
             with self.subTest(verb=verb):
                 self.assertEqual(self._call("POST", f"/{A}/{verb}").status_code, 409)
-        # It keeps every platform feature, as in 1.x; its name can change
+        # It keeps every platform feature, as in 1.x, and may use the platform keys
+        # (phase 4b); its name can change
         self.assertEqual(self._call("PUT", f"/{A}", json={"platform_features": []}).status_code, 409)
+        self.assertEqual(self._call("PUT", f"/{A}", json={"allow_platform_keys": False}).status_code, 409)
+        self.assertEqual(self._call("PUT", f"/{B}", json={"allow_platform_keys": False}).json()["changed"],
+                         ["allow_platform_keys"])
         self.assertEqual(self._call("PUT", f"/{A}", json={
             "name": "Main", "platform_features": ["code", "server_credentials", "email"]}).json()["changed"],
             ["name"])

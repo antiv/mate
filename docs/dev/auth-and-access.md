@@ -469,7 +469,9 @@ httpx is installed the first time such a model is built, and other requests pass
 untouched. A streamed answer is read guarded too (`_GuardedStream`): some providers
 (`gemini/` and `vertex_ai` through LiteLLM, codestral, predibase) send the request
 only when the first chunk is read. `OUTBOUND_ALLOW_PRIVATE_NETWORK=true` leaves the
-model unwrapped.
+model unwrapped. A workspace's provider key with a base URL of its own is called the
+same way, through `GuardedCompletions`, on each call that uses it
+([Agent runtime](agent-runtime.md#which-key-a-model-call-uses)).
 
 Ratings and traces outlive the agent they are about (`agent_cleanup.py` keeps logs),
 and an agent's name is free again once it is deleted. So the eval pages keep a
