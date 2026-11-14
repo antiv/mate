@@ -37,6 +37,7 @@ import os
 import re
 from dataclasses import dataclass
 from typing import Any, AsyncIterator, Dict, Iterator, Optional, Tuple
+from urllib.parse import urlparse
 
 from google.adk.models.google_llm import Gemini
 from pydantic import PrivateAttr
@@ -179,8 +180,10 @@ def model_credentials(context: ModelContext, model_name: Optional[str],
         session.close()
 
 
-def masked(api_key: str) -> str:
-    """A key as the dashboard shows it: its last four characters."""
+def masked(api_key: Optional[str]) -> str:
+    """A key as the dashboard shows it: its last four characters ("" for none)."""
+    if not api_key:
+        return ""
     return "••••" + api_key[-4:] if len(api_key) > 8 else "••••"
 
 
@@ -388,7 +391,8 @@ def google_client_kwargs(context: ModelContext, model_name: str = "gemini-2.5-fl
             "http_options": types.HttpOptions(base_url=base_url, api_version=api_version)}
 
 
-_API_VERSION = re.compile(r"^(?P<base>.*?)/(?P<version>v1(?:alpha|beta)?)/?$")
+# A version at the end of the path, as ADK reads one off a Google URL (v1, v1beta, v1beta1, v2)
+_API_VERSION = re.compile(r"^(?P<base>.*?)/(?P<version>v[0-9][a-z0-9.-]*)/?$")
 
 
 def google_endpoint(credentials: Credentials) -> Tuple[str, Optional[str]]:
@@ -405,52 +409,63 @@ def google_endpoint(credentials: Credentials) -> Tuple[str, Optional[str]]:
 
 class WorkspaceGemini(Gemini):
     """ADK's native Gemini, each call made with the workspace's google key when it has
-    one (google_credentials), else as Gemini is. The call goes to a Gemini built with
-    that key, kept until the key changes. It is a Gemini, so ADK's built-in tools and
-    context cache still see one."""
+    one (google_credentials), else with the environment's, as Gemini is. Every call goes
+    to an inner Gemini, built with that key or for the environment and kept until the
+    key changes, so ADK's own code never runs on this object and never reads its
+    _api_backend mid-call. It is a Gemini, so ADK's built-in tools and context cache
+    still see one."""
 
     _context: ModelContext = PrivateAttr(default_factory=ModelContext)
     _keyed: Any = PrivateAttr(default=None)
+    _plain: Any = PrivateAttr(default=None)
 
-    def _with_key(self, credentials: Credentials) -> Gemini:
+    def _fields(self) -> Dict[str, Any]:
+        return {name: getattr(self, name) for name in Gemini.model_fields
+                if name not in ("client", "client_kwargs", "base_url")}
+
+    def _for(self, credentials: Optional[Credentials]) -> Gemini:
+        """The Gemini a call goes to: the environment's for None."""
+        if credentials is None:
+            if self._plain is None:
+                self._plain = Gemini(**self._fields(), base_url=self.base_url,
+                                     client_kwargs=self.client_kwargs)
+            return self._plain
         key = (credentials.api_key, credentials.base_url, credentials.own_endpoint)
         if self._keyed is None or self._keyed[0] != key:
-            fields = {name: getattr(self, name) for name in Gemini.model_fields
-                      if name not in ("client", "client_kwargs", "base_url")}
-            base_url, api_version = google_endpoint(credentials)
-            if api_version:
-                fields["api_version"] = api_version
+            fields = self._fields()
+            if credentials.own_endpoint and (urlparse(credentials.base_url).hostname or "").endswith(
+                    ".googleapis.com"):
+                # ADK takes a version off a Google URL itself, and the live connection
+                # reads it from there, not from api_version
+                base_url = credentials.base_url
+            else:
+                base_url, api_version = google_endpoint(credentials)
+                if api_version:
+                    fields["api_version"] = api_version
             self._keyed = (key, Gemini(**fields, base_url=base_url, client_kwargs={
                 "api_key": credentials.api_key, "vertexai": False}))
         return self._keyed[1]
 
     @property
     def _api_backend(self) -> Any:
-        """The backend ADK's live flow asks about (session resumption): the Gemini API on
-        the workspace's key, not what the environment's client would say."""
-        credentials = google_credentials(self._context, self.model)
-        if credentials is None:
-            return Gemini._api_backend.__get__(self, type(self))
-        return self._with_key(credentials)._api_backend
+        """The backend ADK's live flow asks about before it connects (session
+        resumption), for the key the connection will use: the Gemini API on the
+        workspace's, not what the environment's client says. A database read, once per
+        live connection: the calls themselves never read it."""
+        return self._for(google_credentials(self._context, self.model))._api_backend
 
     async def generate_content_async(self, llm_request: Any, stream: bool = False) -> AsyncIterator[Any]:
         credentials = await asyncio.to_thread(google_credentials, self._context, self.model)
-        if credentials is None:
-            responses = super().generate_content_async(llm_request, stream)
-        else:
-            responses = self._with_key(credentials).generate_content_async(llm_request, stream)
         with redacting(credentials.api_key if credentials else None):
-            async for response in responses:
+            async for response in self._for(credentials).generate_content_async(llm_request, stream):
                 yield response
 
     @contextlib.asynccontextmanager
     async def connect(self, llm_request: Any) -> AsyncIterator[Any]:
         """The live connection (/run_live), on the same key, its errors masked."""
         credentials = await asyncio.to_thread(google_credentials, self._context, self.model)
-        target = super().connect(llm_request) if credentials is None else \
-            self._with_key(credentials).connect(llm_request)
         with redacting(credentials.api_key if credentials else None):
-            async with target as live:
+            async with self._for(credentials).connect(llm_request) as live:
                 yield live
 
 
