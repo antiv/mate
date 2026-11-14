@@ -3,9 +3,9 @@ title: "Instructions loaded from memory blocks"
 summary: Keep an agent's instruction short and load the detailed rules from memory blocks at run time.
 audience: user
 order: 45
-status: migrated
 covers:
   - shared/utils/tools/memory_blocks_tools.py
+  - shared/utils/memory_blocks_service.py
 ---
 
 # Dynamic System Instructions via Memory Blocks
@@ -50,6 +50,21 @@ MEMORY UPDATE PROTOCOL:
     - If you believe a system rule needs changing (e.g., a new routing rule), PROPOSE the change to the user.
     - ONLY update if the user explicitly confirms.
 ```
+
+What the tool calls above do:
+
+- `label_search` matches every block whose label **contains** the text, not only
+  those that start with it, so pick prefixes that don't occur inside other labels.
+- In `label` and `label_search`, `current_user` and `{user_id}` are replaced with
+  the id of the person chatting: `human_current_user` reads that person's own block,
+  for example `human_alice`.
+- Reading (`list_shared_blocks`, `search_shared_blocks`, `get_shared_block`) works for
+  everyone. Creating, changing and deleting blocks (`create_shared_block`,
+  `modify_shared_block`, `delete_shared_block`) works only when the person chatting is
+  an admin; for anyone else the tool answers "Permission denied. Only admin users can
+  modify memory blocks." The memory update protocol above therefore updates
+  `human_current_user` only in an admin's conversations. To let agents keep notes on
+  any user, use the user's profile instead ([Memory blocks](memory-blocks.md)).
 
 ### 2. Creating Instruction Blocks (Namespace Strategy)
 
@@ -262,7 +277,7 @@ RESPONSE PROTOCOL (Historian):
 
 ## Benefits
 
--   **Zero Deployment Updates**: Change agent behavior by editing a memory block in the dashboard (Memory Blocks modal) or via tools. No code deploys needed. Use **Memory Blocks (local DB)** tool for project-scoped blocks stored in your database.
+-   **Zero Deployment Updates**: Change agent behavior by editing a memory block in the dashboard (**Manage Blocks** in the agent form) or via tools. No code deploys needed. Blocks belong to the agent's project and are stored in MATE's database.
 -   **Context Efficiency**: The agent only loads these tokens when it needs to reference them (or you can force it to load them once at startup).
 -   **Shared Knowledge**: Multiple agents can subscribe to the same `system_instruction_shared_escalation` block.
 
@@ -286,7 +301,7 @@ are kept. A block written before versioning existed gets its old state recorded 
 **Before versioning** version the first time it changes, so that change can still
 be undone.
 
-In the Memory Blocks modal, **History** on a block lists its versions and
+In the **Manage Blocks** dialog, **History** on a block lists its versions and
 **Restore** puts one back. **Deleted blocks** lists deleted blocks, which come back
 under their old ID as they were when deleted. A restore is itself a new version and
 an audit log entry (`memory_block.restore`), so nothing is lost by restoring. It is

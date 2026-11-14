@@ -3,7 +3,6 @@ title: "Subagent delegation"
 summary: Let an agent split a task and run temporary helper agents in parallel.
 audience: user
 order: 35
-status: migrated
 covers:
   - shared/utils/tools/subagent_delegation_tool.py
 ---
@@ -52,7 +51,9 @@ Instead of an agent executing multiple slow research tasks sequentially or pollu
 2. **Context Hygiene (Anti-Bloat)**: Each subagent executes in its own isolated memory and context window. Only its final distilled response is returned to the root agent.
 3. **Parallel Concurrency**: All subtasks run simultaneously via `asyncio.gather`, dramatically reducing total latency.
 4. **Selective Tool Assignment**: Subagents are equipped with only the specific tools requested for their task (`ToolFactory`), minimizing tool selection errors and hallucinations.
-5. **Token Tracking & Audit**: Tokens consumed by subagents are recorded into `token_usage_logs` linked to the parent `session_id` and `user_id`.
+5. **Token Tracking & Audit**: Tokens consumed by subagents are recorded into `token_usage_logs` under the parent's `user_id`, with a session id that starts with the parent's `session_id`.
+6. **The parent's guardrails**: a subagent has no configuration of its own, so it runs under its parent's guardrails.
+7. **A short leash**: a subagent is told to make one or two tool calls and answer. From its fourth tool call on, each call returns "Tool call limit reached" instead of running.
 
 ---
 
@@ -68,7 +69,7 @@ prompt would decide the child's privileges. Since that prompt can be influenced 
 whoever is talking to the agent, a request to spawn a child with a shell would be
 one injected instruction away.
 
-Two consequences worth knowing:
+Three consequences worth knowing:
 
 - **The parent's widget exposure is the child's.** `code_executor` is refused for
   an agent reachable through a widget key, and a child of such an agent is
@@ -111,8 +112,8 @@ Enable the tool on any agent in `tool_config`:
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `max_subagents` | integer | `5` | Maximum number of subtasks that can be executed concurrently in a single call. Extra tasks are capped. |
-| `timeout_seconds` | float | `60.0` | Maximum execution time in seconds for each subagent. If a subagent times out, other tasks continue uninterrupted. |
-| `default_model` | string | `null` | Default model for subagents if not specified by the task. Falls back to parent agent model or `GEMINI_MODEL`. |
+| `timeout_seconds` | float | `60.0` | Maximum execution time in seconds for each subagent, at most 90. If a subagent times out, other tasks continue uninterrupted. |
+| `default_model` | string | `null` | Default model for subagents if not specified by the task. Without it, the parent agent's model, then `GEMINI_MODEL`, then `gemini-2.5-flash`. |
 
 ---
 
@@ -125,7 +126,7 @@ Each item in `tasks` accepts:
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `name` | string | **Yes** | Alphanumeric identifier for the subtask (e.g. `research_competitor_a`, `data_analysis`). |
+| `name` | string | **Yes** | Identifier for the subtask (e.g. `research_competitor_a`, `data_analysis`). |
 | `instruction` | string | **Yes** | Detailed instructions and goal for this subagent. |
 | `role` | string | No | Persona or specialty (e.g. `Market Analyst`, `Python Engineer`). |
 | `tools` | list[string] | No | Names of tools needed by the subagent (e.g. `["google_search", "browser", "code_executor"]`). |
@@ -135,15 +136,17 @@ A subagent on the parent agent's own model also uses the parent's **Model Base U
 and **Model API Key**, read the same way as for the parent: a `${VAR}` key is read
 from the server environment, and the subagent fails with an error when that variable
 is not set. On any other model, from the task or from `default_model`, it uses the
-provider's key from the server, and the parent's endpoint and key are not used.
+workspace's key for that provider, or the server's where the workspace may use it
+([Models and keys](workspaces.md#models-and-keys)), and the parent's endpoint and
+key are not used.
 
 ### Supported Tool Names & Aliases
-The subagent can be equipped with any tool registered in `ToolFactory`:
-- **Web & Search**: `google_search` (or `web_search`), `browser` (Playwright headless)
-- **Code & Execution**: `code_executor` (Python & Bash subprocesses)
-- **RAG & Storage**: `file_search` (Gemini File Search store), `memory_blocks` (Persistent semantic memory), `google_drive`
-- **Productivity**: `google_calendar`, `image_tools`
-- **MCP Protocols**: `mcp` (inherits parent MCP server configurations)
+A subagent can be given these tools, by name or alias, and only those its parent holds:
+- **Web & Search**: `google_search` (or `search`, `web_search`), `browser` (or `web_browser`, `playwright`)
+- **Code & Execution**: `code_executor` (or `python`, `code`, `bash`, `terminal`)
+- **RAG & Storage**: `file_search` (or `files`, `rag`), `memory_blocks` (or `memory`), `google_drive` (or `drive`), `supabase_storage`
+- **Productivity**: `google_calendar` (or `calendar`), `image_tools` (or `image`, `generate_image`), `cv_tools`, `image_data_extraction`, `user_profile`, `shop`, `custom_functions`
+- **MCP Protocols**: `mcp` (the parent's MCP servers)
 
 ---
 

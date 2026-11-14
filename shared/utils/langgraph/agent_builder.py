@@ -375,8 +375,9 @@ class AgentBuilder:
         )
         fallback = _fallback_model(config)
         if fallback:
-            # Provider env vars only: the agent's endpoint and key belong to its own
-            # model, and the fallback is usually on another provider's host.
+            # Not the agent's endpoint and key, which belong to its own model: the
+            # fallback is usually on another provider's host. Its key is the
+            # workspace's or the server's (shared/utils/provider_keys.py).
             from shared.callbacks.model_fallback_callback import PROVIDER_OUTAGE_ERRORS
             model = model.with_fallbacks(
                 [create_chat_model(fallback,

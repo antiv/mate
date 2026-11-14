@@ -11,8 +11,8 @@ it ran in, and a response returned from one is used in place of the error and
 still goes through the after-model callbacks, so guardrails and token logging
 apply to the fallback's answer as to any other.
 
-The fallback is built from the model name alone, through the provider env vars.
-It never inherits the agent's model_base_url / model_api_key: those belong to
+The fallback is built from the model name alone, with the workspace's key for its
+provider or the server's (shared/utils/provider_keys.py). It never inherits the agent's model_base_url / model_api_key: those belong to
 the primary model, and the fallback is usually on a different provider, so
 reusing them would send that key to the wrong host.
 
