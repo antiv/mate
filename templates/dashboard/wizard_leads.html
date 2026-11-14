@@ -122,7 +122,7 @@ function viewRequest(id) {
     let txt = "";
     if (caps.length) txt += "Interested in:\n- " + caps.join("\n- ") + "\n\n";
     if (l.message) txt += "Message:\n" + l.message;
-    alert(txt || "(no details)");
+    showConfirm(txt || "(no details)", "Request", "Close", null, "info");
 }
 
 function renderLeads(leads) {
@@ -189,10 +189,11 @@ function convertLead(id, company) {
     })
         .then(r => r.json().then(d => { if (!r.ok) throw new Error(d.detail || "Failed"); return d; }))
         .then(d => {
-            alert("Converted to project \"" + d.project_name + "\".\nThe agent is now permanent and the widget keeps working.\nWidget key: " + (d.widget_api_key || "—"));
+            showConfirm("Converted to project \"" + d.project_name + "\".\nThe agent is now permanent and the widget keeps working.\nWidget key: " + (d.widget_api_key || "—"),
+                        "Lead converted", "OK", null, "info");
             loadLeads();
         })
-        .catch(e => alert("Convert failed: " + e.message));
+        .catch(e => showNotification("Convert failed: " + e.message, 'error'));
 }
 
 function updateStatus(id, status) {
@@ -203,7 +204,7 @@ function updateStatus(id, status) {
     })
         .then(r => { if (!r.ok) throw new Error(); return r.json(); })
         .then(() => loadLeads())  // reflect re-ordering + freed trial (archived frees its trial)
-        .catch(() => alert("Could not update status"));
+        .catch(() => showNotification("Could not update status", 'error'));
 }
 
 async function deleteLead(id) {
@@ -211,7 +212,7 @@ async function deleteLead(id) {
     fetch("/dashboard/api/wizard/leads/" + id, { method: "DELETE" })
         .then(r => r.json().then(d => { if (!r.ok) throw new Error(d.detail || "Failed"); return d; }))
         .then(() => loadLeads())
-        .catch(e => alert("Delete failed: " + e.message));
+        .catch(e => showNotification("Delete failed: " + e.message, 'error'));
 }
 
 document.addEventListener("DOMContentLoaded", function () {

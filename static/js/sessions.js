@@ -446,7 +446,7 @@ mateActions.allow('sessionsApp.closeSessionInspector', 'sessionsApp.copySessionI
             }
             loadSessions(currentPage);
         } catch (err) {
-            alert(`Failed to delete session: ${err.message}`);
+            showNotification(`Failed to delete session: ${err.message}`, 'error');
         }
     }
 
