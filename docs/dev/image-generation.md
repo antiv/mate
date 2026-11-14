@@ -39,7 +39,8 @@ suggests common ones. This is stored in `tool_config`:
 ```
 
 - `true`, or an empty model, uses the default: the agent's workspace's own
-  (`workspace_settings` row `image_model`), else the model set on the dashboard's
+  (`workspace_settings` row `image_model`, set on **Models and keys**,
+  `server/workspace_model_routes.py`), else the model set on the dashboard's
   [Settings](../user/settings.md) page (`system_settings` row `image_model`), else
   `IMAGE_MODEL`, else `dall-e-3`. It is read on every generation, so a change applies
   without a restart; `default_image_model(workspace_id)` returns it with its source

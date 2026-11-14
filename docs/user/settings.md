@@ -33,7 +33,9 @@ The image model for agents that have **Image Tools** on but no model of their ow
 Below the field:
 
 - **In use** is the model agents get now, and where it comes from: this page, the
-  `IMAGE_MODEL` environment variable, or the built-in default `dall-e-3`.
+  `IMAGE_MODEL` environment variable, or the built-in default `dall-e-3`. A
+  workspace that sets its own on **Models and keys** uses that instead (see
+  [Workspaces](workspaces.md#image-model)).
 - **API key** says whether the server has the key for that model's provider, for
   example `OPENAI_API_KEY` or `BFL_API_KEY`. It only checks that the key is set. A
   wrong key shows up on the first image.

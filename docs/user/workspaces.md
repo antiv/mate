@@ -9,6 +9,9 @@ covers:
   - server/invitation_routes.py::create_invitation
   - server/workspace_routes.py
   - shared/utils/dashboard/dashboard_server.py::dashboard_workspaces
+  - shared/utils/dashboard/dashboard_server.py::dashboard_models
+  - server/workspace_model_routes.py
+  - templates/dashboard/models.html
 ---
 
 # Workspaces
@@ -37,16 +40,18 @@ roles in each. See [Users and roles](users-and-roles.md) for roles and agent rol
    gets an invitation.
 2. **The owner joins.** They open the invitation link, sign in with Google or GitHub as
    that address, and click **Join**. Their dashboard opens in the new workspace.
-3. **The owner builds.** They create a project and its agents, as in Default. An
+3. **The owner adds the workspace's keys** on **Models and keys**, when it should
+   pay for its own model calls (see [Models and keys](#models-and-keys)).
+4. **The owner builds.** They create a project and its agents, as in Default. An
    agent's **Allowed Roles** decide which members may use it.
-4. **The owner invites people** under **Members → Invitations**, and gives each the
+5. **The owner invites people** under **Members → Invitations**, and gives each the
    agent roles that open the agents they need (see
    [Invitations](users-and-roles.md#invitations)).
-5. **The owner sets a budget** for the whole workspace on **Rate Limits**, with the
+6. **The owner sets a budget** for the whole workspace on **Rate Limits**, with the
    scope **Whole workspace** (see [Rate limits](rate-limits.md#the-whole-workspace)),
    and an alert on **Alerts** with the scope **Whole workspace** to hear before it
    runs out.
-6. **Members use the agents** in the Work Room, through a widget, Slack, triggers or
+7. **Members use the agents** in the Work Room, through a widget, Slack, triggers or
    the API with their own personal access token.
 
 Nothing in it is visible from another workspace: agents, sessions, logs, budgets,
@@ -76,7 +81,7 @@ Every workspace is listed, closed ones too, with:
 | **Owners** | The members with the owner role, and addresses invited as owner who haven't accepted yet, marked *(invited)*. |
 | **Members**, **Projects** | How many of each it has. |
 | **Usage (30 days)** | Tokens and cost of its agents' calls over the last 30 days. Calls of agents with no configuration count as Default's. |
-| **Platform keys** | Whether it may call models on the installation's provider keys. |
+| **Platform keys** | Whether it may call models on the installation's provider keys, and under it the providers it has keys of its own for (*own: ...*). |
 | **Features** | The platform features it may use (below). |
 
 ### Create a workspace
@@ -137,6 +142,8 @@ On Gemini's own backend and File Search, a workspace's Google key with a base UR
 its own works in Default only; elsewhere use a `gemini/` model name, which goes
 through the same checks as any other provider.
 
+A workspace's own keys are set by its owners on **Models and keys** (below).
+
 ### Edit, suspend, resume, close
 
 - **Edit** changes the name, platform keys and features. The slug stays.
@@ -170,6 +177,49 @@ is resumed:
 - its open invitations can't be accepted.
 
 Its projects, agents, members, budgets and logs stay as they were.
+
+## Models and keys
+
+**Control Room → Models and keys** holds the current workspace's own provider keys
+and its image model. Owners and admins of the workspace see it, and platform
+administrators in every workspace.
+
+### Provider keys
+
+An owner, or a platform administrator, adds a key:
+
+1. Choose the **Provider**: `google`, `openai`, `anthropic`, `openrouter`,
+   `deepseek`, `mistral`, `groq`, `xai` or `ollama`.
+2. Enter the **API key**. `ollama` needs none.
+3. Optionally a **Base URL**, for a proxy or a provider-compatible server; the field
+   shows the provider's own when left empty. `ollama` needs one: the server it runs
+   on. Outside Default, an address in the server's own network is refused.
+4. Click **Save key**. Saving a provider that has a key replaces it.
+
+What happens then:
+
+- Every model call of the workspace for that provider uses the key, from the next
+  call on, without reloading agents (see
+  [What a workspace may use](#what-a-workspace-may-use)). `google` serves `gemini-*`
+  and `gemini/` models, `ollama` both `ollama/` and `ollama_chat/`.
+- The key is stored encrypted, and never shown again: the list shows its last four
+  characters. To change the base URL, enter the key again.
+- **Delete** removes the key. The provider's models then use the installation's key,
+  or fail when the workspace may not use it.
+- An admin of the workspace sees the list and changes nothing.
+- The server stores keys only when `MATE_SECRET_KEY` is set; without it the page
+  says so and the form is hidden.
+
+Each change is written to the workspace's audit log, as `provider_key.set` or
+`provider_key.delete`, with the provider and base URL but never the key.
+
+### Image model
+
+An owner or admin of the workspace sets the model its agents' image tool uses when
+it names none, for example `openrouter/google/gemini-2.5-flash-image`. Empty uses the
+installation's, from the [Settings](settings.md) page. **In use** shows the model
+agents get and where it comes from. A change is written to the audit log as
+`workspace_setting.update`.
 
 ## Usage and logs across workspaces
 

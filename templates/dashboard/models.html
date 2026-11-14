@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+
+{% block title %}Models and keys - MATE{% endblock %}
+
+{% block content %}
+<div class="space-y-4">
+    <div>
+        <h2 class="text-xl font-bold text-gray-900 dark:text-white">Models and keys</h2>
+        <p id="keysHint" class="text-xs text-gray-500 dark:text-gray-400">This workspace's own provider keys, and the image model its agents use.</p>
+    </div>
+
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 space-y-3">
+        <div>
+            <h3 class="text-sm font-semibold text-gray-900 dark:text-white">Provider keys</h3>
+            <p id="platformKeysNote" class="text-xs text-gray-500 dark:text-gray-400"></p>
+        </div>
+        <form id="keyForm" class="hidden flex flex-wrap items-end gap-2">
+            <div>
+                <label for="keyProvider" class="block text-xs text-gray-500 dark:text-gray-400">Provider</label>
+                <select id="keyProvider" class="border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-1.5 py-1 text-xs"></select>
+            </div>
+            <div>
+                <label for="keyValue" class="block text-xs text-gray-500 dark:text-gray-400">API key</label>
+                <input id="keyValue" type="password" autocomplete="off" class="border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1 text-xs w-72">
+            </div>
+            <div>
+                <label for="keyBaseUrl" class="block text-xs text-gray-500 dark:text-gray-400">Base URL (optional)</label>
+                <input id="keyBaseUrl" type="url" class="border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1 text-xs w-72">
+            </div>
+            <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 text-xs rounded-lg flex items-center space-x-1.5">
+                <i class="fas fa-save"></i><span>Save key</span>
+            </button>
+        </form>
+        <div class="overflow-auto table-responsive">
+            <table class="w-full divide-y divide-gray-200 dark:divide-gray-700 table-cards-mobile">
+                <thead class="bg-gray-50 dark:bg-gray-700">
+                    <tr>
+                        <th class="px-3 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Provider</th>
+                        <th class="px-3 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Key</th>
+                        <th class="px-3 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Base URL</th>
+                        <th class="px-3 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Updated</th>
+                        <th class="px-3 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="keysBody" class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                    <tr><td colspan="5" class="px-3 py-6 text-sm text-center text-gray-500 dark:text-gray-400">Loading…</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 space-y-3">
+        <div>
+            <h3 class="text-sm font-semibold text-gray-900 dark:text-white">Image model</h3>
+            <p class="text-xs text-gray-500 dark:text-gray-400">For agents whose image tool names no model. Empty uses the installation's.</p>
+        </div>
+        <form id="imageForm" class="flex flex-wrap items-end gap-2">
+            <div>
+                <label for="imageModel" class="block text-xs text-gray-500 dark:text-gray-400">Model</label>
+                <input id="imageModel" type="text" placeholder="openrouter/google/gemini-2.5-flash-image" class="border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1 text-xs w-80">
+            </div>
+            <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 text-xs rounded-lg flex items-center space-x-1.5">
+                <i class="fas fa-save"></i><span>Save</span>
+            </button>
+        </form>
+        <p id="imageInUse" class="text-xs text-gray-700 dark:text-gray-300"></p>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script nonce="{{ request.state.csp_nonce }}">
+(function () {
+    mateActions.allow('deleteKey');
+
+    const API = '/dashboard/api/workspace-models';
+    let state = {keys: [], providers: [], image_model: {}, can_manage_keys: false};
+
+    function esc(s) {
+        return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    async function call(url, method, body) {
+        const r = await fetch(url, {
+            method, credentials: 'same-origin',
+            headers: body ? {'Content-Type': 'application/json'} : {},
+            body: body ? JSON.stringify(body) : undefined,
+        });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(data.detail || `Request failed (${r.status})`);
+        return data;
+    }
+
+    function render() {
+        const manage = state.can_manage_keys && state.can_store_keys;
+        document.getElementById('keyForm').classList.toggle('hidden', !manage);
+        const select = document.getElementById('keyProvider');
+        if (!select.options.length) {
+            select.innerHTML = state.providers.map(p => `<option value="${esc(p.name)}">${esc(p.name)}</option>`).join('');
+            select.addEventListener('change', placeholder);
+            placeholder();
+        }
+        document.getElementById('platformKeysNote').textContent = state.may_use_platform_keys
+            ? "A model this workspace has no key for uses the installation's key."
+            : "This workspace doesn't use the installation's keys: a model it has no key for fails.";
+        if (!state.can_manage_keys) {
+            document.getElementById('keysHint').textContent = 'Only an owner of the workspace changes its keys.';
+        } else if (!state.can_store_keys) {
+            document.getElementById('keysHint').textContent = "This server can't store keys until MATE_SECRET_KEY is set.";
+        }
+        document.getElementById('keysBody').innerHTML = state.keys.map(k => `<tr>
+                <td class="px-3 py-1.5 text-xs text-gray-900 dark:text-white" data-label="Provider">${esc(k.provider)}</td>
+                <td class="px-3 py-1.5 text-xs font-mono text-gray-700 dark:text-gray-300" data-label="Key">${k.readable ? esc(k.key) || '—' : '<span class="text-red-600 dark:text-red-400">can\'t be read: enter it again</span>'}</td>
+                <td class="px-3 py-1.5 text-xs text-gray-700 dark:text-gray-300" data-label="Base URL">${esc(k.base_url || '')}</td>
+                <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400" data-label="Updated">${esc((k.updated_at || '').slice(0, 10))} ${esc(k.updated_by || '')}</td>
+                <td class="px-3 py-1.5 text-xs font-medium" data-label="Actions">${state.can_manage_keys
+                    ? `<button data-click="deleteKey" data-args="${mateActions.attr([k.provider])}" class="text-red-600 dark:text-red-400 hover:text-red-900 min-h-[44px] touch-target px-2"><i class="fas fa-trash"></i> Delete</button>` : ''}</td>
+            </tr>`).join('') || `<tr><td colspan="5" class="px-3 py-4 text-xs text-center text-gray-500 dark:text-gray-400">No keys of its own.</td></tr>`;
+        const image = state.image_model || {};
+        document.getElementById('imageModel').value = image.own || '';
+        const source = {workspace: 'this workspace', dashboard: "the installation's Settings page",
+                        IMAGE_MODEL: 'the IMAGE_MODEL variable', 'default': 'the built-in default'}[image.source] || image.source;
+        document.getElementById('imageInUse').textContent = image.effective ? `In use: ${image.effective}, from ${source}.` : '';
+    }
+
+    function placeholder() {
+        const p = state.providers.find(x => x.name === document.getElementById('keyProvider').value);
+        document.getElementById('keyBaseUrl').placeholder = p && p.base_url ? p.base_url : 'required, e.g. https://ollama.example.com';
+    }
+
+    async function load() {
+        try {
+            state = await call(API, 'GET');
+            render();
+        } catch (e) { showNotification(e.message, 'error'); }
+    }
+
+    document.getElementById('keyForm').addEventListener('submit', async function (event) {
+        event.preventDefault();
+        const provider = document.getElementById('keyProvider').value;
+        try {
+            await call(`${API}/keys`, 'PUT', {provider, api_key: document.getElementById('keyValue').value,
+                                              base_url: document.getElementById('keyBaseUrl').value});
+            document.getElementById('keyValue').value = '';
+            document.getElementById('keyBaseUrl').value = '';
+            showNotification(`Key for ${provider} saved`);
+            load();
+        } catch (e) { showNotification(e.message, 'error'); }
+    });
+
+    window.deleteKey = async function (provider) {
+        if (!await showConfirm(`Delete this workspace's key for ${provider}? Its models then use the installation's key, or fail if this workspace may not use it.`,
+                               'Delete key', 'Delete', 'Cancel', 'danger')) return;
+        try {
+            await call(`${API}/keys/${encodeURIComponent(provider)}`, 'DELETE');
+            showNotification(`Key for ${provider} deleted`);
+            load();
+        } catch (e) { showNotification(e.message, 'error'); }
+    };
+
+    document.getElementById('imageForm').addEventListener('submit', async function (event) {
+        event.preventDefault();
+        try {
+            await call(`${API}/image-model`, 'PUT', {model: document.getElementById('imageModel').value});
+            showNotification('Image model saved');
+            load();
+        } catch (e) { showNotification(e.message, 'error'); }
+    });
+
+    load();
+})();
+</script>
+{% endblock %}

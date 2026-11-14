@@ -664,6 +664,10 @@
                         <i class="fas fa-user-friends sidebar-icon"></i>
                         <span class="sidebar-text">Members</span>
                     </a>
+                    <a href="/dashboard/models" class="mate-nav-item {% if request.url.path == '/dashboard/models' %}sidebar-active{% endif %}" title="Models and keys">
+                        <i class="fas fa-key sidebar-icon"></i>
+                        <span class="sidebar-text">Models and keys</span>
+                    </a>
                     <a href="/dashboard/rate-limits" class="mate-nav-item {% if request.url.path == '/dashboard/rate-limits' %}sidebar-active{% endif %}" title="Rate Limits">
                         <i class="fas fa-shield-alt sidebar-icon"></i>
                         <span class="sidebar-text">Rate Limits</span>

@@ -3900,6 +3900,18 @@ class DashboardServer:
                 "is_admin": True,
             })
 
+        @self.app.get("/dashboard/models", response_class=HTMLResponse, tags=["Dashboard - Pages"])
+        async def dashboard_models(request: Request, ctx: RequestContext = Depends(get_request_context)):
+            """Workspace settings → Models and keys (server/workspace_model_routes.py)"""
+            if not ctx.is_admin:
+                return RedirectResponse(url="/dashboard/workroom", status_code=302)
+            return self.templates.TemplateResponse(request, "dashboard/models.html", {
+                "request": request,
+                "page_title": "Models and keys",
+                "username": ctx.user_id,
+                "is_admin": True,
+            })
+
         @self.app.get("/dashboard/invite/{token}", response_class=HTMLResponse, tags=["Dashboard - Pages"])
         async def dashboard_invitation(request: Request, token: str,
                                        ctx: RequestContext = Depends(get_request_context)):

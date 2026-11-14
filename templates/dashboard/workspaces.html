@@ -163,7 +163,8 @@
                 <td class="px-3 py-1.5 text-xs text-gray-700 dark:text-gray-300" data-label="Members">${w.members}</td>
                 <td class="px-3 py-1.5 text-xs text-gray-700 dark:text-gray-300" data-label="Projects">${w.projects}</td>
                 <td class="px-3 py-1.5 text-xs text-gray-700 dark:text-gray-300" data-label="Usage (30 days)">${w.usage.tokens.toLocaleString()} tokens<br><span class="text-gray-400">$${w.usage.cost_usd.toFixed(2)}</span></td>
-                <td class="px-3 py-1.5 text-xs text-gray-700 dark:text-gray-300" data-label="Platform keys">${w.allow_platform_keys ? 'Yes' : 'No'}</td>
+                <td class="px-3 py-1.5 text-xs text-gray-700 dark:text-gray-300" data-label="Platform keys">${w.allow_platform_keys ? 'Yes' : 'No'}${(w.provider_keys || []).length
+                    ? `<div class="text-gray-400 dark:text-gray-500">own: ${esc(w.provider_keys.join(', '))}</div>` : ''}</td>
                 <td class="px-3 py-1.5 text-xs" data-label="Features">${w.platform_features.map(f => badge(FEATURE_LABELS[f] || f, 'bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200')).join('') || '—'}</td>
                 <td class="px-3 py-1.5 text-xs font-medium" data-label="Actions">${actions.join('')}</td>
             </tr>`;
