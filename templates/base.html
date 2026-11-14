@@ -937,6 +937,38 @@
             return true;
         }
 
+        // Times (#247): the server stores UTC and sends it without a zone, as
+        // "2026-11-14T13:57:13", which Date would read as local time. A time without a
+        // zone is read as UTC, and every page shows it in the browser's time zone as
+        // YYYY-MM-DD HH:MM:SS. EMPTY_VALUE is the one placeholder for a missing value.
+        const EMPTY_VALUE = '—';
+
+        // A Date from an ISO string (UTC unless it names a zone) or epoch seconds; null
+        // for nothing or for a value that isn't a time
+        function parseServerTime(value) {
+            if (value === null || value === undefined || value === '') return null;
+            if (typeof value === 'number') return new Date(value * 1000);
+            let text = String(value).trim().replace(' ', 'T');
+            if (!/(Z|[+-]\d{2}:?\d{2})$/i.test(text)) text += 'Z';
+            const date = new Date(text);
+            return isNaN(date.getTime()) ? null : date;
+        }
+
+        function formatDateTime(value) {
+            const date = parseServerTime(value);
+            if (!date) return value ? String(value) : EMPTY_VALUE;
+            const pad = n => String(n).padStart(2, '0');
+            return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} `
+                + `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+        }
+
+        // A time a template rendered: <time datetime="..." data-local-time>
+        document.addEventListener('DOMContentLoaded', () => {
+            document.querySelectorAll('time[data-local-time]').forEach(el => {
+                el.textContent = formatDateTime(el.getAttribute('datetime'));
+            });
+        });
+
         // Global JavaScript functions
         function showNotification(message, type = 'success', duration = 5000) {
             const notification = document.createElement('div');

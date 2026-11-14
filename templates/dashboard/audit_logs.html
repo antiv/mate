@@ -169,7 +169,7 @@
             }
 
             tbody.innerHTML = logs.map(function(row) {
-                var time = row.timestamp ? new Date(row.timestamp).toLocaleString() : '—';
+                var time = formatDateTime(row.timestamp);
                 var details = row.details ? (typeof row.details === 'object' ? JSON.stringify(row.details) : row.details) : '—';
                 var resourceId = row.resource_id || '—';
                 // Every field below is attacker-influenced (actor names, resource ids,

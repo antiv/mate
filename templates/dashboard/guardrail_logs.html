@@ -138,7 +138,7 @@
             }
 
             tbody.innerHTML = logs.map(function(row) {
-                var time = row.timestamp ? new Date(row.timestamp).toLocaleString() : '—';
+                var time = formatDateTime(row.timestamp);
                 var badgeCls = ACTION_BADGES[row.action_taken] || ACTION_BADGES.log;
                 var actionBadge = '<span class="px-2 py-0.5 rounded-full text-xs font-medium ' + badgeCls + '">' + esc(row.action_taken || '—') + '</span>';
                 var matched = esc(row.matched_content);
