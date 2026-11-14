@@ -19,14 +19,23 @@ entry or the agent's base URL.
 
 The key is looked up on every model call, not when the agent is built, so a saved,
 changed or deleted key, and the workspace's "may use platform keys", apply to the next
-call without reloading agents. with_provider_keys() wraps a LiteLLM client (ADK's
-LiteLlm.llm_client, or ChatLiteLLM.client on LangGraph) to do that.
+call without reloading agents:
+
+- with_provider_keys() wraps a LiteLLM client (ADK's LiteLlm.llm_client, or
+  ChatLiteLLM.client on LangGraph);
+- WorkspaceGemini is ADK's native Gemini backend (gemini-* models);
+- google_client_kwargs() builds google.genai's client for File Search.
 """
 
 import asyncio
+import contextlib
 import logging
+import os
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
+
+from google.adk.models.google_llm import Gemini
+from pydantic import PrivateAttr
 
 from .models import DEFAULT_WORKSPACE_ID, Workspace, WorkspaceProviderKey
 from .outbound import GuardedCompletions, _install_guard, private_network_allowed
@@ -184,4 +193,86 @@ def with_provider_keys(model: Any, attribute: str, context: ModelContext, model_
         return model
     object.__setattr__(model, attribute,
                        ProviderKeyCompletions(getattr(model, attribute), context, model_name))
+    return model
+
+
+# Google's own client (google.genai: ADK's native Gemini backend, File Search) goes to
+# this root when the workspace's key names no endpoint. Given explicitly, so that
+# GOOGLE_GEMINI_BASE_URL doesn't redirect it.
+GOOGLE_API_ROOT = "https://generativelanguage.googleapis.com/"
+
+
+def google_credentials(context: ModelContext, model_name: str) -> Optional[Credentials]:
+    """model_credentials() for google.genai's client. Its requests go through aiohttp,
+    outside the outbound guard, so a workspace's own endpoint is refused outside the
+    default workspace; the gemini/ prefix reaches it through LiteLLM instead."""
+    credentials = model_credentials(context, model_name)
+    if (credentials is not None and credentials.own_endpoint
+            and credentials.workspace_id != DEFAULT_WORKSPACE_ID and not private_network_allowed()):
+        raise NoProviderKey("This workspace's google entry names a base URL, which Gemini's own "
+                            "client doesn't take outside the default workspace; use a gemini/ model")
+    return credentials
+
+
+def google_client_kwargs(context: ModelContext, model_name: str = "gemini-2.5-flash") -> Dict[str, Any]:
+    """The arguments of a google.genai Client for this context: the workspace's key, or
+    GOOGLE_API_KEY where the environment is allowed. Raises NoProviderKey, or
+    RuntimeError when the environment has no key either."""
+    credentials = google_credentials(context, model_name)
+    if credentials is None:
+        api_key = os.getenv("GOOGLE_API_KEY")
+        if not api_key:
+            raise RuntimeError("GOOGLE_API_KEY not configured")
+        return {"api_key": api_key}
+    from google.genai import types
+    base_url = credentials.base_url if credentials.own_endpoint else GOOGLE_API_ROOT
+    return {"api_key": credentials.api_key, "vertexai": False,
+            "http_options": types.HttpOptions(base_url=base_url)}
+
+
+class WorkspaceGemini(Gemini):
+    """ADK's native Gemini, each call made with the workspace's google key when it has
+    one (google_credentials), else as Gemini is. The call goes to a Gemini built with
+    that key, kept until the key changes. It is a Gemini, so ADK's built-in tools and
+    context cache still see one."""
+
+    _context: ModelContext = PrivateAttr(default_factory=ModelContext)
+    _keyed: Any = PrivateAttr(default=None)
+
+    def _with_key(self, credentials: Credentials) -> Gemini:
+        key = (credentials.api_key, credentials.base_url, credentials.own_endpoint)
+        if self._keyed is None or self._keyed[0] != key:
+            fields = {name: getattr(self, name) for name in Gemini.model_fields
+                      if name not in ("client", "client_kwargs", "base_url")}
+            base_url = credentials.base_url if credentials.own_endpoint else GOOGLE_API_ROOT
+            self._keyed = (key, Gemini(**fields, base_url=base_url, client_kwargs={
+                "api_key": credentials.api_key, "vertexai": False}))
+        return self._keyed[1]
+
+    async def generate_content_async(self, llm_request: Any, stream: bool = False):
+        credentials = await asyncio.to_thread(google_credentials, self._context, self.model)
+        if credentials is None:
+            responses = super().generate_content_async(llm_request, stream)
+        else:
+            responses = self._with_key(credentials).generate_content_async(llm_request, stream)
+        async for response in responses:
+            yield response
+
+    @contextlib.asynccontextmanager
+    async def connect(self, llm_request: Any):
+        """The live connection (/run_live), on the same key."""
+        credentials = await asyncio.to_thread(google_credentials, self._context, self.model)
+        target = super().connect(llm_request) if credentials is None else \
+            self._with_key(credentials).connect(llm_request)
+        async with target as live:
+            yield live
+
+
+def workspace_gemini(model_name: str, context: ModelContext) -> Any:
+    """ADK's native Gemini for this context: a WorkspaceGemini for an agent, a plain
+    Gemini for no agent (the installation's)."""
+    if not context.agent_name and context.project_id is None:
+        return Gemini(model=model_name)
+    model = WorkspaceGemini(model=model_name)
+    model._context = context
     return model

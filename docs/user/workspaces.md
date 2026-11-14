@@ -125,10 +125,14 @@ for" and the provider's name. An agent with its own **Model API Key** or base UR
 either way. Default always may, and its checkbox can't be changed. A change applies
 to the next call, without reloading agents.
 
-For now this covers the agents' models, their fallback models, subagents and the
-conversation summarizer. Models on Gemini's own backend (`gemini-*`, without a
-provider prefix) and the image tool, memory search, evals and Work Room titles still
-use the installation's keys.
+For now this covers the agents' models, Gemini's own backend (`gemini-*`) included,
+their fallback models, subagents, the conversation summarizer and File Search. The
+image tool, memory search, evals and Work Room titles still use the installation's
+keys.
+
+On Gemini's own backend and File Search, a workspace's Google key with a base URL of
+its own works in Default only; elsewhere use a `gemini/` model name, which goes
+through the same checks as any other provider.
 
 ### Edit, suspend, resume, close
 

@@ -6152,7 +6152,7 @@ class DashboardServer:
             self._require_in_workspace(ctx, project_id=project_id, agent_name=agent_name or None)
             
             # First create the store in Gemini API
-            gemini_result = create_file_search_store(display_name=display_name)
+            gemini_result = create_file_search_store(display_name=display_name, project_id=project_id)
             if not gemini_result.get("success"):
                 return {"success": False, "error": gemini_result.get("error", "Failed to create store in Gemini API")}
             

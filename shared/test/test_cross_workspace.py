@@ -1648,7 +1648,7 @@ class TestSecondReviewOfPhase2(_TwoWorkspaces):
             config = {"name": "x", "project_id": project_id, "tool_config": json.dumps(
                 {"file_search": {"enabled": True, "store_names": names}})}
             with patch("shared.utils.tools.file_search_tools.query_file_search",
-                       side_effect=lambda question, store_names, model: store_names):
+                       side_effect=lambda question, store_names, model, context: store_names):
                 tools = create_file_search_tools_from_config(config)
                 return tools[0]("q") if tools else []
 
