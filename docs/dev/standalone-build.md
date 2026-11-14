@@ -3,7 +3,6 @@ title: "Standalone build"
 summary: Package one agent tree as a desktop application: build steps, options and limits.
 audience: dev
 order: 72
-status: migrated
 covers:
   - build_standalone_agent.py
   - standalone_server.py
@@ -25,7 +24,7 @@ external dependencies at runtime (except API keys).
 
 ## Prerequisites
 
-- Python 3.8+
+- Python 3.10+
 - MATE project with agents configured
 - PyInstaller (for binary packaging): `pip install pyinstaller`
 
@@ -38,8 +37,8 @@ external dependencies at runtime (except API keys).
 ### 1. Export Your Agent
 
 From the MATE dashboard, export your agent hierarchy as JSON:
-- Go to **Agents** page
-- Select a project and root agent
+- Go to **Studio → Agents**
+- Select a project and, in the agent filter, the root agent
 - Click **Export** to download the JSON file
 
 Or use the API directly:
@@ -58,7 +57,8 @@ python build_standalone_agent.py my_agent.json
 This creates `build/standalone/` with:
 - `standalone_server.py` — minimal server
 - `standalone_agent.db` — SQLite database with your agents
-- `.env` — configuration (edit to add API keys)
+- `.env` — configuration (edit to add API keys); it also sets `ROOT_AGENT_NAME`,
+  `DB_TYPE=sqlite` and `DB_PATH=standalone_agent.db`, which the build relies on
 - `MATEAgent.spec` — PyInstaller spec file
 - Required source files and assets
 
@@ -71,6 +71,7 @@ python standalone_server.py
 ```
 
 The server starts on `http://localhost:8080/` and automatically opens your browser.
+`--port`, `--host` and `--no-browser` override that for one run.
 
 ### 4. Build the Binary
 
@@ -138,6 +139,10 @@ OPENAI_API_KEY=your-openai-key          # For OpenAI models
 # Optional
 STANDALONE_PORT=8080
 STANDALONE_HOST=127.0.0.1
+
+# Optional — the wording of the AI disclosure (EU AI Act Art. 50), always shown;
+# empty keeps the default
+MATE_AI_DISCLOSURE=You are chatting with an AI assistant.
 
 # Optional — send 👍/👎 ratings to a central MATE (both needed)
 MATE_FEEDBACK_URL=https://mate.example.com
@@ -277,12 +282,13 @@ Ensure your API keys are set correctly in the `.env` file. Check the terminal
 output for error messages from the LLM provider.
 
 ### Build is very large
-PyInstaller includes the entire Python environment. Use `--upx` (already enabled
-in the spec) to compress, or use a virtual environment with only required packages.
+PyInstaller includes the entire Python environment. The generated spec sets
+`upx=False`; set it to `True` with UPX installed to compress, or build from a virtual
+environment with only the required packages.
 
 ### macOS Troubleshooting
 
-If you download a `.app` bundle zip using your browser and try to open it, macOS may show a an error saying the app **'is damaged and can't be opened'**.
+If you download a `.app` bundle zip using your browser and try to open it, macOS may show an error saying the app **'is damaged and can't be opened'**.
 
 This is a standard macOS security feature (Gatekeeper App Translocation) for applications that aren't officially signed with an Apple Developer certificate. To fix it, you just need to remove the quarantine attribute by running this in your terminal:
 

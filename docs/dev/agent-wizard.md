@@ -3,10 +3,11 @@ title: "Agent Builder Wizard: setup and internals"
 summary: Embed options, partners, tiers, site analysis, trial lifecycle and settings of the wizard.
 audience: dev
 order: 120
-status: migrated
 covers:
   - server/wizard_routes.py
   - shared/utils/wizard/**
+  - static/js/wizard/**
+  - shared/utils/dashboard/dashboard_server.py::*wizard*
 ---
 
 # MATE Agent Builder Wizard
@@ -88,10 +89,10 @@ request as a lead.
 
 | Tier | What it does | Trial provisioned | Template |
 |---|---|---|---|
-| **tier1** — Website Support | Reads the prospect's website (via the `browser` tool) to answer support questions | ✅ | `wizard-tier1-website-support.json` |
+| **tier1** — AI Support | Reads the prospect's website (via the `browser` tool) to answer support questions | ✅ | `wizard-tier1-website-support.json` |
 | **tier2** — Support + Scheduling | tier1 + Google Calendar (availability / booking) | ✅ (needs a Google service account configured) | `wizard-tier2-support-scheduling.json` |
-| **tier3** — Sales | Shows products, fills a cart and places orders via an e-commerce MCP | ✅ (trial uses a built-in demo shop) | `wizard-tier3-sales.json` |
-| **tier4** — Custom | Pick MATE capabilities of interest + describe the need → forwarded as a lead (no trial) | ✗ (lead only) | — |
+| **tier3** — AI Sales Agent | Shows products, fills a cart and places orders via an e-commerce MCP | ✅ (trial uses a built-in demo shop) | `wizard-tier3-sales.json` |
+| **tier4** — Enterprise | Pick MATE capabilities of interest + describe the need → forwarded as a lead (no trial) | ✗ (lead only) | — |
 
 Trial tier templates live in `templates/agent_templates` and reuse the
 [Template Library](template-format.md). Per-prospect values are injected into `{{PLACEHOLDER}}`
@@ -103,7 +104,7 @@ tokens at provision time (e.g. `{{SITE_URL}}`, `{{EXTRA_INSTRUCTIONS}}`,
 ## Site analysis (tailored instructions)
 
 When a tier with a website is provisioned, MATE crawls the site and runs an LLM
-(`WIZARD_ANALYSIS_MODEL`) to extract a short **business description** and a list of **services /
+(`WIZARD_ANALYSIS_MODEL`, else `TITLE_GEN_MODEL`, else `openrouter/google/gemini-2.5-flash`) to extract a short **business description** and a list of **services /
 appointment reasons**. These are injected into the trial agent:
 
 - the agent's **description** field becomes the generated business summary (a starting point you can edit);
@@ -115,13 +116,14 @@ Analysis is best-effort: if the LLM is unavailable, the agent falls back to gene
 ## How a Trial Works
 
 1. The visitor picks a tier and fills in the config (e.g. website URL + instructions).
-2. MATE provisions an isolated project named `trial_<tier>_<token>`, creates the agent(s) from the
-   tier template, and issues a `wk_…` **widget key**.
+2. MATE provisions an isolated project named `trial_<tier>_<token>` in the Default workspace,
+   creates the agent(s) from the tier template on `WIZARD_AGENT_MODEL`, and issues a `wk_…`
+   **widget key**.
 3. The wizard embeds the standard [widget chat](../user/widget.md) so the visitor can test the
    agent immediately.
 4. The visitor submits their details → a **lead** is stored (with a snapshot of the price estimate
    and a reference to the trial).
-5. Trials are disposable: a daily job removes expired ones (see **Cleanup** below). Leads are kept.
+5. Trials are disposable: a daily job, at 03:00 UTC, removes expired ones. Leads are kept.
 
 ---
 
@@ -132,6 +134,7 @@ Open the **MATE Dashboard → Wizard Leads** (`/dashboard/wizard-leads`, admin o
 - See every lead (name, email, company, tier, estimated price, created date).
 - Open the lead's trial chat (while the trial is still alive).
 - Move a lead through `new → contacted → converted → archived`.
+- Delete an archived lead, with whatever is left of its trial.
 
 ---
 
@@ -139,6 +142,8 @@ Open the **MATE Dashboard → Wizard Leads** (`/dashboard/wizard-leads`, admin o
 
 | Variable | Default | Purpose |
 |---|---|---|
+| `WIZARD_AGENT_MODEL` | `openrouter/google/gemini-2.5-flash` | Model of the trial agents |
+| `WIZARD_ANALYSIS_MODEL` | `TITLE_GEN_MODEL`, then `openrouter/google/gemini-2.5-flash` | Model of the site analysis |
 | `WIZARD_CONTACT_EMAIL` | `sales@example.com` | Contact address shown on the final wizard screen and returned to the lead |
 | `WIZARD_CURRENCY` | `EUR` | Default price currency when the embed doesn't pass `data-currency` (overridable per-tier in the pricing editor) |
 | `WIZARD_SHOP_CURRENCY` | `EUR` | Fallback currency for the Tier 3 trial shop catalog when site analysis doesn't detect one |
@@ -149,7 +154,10 @@ Open the **MATE Dashboard → Wizard Leads** (`/dashboard/wizard-leads`, admin o
 | `WIZARD_TIER3_TRIAL_TTL_DAYS` | `2` | Shorter TTL for Tier 3 (sales) trials |
 | `WIZARD_SESSION_IDLE_HOURS` | `4` | Hours of inactivity after which a provisioned trial is eagerly cleaned up |
 | `WIZARD_TRIAL_MAX_PAGES` | `5` | Max pages crawled per trial provision (separate from `WIZARD_CRAWL_MAX_PAGES`) |
-| `WIZARD_CLEANUP_ENABLED` | `true` | Enable the daily trial cleanup job |
+| `WIZARD_CRAWL_MAX_PAGES` / `WIZARD_CRAWL_MAX_DEPTH` | `10` / `3` | The site crawler's page and link-depth limits |
+| `WIZARD_CRAWL_PAGE_TIMEOUT_MS` / `WIZARD_CRAWL_TIME_BUDGET_S` | `20000` / `90` | Per-page timeout and the whole crawl's time budget |
+| `WIZARD_DEFAULT_SLOT_MIN` | `30` | Appointment length when the site gives none |
+| `WIZARD_CLEANUP_ENABLED` | `true` | Enable the daily trial cleanup job (03:00 UTC) |
 | `WIZARD_CAPTCHA_PROVIDER` | (unset) | When set, enables the captcha hook on provisioning (pluggable; off by default) |
 
 ### Tier 2 calendar setup
@@ -198,6 +206,7 @@ Public (no login; protected by a per-session token + per-IP throttle):
 |---|---|---|
 | `GET` | `/wizard/embed` | The wizard iframe page (`?tier=`, `?lang=`, `?currency=`, `?partner=`, `?contact=`) |
 | `GET` | `/wizard/mate-wizard.js` | Embeddable loader script |
+| `GET` | `/wizard/demo` | A test page that embeds the wizard (`static/wizard-demo.html`) |
 | `GET` | `/wizard/api/tiers` | Tier catalogue + display prices (`?lang=&currency=&partner=`) |
 | `POST` | `/wizard/api/session/start` | Start a wizard session → `session_token` |
 | `POST` | `/wizard/api/session/step` | Save step inputs |
@@ -216,8 +225,10 @@ Admin (dashboard auth):
 | `PATCH` | `/dashboard/api/wizard/leads/{id}` | Update lead status (archiving frees the trial) |
 | `POST` | `/dashboard/api/wizard/leads/{id}/convert` | Convert a live trial into a permanent agent |
 | `GET` | `/dashboard/api/wizard/leads/{id}/snapshot` | Download the trial agent JSON snapshot |
+| `DELETE` | `/dashboard/api/wizard/leads/{id}` | Delete an archived lead and what is left of its trial |
 | `GET` `PUT` | `/dashboard/api/wizard/pricing` | Get/save tier prices (`?partner=` for a partner) |
-| `GET` `POST` `DELETE` | `/dashboard/api/wizard/partners` | List / upsert / delete partners |
+| `GET` `POST` | `/dashboard/api/wizard/partners` | List / upsert partners |
+| `DELETE` | `/dashboard/api/wizard/partners/{partner_key}` | Delete a partner |
 
 ---
 
@@ -226,7 +237,8 @@ Admin (dashboard auth):
 Trial agents are created with `allowed_for_roles: ["admin", "widget"]`. Public widget visitors are
 auto-assigned the **`widget`** role (their user id is scoped `widget_<keyid>_<uid>`), so they can use
 only their bound, widget-enabled agent — never dashboard agents. Dashboard `user` accounts cannot use
-widget/trial agents, and agents with no roles configured are admin-only. See [SSO_OAUTH.md](sso-setup.md).
+widget/trial agents, and agents with no roles configured are admin-only. See
+[Authentication and access](auth-and-access.md) and [Single sign-on setup](sso-setup.md).
 
 ## Rich cards in chat (any agent)
 
