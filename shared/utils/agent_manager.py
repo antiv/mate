@@ -226,36 +226,16 @@ class AgentManager:
             # Auto-configure File Search stores from database
             # Check if agent has any File Search stores assigned
             tool_config = config.tool_config
+            from .tools.file_search_tools import add_assigned_stores
             try:
-                from .file_search_service import FileSearchService
-                file_search_service = FileSearchService(self.db_client)
-                assigned_stores = file_search_service.get_stores_for_agent(config.name)
-                
-                if assigned_stores:
-                    # Parse existing tool_config or create new one
-                    if tool_config:
-                        try:
-                            tool_config_dict = json.loads(tool_config) if isinstance(tool_config, str) else tool_config
-                        except (json.JSONDecodeError, TypeError):
-                            tool_config_dict = {}
-                    else:
-                        tool_config_dict = {}
-                    
-                    # Get store names
-                    store_names = [store['store_name'] for store in assigned_stores if store.get('store_name')]
-                    
-                    if store_names:
-                        # Add or update file_search config
-                        tool_config_dict['file_search'] = {
-                            'enabled': True,
-                            'store_names': store_names
-                        }
-                        
-                        # Update tool_config string
-                        tool_config = json.dumps(tool_config_dict)
-                        logger.info(f"✅ Auto-configured File Search for agent {config.name} with stores: {store_names}")
-            except Exception as e:
-                logger.warning(f"Failed to auto-configure File Search for agent {config.name}: {e}")
+                tool_config_dict = json.loads(tool_config) if isinstance(tool_config, str) else tool_config
+            except (json.JSONDecodeError, TypeError):
+                tool_config_dict = None
+            if not isinstance(tool_config_dict, dict):
+                tool_config_dict = {}
+            with_stores = add_assigned_stores(tool_config_dict, config.name, self.db_client)
+            if with_stores is not tool_config_dict:
+                tool_config = json.dumps(with_stores)
             
             # Create agent configuration dictionary
             agent_config = {

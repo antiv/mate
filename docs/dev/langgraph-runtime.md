@@ -79,6 +79,9 @@ Unlike ADK, an agent that appears under multiple parents is a single node (no
 - DB-driven `llm` agents with sub-agent delegation
 - Tools via the existing ToolFactory (custom functions, image tools, browser,
   memory blocks, user profile, shop, calendar, `create_agent` self-building, …)
+- File Search: the stores assigned to an agent in the dashboard are added to its
+  `tool_config` before ToolFactory runs, as on ADK (`add_assigned_stores`,
+  `shared/test/test_file_search_assigned_stores.py`)
 - MCP servers, remote (`url`, streamable HTTP or SSE) and stdio. `timeout` applies
   to remote servers; stdio servers on this runtime use the adapter's default.
 - Sessions (DB-persisted, multi-turn memory), artifacts, streaming SSE

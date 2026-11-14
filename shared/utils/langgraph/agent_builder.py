@@ -453,7 +453,10 @@ class AgentBuilder:
         factory_config = dict(config)
         mcp_config = factory_config.pop("mcp_servers_config", None)
 
-        tool_config = _json_field(config, "tool_config")
+        from shared.utils.tools.file_search_tools import add_assigned_stores
+
+        # The stores assigned in the dashboard, as AgentManager adds them on ADK
+        tool_config = add_assigned_stores(_json_field(config, "tool_config"), app_name)
         confirm_names = tool_config.pop("require_confirmation", None) or []
         if not isinstance(confirm_names, list):
             confirm_names = [confirm_names]
