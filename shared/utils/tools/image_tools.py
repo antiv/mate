@@ -187,8 +187,7 @@ def _resolve(model: Optional[str], context: Optional[ModelContext]) -> Tuple[str
     """resolve_image_model(), and the workspace to guard the call for (provider_keys)."""
     from ..provider_keys import litellm_credentials, workspace_of_context
     context = context or ModelContext()
-    name = (model or default_image_model(workspace_of_context(context))[0]).strip()
-    name = _MODEL_ALIASES.get(name, name)
+    name = image_model_name(model or default_image_model(workspace_of_context(context))[0])
     credentials, guard = litellm_credentials(context, name)
     if credentials:
         return name, credentials, guard
@@ -228,9 +227,15 @@ def _environment_credentials(name: str) -> Dict[str, Any]:
     return kwargs
 
 
+def image_model_name(model: str) -> str:
+    """The LiteLLM name of an image model as written in a config (nano-banana is an alias)."""
+    name = model.strip()
+    return _MODEL_ALIASES.get(name, name)
+
+
 def image_tool_name(model: str) -> str:
     """The tool name an agent sees for an image model."""
-    name = _MODEL_ALIASES.get(model.strip(), model.strip())
+    name = image_model_name(model)
     if name in _LEGACY_TOOL_NAMES:
         return _LEGACY_TOOL_NAMES[name]
     return "generate_image_" + (re.sub(r"[^A-Za-z0-9]+", "_", model).strip("_") or "default")

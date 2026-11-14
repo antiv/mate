@@ -137,8 +137,9 @@ requests: a webhook trigger answers only when its agent has finished.
 ### Secrets at rest
 
 MATE stores some secrets it has to read back: a Slack integration's bot token and
-signing secret, a webhook trigger's signing secret, and an agent's **Model API Key**
-when it is typed literally rather than as `${VAR}`. With `MATE_SECRET_KEY` set, they
+signing secret, a webhook trigger's signing secret, an agent's **Model API Key**
+when it is typed literally rather than as `${VAR}`, and a workspace's provider keys
+(**Models and keys**). With `MATE_SECRET_KEY` set, they
 are encrypted in the database with Fernet (AES-128-CBC with an HMAC), the key in an
 agent's version history included. Generate a key with:
 
@@ -157,7 +158,8 @@ python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().d
   to be entered again. There is no key rotation yet.
 - **Without the key** the auth server refuses to start with `MATE_ENV=production`,
   unless `MATE_ALLOW_INSECURE_DEFAULTS` is set. Elsewhere nothing changes from 1.x,
-  and the startup warning gives the number of secrets stored in the clear.
+  and the startup warning gives the number of secrets stored in the clear; a
+  workspace's provider keys can't be saved at all.
 
 A stored value is either plain text or `enc:v1:` followed by the Fernet token, so
 `shared/utils/secret_box.py` reads both. The columns use its `EncryptedText` type,

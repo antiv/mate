@@ -63,7 +63,7 @@ from shared.utils.models import (
     AgentConfig, AgentConfigVersion, AgentResponse, AgentTrigger, AlertRule, AuditLog, Base,
     ChannelIntegration, EvalResult, FileSearchStore, GuardrailLog, LangGraphSession, MemoryBlock,
     PersonalAccessToken, Project, RateLimitConfig, ResponseFeedback, TestCase, TokenUsageLog, User,
-    WidgetApiKey, Workspace, WorkspaceInvitation, WorkspaceMember,
+    WidgetApiKey, Workspace, WorkspaceInvitation, WorkspaceMember, WorkspaceProviderKey,
 )
 from shared.utils.rbac_middleware import RBACMiddleware
 from shared.utils.tools import mcp_tools
@@ -214,12 +214,14 @@ COVERED_BY_TEST: Dict[Route, str] = {
     ("POST", "/dashboard/api/members/leave"): "test_a_member_leaves_the_current_workspace",
     ("POST", "/dashboard/api/invitations"): "test_an_owner_invites_to_the_current_workspace",
     ("POST", "/dashboard/api/invitations/accept"): "test_an_invitation_is_accepted_once",
+    ("PUT", "/dashboard/api/workspace-models/keys"): "test_an_owner_sets_the_current_workspace_s_keys",
+    ("PUT", "/dashboard/api/workspace-models/image-model"): "test_the_image_model_is_the_current_workspace_s",
     **{route: "test_every_body_naming_a_row_of_b_is_a_404" for route in BODIES_NAMING_B},
 }
 
 # A row of workspace B for each path parameter of a scoped route, set by the fixture
 B_IDS: Dict[str, str] = {"agent_name": B_ROOT, "build_id": "build-of-b",
-                         "scope": "agent", "scope_id": B_ROOT}
+                         "scope": "agent", "scope_id": B_ROOT, "provider": "openrouter"}
 
 
 def _api_routes() -> List[APIRoute]:
@@ -359,6 +361,10 @@ class _TwoWorkspaces(unittest.TestCase):
                 workspace_id=B, email=f"invitee@{B_MARKER}.example", role="member", token_hash="0" * 64,
                 expires_at=datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(days=7),
                 created_by=BOB),
+            # B's own provider key: A never sees it, nor its base URL
+            "provider_key_id": WorkspaceProviderKey(workspace_id=B, provider="openrouter",
+                                                    api_key=f"sk-{B_MARKER}-key",
+                                                    base_url=f"https://{B_MARKER}.example/v1"),
         }
         session.add_all(b_ops.values())
         session.commit()
@@ -3042,6 +3048,117 @@ class TestPlatformWorkspaces(_TwoWorkspaces):
         # It keeps its slug
         self.assertEqual(self._create(name="Other").status_code, 409)
 
+
+
+class TestModelsAndKeys(_TwoWorkspaces):
+    """Workspace settings → Models and keys (#277, 4e): owners set the workspace's
+    provider keys, owners and admins its image model; a key is stored encrypted and
+    never sent back."""
+
+    CAROL = "carol@b.example"
+    API = "/dashboard/api/workspace-models"
+
+    def setUp(self):
+        super().setUp()
+        session = self.Session()
+        carol = User(user_id=self.CAROL, roles='["user"]')
+        carol.home_workspace_id = B
+        session.add(carol)
+        session.commit()
+        session.close()
+        self.bob = TestClient(auth_server.app, cookies=_signed_in(BOB))
+        self.carol = TestClient(auth_server.app, cookies=_signed_in(self.CAROL))
+        from cryptography.fernet import Fernet
+        patcher = patch.dict(os.environ, {"MATE_SECRET_KEY": Fernet.generate_key().decode()})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def _key_row(self, workspace_id: int, provider: str):
+        with self.Session() as session:
+            return session.query(WorkspaceProviderKey).filter_by(
+                workspace_id=workspace_id, provider=provider).first()
+
+    def _audit(self, action: str) -> List[AuditLog]:
+        with self.Session() as session:
+            return session.query(AuditLog).filter_by(action=action).all()
+
+    def test_an_owner_sets_the_current_workspace_s_keys(self):
+        response = self.bob.put(f"{self.API}/keys", json={"provider": "anthropic", "api_key": "sk-ant-bob-1234"})
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["key"], "••••1234")
+        self.assertEqual(self._key_row(B, "anthropic").api_key, "sk-ant-bob-1234")
+        self.assertIsNone(self._key_row(A, "anthropic"))
+        # Stored encrypted, and never sent back
+        with self.Session() as session:
+            raw = session.execute(text("SELECT api_key FROM workspace_provider_keys WHERE provider = 'anthropic'")).scalar()
+        self.assertTrue(raw.startswith("enc:v1:"))
+        listed = self.bob.get(self.API)
+        self.assertNotIn("sk-ant-bob-1234", listed.text)
+        self.assertIn({"provider": "anthropic", "key": "••••1234"},
+                      [{k: key[k] for k in ("provider", "key")} for key in listed.json()["keys"]])
+        # Replacing it gives the key again; the audit entry names the provider only
+        self.bob.put(f"{self.API}/keys", json={"provider": "anthropic", "api_key": "sk-ant-bob-5678",
+                                              "base_url": "https://llm.b.example/v1"})
+        [first, second] = self._audit("provider_key.set")
+        self.assertEqual((first.workspace_id, second.get_details()),
+                         (B, {"provider": "anthropic", "base_url": "https://llm.b.example/v1", "replaced": True}))
+        self.assertNotIn("sk-ant", json.dumps([first.get_details(), second.get_details()]))
+        # Platform → Workspaces names it
+        workspaces = self.client.get("/dashboard/api/platform/workspaces", headers=_platform_admin(A)).json()
+        self.assertEqual({w["id"]: w["provider_keys"] for w in workspaces["workspaces"]}[B],
+                         ["anthropic", "openrouter"])
+
+    def test_a_key_is_deleted(self):
+        self.assertEqual(self.bob.delete(f"{self.API}/keys/anthropic").status_code, 404)
+        self.assertEqual(self.bob.delete(f"{self.API}/keys/openrouter").status_code, 200)
+        self.assertIsNone(self._key_row(B, "openrouter"))
+        self.assertEqual(len(self._audit("provider_key.delete")), 1)
+
+    def test_what_a_key_is_refused(self):
+        for body, status in (({"provider": "nope", "api_key": "k"}, 400),
+                             ({"provider": "openai"}, 400),
+                             ({"provider": "openai", "api_key": "two words"}, 400),
+                             ({"provider": "ollama", "api_key": ""}, 400),
+                             ({"provider": "openai", "api_key": "k", "base_url": "ftp://x.example"}, 400),
+                             # Outside the default workspace, not into the server's network
+                             ({"provider": "ollama", "base_url": "http://127.0.0.1:11434"}, 400)):
+            with self.subTest(body=body):
+                self.assertEqual(self.bob.put(f"{self.API}/keys", json=body).status_code, status)
+        # The default workspace's may point inside, as an agent's base URL may
+        response = self.client.put(f"{self.API}/keys", headers=_platform_admin(A),
+                                   json={"provider": "ollama", "base_url": "http://127.0.0.1:11434"})
+        self.assertEqual(response.status_code, 200, response.text)
+        with patch.dict(os.environ, {"MATE_SECRET_KEY": ""}):
+            response = self.bob.put(f"{self.API}/keys", json={"provider": "openai", "api_key": "k"})
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("MATE_SECRET_KEY", response.text)
+
+    def test_only_an_owner_changes_keys_and_a_member_sees_none(self):
+        self.bob.put(f"/dashboard/api/members/{self.CAROL}", json={"role": "admin"})
+        listed = self.carol.get(self.API).json()
+        self.assertFalse(listed["can_manage_keys"])
+        self.assertEqual([k["provider"] for k in listed["keys"]], ["openrouter"])
+        self.assertEqual(self.carol.put(f"{self.API}/keys", json={"provider": "openai", "api_key": "k"}).status_code, 403)
+        self.assertEqual(self.carol.delete(f"{self.API}/keys/openrouter").status_code, 403)
+        self.bob.put(f"/dashboard/api/members/{self.CAROL}", json={"role": "member"})
+        self.assertEqual(self.carol.get(self.API).status_code, 403)
+        self.assertEqual(self.carol.put(f"{self.API}/image-model", json={"model": "dall-e-3"}).status_code, 403)
+
+    def test_the_image_model_is_the_current_workspace_s(self):
+        from shared.utils.tools.image_tools import default_image_model
+        self.bob.put(f"/dashboard/api/members/{self.CAROL}", json={"role": "admin"})
+        # An admin of the workspace sets it, as an owner does
+        response = self.carol.put(f"{self.API}/image-model", json={"model": "openai/gpt-image-1"})
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["image_model"],
+                         {"own": "openai/gpt-image-1", "effective": "openai/gpt-image-1", "source": "workspace"})
+        self.assertEqual(default_image_model(B), ("openai/gpt-image-1", "workspace"))
+        self.assertNotEqual(default_image_model(A)[1], "workspace")
+        self.assertEqual(self.carol.put(f"{self.API}/image-model", json={"model": "no such model"}).status_code, 400)
+        self.carol.put(f"{self.API}/image-model", json={"model": ""})
+        self.assertNotEqual(default_image_model(B)[1], "workspace")
+        self.assertEqual([e.get_details() for e in self._audit("workspace_setting.update")],
+                         [{"from": None, "to": "openai/gpt-image-1"}, {"from": "openai/gpt-image-1", "to": None}])
 
 
 class TestMembers(_TwoWorkspaces):

@@ -99,6 +99,13 @@ ACTION_INVITATION_CREATE = "invitation.create"
 ACTION_INVITATION_REVOKE = "invitation.revoke"
 ACTION_INVITATION_ACCEPT = "invitation.accept"
 
+# A workspace's provider keys and settings (server/workspace_model_routes.py)
+RESOURCE_PROVIDER_KEY = "provider_key"
+ACTION_PROVIDER_KEY_SET = "provider_key.set"
+ACTION_PROVIDER_KEY_DELETE = "provider_key.delete"
+RESOURCE_WORKSPACE_SETTING = "workspace_setting"
+ACTION_WORKSPACE_SETTING_UPDATE = "workspace_setting.update"
+
 
 def _client_ip(request: Any) -> Optional[str]:
     """Extract client IP from a FastAPI Request.

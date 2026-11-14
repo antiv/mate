@@ -420,6 +420,7 @@ from server.workspace_routes import router as workspace_router
 from server.platform_workspace_routes import router as platform_workspace_router
 from server.member_routes import router as member_router
 from server.invitation_routes import router as invitation_router
+from server.workspace_model_routes import router as workspace_model_router
 
 configure_widget_proxy(ADK_HOST, ADK_PORT)
 
@@ -437,6 +438,7 @@ app.include_router(workspace_router)
 app.include_router(platform_workspace_router)
 app.include_router(member_router)
 app.include_router(invitation_router)
+app.include_router(workspace_model_router)
 app.include_router(public_artifacts_router)
 app.include_router(csp_report_router)
 app.include_router(proxy_router)

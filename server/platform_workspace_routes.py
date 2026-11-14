@@ -40,7 +40,7 @@ from server.invitation_routes import (
 from server.member_routes import open_session
 from shared.utils.models import (
     DEFAULT_WORKSPACE_ID, PLATFORM_FEATURES, Project, TokenUsageLog, User, Workspace,
-    WorkspaceInvitation, WorkspaceMember,
+    WorkspaceInvitation, WorkspaceMember, WorkspaceProviderKey,
 )
 from shared.utils.workspaces import (
     DEFAULT_AGENT_ROLES, NON_MEMBER_ROLES, ROLE_OWNER, is_reserved_user_id,
@@ -83,12 +83,15 @@ USAGE_DAYS = 30
 
 def _describe(workspace: Workspace, owners: List[str], members: int, projects: int,
               invited_owners: Optional[List[str]] = None,
-              usage: Optional[Tuple[int, float]] = None) -> Dict[str, Any]:
+              usage: Optional[Tuple[int, float]] = None,
+              provider_keys: Optional[List[str]] = None) -> Dict[str, Any]:
     tokens, cost = usage or (0, 0.0)
     return {
         "id": workspace.id, "name": workspace.name, "slug": workspace.slug,
         "status": _status(workspace), "is_default": workspace.id == DEFAULT_WORKSPACE_ID,
         "allow_platform_keys": bool(workspace.allow_platform_keys),
+        # The providers it has keys of its own for (Workspace settings → Models and keys)
+        "provider_keys": provider_keys or [],
         "platform_features": _features(workspace),
         "owners": owners, "invited_owners": invited_owners or [], "members": members,
         "projects": projects, "usage": {"days": USAGE_DAYS, "tokens": tokens, "cost_usd": round(cost, 4)},
@@ -115,8 +118,12 @@ def _list(session: Session) -> List[Dict[str, Any]]:
                                 .order_by(WorkspaceInvitation.email)):
         invited.setdefault(workspace_id, []).append(email)
     usage = _usage(session)
+    keys: Dict[int, List[str]] = {}
+    for workspace_id, provider in (session.query(WorkspaceProviderKey.workspace_id, WorkspaceProviderKey.provider)
+                                   .order_by(WorkspaceProviderKey.provider)):
+        keys.setdefault(workspace_id, []).append(provider)
     return [_describe(w, owners.get(w.id, []), members.get(w.id, 0), projects.get(w.id, 0),
-                      invited.get(w.id), usage.get(w.id))
+                      invited.get(w.id), usage.get(w.id), keys.get(w.id))
             for w in session.query(Workspace).order_by(Workspace.id)]
 
 
