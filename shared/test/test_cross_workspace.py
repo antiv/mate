@@ -63,7 +63,7 @@ from shared.utils.models import (
     AgentConfig, AgentConfigVersion, AgentResponse, AgentTrigger, AlertRule, AuditLog, Base,
     ChannelIntegration, EvalResult, FileSearchStore, GuardrailLog, LangGraphSession, MemoryBlock,
     PersonalAccessToken, Project, RateLimitConfig, ResponseFeedback, TestCase, TokenUsageLog, User,
-    WidgetApiKey, Workspace, WorkspaceInvitation, WorkspaceMember, WorkspaceProviderKey,
+    WidgetApiKey, Workspace, WorkspaceInvitation, WorkspaceMember, WorkspaceProviderKey, WorkspaceSetting,
 )
 from shared.utils.rbac_middleware import RBACMiddleware
 from shared.utils.tools import mcp_tools
@@ -3108,12 +3108,35 @@ class TestModelsAndKeys(_TwoWorkspaces):
         self.assertEqual({w["id"]: w["provider_keys"] for w in workspaces["workspaces"]}[B],
                          ["anthropic", "openrouter"])
 
-    def test_two_saves_of_a_new_key_at_once_are_a_409_not_a_500(self):
+    def test_a_save_that_meets_another_s_insert_replaces_it(self):
+        # Two first saves at once: the second's insert fails on the unique key, and it
+        # replaces the row the first wrote
         from sqlalchemy.exc import IntegrityError
-        with patch("sqlalchemy.orm.Session.commit", side_effect=IntegrityError("INSERT", {}, Exception("unique"))):
+        from sqlalchemy.orm import Session as OrmSession
+        commit = OrmSession.commit
+        failed = []
+
+        def first_fails(session):
+            if not failed:
+                failed.append(True)
+                session.rollback()
+                with self.Session() as other:
+                    other.add(WorkspaceProviderKey(workspace_id=B, provider="openai", api_key="sk-other"))
+                    other.add(WorkspaceSetting(workspace_id=B, setting_key="image_model", value="dall-e-3"))
+                    commit(other)
+                raise IntegrityError("INSERT", {}, Exception("unique"))
+            return commit(session)
+
+        with patch.object(OrmSession, "commit", first_fails):
             response = self.bob.put(f"{self.API}/keys", json={"provider": "openai", "api_key": "sk-openai-bob"})
-        self.assertEqual(response.status_code, 409, response.text)
-        self.assertEqual(self._audit("provider_key.set"), [])
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(self._key_row(B, "openai").api_key, "sk-openai-bob")
+        self.assertTrue(self._audit("provider_key.set")[0].get_details()["replaced"])
+        failed.clear()
+        with patch.object(OrmSession, "commit", first_fails):
+            response = self.bob.put(f"{self.API}/image-model", json={"model": "openai/gpt-image-1"})
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["image_model"]["own"], "openai/gpt-image-1")
 
     def test_a_key_is_deleted(self):
         self.assertEqual(self.bob.delete(f"{self.API}/keys/anthropic").status_code, 404)

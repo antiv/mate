@@ -128,10 +128,11 @@ even when the provider repeats it.
 A `gemini-*` model on ADK's native Gemini backend is a `WorkspaceGemini`, a
 subclass of ADK's `Gemini`, so the built-in tools and the context cache still see a
 Gemini. Each `generate_content_async` and `connect` (`/run_live`) reads the
-workspace's `google` key; with one, it hands the call to a `Gemini` built with that
-key (`client_kwargs`, Vertex AI off, base URL `GOOGLE_API_ROOT` so
-`GOOGLE_GEMINI_BASE_URL` doesn't redirect it), kept until the key changes. Without
-one it runs as ADK's `Gemini`, on `GOOGLE_API_KEY`. File Search's `genai.Client` takes
+workspace's `google` key once, and hands the whole call to an inner `Gemini`: one
+built with that key (`client_kwargs`, Vertex AI off, base URL `GOOGLE_API_ROOT` so
+`GOOGLE_GEMINI_BASE_URL` doesn't redirect it), kept until the key changes, or
+without one a plain `Gemini` on `GOOGLE_API_KEY`. ADK's own code runs on the inner
+one, so it never reads the outer model's properties mid-call. File Search's `genai.Client` takes
 the same arguments from `google_client_kwargs()`: a query from the agent's context,
 creating a store from its project, an upload from the store's project. google.genai
 sends through aiohttp, outside the outbound guard, so `google_credentials()` refuses
@@ -141,10 +142,15 @@ already.
 
 - A Google base URL of the workspace's own is given as LiteLLM takes it, with its
   version (`.../v1beta`, the field's placeholder). `google_endpoint()` takes the
-  version apart for google.genai, which adds it itself.
-- ADK's live flow asks the model for `_api_backend` (session resumption); a
-  `WorkspaceGemini` answers for the workspace's key, the Gemini API, not for the
-  environment's client, which `GOOGLE_GENAI_USE_VERTEXAI` may make Vertex AI.
+  version apart for google.genai's client, which adds it itself, using the pattern
+  ADK uses (`v1`, `v1beta`, `v1beta1`, ...). The inner `Gemini` gets a
+  `*.googleapis.com` URL whole: ADK takes the version off it itself, and the live
+  connection reads its version only from there.
+- ADK's live flow asks the model for `_api_backend` before it connects (session
+  resumption); a `WorkspaceGemini` looks the key up and answers for it, the Gemini
+  API for a workspace key, not what the environment's client says, which
+  `GOOGLE_GENAI_USE_VERTEXAI` may make Vertex AI. That is one database read per live
+  connection.
 - `connect` masks the key in a live session's errors, as `generate_content_async`
   does.
 
@@ -158,7 +164,7 @@ the workspace's own endpoint outside the default workspace:
 | The eval judge | The test case's agent |
 | The improver (**Suggest a fix**) | The case's or rating's agent |
 | Work Room session titles | The session's agent |
-| The hallucination guardrail | The agent (`GuardrailEngine(..., context)`, both runtimes; every check is given it, so a new one that calls a model has it too) |
+| The hallucination guardrail | The agent (`GuardrailEngine(..., context)`, both runtimes; every check that takes a `context` parameter is given it, and one written without it still runs) |
 | Memory block embeddings | The block's project |
 | The image tool | Its agent; also picks the workspace's image model |
 | The murder-mystery game master | Its agent |

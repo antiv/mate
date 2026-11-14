@@ -18,6 +18,16 @@ from .hallucination import check_hallucination
 logger = logging.getLogger(__name__)
 
 # Map guardrail type strings to checker functions
+def _takes_context(checker: Any) -> bool:
+    """Whether a check accepts the agent's context (a context parameter or **kwargs)."""
+    import inspect
+    try:
+        parameters = inspect.signature(checker).parameters.values()
+    except (TypeError, ValueError):
+        return False
+    return any(p.name == "context" or p.kind is p.VAR_KEYWORD for p in parameters)
+
+
 _CHECKERS = {
     "pii_detection": check_pii,
     "prompt_injection": check_prompt_injection,
@@ -136,9 +146,12 @@ class GuardrailEngine:
             g_config = guardrail_def.get("config", {})
 
             try:
-                # Every check takes the agent's context: one that calls a model does
-                # so on the agent's workspace's key
-                result = checker(text, action, phase, g_config, context=self.context)
+                # A check that calls a model takes the agent's context, for its
+                # workspace's key; one written without the parameter still runs
+                if _takes_context(checker):
+                    result = checker(text, action, phase, g_config, context=self.context)
+                else:
+                    result = checker(text, action, phase, g_config)
                 summary.results.append(result)
             except Exception as e:
                 logger.error(f"Error running guardrail {g_type}: {e}")

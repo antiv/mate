@@ -411,7 +411,7 @@ class TestNativeGemini(_Workspaces):
     def keyed_client(self, model):
         """The google.genai client a call of the model is made with."""
         credentials = provider_keys.google_credentials(model._context, model.model)
-        return model._with_key(credentials).api_client._api_client
+        return model._for(credentials).api_client._api_client
 
     def test_an_agent_s_gemini_calls_carry_the_workspace_s_key(self):
         gemini = _FakeGemini(self)
@@ -462,6 +462,7 @@ class TestNativeGemini(_Workspaces):
                          ("https://proxy.example/gemini/", "v1"))
         self.assertEqual(google_endpoint(own("https://proxy.example/gemini")),
                          ("https://proxy.example/gemini", None))
+        self.assertEqual(google_endpoint(own("https://proxy.example/v1beta1")), ("https://proxy.example/", "v1beta1"))
         self.assertEqual(google_endpoint(Credentials("k", "x", CLIENT, False))[0],
                          provider_keys.GOOGLE_API_ROOT)
         self.set_key(DEFAULT, "google", "default-google-key",
@@ -469,6 +470,28 @@ class TestNativeGemini(_Workspaces):
         options = provider_keys.google_client_kwargs(self.context(DEFAULT))["http_options"]
         self.assertEqual((options.base_url, options.api_version),
                          ("https://generativelanguage.googleapis.com/", "v1beta"))
+        # The live connection uses the version generate calls use, as ADK reads it off the URL
+        model = create_model("gemini-2.5-flash", context=self.context(DEFAULT))
+        keyed = model._for(provider_keys.google_credentials(model._context, model.model))
+        self.assertEqual(keyed._live_api_version, "v1beta")
+
+    def test_a_call_reads_the_key_once(self):
+        # ADK's Gemini reads _api_backend several times a call; the call goes to an
+        # inner Gemini, so none of those reads looks the key up again
+        gemini = _FakeGemini(self)
+        lookups = []
+        real = provider_keys.google_credentials
+
+        def counted(*args):
+            lookups.append(args)
+            return real(*args)
+
+        model = create_model("gemini-2.5-flash", context=self.context(DEPARTMENT))
+        with patch.dict(os.environ, {"GOOGLE_GEMINI_BASE_URL": gemini.url}), \
+                patch.object(provider_keys, "google_credentials", counted):
+            self.assertEqual(self.ask(model), "ok")
+        self.assertEqual(len(lookups), 1)
+        self.assertEqual(gemini.keys, ["platform-google-key"])
 
     def test_the_live_flow_sees_the_workspace_key_s_backend(self):
         # GOOGLE_GENAI_USE_VERTEXAI makes the environment's client Vertex AI; the
@@ -678,6 +701,26 @@ class TestDirectCalls(_OverHttp):
                            num_retries=0)
         self.assertEqual(self.provider.keys, [])
 
+
+
+class TestGuardrailChecks(unittest.TestCase):
+
+    def test_a_check_without_a_context_parameter_still_runs(self):
+        from shared.utils.guardrails import engine
+        from shared.utils.guardrails.base import GuardrailResult
+
+        def block_everything(text, action, phase, config):
+            return GuardrailResult(triggered=True, guardrail_type="custom", action=action, phase=phase)
+
+        with patch.dict(engine._CHECKERS, {"custom": block_everything}):
+            checks = engine.GuardrailEngine({"guardrails": [{"type": "custom", "enabled": True,
+                                                             "action": "block", "apply_to": "both"}]},
+                                            ModelContext("a", 1))
+            self.assertTrue(checks.check_input("hi").results[0].triggered)
+
+    def test_masked(self):
+        self.assertEqual(provider_keys.masked(None), "")
+        self.assertEqual(provider_keys.masked("sk-1234567890"), "••••7890")
 
 
 class TestRedaction(unittest.TestCase):

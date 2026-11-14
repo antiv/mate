@@ -105,7 +105,7 @@ def list_models_and_keys(ctx: RequestContext = Depends(get_api_request_context))
         rows = (session.query(WorkspaceProviderKey)
                 .filter(WorkspaceProviderKey.workspace_id == ctx.workspace_id)
                 .order_by(WorkspaceProviderKey.provider).all())
-        keys = [{"provider": row.provider, "key": masked(row.api_key) if row.api_key else "",
+        keys = [{"provider": row.provider, "key": masked(row.api_key),
                  "readable": row.api_key is not None,
                  "base_url": row.base_url, "updated_by": row.updated_by,
                  "updated_at": row.updated_at.isoformat() if row.updated_at else None} for row in rows]
@@ -137,27 +137,30 @@ def set_provider_key(request: Request, body: Dict[str, Any] = Body(...),
     base_url = _base_url(body.get("base_url"), provider, ctx.workspace_id)
     session = open_session()
     try:
-        row = session.query(WorkspaceProviderKey).filter(
-            WorkspaceProviderKey.workspace_id == ctx.workspace_id,
-            WorkspaceProviderKey.provider == provider).first()
-        replaced = row is not None
-        if row is None:
-            row = WorkspaceProviderKey(workspace_id=ctx.workspace_id, provider=provider)
-            session.add(row)
-        row.api_key, row.base_url, row.updated_by = api_key, base_url, ctx.user_id
-        row.updated_at = datetime.now(timezone.utc)
-        session.commit()
-    except IntegrityError:
-        # Another request added this provider's key between the read and the write
-        session.rollback()
-        raise HTTPException(status_code=409, detail="The key was saved by another request at the same "
-                                                    "time; reload and try again")
+        # Twice at most: another request may add this provider's key between the read
+        # and the write, and this one then replaces it
+        for attempt in (1, 2):
+            row = session.query(WorkspaceProviderKey).filter(
+                WorkspaceProviderKey.workspace_id == ctx.workspace_id,
+                WorkspaceProviderKey.provider == provider).first()
+            replaced = row is not None
+            if row is None:
+                row = WorkspaceProviderKey(workspace_id=ctx.workspace_id, provider=provider)
+                session.add(row)
+            row.api_key, row.base_url, row.updated_by = api_key, base_url, ctx.user_id
+            row.updated_at = datetime.now(timezone.utc)
+            try:
+                session.commit()
+                break
+            except IntegrityError:
+                session.rollback()
+                if attempt == 2:
+                    raise HTTPException(status_code=409, detail="The key could not be saved; try again")
     finally:
         session.close()
     _audit(ctx, audit_service.ACTION_PROVIDER_KEY_SET, audit_service.RESOURCE_PROVIDER_KEY, provider,
            {"provider": provider, "base_url": base_url, "replaced": replaced}, request)
-    return {"success": True, "provider": provider, "key": masked(api_key) if api_key else "",
-            "base_url": base_url}
+    return {"success": True, "provider": provider, "key": masked(api_key), "base_url": base_url}
 
 
 @router.delete("/keys/{provider}")
@@ -201,17 +204,25 @@ def set_image_model(request: Request, body: Dict[str, Any] = Body(...),
                                                         "provider/model, e.g. gemini/gemini-2.5-flash-image")
     session = open_session()
     try:
-        row = session.get(WorkspaceSetting, (ctx.workspace_id, IMAGE_MODEL))
-        before = row.value if row else None
-        if not model:
-            if row:
-                session.delete(row)
-        elif row:
-            row.value, row.updated_by, row.updated_at = model, ctx.user_id, datetime.now(timezone.utc)
-        else:
-            session.add(WorkspaceSetting(workspace_id=ctx.workspace_id, setting_key=IMAGE_MODEL,
-                                         value=model, updated_by=ctx.user_id))
-        session.commit()
+        # Twice at most, as for a key: two first saves at once
+        for attempt in (1, 2):
+            row = session.get(WorkspaceSetting, (ctx.workspace_id, IMAGE_MODEL))
+            before = row.value if row else None
+            if not model:
+                if row:
+                    session.delete(row)
+            elif row:
+                row.value, row.updated_by, row.updated_at = model, ctx.user_id, datetime.now(timezone.utc)
+            else:
+                session.add(WorkspaceSetting(workspace_id=ctx.workspace_id, setting_key=IMAGE_MODEL,
+                                             value=model, updated_by=ctx.user_id))
+            try:
+                session.commit()
+                break
+            except IntegrityError:
+                session.rollback()
+                if attempt == 2:
+                    raise HTTPException(status_code=409, detail="The image model could not be saved; try again")
     finally:
         session.close()
     if (before or "") != model:
