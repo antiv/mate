@@ -203,6 +203,48 @@ class TestManagementSchema(unittest.TestCase):
         self.assertEqual(self.sql("SELECT COUNT(*) FROM projects WHERE name = 'Shared name'"), [(2,)])
 
 
+class TestProviderKeySchema(unittest.TestCase):
+    """V049 (phase 4a): a workspace's provider keys and its own settings."""
+
+    setUp = TestMigration.setUp
+    migrate = TestMigration.migrate
+    sql = TestMigration.sql
+
+    def test_a_workspace_has_one_key_per_provider(self):
+        self.migrate()
+        self.sql("INSERT INTO workspaces (id, name, slug) VALUES (2, 'B', 'b')")
+        insert = "INSERT INTO workspace_provider_keys (workspace_id, provider, api_key) VALUES (?, ?, 'k')"
+        self.sql(insert, 1, "openrouter")
+        self.sql(insert, 2, "openrouter")
+        self.sql(insert, 2, "google")
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.sql(insert, 2, "openrouter")
+        self.assertEqual(self.sql("SELECT base_url FROM workspace_provider_keys WHERE workspace_id = 2"),
+                         [(None,), (None,)])
+
+    def test_a_workspace_has_one_value_per_setting(self):
+        self.migrate()
+        insert = "INSERT INTO workspace_settings (workspace_id, setting_key, value) VALUES (1, 'image_model', ?)"
+        self.sql(insert, "dall-e-3")
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.sql(insert, "gpt-image-1")
+
+    def test_a_create_all_schema_matches(self):
+        from shared.utils.models import WorkspaceProviderKey, WorkspaceSetting
+        engine = create_engine(f"sqlite:///{self.db_path}")
+        Base.metadata.create_all(engine)
+        engine.dispose()
+        self.migrate()
+        session = sessionmaker(bind=create_engine(f"sqlite:///{self.db_path}"))()
+        self.addCleanup(session.close)
+        session.add(WorkspaceProviderKey(workspace_id=1, provider="openai", api_key="sk-x"))
+        session.add(WorkspaceSetting(workspace_id=1, setting_key="image_model", value="dall-e-3"))
+        session.commit()
+        session.add(WorkspaceProviderKey(workspace_id=1, provider="openai", api_key="sk-y"))
+        with self.assertRaises(Exception):
+            session.commit()
+
+
 class _Db(unittest.TestCase):
 
     def setUp(self):

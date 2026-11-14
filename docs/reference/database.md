@@ -10,7 +10,7 @@ generated: true
 
 # Database reference
 
-**37** tables defined in `shared/utils/models.py`; migrations are at **V048**. Migrations apply automatically on startup and are the source of truth for the schema: the models describe it, the migrations create it.
+**39** tables defined in `shared/utils/models.py`; migrations are at **V049**. Migrations apply automatically on startup and are the source of truth for the schema: the models describe it, the migrations create it.
 
 ## Migrations
 
@@ -66,6 +66,7 @@ A ✗ means that dialect has no file for that version. All dialects are in step.
 | V046 | workspaces | ✓ | ✓ | ✓ |
 | V047 | channel team unique | ✓ | ✓ | ✓ |
 | V048 | workspace management | ✓ | ✓ | ✓ |
+| V049 | workspace provider keys | ✓ | ✓ | ✓ |
 
 ## `users`
 
@@ -201,6 +202,32 @@ Model `WorkspaceInvitation`. An invitation for one email to join one workspace w
 | `accepted_by` | `String(255)` | — | — | — |
 | `created_by` | `String(255)` | — | — | — |
 | `created_at` | `DateTime` | not null | `(computed)` | — |
+
+## `workspace_provider_keys`
+
+Model `WorkspaceProviderKey`. A workspace's own key for one model provider, with an optional base URL (V049).
+
+| Column | Type | Constraints | Default | Notes |
+|---|---|---|---|---|
+| `id` | `Integer` | PK | — | — |
+| `workspace_id` | `Integer` | FK → `workspaces.id`, not null | — | — |
+| `provider` | `String(50)` | not null | — | — |
+| `api_key` | `EncryptedText` | not null | — | — |
+| `base_url` | `String(1024)` | — | — | — |
+| `updated_by` | `String(255)` | — | — | — |
+| `updated_at` | `DateTime` | not null | `(computed)` | — |
+
+## `workspace_settings`
+
+Model `WorkspaceSetting`. A workspace's own value for a setting the installation keeps in system_settings, such as the image model (V049).
+
+| Column | Type | Constraints | Default | Notes |
+|---|---|---|---|---|
+| `workspace_id` | `Integer` | PK, FK → `workspaces.id` | — | — |
+| `setting_key` | `String(100)` | PK | — | — |
+| `value` | `Text` | — | — | — |
+| `updated_by` | `String(255)` | — | — | — |
+| `updated_at` | `DateTime` | not null | `(computed)` | — |
 
 ## `agents_config`
 
