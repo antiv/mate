@@ -25,10 +25,10 @@ customer is a conversation you have afterwards.
 
 | Tier | The trial agent | Trial |
 |---|---|---|
-| **Website Support** | Reads the visitor's own website and answers questions about it. | yes |
+| **AI Support** | Reads the visitor's own website and answers questions about it. | yes |
 | **Support + Scheduling** | The same, plus checking availability and booking in a calendar. | yes, if a Google service account is configured on the server |
-| **Sales** | Shows products, fills a cart and takes orders, using a demo shop. | yes |
-| **Custom** | None. The visitor describes what they need. | no, lead only |
+| **AI Sales Agent** | Shows products, fills a cart and takes orders, using a demo shop. | yes |
+| **Enterprise** | None. The visitor describes what they need. | no, lead only |
 
 For tiers with a website, MATE reads a few pages of the visitor's site and writes the
 trial agent's description and instruction from what it finds, so the first answers
@@ -82,7 +82,7 @@ company, partner, tier, the estimate they were shown, and their trial.
 ## Trials are temporary
 
 Each trial is its own project with its own agent and widget key. Trials are removed
-automatically after seven days (two for Sales trials), in a nightly cleanup. The
+automatically after seven days (two for AI Sales Agent trials), in a nightly cleanup. The
 lead stays. To keep what a prospect built, copy it out before it expires; one way is
 **Clone to Project** on the Agents page, into a permanent project.
 

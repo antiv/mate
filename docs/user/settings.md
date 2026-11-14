@@ -70,7 +70,8 @@ price, the price in use per million tokens (input / output) and where it comes f
   calls, past ones included.
 - **Remove** drops the manual price. The model's calls are priced from the lists
   again, or have no price.
-- **Another model** adds a price for a model not used yet.
+- **Add a price** adds a price for a model not used yet: enter its name in the field
+  beside it first.
 - **Fill in missing costs** prices the calls logged without a cost whose model has a
   price now, for example after setting a price by hand. Calls that already have a
   cost keep it. Calls to `openrouter/` models logged before OpenRouter's list was

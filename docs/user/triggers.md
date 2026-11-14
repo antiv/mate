@@ -142,7 +142,8 @@ Each row in the list has:
 - The pencil opens the trigger for editing; the bin deletes it.
 
 **Last Run** shows when the trigger last fired and whether it succeeded. Token usage
-from triggers appears on the **Usage** page under the *trigger* origin.
+from triggers appears on **Usage Analytics** under the user `trigger_runner`; pick
+**Triggers** in its **Response Latency** list for their response times.
 
 ## System background tasks
 

@@ -22,8 +22,8 @@ last night's scheduled run.
 ## Give an agent access
 
 Open the agent on **Studio → Agents**, click **Configure** under
-**Tool Configuration**, tick **Memory Blocks** and save. Until an agent has the tool,
-its **Manage Blocks** dialog cannot create blocks.
+**Tool Configuration**, tick **Memory Blocks** and save. The agent form shows **Manage Blocks** only once
+the tool is ticked.
 
 ## Create and edit blocks
 
@@ -35,7 +35,7 @@ In the agent form, click **Manage Blocks**. The dialog lists the project's block
 | **Value** | The text itself. |
 | **Description** | A note about what the block is for. |
 | **Character Limit** | The longest value the block accepts. A longer value is refused when it is saved, whoever saves it. Empty means no limit. |
-| **Read-only** | The block cannot be changed, deleted or restored to an older version, by you, an agent, a trigger, a template update or the widget admin panel. To change it, open it, untick **Read-only** and save; your edits in that same save are kept. One exception: importing agents with **Overwrite existing agents with the same name** ticked replaces existing blocks from the file, read-only ones included. |
+| **Read-only** | The block cannot be changed, deleted or restored to an older version, by you, an agent, a trigger, a template update or the widget admin panel. To change it, open it, untick **Read-only** and click **Update**; your edits in that same save are kept. One exception: importing agents with **Overwrite existing agents with the same name** ticked replaces existing blocks from the file, read-only ones included. |
 | **Preserve on migration** | Recorded with the block. |
 
 Use the search row at the top to filter the list; **Add Condition** combines several

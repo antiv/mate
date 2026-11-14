@@ -32,7 +32,8 @@ Check the agent on the **Agents** page:
 
 ## Create a key and embed the widget
 
-1. On the Agents page, click **Widget Keys** for the agent.
+1. On the Agents page, choose the root agent in the agent filter (**All Agents**),
+   then click the code icon (**Widget Keys**) next to it.
 2. Optionally enter a **Label** and the **Allowed Origins**: the addresses of the
    sites that may embed the widget, separated by commas, such as
    `https://example.com, https://www.example.com`.
