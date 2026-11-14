@@ -12,12 +12,12 @@
             </p>
         </div>
         <div class="flex flex-wrap gap-2 items-center flex-shrink-0">
-            <input type="text" id="searchInput" placeholder="Search name, email, company…"
+            <input type="text" id="searchInput" aria-label="Search leads" placeholder="Search name, email, company…"
                    class="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg w-56">
-            <select id="filterPartner" data-change="loadLeads" class="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg">
+            <select id="filterPartner" aria-label="Partner" data-change="loadLeads" class="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg">
                 <option value="">All partners</option>
             </select>
-            <select id="filterStatus" data-change="loadLeads" class="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg">
+            <select id="filterStatus" aria-label="Status" data-change="loadLeads" class="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg">
                 <option value="">All statuses</option>
                 <option value="new">New</option>
                 <option value="contacted">Contacted</option>
@@ -171,7 +171,7 @@ function renderLeads(leads) {
             '<td class="px-4 py-2 whitespace-nowrap text-gray-700 dark:text-gray-300">' + esc(l.estimated_price || "—") + '</td>' +
             '<td class="px-4 py-2 whitespace-nowrap">' + trial + '</td>' +
             '<td class="px-4 py-2 whitespace-nowrap">' +
-                '<select data-change="updateStatus" data-args="' + mateActions.attr([l.id, '$value']) + '" class="text-xs border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1">' + opts + '</select>' +
+                '<select aria-label="' + esc('Status of the lead from ' + (l.name || l.email || '#' + l.id)) + '" data-change="updateStatus" data-args="' + mateActions.attr([l.id, '$value']) + '" class="text-xs border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1">' + opts + '</select>' +
             '</td>' +
             '<td class="px-4 py-2 whitespace-nowrap">' + deleteBtn + '</td>' +
             '</tr>';
