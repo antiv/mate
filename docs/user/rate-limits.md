@@ -108,7 +108,7 @@ Saving a configuration for a scope and id that already has one replaces it.
 
 ## See current usage
 
-Select a configuration to see **Usage vs Limits**: how many requests and tokens the
+Click **Usage** on a configuration's row to see, under **Usage vs Limits**, how many requests and tokens the
 scope has used in the current minute, hour, day and month, and what it spent in
 dollars over the last day and 30 days, against its limits. For an agent config with
 **Include sub-agents**, the spend and daily tokens include the sub-agents. When the

@@ -45,7 +45,7 @@ Agents live in projects. A project is a group of agents that belong together, wi
 their own memory blocks and triggers.
 
 1. Go to **Studio → Agents**.
-2. Pick a project from the **Project** list. If the list is empty, click
+2. Pick a project from the project list (**Select project...**). If the list is empty, click
    **Manage Projects**, enter a name and click **Create Project**.
 
 ## Create your first agent
@@ -67,7 +67,8 @@ The [Agents guide](agents.md) explains every field.
 
 ## Talk to it
 
-Click **Open agent chat** on the Agents page, or switch to the **Work Room** and
+On the Agents page, choose the root agent in the agent filter (**All Agents**) and
+click the speech-bubbles icon (**Open agent chat**) next to it, or switch to the **Work Room** and
 select the agent. Type a message and press **Send**.
 
 In the Work Room you can also:

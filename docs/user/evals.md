@@ -69,8 +69,9 @@ Things to know:
 - Each case runs in a fresh conversation.
 - Role checks are skipped for eval runs, so an agent that would refuse you in chat
   can still be evaluated.
-- Runs call the real models and cost tokens. They are listed under the *eval* origin
-  on the **Usage** page.
+- Runs call the real models and cost tokens. They appear on **Usage Analytics** under
+  the user `eval_runner`; pick **Evals** in its **Response Latency** list for their
+  response times.
 
 **Score History** shows the average score and pass rate per version, which is where
 you see whether your last change moved things up or down. When a run scores more
@@ -138,7 +139,7 @@ Below it, each prompt has every variant's reply with its own score, time and cos
 - Nothing is saved or deployed. To keep a winning variant, change the agent, or
   apply instructions with **Suggest a fix**.
 - The runs are real model calls. They cost money, and appear on the
-  [Usage page](usage-and-audit.md) under the agent, by the user `eval_runner`, as eval
+  [Usage Analytics](usage-and-audit.md) under the agent, by the user `eval_runner`, as eval
   runs do. The audit log records who started each run (`evals.playground_run`), with
   each variant's model and version, and for changed instructions their length and a
   hash, not the text.

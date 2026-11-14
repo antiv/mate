@@ -816,7 +816,7 @@ function renderRatedDown() {
             action = '<span class="text-gray-400">—</span>';
         }
         if (r.question && r.agent_name) {
-            action += ` <button data-click="openImprove" data-args="${mateActions.attr([{feedback_id: r.id}])}" class="px-2 py-1 mt-1 text-xs text-purple-600 hover:underline whitespace-nowrap" title="Suggest a fix"><i class="fas fa-wand-magic-sparkles mr-1"></i>Suggest fix</button>`;
+            action += ` <button data-click="openImprove" data-args="${mateActions.attr([{feedback_id: r.id}])}" class="px-2 py-1 mt-1 text-xs text-purple-600 hover:underline whitespace-nowrap" title="Suggest a fix"><i class="fas fa-wand-magic-sparkles mr-1"></i>Suggest a fix</button>`;
         }
         return `
             <tr class="border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 align-top">
