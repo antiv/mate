@@ -3,9 +3,10 @@ title: "Agents you already run elsewhere"
 summary: Put an agent that runs outside MATE under MATE's roles, guardrails, evals and usage tracking.
 audience: user
 order: 27
-status: migrated
 covers:
   - shared/utils/utils.py::create_model*
+  - shared/utils/utils.py::resolve_agent_endpoint
+  - shared/utils/utils.py::resolve_env_placeholders
 ---
 
 # Pointing MATE at an agent you already run
@@ -29,11 +30,11 @@ Requirements for the remote:
 
 ## Configuring it
 
-In the agent modal, or via `POST /dashboard/api/agents`:
+In the agent form, or via `POST /dashboard/api/agents`:
 
 | Field | Example | Notes |
 |-------|---------|-------|
-| Model Name | `openai/my-agent` | **Needs a provider prefix.** A bare `gemini-*` name routes to the native Gemini backend, which ignores the base URL |
+| Model Name | `openai/my-agent` | **Needs a provider prefix.** A name with no prefix, or one starting `gemini-`, goes to the native Gemini backend, which ignores both endpoint fields and only logs a warning |
 | Model Base URL | `https://agent.example.com/v1` | The remote's OpenAI-compatible root |
 | Model API Key | `${MY_AGENT_KEY}` | Optional. See below |
 
@@ -53,7 +54,7 @@ The dashboard never sends a stored literal key to the browser — it is replaced
 a sentinel, and saving the form with the sentinel unchanged leaves the stored
 value alone. A `${VAR}` reference is not a secret, so it is shown as written.
 
-Two failure modes are deliberate:
+Three refusals are deliberate:
 
 - **A `${VAR}` that is not set refuses to build the agent**, with the missing name
   in the error and in the dashboard's last-error field. The alternative is worse:
@@ -80,8 +81,8 @@ Applies to the external agent as to any other:
 - The chat widget and the Work Room
 
 **Cost tracking depends on the remote.** Token counts come from the `usage`
-object in its response. An endpoint that omits `usage` produces requests with no
-token counts rather than invented ones — the request is still recorded.
+object in its response. An endpoint that omits `usage` is still recorded in the
+usage logs, with 0 tokens and so no cost: MATE does not estimate them.
 
 The remote runs its own agent loop. MATE sees one request and one response, so
 its internal tool calls and sub-agent steps do not appear in MATE's traces.

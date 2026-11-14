@@ -3,12 +3,12 @@ title: "File search (RAG)"
 summary: Give an agent documents to search when it answers.
 audience: user
 order: 42
-status: migrated
 covers:
   - shared/utils/file_search_service.py
   - shared/utils/tools/file_search_tools.py
   - templates/dashboard/modals/file_search_modal.html
   - static/js/modals/file-search.js
+  - shared/utils/agent_manager.py::initialize_agent_from_config
 ---
 
 # File Search (RAG) Setup Guide
@@ -37,6 +37,11 @@ File Search is implemented as a **regular Python function tool** that wraps the 
    - Adds the tool to `Agent.tools` (ADK-compliant)
 3. **File Search Active** → Agent can now use the `query_file_search` tool for RAG
 
+This happens on the ADK runtime. The LangGraph runtime (`AGENT_FRAMEWORK=langgraph`)
+does not read `agent_file_search_stores`: there an agent queries only the stores
+written into its `tool_config` by hand, as `{"file_search": {"enabled": true,
+"store_names": [...]}}`.
+
 An agent only queries stores of its own workspace's projects. A store written into
 `tool_config` by hand that belongs to another workspace is left out, and the server
 log says so. A store created in Gemini outside MATE works in the Default workspace
@@ -54,19 +59,22 @@ The `query_file_search` tool:
 
 ### 1. Assign File Search Stores to Agent
 
-1. Go to the agent list in the dashboard
-2. Click **"Edit"** on your agent
-3. Click **"Manage Files"** in the File Search section
-4. Create a new store or assign an existing store of the agent's project (a store
-   belongs to one project, and assigning another project's store is refused)
-5. Upload files to the store
+1. Go to **Studio → Agents**
+2. Click the pencil (**Edit**) on your agent
+3. Under **File Search (RAG)**, click **Manage**
+4. Under **Assign or Create Store**, pick an existing store of the agent's project and
+   click **Assign Store**, or pick **Create New Store**, enter a **Store display name**
+   and click **Create Store** (a store belongs to one project, and assigning another
+   project's store is refused)
+5. Under **Assigned Stores & Files**, open the store, choose a file and click **Upload**
 
 ### 2. Reinitialize Agent
 
-After assigning stores, reinitialize the agent:
+After assigning stores, reload the agent:
 
 1. Go back to the agent list
-2. Click **"Reinitialize"** button
+2. Click the agent's **Reload** icon (or **Reload All**); saving the agent form
+   reloads it too
 3. The agent will automatically:
    - Read assigned stores from database
    - Add File Search to `tool_config`
@@ -109,7 +117,7 @@ Only use general knowledge if file storage doesn't contain relevant information.
 ```
 
 You can add this to the agent's `instruction` field via:
-- Dashboard: Edit agent → System Instructions field
+- Dashboard: Edit agent → **Instruction** field
 - Database: Update `agents_config.instruction` column directly
 
 After updating system instructions, **reinitialize the agent** for changes to take effect.

@@ -206,8 +206,9 @@ nothing runs twice. Requires ADK 2.x.
 ### Fallback model
 
 When `fallback_model` is set and differs from `model_name`, a model error triggers a
-retry on the fallback. It is reached through the provider's environment keys, never
-through the agent's `model_base_url` or `model_api_key`. Each fallback is written to
+retry on the fallback. It is built for the same agent, so it takes the workspace's key
+for its provider or the environment's, never the agent's `model_base_url` or
+`model_api_key`. Each fallback is written to
 the audit log as `agent.model_fallback`.
 
 ## The LangGraph runtime

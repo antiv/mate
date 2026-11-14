@@ -3,11 +3,12 @@ title: "EU AI Act"
 summary: What the AI Act asks of someone running an agent, and what MATE does and does not do about it.
 audience: user
 order: 170
-status: migrated
 covers:
   - shared/utils/ai_disclosure.py
   - shared/utils/content_marking.py
   - shared/utils/audit_service.py
+  - server/widget_routes.py::_agent_disclosure
+  - shared/utils/tools/image_tools.py
 ---
 
 # EU AI Act support in MATE
@@ -47,7 +48,7 @@ widget is embedded in someone else's site and styled to match it.
 
 ### Configuring it
 
-Two fields on each agent, in the agent modal:
+Two fields on each agent, in the agent form:
 
 | Field | Effect |
 |---|---|
@@ -93,8 +94,8 @@ Images generated through MATE's image tools carry an XMP packet declaring the
 IPTC digital source type
 `http://cv.iptc.org/newscodes/digitalsourcetype/trainedAlgorithmicMedia` — the
 same marker the major image generators write, so anything that already reads
-provenance metadata will read MATE's. The prompt is recorded in the description
-field, XML-escaped.
+provenance metadata will read MATE's. The description field reads "AI-generated image for prompt: …",
+cut to 300 characters and XML-escaped.
 
 The marker is written **before the artifact is saved**, so every stored copy and
 every URL served from it carries the same bytes. Every image model goes through
@@ -123,5 +124,7 @@ generates today.
 
 - It does not perform a conformity assessment or produce a declaration of conformity.
 - It does not decide whether your system is high-risk.
-- An append-only audit log is *evidence toward* Art. 12 record-keeping. It is not
-  compliance, and MATE's own wording was corrected to stop implying otherwise.
+- The audit log is *evidence toward* Art. 12 record-keeping, not compliance. Its
+  entries are never edited; they are deleted only by the retention period
+  (`AUDIT_RETENTION_DAYS`, off by default), as
+  [Usage and audit](usage-and-audit.md) describes.

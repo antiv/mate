@@ -3,9 +3,9 @@ title: "Fallback model"
 summary: Answer from a second model when an agent's own model fails.
 audience: user
 order: 28
-status: migrated
 covers:
   - shared/callbacks/model_fallback_callback.py
+  - shared/utils/langgraph/agent_builder.py
 ---
 
 # Fallback model
@@ -18,8 +18,8 @@ instead.
 
 ## Configuring it
 
-Set **Fallback Model** in the agent modal or in the visual builder's side
-panel, or send `fallback_model` to `POST /dashboard/api/agents`. It takes the
+Set **Fallback Model** in the agent form, or **Fallback model** in the visual
+builder's side panel, or send `fallback_model` to `POST /dashboard/api/agents`. It takes the
 same model strings as Model Name, for example `openai/gpt-4o-mini` or
 `gemini-2.5-flash`. Pick a model on a different provider from the agent's own,
 because an outage usually takes down a whole provider.
@@ -27,8 +27,10 @@ because an outage usually takes down a whole provider.
 Leave it empty and nothing changes. A fallback equal to the agent's own model
 is ignored.
 
-The fallback is reached through the provider's server env vars
-(`OPENAI_API_KEY`, `GOOGLE_API_KEY`, ...). It never uses the agent's **Model
+The fallback uses the workspace's key for its provider, set under
+[Models and keys](workspaces.md#models-and-keys), or else the server's
+(`OPENAI_API_KEY`, `GOOGLE_API_KEY`, ...) where the workspace may use the
+server's keys. Without either it fails as any model would. It never uses the agent's **Model
 Base URL** or **Model API Key**. Those belong to the agent's own model, and
 sending that key to another provider's host would leak it.
 
