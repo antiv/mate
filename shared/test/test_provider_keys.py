@@ -621,6 +621,14 @@ class TestDirectCalls(_OverHttp):
             completion(self.context(CLIENT), model="anthropic/claude", messages=[])
         self.assertEqual(self.provider.keys, [])
 
+    def test_a_direct_call_s_error_has_the_key_masked(self):
+        from shared.utils.provider_keys import completion
+        self.set_key(CLIENT, "openai", "sk-client-echoed-9999", base_url=self.provider.url)
+        with patch("litellm.completion", side_effect=RuntimeError("Invalid API key: sk-client-echoed-9999")):
+            with self.assertRaises(RuntimeError) as raised:
+                completion(self.context(CLIENT), model="openai/m", messages=[])
+        self.assertEqual(str(raised.exception), "Invalid API key: ••••9999")
+
     def test_a_direct_call_to_its_own_endpoint_is_guarded(self):
         from shared.utils.provider_keys import completion
         with patch.dict(os.environ, {"OUTBOUND_ALLOW_PRIVATE_NETWORK": "false"}):
@@ -628,6 +636,56 @@ class TestDirectCalls(_OverHttp):
                 completion(self.context(CLIENT), model="openai/m", messages=[{"role": "user", "content": "q"}],
                            num_retries=0)
         self.assertEqual(self.provider.keys, [])
+
+
+
+class TestRedaction(unittest.TestCase):
+    """A provider that repeats the key in its error: the key is masked in the error and
+    in the errors it was raised from, whose tracebacks reach the logs (4f)."""
+
+    KEY = "sk-or-v1-secret-key-5678"
+
+    def test_the_error_and_its_causes_are_masked(self):
+        import litellm
+        try:
+            try:
+                raise ValueError(f"Invalid API key: {self.KEY}")
+            except ValueError as cause:
+                raise litellm.AuthenticationError(f"OpenrouterException - {cause}", "openrouter", "m") from cause
+        except Exception as e:
+            error = provider_keys.redact(e, self.KEY)
+        self.assertIsInstance(error, litellm.AuthenticationError)
+        for each in (error, error.__cause__):
+            self.assertNotIn(self.KEY, str(each))
+            self.assertNotIn(self.KEY, repr(each))
+            self.assertIn("••••5678", str(each))
+
+    def test_a_streamed_answer_s_error_is_masked(self):
+        def chunks():
+            yield "a"
+            raise RuntimeError(f"bad key {self.KEY}")
+
+        stream = provider_keys._redacting(chunks(), self.KEY)
+        self.assertEqual(next(stream), "a")
+        with self.assertRaises(RuntimeError) as raised:
+            next(stream)
+        self.assertEqual(str(raised.exception), "bad key ••••5678")
+
+        async def achunks():
+            yield "a"
+            raise RuntimeError(f"bad key {self.KEY}")
+
+        async def read():
+            return [chunk async for chunk in provider_keys._redacting(achunks(), self.KEY)]
+        with self.assertRaises(RuntimeError) as raised:
+            asyncio.run(read())
+        self.assertEqual(str(raised.exception), "bad key ••••5678")
+
+    def test_a_direct_call_s_error_is_masked(self):
+        with self.assertRaises(RuntimeError) as raised:
+            with provider_keys.redacting(self.KEY):
+                raise RuntimeError(f"rejected {self.KEY}")
+        self.assertNotIn(self.KEY, str(raised.exception))
 
 
 if __name__ == "__main__":

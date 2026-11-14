@@ -110,6 +110,21 @@ it replaces `api_key` and `api_base`. `NoProviderKey` is raised before any reque
 and the fallback model doesn't answer it, since it isn't a provider outage. A model
 for no agent (`ModelContext()`) is left unwrapped and uses the environment.
 
+Some providers repeat the key they were sent in their error, and the error reaches
+logs (ADK logs a failed call's traceback, with the errors it was raised from) and
+responses (an eval run answers with it). So a call made with a workspace key masks
+it, as `••••` and its last four characters, in the error and every error in its
+chain (`redact`): `ProviderKeyCompletions`, a streamed answer read later
+(`_RedactingStream`), `WorkspaceGemini` and the direct calls (`redacting()`). The
+error keeps its type, so the fallback model decides as before.
+
+`shared/test/test_provider_keys_end_to_end.py` checks the phase as a whole: a
+workspace set up over HTTP with only an OpenRouter key, and no use of the platform's,
+runs a test case whose agent calls the image tool, judged by a model. Outgoing
+requests are caught at httpx: each carries the workspace's key, none the platform's
+keys in the environment, and the key shows in no response, audit entry or log line,
+even when the provider repeats it.
+
 A `gemini-*` model on ADK's native Gemini backend is a `WorkspaceGemini`, a
 subclass of ADK's `Gemini`, so the built-in tools and the context cache still see a
 Gemini. Each `generate_content_async` and `connect` (`/run_live`) reads the

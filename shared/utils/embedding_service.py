@@ -44,7 +44,7 @@ def embed_texts(texts: List[str], context: Optional["ModelContext"] = None) -> O
         return []
     try:
         import litellm
-        from .provider_keys import guarded, litellm_credentials
+        from .provider_keys import guarded, litellm_credentials, redacting
         from .utils import ModelContext
 
         model = get_embedding_model()
@@ -53,7 +53,7 @@ def embed_texts(texts: List[str], context: Optional["ModelContext"] = None) -> O
         if not credentials and not os.getenv("GEMINI_API_KEY") and os.getenv("GOOGLE_API_KEY"):
             os.environ["GEMINI_API_KEY"] = os.environ["GOOGLE_API_KEY"]
 
-        with guarded(guard):
+        with guarded(guard), redacting(credentials.get("api_key")):
             response = litellm.embedding(model=model, input=texts, **credentials)
         vectors: List[Optional[List[float]]] = [None] * len(texts)
         for item in response.data:
