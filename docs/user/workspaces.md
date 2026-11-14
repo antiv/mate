@@ -203,7 +203,8 @@ What happens then:
   [What a workspace may use](#what-a-workspace-may-use)). `google` serves `gemini-*`
   and `gemini/` models, `ollama` both `ollama/` and `ollama_chat/`.
 - The key is stored encrypted, and never shown again: the list shows its last four
-  characters. To change the base URL, enter the key again.
+  characters, and so does an error from a provider that repeats the key it was
+  sent. To change the base URL, enter the key again.
 - **Delete** removes the key. The provider's models then use the installation's key,
   or fail when the workspace may not use it.
 - An admin of the workspace sees the list and changes nothing.

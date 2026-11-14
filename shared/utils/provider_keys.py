@@ -178,6 +178,73 @@ def model_credentials(context: ModelContext, model_name: Optional[str],
         session.close()
 
 
+def masked(api_key: str) -> str:
+    """A key as the dashboard shows it: its last four characters."""
+    return "••••" + api_key[-4:] if len(api_key) > 8 else "••••"
+
+
+def redact(error: BaseException, api_key: Optional[str]) -> BaseException:
+    """The error, with the key masked in it and in the errors it was raised from. Some
+    providers repeat the key they were sent in their error, and the error reaches logs
+    (ADK logs a failed call's traceback) and responses. Changed in place, so its type,
+    and what the fallback model decides from it, stay."""
+    if not api_key or len(api_key) < 8:
+        return error
+    seen = set()
+    current: Optional[BaseException] = error
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        try:
+            current.args = tuple(a.replace(api_key, masked(api_key)) if isinstance(a, str) else a
+                                 for a in current.args)
+            for name, value in list(vars(current).items()):
+                if isinstance(value, str) and api_key in value:
+                    setattr(current, name, value.replace(api_key, masked(api_key)))
+        except Exception:
+            pass
+        current = current.__cause__ or current.__context__
+    return error
+
+
+class _RedactingStream:
+    """A streamed answer whose errors, raised while it is read, are redacted too."""
+
+    def __init__(self, inner: Any, api_key: str):
+        self._inner = inner
+        self._api_key = api_key
+
+    def __aiter__(self) -> "_RedactingStream":
+        return self
+
+    async def __anext__(self) -> Any:
+        try:
+            return await self._inner.__anext__()
+        except StopAsyncIteration:
+            raise
+        except Exception as e:
+            raise redact(e, self._api_key)
+
+    def __iter__(self) -> "_RedactingStream":
+        return self
+
+    def __next__(self) -> Any:
+        try:
+            return next(self._inner)
+        except StopIteration:
+            raise
+        except Exception as e:
+            raise redact(e, self._api_key)
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._inner, name)
+
+
+def _redacting(result: Any, api_key: str) -> Any:
+    if hasattr(result, "__anext__") or hasattr(result, "__next__"):
+        return _RedactingStream(result, api_key)
+    return result
+
+
 def _with_credentials(kwargs: Dict[str, Any], credentials: Credentials) -> Dict[str, Any]:
     """The call's arguments, sent with the workspace's key to its endpoint. What the
     model was built with from the environment (api_key, base_url) is replaced."""
@@ -210,13 +277,21 @@ class ProviderKeyCompletions:
         credentials = model_credentials(self._context, self._model_name)
         if credentials is None:
             return self._inner.completion(*args, **kwargs)
-        return self._client(credentials).completion(*args, **_with_credentials(kwargs, credentials))
+        try:
+            return _redacting(self._client(credentials).completion(
+                *args, **_with_credentials(kwargs, credentials)), credentials.api_key)
+        except Exception as e:
+            raise redact(e, credentials.api_key)
 
     async def acompletion(self, *args: Any, **kwargs: Any) -> Any:
         credentials = await asyncio.to_thread(model_credentials, self._context, self._model_name)
         if credentials is None:
             return await self._inner.acompletion(*args, **kwargs)
-        return await self._client(credentials).acompletion(*args, **_with_credentials(kwargs, credentials))
+        try:
+            return _redacting(await self._client(credentials).acompletion(
+                *args, **_with_credentials(kwargs, credentials)), credentials.api_key)
+        except Exception as e:
+            raise redact(e, credentials.api_key)
 
     def __getattr__(self, name: str) -> Any:
         return getattr(self._inner, name)
@@ -251,11 +326,20 @@ def guarded(workspace_id: Optional[int]):
         _GUARDED.reset(token)
 
 
+@contextlib.contextmanager
+def redacting(api_key: Optional[str]):
+    """An error raised in the block has the key masked (redact)."""
+    try:
+        yield
+    except Exception as e:
+        raise redact(e, api_key)
+
+
 def completion(context: ModelContext, **kwargs: Any) -> Any:
     """litellm.completion(**kwargs) on the context's key (litellm_credentials)."""
     import litellm
     extra, guard = litellm_credentials(context, kwargs["model"])
-    with guarded(guard):
+    with guarded(guard), redacting(extra.get("api_key")):
         return litellm.completion(**kwargs, **extra)
 
 
@@ -328,8 +412,9 @@ class WorkspaceGemini(Gemini):
             responses = super().generate_content_async(llm_request, stream)
         else:
             responses = self._with_key(credentials).generate_content_async(llm_request, stream)
-        async for response in responses:
-            yield response
+        with redacting(credentials.api_key if credentials else None):
+            async for response in responses:
+                yield response
 
     @contextlib.asynccontextmanager
     async def connect(self, llm_request: Any):

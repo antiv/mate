@@ -418,15 +418,15 @@ async def _generate_image_internal(prompt: str, tool_context: ToolContext = None
     """
     try:
         import litellm
-        from ..provider_keys import guarded
+        from ..provider_keys import guarded, redacting
 
         model, credentials, guard = _resolve(model, context)
         params = get_model_config(model, model_config)
         if model.startswith("openrouter/"):
-            with guarded(guard):
+            with guarded(guard), redacting(credentials.get("api_key")):
                 image_url, image_b64 = await _openrouter_image(model, prompt, params, credentials)
         else:
-            with guarded(guard):
+            with guarded(guard), redacting(credentials.get("api_key")):
                 response = await litellm.aimage_generation(
                     model=model, prompt=prompt, drop_params=True, **params, **credentials)
             if not response.data:
