@@ -48,8 +48,7 @@ function esc(s) {
 }
 
 function fmtDate(iso) {
-    if (!iso) return "—";
-    try { return new Date(iso).toLocaleString(); } catch (e) { return iso; }
+    return formatDateTime(iso);
 }
 
 function fmtMoney(total, currency) {

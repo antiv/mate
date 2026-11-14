@@ -29,6 +29,10 @@ code), and audit entries about the installation rather than a project, such as
 sign-ins and user changes, are in the default workspace. A change made on
 **Workspaces** is in the workspace it changed.
 
+Times on these pages, and on every other page that lists them, are shown in your
+browser's time zone as `YYYY-MM-DD HH:MM:SS`; the server stores them in UTC. A
+missing value is shown as `—`.
+
 **All workspaces.** A platform administrator sees an **All workspaces** box under the
 page title. Ticking it shows every workspace's entries, each named with its workspace;
 the choice stays in the page's address, so a reload or a shared link keeps it. Owners

@@ -65,8 +65,7 @@ function esc(s) {
 }
 
 function fmtDate(iso) {
-    if (!iso) return "—";
-    try { return new Date(iso).toLocaleString(); } catch (e) { return iso; }
+    return formatDateTime(iso);
 }
 
 const STATUS_BADGE = {

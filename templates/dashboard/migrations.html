@@ -99,7 +99,7 @@
                                 {% if migration.applied_at %}
                                     <div class="flex items-center text-xs text-green-600 dark:text-green-400">
                                         <i class="fas fa-check-circle mr-1"></i>
-                                        <span class="truncate">{{ migration.applied_at[:19] }}</span>
+                                        <span class="truncate"><time datetime="{{ migration.applied_at }}" data-local-time>{{ migration.applied_at[:19] }}</time></span>
                                     </div>
                                 {% else %}
                                     <div class="flex items-center text-xs text-yellow-600 dark:text-yellow-400">

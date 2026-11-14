@@ -24,19 +24,7 @@ mateActions.allow('sessionsApp.closeSessionInspector', 'sessionsApp.copySessionI
     }
 
     function formatTime(isoOrTs) {
-        if (!isoOrTs) return '-';
-        try {
-            let d;
-            if (typeof isoOrTs === 'number') {
-                d = new Date(isoOrTs * 1000);
-            } else {
-                d = new Date(isoOrTs);
-            }
-            if (isNaN(d.getTime())) return String(isoOrTs);
-            return d.toLocaleString();
-        } catch (e) {
-            return String(isoOrTs);
-        }
+        return formatDateTime(isoOrTs);
     }
 
     async function loadSessions(page = 1) {
@@ -210,11 +198,11 @@ mateActions.allow('sessionsApp.closeSessionInspector', 'sessionsApp.copySessionI
             </div>
             <div>
                 <span class="text-gray-500 dark:text-gray-400 block font-medium">App / Agent</span>
-                <span class="font-semibold text-gray-900 dark:text-white">${escapeHtml(session.app_name || session.appName || '-')}</span>
+                <span class="font-semibold text-gray-900 dark:text-white">${escapeHtml(session.app_name || session.appName || EMPTY_VALUE)}</span>
             </div>
             <div>
                 <span class="text-gray-500 dark:text-gray-400 block font-medium">User ID</span>
-                <span class="text-gray-900 dark:text-white">${escapeHtml(session.user_id || session.userId || '-')}</span>
+                <span class="text-gray-900 dark:text-white">${escapeHtml(session.user_id || session.userId || EMPTY_VALUE)}</span>
             </div>
             <div>
                 <span class="text-gray-500 dark:text-gray-400 block font-medium">Runtime</span>

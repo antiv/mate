@@ -434,9 +434,9 @@
                     <tr class="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700" data-click="showLogDetails" data-args='{{ [log.id | string] | tojson }}'>
                         <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate" data-label="Timestamp">
                             {% if log.timestamp %}
-                                {{ log.timestamp[:19].replace('T', ' ') }}
+                                <time datetime="{{ log.timestamp }}" data-local-time>{{ log.timestamp[:19].replace('T', ' ') }}</time>
                             {% else %}
-                                N/A
+                                —
                             {% endif %}
                         </td>
                         <td class="px-3 py-1.5 text-xs font-mono text-gray-900 dark:text-white truncate" data-label="Request ID">
@@ -445,13 +445,13 @@
                             </button>
                         </td>
                         <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate" data-label="User ID">
-                            {{ log.user_id or 'N/A' }}
+                            {{ log.user_id or '—' }}
                         </td>
                         <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate" data-label="Agent">
-                            {{ log.agent_name or 'N/A' }}
+                            {{ log.agent_name or '—' }}
                         </td>
                         <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate" data-label="Model">
-                            {{ log.model_name or 'N/A' }}
+                            {{ log.model_name or '—' }}
                         </td>
                         <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate" data-label="Prompt Tokens">
                             {{ log.prompt_tokens or 0 }}
@@ -719,27 +719,27 @@ function esc(value) {
                     </div>
                     <div>
                         <strong class="text-gray-700 dark:text-gray-300">Session ID:</strong>
-                        <p class="text-gray-600 dark:text-gray-400 mt-1 font-mono text-sm">${esc(log.session_id || 'N/A')}</p>
+                        <p class="text-gray-600 dark:text-gray-400 mt-1 font-mono text-sm">${esc(log.session_id || EMPTY_VALUE)}</p>
                     </div>
                     <div>
                         <strong class="text-gray-700 dark:text-gray-300">User ID:</strong>
-                        <p class="text-gray-600 dark:text-gray-400 mt-1">${esc(log.user_id || 'N/A')}</p>
+                        <p class="text-gray-600 dark:text-gray-400 mt-1">${esc(log.user_id || EMPTY_VALUE)}</p>
                     </div>
                     <div>
                         <strong class="text-gray-700 dark:text-gray-300">Agent Name:</strong>
-                        <p class="text-gray-600 dark:text-gray-400 mt-1">${esc(log.agent_name || 'N/A')}</p>
+                        <p class="text-gray-600 dark:text-gray-400 mt-1">${esc(log.agent_name || EMPTY_VALUE)}</p>
                     </div>
                     <div>
                         <strong class="text-gray-700 dark:text-gray-300">Model Name:</strong>
-                        <p class="text-gray-600 dark:text-gray-400 mt-1">${esc(log.model_name || 'N/A')}</p>
+                        <p class="text-gray-600 dark:text-gray-400 mt-1">${esc(log.model_name || EMPTY_VALUE)}</p>
                     </div>
                     <div>
                         <strong class="text-gray-700 dark:text-gray-300">Status:</strong>
-                        <p class="text-gray-600 dark:text-gray-400 mt-1">${esc(log.status || 'N/A')}</p>
+                        <p class="text-gray-600 dark:text-gray-400 mt-1">${esc(log.status || EMPTY_VALUE)}</p>
                     </div>
                     <div>
                         <strong class="text-gray-700 dark:text-gray-300">Timestamp:</strong>
-                        <p class="text-gray-600 dark:text-gray-400 mt-1">${log.timestamp ? new Date(log.timestamp).toLocaleString() : 'N/A'}</p>
+                        <p class="text-gray-600 dark:text-gray-400 mt-1">${esc(formatDateTime(log.timestamp))}</p>
                     </div>
                     <div>
                         <strong class="text-gray-700 dark:text-gray-300">Total Tokens:</strong>
@@ -892,7 +892,7 @@ function esc(value) {
         tbody.innerHTML = logs.map(log => `
             <tr class="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700" data-click="showLogDetails" data-args="${mateActions.attr([String(log.id)])}">
                 <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate" data-label="Timestamp">
-                    ${log.timestamp ? log.timestamp.substring(0, 19).replace('T', ' ') : 'N/A'}
+                    ${esc(formatDateTime(log.timestamp))}
                 </td>
                 <td class="px-3 py-1.5 text-xs font-mono text-gray-900 dark:text-white truncate" data-label="Request ID">
                     <button data-click="showLogDetails" data-args="${mateActions.attr([String(log.id)])}" data-stop class="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 underline min-h-[44px] touch-target">
@@ -900,13 +900,13 @@ function esc(value) {
                     </button>
                 </td>
                 <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate" data-label="User ID">
-                    ${esc(log.user_id || 'N/A')}
+                    ${esc(log.user_id || EMPTY_VALUE)}
                 </td>
                 <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate" data-label="Agent">
-                    ${esc(log.agent_name || 'N/A')}${mateScope.label(log) ? `<div class="text-gray-400">${esc(mateScope.label(log))}</div>` : ''}
+                    ${esc(log.agent_name || EMPTY_VALUE)}${mateScope.label(log) ? `<div class="text-gray-400">${esc(mateScope.label(log))}</div>` : ''}
                 </td>
                 <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate" data-label="Model">
-                    ${esc(log.model_name || 'N/A')}
+                    ${esc(log.model_name || EMPTY_VALUE)}
                 </td>
                 <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate" data-label="Prompt Tokens">
                     ${log.prompt_tokens || 0}

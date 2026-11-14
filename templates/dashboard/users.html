@@ -269,7 +269,7 @@
 
     // ── Render ────────────────────────────────────────────────────────────────
     function formatDate(iso) {
-        return iso ? iso.slice(0, 16).replace('T', ' ') : 'N/A';
+        return formatDateTime(iso);
     }
 
     function esc(s) {
