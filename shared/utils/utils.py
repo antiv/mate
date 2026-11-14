@@ -175,6 +175,7 @@ def create_model(model_name: str = None, api_key: str = None, base_url: str = No
         Model instance (LiteLlm or Gemini)
     """
     effective_model_name = (model_name or os.getenv("GEMINI_MODEL", "gemini-2.5-flash")).strip()
+    requested_name = effective_model_name
     context = context or ModelContext()
 
     if _is_gemini_model(effective_model_name):
@@ -230,8 +231,14 @@ def create_model(model_name: str = None, api_key: str = None, base_url: str = No
     from .outbound import guard_model_client
     # An agent's own base URL outside the default workspace: no redirect into the
     # server's network (shared/utils/outbound.py)
-    return guard_model_client(LiteLlm(effective_model_name, **litellm_kwargs), "llm_client",
-                              base_url, context.agent_name, context.project_id)
+    model = guard_model_client(LiteLlm(effective_model_name, **litellm_kwargs), "llm_client",
+                               base_url, context.agent_name, context.project_id)
+    if api_key or base_url:
+        return model
+    # Without an endpoint of the agent's own, each call takes the workspace's key, or
+    # the environment where the workspace may use it (shared/utils/provider_keys.py)
+    from .provider_keys import with_provider_keys
+    return with_provider_keys(model, "llm_client", context, requested_name)
 
 
 
@@ -623,7 +630,9 @@ def create_app_with_context_caching(
             # Create custom summarizer if model specified
             if effective_summarizer_model:
                 try:
-                    summarizer_llm = create_model(effective_summarizer_model, context=ModelContext())
+                    # It summarizes the root agent's conversations, on its workspace's keys
+                    summarizer_llm = create_model(effective_summarizer_model,
+                                                  context=ModelContext(agent_name=root_agent.name))
                     summarizer = LlmEventSummarizer_runtime(llm=summarizer_llm)
                     compaction_config_kwargs['summarizer'] = summarizer
                     logger.info(f"Using custom summarizer model: {effective_summarizer_model}")

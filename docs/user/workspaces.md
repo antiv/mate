@@ -118,8 +118,17 @@ feature enabled, only a platform administrator adds it to an agent. An agent pic
 a change to **Code** or **Server credentials** when its tools are next built, for
 example after it is saved or **Reload All**.
 
-**May use platform keys** is stored, and has no effect yet: every workspace calls
-models on the installation's provider keys.
+**May use platform keys** decides what an agent's model call does when the
+workspace has no key of its own for the model's provider: on, it uses the
+installation's key, as in 1.x; off, the call fails with "This workspace has no key
+for" and the provider's name. An agent with its own **Model API Key** or base URL uses that
+either way. Default always may, and its checkbox can't be changed. A change applies
+to the next call, without reloading agents.
+
+For now this covers the agents' models, their fallback models, subagents and the
+conversation summarizer. Models on Gemini's own backend (`gemini-*`, without a
+provider prefix) and the image tool, memory search, evals and Work Room titles still
+use the installation's keys.
 
 ### Edit, suspend, resume, close
 
