@@ -3,10 +3,10 @@ title: "LangGraph runtime"
 summary: Run the agent server on LangGraph instead of ADK: how it works, what is supported, what differs.
 audience: dev
 order: 22
-status: migrated
 covers:
   - langgraph_main.py
   - shared/utils/langgraph/**
+  - shared/utils/server_control_service.py
 ---
 
 # LangGraph Runtime
@@ -89,7 +89,7 @@ Unlike ADK, an agent that appears under multiple parents is a single node (no
   input + output, logged to `guardrail_logs`), user-profile injection
 - Token usage tracking (`token_usage_logs`, same fields)
 - Human-in-the-loop `require_confirmation` (approve/reject round-trip)
-- Evals against a stored version and "Check against suite" (see `EVALS.md`)
+- Evals against a stored version and "Check against suite" (see [Evals](evals.md))
 
 ## Not supported in v1 (use `AGENT_FRAMEWORK=adk`)
 
@@ -120,7 +120,8 @@ MATE login, RBAC or guardrails (see below), and it is not installed in the
 Docker image. The same goes for ADK's dev UI, which is off by default when
 `MATE_ENV=production`.
 
-- `STUDIO_AGENT` picks the agent (defaults to the first `AGENTS_LIST` entry).
+- `STUDIO_AGENT` picks the agent (defaults to the first `AGENTS_LIST` entry, then
+  to the first enabled top-level agent in the database).
 - `--allow-blocking` is required — MATE's DB layer is synchronous.
 - The command starts a dev server on **http://127.0.0.1:2024** and prints a
   Studio link; in Studio's "Configure Studio connection" dialog the Base URL is
@@ -139,8 +140,8 @@ inspection and time travel. Usage notes:
   and RBAC/guardrails are not applied, transfers included — for MATE these runs
   never happened.
 - **The LLM cost is still real.** Calls go straight to the provider
-  (OpenRouter/Google/…) with the API keys from `.env`, so tokens are billed
-  normally — MATE just doesn't count them, and MATE rate limits/budgets don't
+  (OpenRouter/Google/…) with the keys the agent would use in MATE (its workspace's,
+  or `.env`'s where the workspace may use them), so tokens are billed normally — MATE just doesn't count them, and MATE rate limits/budgets don't
   see them. Runs are visible in the `langgraph dev` terminal, Studio's Trace
   tab, and — with `LANGSMITH_TRACING=true` — in LangSmith, which shows token
   counts per LLM call (the closest substitute for MATE's token log here).
@@ -188,9 +189,11 @@ the latter).
 ## Tests
 
 ```bash
-python -m unittest shared.test.test_langgraph_event_translator \
-                   shared.test.test_langgraph_tool_adapter \
-                   shared.test.test_langgraph_agent_builder \
-                   shared.test.test_langgraph_resumed_agent_rbac \
-                   shared.test.test_langgraph_sessions -v
+python -m unittest discover -s shared/test -t . -p "test_langgraph_*.py" -v
 ```
+
+That covers the event translator, tool adapter, agent builder, client tools, remote
+MCP, resumed-agent RBAC and sessions. `-t .` matters: without it the tests skip the
+package setup and use the database `.env` configures. Tests of other features cover
+the runtime too, such as `test_model_fallback.py`, `test_eval_version_runner.py`,
+`test_rbac_fail_closed.py` and `test_file_search_assigned_stores.py`.

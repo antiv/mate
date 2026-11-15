@@ -3,11 +3,12 @@ title: "Evals: methods, runs and API"
 summary: How eval methods score, how the agent is run for a test, and the eval API.
 audience: dev
 order: 140
-status: migrated
 covers:
   - shared/utils/eval_runner.py
   - shared/utils/eval_agent_runner.py
   - shared/utils/agent_improver.py
+  - shared/utils/dashboard/dashboard_server.py::*eval*
+  - shared/utils/guardrails/hallucination.py
 ---
 
 # Eval Framework
@@ -27,7 +28,7 @@ The Eval Framework gives you a structured way to measure whether an agent config
 └─────────────────────────────────────────────────────────┘
 ```
 
-- **Agent Suites** — left panel lists every agent that has at least one active test case
+- **Agent Test Suites** — left panel lists every agent that has at least one active test case
 - **Test Cases** — right panel shows cases for the selected agent, with the most recent score per case
 - **Score History** — Chart.js line chart showing `avg_score` and `pass_rate` across config versions
 
@@ -91,7 +92,7 @@ Score how well the actual output satisfies the expected output.
 Respond ONLY with valid JSON: {"score": <float 0.0-1.0>, "reasoning": "<brief explanation>"}
 ```
 
-The judge model comes from the test case, or from `EVAL_JUDGE_MODEL` when the case names none; with neither, the case is skipped rather than scored. The call goes through `provider_keys.completion()` with the case's agent as context, so it runs on that agent's workspace key ([Agent runtime](agent-runtime.md#which-key-a-model-call-uses)); `propose_instruction()` takes the agent's context the same way. Any LiteLLM model string works (e.g. `openai/gpt-4o`, `anthropic/claude-haiku-4-5-20251001`). Markdown code fences are stripped before JSON parsing. The score is clamped to `[0.0, 1.0]`.
+The judge model comes from the test case, or from `EVAL_JUDGE_MODEL` when the case names none; with neither, the case is skipped rather than scored: its result has no score and no pass/fail, and reads "Skipped: EVAL_JUDGE_MODEL not configured". The call goes through `provider_keys.completion()` with the case's agent as context, so it runs on that agent's workspace key ([Agent runtime](agent-runtime.md#which-key-a-model-call-uses)); `propose_instruction()` takes the agent's context the same way. Any LiteLLM model string works (e.g. `openai/gpt-4o`, `anthropic/claude-haiku-4-5-20251001`). Markdown code fences are stripped before JSON parsing. The score is clamped to `[0.0, 1.0]`.
 
 ## Agent Auto-Invocation
 
@@ -184,7 +185,7 @@ the block rather than in the instruction.
   memory blocks in the project are named in a warning.
 - **Apply** is refused (`409`) if a block changed since the suggestion. Each block is
   written as a block version under your name (see *History and Restore* in
-  `DYNAMIC_MEMORY_INSTRUCTIONS.md`), and the audit entry lists the block versions
+  [Dynamic instructions](../user/dynamic-instructions.md#history-and-restore)), and the audit entry lists the block versions
   under `memory_blocks`. The instruction gets a new config version only if it
   changed.
 
@@ -196,21 +197,26 @@ format). Checking a suggestion calls the agent twice per active test case, and
 
 After each full suite run (`POST /dashboard/api/evals/version/{version_id}/run`), the server:
 
-1. Computes `new_avg` — average score across all results for this version
-2. Queries the immediately preceding version's results for the same agent → `prev_avg`
-3. If `new_avg < prev_avg - 0.05` and `EVAL_REGRESSION_WEBHOOK_URL` is set, fires a POST:
+1. Takes the run's average score.
+2. Averages every stored result of the agent's previous version (the highest lower
+   `version_number`), in this workspace, over all its runs → the previous average.
+3. If the run's average is more than 0.05 below it, the response has
+   `regression_alert: true`, and when `EVAL_REGRESSION_WEBHOOK_URL` is set the server
+   POSTs, with a 10 s timeout; a failed POST is only logged:
 
 ```json
 {
-  "timestamp": "2026-04-27T12:00:00Z",
   "type": "eval_regression_alert",
+  "timestamp": "2026-04-27T12:00:00+00:00",
   "agent_name": "my_agent",
   "version_id": 42,
   "new_avg_score": 0.61,
   "prev_avg_score": 0.78,
-  "regression": true
+  "regression": 0.17
 }
 ```
+
+`regression` is the drop, previous average minus the new one.
 
 Set the env var to any webhook URL (Slack incoming webhook, n8n, Make, custom endpoint):
 
@@ -220,7 +226,7 @@ EVAL_REGRESSION_WEBHOOK_URL=https://hooks.slack.com/services/xxx/yyy/zzz
 
 ## API Reference
 
-All endpoints require HTTP Basic Auth (same credentials as the dashboard).
+All endpoints take the dashboard's sign-in (the session cookie, a bearer token or HTTP Basic Auth) and act on the current workspace's test cases.
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -234,9 +240,12 @@ All endpoints require HTTP Basic Auth (same credentials as the dashboard).
 | `PUT` | `/dashboard/api/evals/{id}` | Update a test case |
 | `DELETE` | `/dashboard/api/evals/{id}` | Soft-delete (sets `is_active=False`) |
 | `POST` | `/dashboard/api/evals/{id}/run` | Run one test case; body: `{version_id}` |
-| `POST` | `/dashboard/api/evals/version/{version_id}/run` | Run all active cases for the agent; body: `{results: []}` |
+| `POST` | `/dashboard/api/evals/version/{version_id}/run` | Run all active cases for the agent; body: `{results: []}`, or `{results: [{test_case_id, actual_output}]}` to score given answers instead of running the agent for those cases |
 | `POST` | `/dashboard/api/evals/improve/propose` | Suggest an instruction and block values; body: `{test_case_id}` or `{feedback_id}`, optional `block_labels` |
 | `POST` | `/dashboard/api/evals/improve/check` | Run the suite with the current and a proposed version; body: `{agent_name, instruction}`, optional `blocks: {label: value}` |
+| `GET` | `/dashboard/api/evals/playground/agents` | Agents the Playground can compare |
+| `GET` | `/dashboard/api/evals/playground/agent/{name}` | An agent's versions and settings for the Playground |
+| `POST` | `/dashboard/api/evals/playground/run` | Run one prompt on two or three variants ([user guide](../user/evals.md#playground)) |
 | `POST` | `/dashboard/api/evals/improve/apply` | Replace the instruction and block values; body: `{agent_name, instruction, base_instruction}`, optional `blocks` / `base_blocks` and `test_case_id` / `feedback_id` |
 
 ### Create Test Case
@@ -265,10 +274,8 @@ Response:
 
 ```json
 {
-  "success": true,
   "passed": 3,
   "failed": 1,
-  "total": 4,
   "avg_score": 0.81,
   "pass_rate": 0.75,
   "regression_alert": false,
@@ -295,17 +302,22 @@ Response:
 
 ## Hallucination Guardrail
 
-The `hallucination_check` guardrail uses the same LLM-as-judge infrastructure as `llm_judge` evals. Configure it in an agent's guardrail settings:
+The `hallucination_check` guardrail uses the same LLM-as-judge infrastructure as `llm_judge` evals. Configure it as an entry in an agent's guardrail configuration; it checks output only:
 
 ```json
 {
-  "hallucination_check": {
-    "enabled": true,
-    "model": "gemini/gemini-2.0-flash",
-    "threshold": 0.7
-  }
+  "guardrails": [
+    {
+      "type": "hallucination_check",
+      "enabled": true,
+      "action": "block",
+      "config": {"model": "gemini/gemini-2.0-flash", "threshold": 0.7}
+    }
+  ]
 }
 ```
+
+Without a `model` the check is skipped. `threshold` defaults to 0.7.
 
 The guardrail scores the agent's response for factual consistency on a `0.0–1.0` scale. If `score < threshold`, the response is flagged (`triggered=True`) and can be blocked or logged depending on your guardrail action setting.
 

@@ -3,15 +3,15 @@ title: "Single sign-on setup"
 summary: Set up Google and GitHub sign-in, restrict who may sign in, and secure sessions.
 audience: dev
 order: 42
-status: migrated
 covers:
   - server/oauth_routes.py
+  - auth_server.py
 ---
 
 # OAuth 2.0 / OIDC Single Sign-On
 
 MATE supports native Google (OIDC) and GitHub (OAuth 2.0) login using the [Authlib](https://docs.authlib.org/) library.  
-Both providers use the **Authorization Code Flow with PKCE**, and both can be active at the same time.  
+Both providers use the **Authorization Code Flow** with a confidential client (the client secret stays on the server), and both can be active at the same time. PKCE is not enabled: no `code_challenge_method` is passed to Authlib.  
 HTTP Basic Auth is always available alongside SSO — you do not have to choose.
 
 ---
@@ -56,8 +56,8 @@ Browser                 MATE (port 8000)              Google / GitHub
   │◀──────────────────────────│                              │
 ```
 
-1. **Login redirect** (`/auth/login/{provider}`) — MATE builds the authorization URL including a PKCE `code_challenge` and a random `state`, stores both in the encrypted session, then redirects the browser to the provider.
-2. **Callback** (`/auth/callback/{provider}`) — MATE verifies the `state`, exchanges the authorization code for tokens, fetches the user's profile, upserts the row in the `users` table (creating it with `OAUTH_DEFAULT_ROLE` on first login), and stores identity in the session cookie.
+1. **Login redirect** (`/auth/login/{provider}`) — MATE keeps the `next` query parameter (where to go after sign-in, default `/dashboard`), and Authlib builds the authorization URL with a random `state` (and, for Google, a `nonce`), stored in the session cookie. The browser is then redirected to the provider.
+2. **Callback** (`/auth/callback/{provider}`) — Authlib verifies the `state` and exchanges the authorization code for tokens. MATE fetches the user's profile, checks the sign-up allowlists and refuses a reserved user id (one that would pass for a widget visitor, such as `widget_7_x@example.com`). It then upserts the row in the `users` table (creating it with `OAUTH_DEFAULT_ROLE` on first login), stores identity in the session cookie, writes an `auth.login` audit entry and redirects to `next`, kept on this site.
 3. **Subsequent requests** — `server/auth.py` reads `request.session["user"]` to authenticate the user. No passwords are stored or transmitted.
 
 ---
@@ -134,7 +134,7 @@ GITHUB_CLIENT_ID=<Client ID>
 GITHUB_CLIENT_SECRET=<Client Secret>
 ```
 
-> **Note**: GitHub OAuth Apps do not support PKCE natively, but Authlib handles this transparently; the flow remains secure via the server-side client secret.
+> **Note**: the flow's security rests on the server-side client secret and the `state` check; MATE does not send PKCE to either provider.
 
 ---
 
@@ -147,9 +147,10 @@ GITHUB_CLIENT_SECRET=<Client Secret>
 | `GOOGLE_CONF_URL` | No | `https://accounts.google.com/.well-known/openid-configuration` | OIDC discovery URL; override for Workspace or custom OIDC |
 | `GITHUB_CLIENT_ID` | For GitHub SSO | — | OAuth client ID from GitHub Settings |
 | `GITHUB_CLIENT_SECRET` | For GitHub SSO | — | OAuth client secret from GitHub Settings |
-| `SECRET_KEY` | **Yes, in production** | Random (new per restart) | Signs and verifies the encrypted session cookie. A random key means sessions are invalidated on restart. |
-| `OAUTH_DEFAULT_ROLE` | No | `pending` | Role assigned to newly provisioned SSO users. Default `pending` = **no access** until an admin grants a role. Other values: `user`, `admin` |
-| `SESSION_SECURE_COOKIE` | No | `false` | Set to `true` behind HTTPS to add the `Secure` flag to the session cookie |
+| `SECRET_KEY` | **Yes, in production** | Random (new per restart) | Signs the session cookie. A random key means sessions are invalidated on restart; with `MATE_ENV=production` the server refuses to start without it. |
+| `OAUTH_DEFAULT_ROLE` | No | `pending` | Role given to a new SSO user. `pending` = **no access** until an admin approves them. `admin` makes a platform administrator. Any other value is an agent role: the user joins the Default workspace as a member with it |
+| `OAUTH_ALLOWED_DOMAINS` / `OAUTH_ALLOWED_EMAILS` | No | — | Who may sign in; see [Enterprise access restrictions](#enterprise-access-restrictions) |
+| `SESSION_SECURE_COOKIE` | No | `false` | Set to `true` behind HTTPS to add the `Secure` flag to the session cookie; `MATE_ENV=production` turns it on |
 
 ---
 
@@ -163,42 +164,42 @@ On each successful OAuth login MATE **upserts** a row in the `users` table:
 | `email` | Verified email from the provider |
 | `display_name` | Full name from the provider profile |
 | `oauth_provider` | `google` or `github` |
-| `roles` | `["<OAUTH_DEFAULT_ROLE>"]` on first login (default `["pending"]`); unchanged on subsequent logins |
+| `roles` | The platform roles only (`admin`, `pending`); unchanged on subsequent logins |
+
+`users.roles` holds platform roles: `admin` (platform administrator), `pending` (not
+let in yet) and `widget` (a widget visitor). A user's agent roles, matched against an
+agent's `allowed_for_roles`, are per workspace, on their `workspace_members` row
+(`shared/utils/workspaces.py`). A first login with `OAUTH_DEFAULT_ROLE` set to an agent
+role such as `user` makes the user a member of the Default workspace with that role.
 
 ### Approval flow (default)
 
-New SSO users are created with the **`pending`** role and have **no agent access**. An admin must
-promote them (filter the Users page by role `pending`). The role model:
-
-| Role | Access |
-|---|---|
-| `admin` | Everything, incl. agents with no roles configured |
-| `user` | Dashboard agents whose `allowed_for_roles` includes `user` |
-| `widget` | Public embeddable-widget / wizard-trial agents (auto-assigned to `widget_*` visitors) |
-| `pending` | None — awaiting admin approval |
+New SSO users are created **`pending`**: a member of no workspace, with no agent
+access. An admin approves them on the **Users** page by removing `pending`; a user who
+is a member nowhere then joins the Default workspace as a member. Agent roles are set
+per workspace on its **Members** page. A link from a workspace invitation also lets a
+user in: signing in from it passes the invitation page as `next`.
 
 **Secure default:** an agent with **no `allowed_for_roles` set is admin-only**. Grant `user`/`widget`
-explicitly to widen access.
+explicitly to widen access. See [Authentication and access](auth-and-access.md).
 
 ### Changing a user's role after first login
 
-From the dashboard → **Users** → find the user → edit roles.
+From the dashboard → **Users** → find the user → edit roles (`admin`, `pending`).
+Agent roles are changed on the workspace's **Members** page.
 
-Or directly in the database:
-
-```sql
-UPDATE users SET roles = '["admin"]' WHERE user_id = 'alice@example.com';
-```
+Edit roles through the dashboard, not with SQL on `users.roles`: the memberships that
+follow from a role change are written by an ORM listener, which a raw `UPDATE` skips.
 
 ### Restricting which users can access MATE
 
-By default any valid Google or GitHub account can log in and be provisioned. See [Enterprise access restrictions](#enterprise-access-restrictions) to limit this.
+By default any valid Google or GitHub account can log in and be provisioned (as `pending`, unless `OAUTH_DEFAULT_ROLE` says otherwise). See [Enterprise access restrictions](#enterprise-access-restrictions) to limit this.
 
 ---
 
 ## Session security
 
-Sessions are stored in a **signed, encrypted cookie** (Starlette `SessionMiddleware` backed by `itsdangerous`):
+Sessions are stored in a **signed cookie** (Starlette `SessionMiddleware`, signed with `itsdangerous`). It is not encrypted: its contents are base64 JSON that anyone holding the cookie can read, and only the signature stops them from being changed. It expires after Starlette's default 14 days.
 
 - **httponly**: the cookie is not accessible to JavaScript
 - **SameSite=Lax**: prevents the cookie from being sent on cross-site POST requests (CSRF protection)
@@ -226,32 +227,29 @@ python -c "import secrets; print(secrets.token_hex(32))"
 
 ## Enterprise access restrictions
 
-The callback handler in `server/oauth_routes.py` receives the full user profile before writing to the database. You can add domain or organisation checks there.
+Sign-in can be limited by email with two variables. A check on anything else, such as a GitHub organisation, is a change to the callback handler in `server/oauth_routes.py`, which receives the user's profile before writing to the database.
 
-### Restrict to a Google Workspace domain
+### Restrict by email domain or address
 
-Edit `server/oauth_routes.py`, inside the `if provider == "google":` block:
+Two variables, both comma-separated and both unset by default (anyone with a
+provider account may sign in):
 
-```python
-ALLOWED_DOMAIN = os.getenv("OAUTH_ALLOWED_DOMAIN", "")   # e.g. "yourcompany.com"
-
-if provider == "google":
-    info = token.get("userinfo") or {}
-    email = info.get("email", "")
-
-    # --- domain restriction ---
-    if ALLOWED_DOMAIN and not email.endswith(f"@{ALLOWED_DOMAIN}"):
-        logger.warning("Blocked OAuth login from outside domain: %s", email)
-        return RedirectResponse(url="/login?error=domain_not_allowed")
-    # --------------------------
-
-    user_id = email or info.get("sub", "")
-    display_name = info.get("name") or email or user_id
+```bash
+OAUTH_ALLOWED_DOMAINS=yourcompany.com,subsidiary.com
+OAUTH_ALLOWED_EMAILS=contractor@gmail.com
 ```
 
-Alternatively, set the consent screen to **Internal** in Google Cloud (restricts to your Workspace organisation at the provider level without any code change).
+With either set, a sign-in whose email is neither on the list nor in a listed domain
+is sent back to `/login?error=not_allowed` before any `users` row is written. The
+check is case-insensitive, and a leading `@` on a domain is ignored. A GitHub account
+with no verified email can't pass it.
+
+Alternatively, set the consent screen to **Internal** in Google Cloud (restricts to
+your Workspace organisation at the provider level).
 
 ### Restrict to a GitHub Organisation
+
+Not built in. A check like this in the `github` branch of `oauth_callback` does it:
 
 ```python
 ALLOWED_GITHUB_ORG = os.getenv("OAUTH_ALLOWED_GITHUB_ORG", "")   # e.g. "myorg"
@@ -303,7 +301,7 @@ The env vars for that provider are not set. Check that both `*_CLIENT_ID` and `*
 
 ### "auth_failed" redirect after approving
 
-Usually a state/PKCE mismatch caused by the session not persisting between the login redirect and the callback. Check:
+Usually a `state` mismatch caused by the session not persisting between the login redirect and the callback. Check:
 
 - `SECRET_KEY` is set and the same value across all instances
 - The callback URL registered in Google/GitHub Console matches exactly the URL MATE receives (scheme, host, port, path — no trailing slash difference)

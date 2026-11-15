@@ -3,9 +3,10 @@ title: "Exposed MCP servers"
 summary: The MCP servers MATE serves (images, Google Drive, agents): endpoints, tools and client setup.
 audience: dev
 order: 54
-status: migrated
 covers:
   - shared/utils/mcp/**
+  - shared/utils/tools/mcp_tools.py
+  - shared/utils/tools/*mcp_protocol_handler.py
 ---
 
 # Exposed MCP Servers
@@ -84,7 +85,7 @@ server's service account.
 **Dynamic MCP servers created for each configured agent**, allowing agents to be accessed via standard MCP protocol.
 
 **Configuration:**
-Set the `MCP_EXPOSED_AGENTS` environment variable with a comma or space-separated list of agent names:
+Set the `MCP_EXPOSED_AGENTS` environment variable with a comma or space-separated list of agent names. Unset, it defaults to `chess_mate_root`; set it to an empty value to expose none:
 
 ```bash
 MCP_EXPOSED_AGENTS=creative_agent,main_entity,jira_agent
@@ -193,6 +194,14 @@ Two transports are supported, chosen by what the server entry contains:
 
 If an entry sets both, `url` wins and the command is ignored.
 
+Outside the Default workspace two more rules apply, and a server that breaks one is
+skipped with an error in the log while the agent keeps its other tools:
+
+- a `url` on the server's own network (loopback, private, link-local) is refused
+  (`outbound.outbound_refusal`; `OUTBOUND_ALLOW_PRIVATE_NETWORK=true` lifts it);
+- a stdio server runs only when a platform administrator has enabled the `code`
+  platform feature for the agent's workspace (`platform_only.may_use(FEATURE_CODE, ...)`).
+
 ### HTTP servers
 
 **Configuration Format:**
@@ -299,7 +308,7 @@ External MCP servers are created via `create_mcp_tools_from_config()`, which dis
 - **SSE Support:** Server-Sent Events for real-time communication
 - **CORS:** Enabled for web-based MCP clients
 - **Authentication:** Every endpoint except health and CORS preflight requires a caller. Agent servers, `GET /mcp` and `/gdrive/mcp` take a personal access token, Basic auth, the dashboard's login token or a session ([Who may call](#who-may-call)); `/images/mcp` takes a signed-in dashboard user and no personal access tokens
-- **Availability:** Both servers check availability at startup and return 503 if dependencies aren't configured
+- **Availability:** both built-in servers answer 503 while their dependencies aren't configured; the image server's health check reports `degraded` with the reason
 
 ---
 
