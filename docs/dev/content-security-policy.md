@@ -46,7 +46,8 @@ URLs) do not run at all. Every page is converted to work that way.
 | `off` | none |
 
 Pages a library renders get the nonce on their inline scripts too
-(`nonce_inline_scripts()`, used for the admin Swagger UI). A static HTML file
+(`nonce_inline_scripts()`, used for the admin Swagger UI at `/admin-docs` and for the
+agent server's, which the proxy serves at `/docs`). A static HTML file
 cannot carry a nonce, so it may have no inline script at all; the wizard demo
 page loads its code from `static/js/wizard/demo.js`.
 

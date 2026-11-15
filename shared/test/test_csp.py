@@ -280,6 +280,35 @@ class TestLibraryPages(unittest.TestCase):
         for tag in re.findall(r"<script\b[^>]*>", html):
             self.assertTrue("src=" in tag or 'nonce="abc"' in tag, tag)
 
+    def test_the_agent_servers_swagger_ui_through_the_proxy_gets_the_nonce(self):
+        import re
+        import httpx
+        from fastapi.openapi.docs import get_swagger_ui_html
+        from server import proxy_routes
+        from server.auth import get_auth_user
+
+        body = get_swagger_ui_html(openapi_url="/openapi.json", title="ADK").body
+        transport = httpx.MockTransport(lambda request: httpx.Response(
+            200, content=body, headers={"content-type": "text/html; charset=utf-8"}))
+        real_client = httpx.AsyncClient
+
+        # As auth_server.py: no /docs of its own, so the proxy's answers
+        app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
+        app.middleware("http")(csp.add_csp_header)
+        app.include_router(proxy_routes.router)
+        app.dependency_overrides[get_auth_user] = lambda: "admin"
+        with patch.dict(os.environ, {"CSP_MODE": "enforce"}), \
+                patch.object(proxy_routes.httpx, "AsyncClient",
+                             lambda **kw: real_client(transport=transport, **kw)):
+            resp = TestClient(app).get("/docs")
+
+        self.assertEqual(resp.status_code, 200)
+        nonce = re.search(r"'nonce-([^']+)'", resp.headers[csp.CSP_HEADER]).group(1)
+        tags = re.findall(r"<script\b[^>]*>", resp.text)
+        self.assertTrue(any("nonce" in tag for tag in tags))
+        for tag in tags:
+            self.assertTrue("src=" in tag or f'nonce="{nonce}"' in tag, tag)
+
 
 class TestWizardFrameAncestors(unittest.TestCase):
     """Partner sites frame the agent wizard, as customer sites frame the widget."""
