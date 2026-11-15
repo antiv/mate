@@ -165,5 +165,25 @@ class TestAgentAllowed(unittest.TestCase):
             self.assertFalse(mcp_auth.agent_allowed("dev", "helper", 1))
 
 
+class TestExposedAgents(unittest.TestCase):
+
+    def exposed(self, env):
+        with patch.dict(os.environ, env, clear=False), \
+                patch("shared.utils.mcp.agent_mcp_manager.get_database_client"):
+            if "MCP_EXPOSED_AGENTS" not in env:
+                os.environ.pop("MCP_EXPOSED_AGENTS", None)
+            return AgentMCPManager(FastAPI()).enabled_agents
+
+    def test_none_exposed_when_unset(self):
+        self.assertEqual(self.exposed({}), [])
+
+    def test_none_exposed_when_empty(self):
+        self.assertEqual(self.exposed({"MCP_EXPOSED_AGENTS": ""}), [])
+
+    def test_named_agents_exposed(self):
+        self.assertEqual(self.exposed({"MCP_EXPOSED_AGENTS": "helper, other secret"}),
+                         ["helper", "other", "secret"])
+
+
 if __name__ == "__main__":
     unittest.main()

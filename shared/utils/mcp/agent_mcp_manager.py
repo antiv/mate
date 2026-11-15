@@ -45,7 +45,8 @@ class AgentMCPManager:
     
     def _get_enabled_agents_from_env(self) -> List[str]:
         """Get list of agent names to expose as MCPs from environment variable"""
-        env_value = os.getenv("MCP_EXPOSED_AGENTS", "chess_mate_root")
+        # None unless named: an exposed agent can be run by any caller it allows
+        env_value = os.getenv("MCP_EXPOSED_AGENTS", "")
         if not env_value:
             return []
         

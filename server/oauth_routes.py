@@ -1,7 +1,8 @@
 """
 OAuth 2.0 / OIDC authentication routes for MATE.
 
-Supports Google (OIDC via Authorization Code + PKCE) and GitHub (OAuth 2.0).
+Supports Google (OIDC) and GitHub (OAuth 2.0), both with the Authorization Code
+flow and PKCE (S256).
 Providers are enabled only when their client ID/secret env vars are set.
 """
 
@@ -52,7 +53,7 @@ def _get_oauth():
                 "GOOGLE_CONF_URL",
                 "https://accounts.google.com/.well-known/openid-configuration",
             ),
-            client_kwargs={"scope": "openid email profile"},
+            client_kwargs={"scope": "openid email profile", "code_challenge_method": "S256"},
         )
         logger.info("OAuth: Google provider registered")
 
@@ -64,7 +65,7 @@ def _get_oauth():
             authorize_url="https://github.com/login/oauth/authorize",
             access_token_url="https://github.com/login/oauth/access_token",
             api_base_url="https://api.github.com/",
-            client_kwargs={"scope": "user:email"},
+            client_kwargs={"scope": "user:email", "code_challenge_method": "S256"},
         )
         logger.info("OAuth: GitHub provider registered")
 
