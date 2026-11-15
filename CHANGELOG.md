@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-11-15
+
 **Read `docs/dev/upgrading-to-2.0.md` before upgrading.** The first start migrates the database (V046–V049) and moves agent roles off `users.roles`; the only way back to 1.x is the backup taken before it. In production the auth server refuses to start without `MATE_SECRET_KEY`. An installation upgraded from 1.x has one workspace, **Default**, holding everything it had, and answers its clients as 1.x did: `shared/test/test_client_contract.py` runs the OpenAI-compatible API with a personal access token, the widget and `/run_sse` through the proxy against the real app, unchanged since 1.6.
 
 ### Added
@@ -54,6 +56,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **The LangGraph runtime ignored the File Search stores assigned to an agent** (#362) - on `AGENT_FRAMEWORK=langgraph`, only stores written into the agent's `tool_config` were used. Both runtimes now add the stores assigned on the File Search page.
 - **A parent with a non-ASCII name had no sub-agents** (#331) - `parent_agents` stores names with `\u` escapes, which the lookup missed. Building the tree, a rename and a project move now match both spellings.
 - **Dashboard accessibility** (#246) - labels are linked to their fields, and icon-only buttons, filters and per-row fields have names for screen readers.
+- **The agent server's API page at `/docs` was blank with `CSP_MODE=enforce`** (#366) - the proxy forwarded its Swagger UI without the response's nonce on the inline script that starts it. It now adds it, as `/admin-docs` does.
 
 ## [1.6.1] - 2026-11-07
 
