@@ -11,7 +11,7 @@ covers:
 # OAuth 2.0 / OIDC Single Sign-On
 
 MATE supports native Google (OIDC) and GitHub (OAuth 2.0) login using the [Authlib](https://docs.authlib.org/) library.  
-Both providers use the **Authorization Code Flow** with a confidential client (the client secret stays on the server), and both can be active at the same time. PKCE is not enabled: no `code_challenge_method` is passed to Authlib.  
+Both providers use the **Authorization Code Flow** with a confidential client (the client secret stays on the server), and both can be active at the same time. Both also use PKCE (`code_challenge_method="S256"`): the login route sends a code challenge with the redirect, Authlib keeps its verifier in the session next to the `state`, and the callback sends the verifier with the code when it asks for the token.  
 HTTP Basic Auth is always available alongside SSO — you do not have to choose.
 
 ---
@@ -134,7 +134,7 @@ GITHUB_CLIENT_ID=<Client ID>
 GITHUB_CLIENT_SECRET=<Client Secret>
 ```
 
-> **Note**: the flow's security rests on the server-side client secret and the `state` check; MATE does not send PKCE to either provider.
+> **Note**: a code taken from the redirect is of no use without the verifier, which never leaves the server's session; the client secret and the `state` check still apply.
 
 ---
 

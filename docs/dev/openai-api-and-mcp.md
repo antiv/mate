@@ -81,7 +81,8 @@ Rules that follow from this:
 
 ## Agents as MCP servers
 
-Set `MCP_EXPOSED_AGENTS` to a list of agent names and each becomes an MCP server at
+Set `MCP_EXPOSED_AGENTS` to a list of agent names (unset, none is exposed) and each
+becomes an MCP server at
 `/agents/<name>/mcp`, with the standard endpoints under it (`initialize`,
 `tools/list`, `tools/call`, `sse`, and an unauthenticated `health`). An MCP client
 that connects sees the agent as a tool it can call, plus a prompt that asks the agent

@@ -34,7 +34,7 @@ API, the agent server behind the proxy, and the agent itself.
 | Caller | Credential | Checked in |
 |---|---|---|
 | Built-in account | HTTP Basic, or the session opened by the login page | `server/auth.py` |
-| Single sign-on user | Encrypted session cookie, set after Google or GitHub login | `server/oauth_routes.py` |
+| Single sign-on user | Signed session cookie, set after Google or GitHub login | `server/oauth_routes.py` |
 | Script or service | Bearer token from `POST /auth/token` | `shared/utils/auth_utils.py` |
 | OpenAI-compatible client | Personal access token (`mate_pat_...`) | `server/pat_auth.py` |
 | Website visitor | Widget key (`wk_...`) in `X-Widget-Key` | `server/widget_routes.py` |
@@ -54,8 +54,8 @@ token is treated as the built-in administrator.
 
 ### Single sign-on
 
-Google uses OIDC with the authorization code flow and PKCE; GitHub uses OAuth 2.0. A
-provider is enabled when its client id and secret are set. The redirect URIs to
+Google uses OIDC and GitHub OAuth 2.0, both with the authorization code flow and PKCE
+(S256). A provider is enabled when its client id and secret are set. The redirect URIs to
 register with the provider are `/auth/callback/google` and `/auth/callback/github`.
 
 On callback, `_upsert_oauth_user` creates or updates the `users` row. A new user gets

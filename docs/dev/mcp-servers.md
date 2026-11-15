@@ -85,7 +85,7 @@ server's service account.
 **Dynamic MCP servers created for each configured agent**, allowing agents to be accessed via standard MCP protocol.
 
 **Configuration:**
-Set the `MCP_EXPOSED_AGENTS` environment variable with a comma or space-separated list of agent names. Unset, it defaults to `chess_mate_root`; set it to an empty value to expose none:
+Set the `MCP_EXPOSED_AGENTS` environment variable with a comma or space-separated list of agent names. Unset or empty, no agent is exposed:
 
 ```bash
 MCP_EXPOSED_AGENTS=creative_agent,main_entity,jira_agent
