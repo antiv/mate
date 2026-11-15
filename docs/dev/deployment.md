@@ -18,6 +18,9 @@ covers:
 
 # Deployment
 
+Upgrading a 1.x installation to 2.0: read [Upgrading from 1.x to 2.0](upgrading-to-2.0.md)
+first.
+
 ## Local
 
 ```bash
