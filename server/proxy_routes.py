@@ -202,10 +202,19 @@ async def proxy_adk_docs(request: Request, username: str = Depends(get_auth_user
     try:
         async with httpx.AsyncClient() as client:
             response = await client.get(target_url, timeout=30.0)
+            content = response.content
+            headers = dict(response.headers)
+            if "text/html" in headers.get("content-type", ""):
+                # Swagger UI starts from an inline script, which the policy runs only with the nonce
+                from server.csp import nonce_inline_scripts
+                content = nonce_inline_scripts(response.text, request.state.csp_nonce).encode()
+                # The body is rewritten and httpx has already decoded it
+                for name in ("content-length", "content-encoding"):
+                    headers.pop(name, None)
             return Response(
-                content=response.content,
+                content=content,
                 status_code=response.status_code,
-                headers=dict(response.headers),
+                headers=headers,
                 media_type=response.headers.get("content-type"),
             )
     except Exception as e:
