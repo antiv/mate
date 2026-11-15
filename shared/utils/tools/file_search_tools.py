@@ -21,6 +21,30 @@ except ImportError:
     logger.warning("Google Generative AI package not available. File Search tools will not work.")
 
 
+def add_assigned_stores(tool_config: Dict[str, Any], agent_name: str, db_client: Any = None) -> Dict[str, Any]:
+    """The agent's tool_config with the File Search stores assigned to it in the
+    dashboard (agent_file_search_stores) as its `file_search` entry. Both runtimes
+    build an agent's tools from this, so an assignment means the same on either.
+
+    Returns `tool_config` itself when the agent has no stores assigned, or when they
+    can't be read.
+    """
+    try:
+        from shared.utils.file_search_service import FileSearchService
+        if db_client is None:
+            from shared.utils.database_client import get_database_client
+            db_client = get_database_client()
+        stores = FileSearchService(db_client).get_stores_for_agent(agent_name)
+    except Exception as e:
+        logger.warning(f"Failed to auto-configure File Search for agent {agent_name}: {e}")
+        return tool_config
+    store_names = [s['store_name'] for s in stores if s.get('store_name')]
+    if not store_names:
+        return tool_config
+    logger.info(f"✅ Auto-configured File Search for agent {agent_name} with stores: {store_names}")
+    return {**(tool_config or {}), 'file_search': {'enabled': True, 'store_names': store_names}}
+
+
 def get_file_search_client(context: Optional[ModelContext] = None):
     """A Gemini client on the key of the context's workspace (its google key, or
     GOOGLE_API_KEY where it may use the platform's); the installation's for none."""

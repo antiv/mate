@@ -9,6 +9,7 @@ covers:
   - templates/dashboard/modals/file_search_modal.html
   - static/js/modals/file-search.js
   - shared/utils/agent_manager.py::initialize_agent_from_config
+  - shared/utils/langgraph/agent_builder.py
 ---
 
 # File Search (RAG) Setup Guide
@@ -37,10 +38,8 @@ File Search is implemented as a **regular Python function tool** that wraps the 
    - Adds the tool to `Agent.tools` (ADK-compliant)
 3. **File Search Active** → Agent can now use the `query_file_search` tool for RAG
 
-This happens on the ADK runtime. The LangGraph runtime (`AGENT_FRAMEWORK=langgraph`)
-does not read `agent_file_search_stores`: there an agent queries only the stores
-written into its `tool_config` by hand, as `{"file_search": {"enabled": true,
-"store_names": [...]}}`.
+Both runtimes do this, ADK and LangGraph (`AGENT_FRAMEWORK=langgraph`), through the
+same function (`add_assigned_stores` in `shared/utils/tools/file_search_tools.py`).
 
 An agent only queries stores of its own workspace's projects. A store written into
 `tool_config` by hand that belongs to another workspace is left out, and the server
