@@ -84,8 +84,9 @@ logs each step:
   V046, from their project, in batches. Until it finishes, a row without a workspace
   counts as Default's, so nothing is missing from the dashboard meanwhile.
 
-On a copy of a production PostgreSQL database, V046 took 0.04 s and the backfill
-0.19 s.
+On a copy of a production PostgreSQL 15 database at V045, the four migrations took
+0.03 s, the membership step moved the roles of 6 users, and the backfill set 4,169
+log rows in under a second; the server answered within 3 seconds of starting.
 
 ## Check the upgrade
 
