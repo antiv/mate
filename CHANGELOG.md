@@ -7,6 +7,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+**Read `docs/dev/upgrading-to-2.0.md` before upgrading.** The first start migrates the database (V046–V049) and moves agent roles off `users.roles`; the only way back to 1.x is the backup taken before it. In production the auth server refuses to start without `MATE_SECRET_KEY`. An installation upgraded from 1.x has one workspace, **Default**, holding everything it had, and answers its clients as 1.x did: `shared/test/test_client_contract.py` runs the OpenAI-compatible API with a personal access token, the widget and `/run_sse` through the proxy against the real app, unchanged since 1.6.
+
+### Added
+
+- **Workspaces** (#277) - several organisations (clients, departments) in one installation, each with its own members, projects, agents, budgets, alert rules, logs and provider keys. A workspace's members see and run only its agents and data, through every entry point: the dashboard, the proxy and `/list-apps`, the Work Room, the OpenAI-compatible API, MCP and A2A, the widget, triggers and Slack, alerts and rate limits, traces and replay. A row of another workspace answers 404. Agent names stay unique across the installation. See `docs/user/workspaces.md`
+  - **Platform → Workspaces**, for platform administrators: create a workspace with a first owner, who gets an invitation; rename, suspend and resume, close one with no projects. A suspended or closed workspace stops: its dashboard, tokens, agents, widget keys, Slack integrations and triggers. The page also sets whether a workspace may use the platform's provider keys, and which platform features it may use: `code` (the code executor, stdio MCP servers, hardcoded agents), `server_credentials` (Google Drive, Calendar, Supabase Storage, the shop's vendor settings) and `email` (a trigger's or alert's email through the server's SMTP). Default has all three, as 1.x did, and always uses the platform's keys.
+  - **The workspace switcher** in the account menu, shown to someone with more than one workspace. Basic auth picks a workspace with the `X-MATE-Workspace` header.
+  - **Control Room → Members**: owners change a member's role (owner, admin, member) and agent roles, or remove them; anyone leaves a workspace. The last owner can't leave or be demoted. Every change is audited.
+  - **Invitations**: an owner invites an email with a role. The link is valid for 7 days and used once; it is emailed when SMTP is set and shown to copy either way. Accepting it, signed in or through single sign-on with the invited email, adds the membership. `OAUTH_ALLOWED_DOMAINS` and `OAUTH_ALLOWED_EMAILS` still apply. See `docs/user/users-and-roles.md`
+  - **Workspace budgets and alerts**: a budget of scope `workspace` counts tokens and dollars over the whole workspace's usage, and the **Whole workspace** alert rule (stored as `global`) measures it. A user's budget or alert counts their usage in the workspace only. See `docs/user/rate-limits.md` and `docs/user/alerts.md`
+  - **Usage and logs per workspace**: Usage, Audit Logs, Guardrail Logs, Traces and Sessions show the current workspace; platform administrators can show **All workspaces**, and Platform → Workspaces shows each workspace's usage over 30 days. Members see their own usage. Log rows and spans carry `workspace_id`.
+- **Provider keys per workspace** (#277) - on **Models and keys**, a workspace's owners save a key, with an optional base URL, for `google`, `openai`, `anthropic`, `openrouter`, `deepseek`, `mistral`, `groq`, `xai` or `ollama`, and set the workspace's image model. A key is looked up on every model call: the agent's own key, else the workspace's key for the model's provider, else the platform's keys in the environment when the workspace may use them, else the call fails with `This workspace has no key for <provider>`. That covers the agent's model and its fallback, sub-agents, the compaction summarizer, native Gemini and File Search, the image tool, memory block embeddings, the eval judge and improver, Work Room titles and the hallucination guardrail. A key is saved only when `MATE_SECRET_KEY` is set, is shown as `••••1234` once saved, and the audit entry names the provider only. Admins of the workspace see which providers have a key. See `docs/user/workspaces.md`
+- **Upgrade guide** - `docs/dev/upgrading-to-2.0.md`: what to do before upgrading, what the first start changes, how to check it and how to go back.
+- **Client contract test** (#309) - `shared/test/test_client_contract.py` makes the calls 1.x clients make against the real app: the OpenAI-compatible API with a personal access token, the widget and `/run_sse` through the proxy with admin credentials. A change to it is a breaking change.
+- **Cross-workspace test** (#277) - `shared/test/test_cross_workspace.py` calls every dashboard route as a member of another workspace and fails when one answers with a row it should not, unless the route is listed as platform-only. `shared/test/test_workspace_end_to_end.py` sets up a workspace over HTTP and suspends it; `shared/test/test_provider_keys_end_to_end.py` runs a workspace on its own OpenRouter key and checks that no request carries a platform key. See `docs/dev/auth-and-access.md`
+
+### Changed
+
+- **`MATE_SECRET_KEY` is required in production** (#347) - with `MATE_ENV=production` the auth server refuses to start without it, unless `MATE_ALLOW_INSECURE_DEFAULTS` is set. Elsewhere it still only warns. See `docs/dev/deployment.md`
+- **Agent roles are kept per workspace** (#337) - the first start moves each user's agent roles to their membership of Default, once, and `users.roles` keeps only `admin`, `pending` and `widget`. Agent roles are edited on **Members**; the **Users** page edits `admin` and `pending`. A user inserted with agent roles, as 1.x code writes them, gets them on the membership. **Going back to 1.x after the first start loses the agent roles**, which 1.x reads from `users.roles`: restore the backup instead.
+- **"Admin" means an administrator of the workspace** (#320) - a user with the `admin` role is a platform administrator and an owner of Default. Owners and admins of a workspace administer only that one; the installation's pages (settings, the wizard, binary builds, Platform → Workspaces) stay with platform administrators. Taking `admin` away makes an owner of Default a member (#342).
+- **A personal access token reaches one workspace** (#317) - the workspace it was made in; tokens from 1.x reach Default. `ALLOWED_API_ROLES` is matched on the user's agent roles in that workspace. A token stops working when its workspace is closed or suspended, or its owner is no longer a member of it.
+- **Responses that list projects, agents or logs gain a `workspace_id` field.**
+- **An RBAC refusal's audit entry** lists, in `user_roles`, the user's agent roles in the agent's workspace, where it listed `users.roles` (#342).
+- **No agent is exposed over MCP unless named** (#364) - `MCP_EXPOSED_AGENTS` defaulted to `chess_mate_root`, so an installation with an agent of that name served it at `/agents/chess_mate_root/mcp`. Unset or empty, it now exposes none. **Set `MCP_EXPOSED_AGENTS=chess_mate_root` if you relied on the default.**
+- **Project names are unique per workspace** (#334), instead of across the installation. A template import whose agent names one another workspace holds is refused with 409 before it creates the project.
+- **One integration per Slack team** (#319) - V047 makes `channel_integrations.team_id` unique, so a Slack event finds one workspace. It fails on an installation with two integrations for one team; the upgrade guide has the query that finds them.
+- **A renamed agent keeps its rows** (#328) - a rename moves the agent's sessions, ratings and other rows to the new name, and rewrites its sub-agents' `parent_agents`.
+- **The dashboard uses its own dialogs everywhere** (#244) - the last native `alert()` calls are the shared dialog.
+- **One date and time format** (#247) - every page shows dates and times in the viewer's time zone, in one format, and an empty value as one placeholder.
+- **The agent side panel closes by clicking outside it or pressing Escape** (#312) - with unsaved changes, it asks first.
+- **The developer and user guides were checked against the code** (#205, #206, #236) - no guide is marked `status: migrated` any more, and the guides name the dashboard's buttons, fields and tiers as it shows them.
+
+### Security
+
+- **Single sign-on uses PKCE** (#364) - Google and GitHub sign-in send a code challenge (S256) with the redirect and the verifier with the code, so a code taken from the redirect is of no use. The registered redirect URIs don't change.
+- **A provider error that repeats the key is logged with it masked** (#352) - some providers repeat the key they were sent in their error, which reached the logs through ADK's traceback and could reach a response. The key of the call is masked in the error and the errors it was raised from, on streamed and live calls too.
+- **Webhooks, MCP servers and model endpoints of a workspace other than Default don't reach the server's own network** (#326) - private and loopback addresses are refused, and a model endpoint's redirects aren't followed, unless `OUTBOUND_ALLOW_PRIVATE_NETWORK` is set.
+- **Only the server gives out the reserved user ids** (#321) - single sign-on and new accounts can't take a widget visitor's `widget_<key id>_` id or `trigger_runner`.
+- **A rating needs a session of the caller with that agent** (#321), and a session is read and deleted by its whole key (app, user, id), so a session id another agent also has reaches only the session checked.
+- **Each agent has its own A2A task store** (#321) - `tasks/get` and `tasks/cancel` through one agent find none of another's tasks.
+
+### Fixed
+
+- **The LangGraph runtime ignored the File Search stores assigned to an agent** (#362) - on `AGENT_FRAMEWORK=langgraph`, only stores written into the agent's `tool_config` were used. Both runtimes now add the stores assigned on the File Search page.
+- **A parent with a non-ASCII name had no sub-agents** (#331) - `parent_agents` stores names with `\u` escapes, which the lookup missed. Building the tree, a rename and a project move now match both spellings.
+- **Dashboard accessibility** (#246) - labels are linked to their fields, and icon-only buttons, filters and per-row fields have names for screen readers.
+
 ## [1.6.1] - 2026-11-07
 
 ### Security
