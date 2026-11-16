@@ -4,7 +4,7 @@
     position: fixed;
     right: 20px;
     bottom: 20px;
-    z-index: 40;
+    z-index: 35;
     width: 44px;
     height: 44px;
     border-radius: 999px;
@@ -15,6 +15,9 @@
     font-weight: 700;
     cursor: pointer;
     box-shadow: 0 4px 14px rgb(0 0 0 / 0.18);
+}
+main.dashboard-main {
+    padding-bottom: 98px !important;
 }
 .mate-help-button:hover { filter: brightness(1.08); }
 .mate-help-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
@@ -129,7 +132,7 @@
 @media (max-width: 767px) {
     .mate-help-button { right: 14px; bottom: 14px; }
     .mate-help-panel { right: 8px; left: 8px; bottom: 68px; width: auto; height: calc(100vh - 150px); }
-     main.dashboard-main {
+    main.dashboard-main {
         padding-bottom: 90px !important;
     }
 }

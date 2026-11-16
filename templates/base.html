@@ -1,6 +1,5 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -38,27 +37,8 @@
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="/static/css/redesign.css">
     <style>
-        @keyframes mate-slide-in {
-            from {
-                transform: translateX(120%);
-                opacity: 0;
-            }
-
-            to {
-                transform: translateX(0);
-                opacity: 1;
-            }
-        }
-
-        @keyframes mate-spin {
-            from {
-                transform: rotate(0deg);
-            }
-
-            to {
-                transform: rotate(360deg);
-            }
-        }
+        @keyframes mate-slide-in { from { transform: translateX(120%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        @keyframes mate-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 
         /* Theme transition */
         * {
@@ -78,7 +58,6 @@
             top: 0;
             z-index: 50;
         }
-
         .mate-brand-logo {
             width: 34px;
             height: 34px;
@@ -86,7 +65,6 @@
             object-fit: contain;
             box-shadow: var(--shadow-card);
         }
-
         .mate-brand-name {
             font-weight: 800;
             font-size: 17px;
@@ -105,7 +83,6 @@
             border: 1px solid var(--border);
             margin-left: 10px;
         }
-
         .mate-space-pill {
             display: flex;
             align-items: center;
@@ -120,11 +97,7 @@
             border: none;
             background: transparent;
         }
-
-        .mate-space-pill:hover {
-            color: var(--text-primary);
-        }
-
+        .mate-space-pill:hover { color: var(--text-primary); }
         .mate-space-pill.active {
             background: var(--accent-soft);
             color: var(--accent);
@@ -140,20 +113,17 @@
             background: var(--bg-surface-2);
             border: 1px solid var(--border);
         }
-
         #adkStatusIndicator {
             width: 8px !important;
             height: 8px !important;
             border-radius: 999px !important;
             flex-shrink: 0;
         }
-
         #adkStatusText {
             font-size: 11.5px !important;
             font-weight: 600 !important;
             white-space: nowrap;
         }
-
         .mate-adk-btn {
             height: 22px;
             min-width: 22px;
@@ -167,21 +137,9 @@
             justify-content: center;
             white-space: nowrap;
         }
-
-        #startAdkBtn {
-            background: var(--success-soft) !important;
-            color: var(--success) !important;
-        }
-
-        #stopAdkBtn {
-            background: var(--danger-soft) !important;
-            color: var(--danger) !important;
-        }
-
-        #restartAdkBtn {
-            background: var(--accent-3-soft) !important;
-            color: var(--accent-3) !important;
-        }
+        #startAdkBtn { background: var(--success-soft) !important; color: var(--success) !important; }
+        #stopAdkBtn { background: var(--danger-soft) !important; color: var(--danger) !important; }
+        #restartAdkBtn { background: var(--accent-3-soft) !important; color: var(--accent-3) !important; }
 
         /* Theme toggle pill */
         .theme-switcher {
@@ -194,7 +152,6 @@
             cursor: pointer;
             flex-shrink: 0;
         }
-
         .mate-theme-thumb {
             position: absolute;
             top: 2px;
@@ -209,34 +166,16 @@
             align-items: center;
             justify-content: center;
         }
-
-        html.dark .mate-theme-thumb {
-            left: 26px;
-        }
-
+        html.dark .mate-theme-thumb { left: 26px; }
         .theme-icon {
             position: absolute;
             font-size: 10px;
             transition: opacity 0.3s;
         }
-
-        .theme-icon.sun {
-            color: #e8a23d;
-            opacity: 1;
-        }
-
-        .theme-icon.moon {
-            color: #8ea6d6;
-            opacity: 0;
-        }
-
-        html.dark .theme-icon.sun {
-            opacity: 0;
-        }
-
-        html.dark .theme-icon.moon {
-            opacity: 1;
-        }
+        .theme-icon.sun { color: #e8a23d; opacity: 1; }
+        .theme-icon.moon { color: #8ea6d6; opacity: 0; }
+        html.dark .theme-icon.sun { opacity: 0; }
+        html.dark .theme-icon.moon { opacity: 1; }
 
         /* User avatar + dropdown */
         .mate-avatar {
@@ -253,7 +192,6 @@
             align-items: center;
             justify-content: center;
         }
-
         .mate-menu {
             position: absolute;
             right: 0;
@@ -266,7 +204,6 @@
             overflow: hidden;
             z-index: 60;
         }
-
         .mate-menu-item {
             display: flex;
             align-items: center;
@@ -281,15 +218,8 @@
             cursor: pointer;
             text-decoration: none;
         }
-
-        .mate-menu-item:hover {
-            background: var(--bg-surface-2);
-        }
-
-        .mate-menu-item.danger {
-            color: var(--danger);
-            border-top: 1px solid var(--border);
-        }
+        .mate-menu-item:hover { background: var(--bg-surface-2); }
+        .mate-menu-item.danger { color: var(--danger); border-top: 1px solid var(--border); }
 
         /* ── Sidebar ──────────────────────────────────────── */
         #sidebar {
@@ -304,7 +234,6 @@
             flex-shrink: 0;
             transition: width 0.22s ease, transform 0.25s ease;
         }
-
         .sidebar-section-header {
             font-size: 10.5px;
             font-weight: 700;
@@ -315,7 +244,6 @@
             white-space: nowrap;
             overflow: hidden;
         }
-
         .mate-nav-item {
             display: flex;
             align-items: center;
@@ -329,19 +257,16 @@
             text-decoration: none;
             white-space: nowrap;
         }
-
         .mate-nav-item:hover {
             background: var(--bg-surface-2);
             color: var(--text-primary);
         }
-
         .mate-nav-item .sidebar-icon {
             width: 16px;
             text-align: center;
             font-size: 13px;
             flex-shrink: 0;
         }
-
         .sidebar-active {
             background: var(--accent-soft) !important;
             color: var(--accent) !important;
@@ -349,31 +274,16 @@
         }
 
         /* Collapse (minimized) state */
-        #sidebar.sidebar-minimized {
-            width: 76px;
-        }
-
-        #sidebar.sidebar-minimized .sidebar-text {
-            display: none !important;
-        }
-
-        #sidebar.sidebar-minimized .sidebar-section-header {
-            display: none !important;
-        }
-
+        #sidebar.sidebar-minimized { width: 76px; }
+        #sidebar.sidebar-minimized .sidebar-text { display: none !important; }
+        #sidebar.sidebar-minimized .sidebar-section-header { display: none !important; }
         #sidebar.sidebar-minimized .mate-nav-item {
             justify-content: center;
             padding: 10px 0;
         }
-
-        #sidebar.sidebar-minimized #sidebarToggleIcon {
-            transform: rotate(180deg);
-        }
-
+        #sidebar.sidebar-minimized #sidebarToggleIcon { transform: rotate(180deg); }
         #sidebar.sidebar-minimized #workroomSessionList,
-        #sidebar.sidebar-minimized .wr-recent-label {
-            display: none !important;
-        }
+        #sidebar.sidebar-minimized .wr-recent-label { display: none !important; }
 
         .mate-sidebar-foot {
             display: flex;
@@ -385,7 +295,6 @@
             bottom: 0;
             background: var(--bg-surface);
         }
-
         #sidebarToggle {
             width: 32px;
             height: 32px;
@@ -395,10 +304,7 @@
             color: var(--text-secondary);
             cursor: pointer;
         }
-
-        #sidebarToggleIcon {
-            transition: transform 0.2s ease;
-        }
+        #sidebarToggleIcon { transition: transform 0.2s ease; }
 
         /* Hamburger (mobile only) */
         #hamburgerBtn {
@@ -413,9 +319,7 @@
         }
 
         /* Sidebar sessions list (Work Room) */
-        #workroomSessionList a {
-            margin: 0;
-        }
+        #workroomSessionList a { margin: 0; }
 
         /* ── Toast notifications ──────────────────────────── */
         .mate-notification {
@@ -437,9 +341,7 @@
         }
 
         /* Mobile space tabs (Work Room / Studio / Control Room) */
-        .mate-mobile-tabs {
-            display: none;
-        }
+        .mate-mobile-tabs { display: none; }
 
         /* Mobile sidebar - drawer overlay */
         @media (max-width: 767px) {
@@ -447,7 +349,6 @@
                 position: sticky;
                 z-index: 40;
             }
-
             .mate-mobile-tabs {
                 display: flex;
                 position: sticky;
@@ -456,7 +357,6 @@
                 background: var(--bg-surface);
                 border-bottom: 1px solid var(--border);
             }
-
             .mate-mobile-tab {
                 flex: 1;
                 display: flex;
@@ -472,21 +372,13 @@
                 white-space: nowrap;
                 border-bottom: 2px solid transparent;
             }
-
-            .mate-mobile-tab i {
-                font-size: 11px;
-            }
-
+            .mate-mobile-tab i { font-size: 11px; }
             .mate-mobile-tab.active {
                 color: var(--accent);
                 border-bottom-color: var(--accent);
                 background: var(--accent-soft);
             }
-
-            main.dashboard-main {
-                padding: 14px !important;
-            }
-
+            main.dashboard-main { padding: 14px !important; }
             #sidebar {
                 position: fixed;
                 top: 0;
@@ -500,31 +392,18 @@
                 transition: transform 0.25s ease, z-index 0s 0.25s;
                 box-shadow: none;
             }
-
             #sidebar.mobile-sidebar-open {
                 transform: translateX(0);
                 z-index: 50;
                 transition: transform 0.25s ease;
                 box-shadow: 8px 0 24px rgba(0, 0, 0, 0.25);
             }
-
-            #sidebarToggle {
-                display: none !important;
-            }
-
-            .mate-sidebar-foot {
-                display: none;
-            }
+            #sidebarToggle { display: none !important; }
+            .mate-sidebar-foot { display: none; }
         }
-
         @media (min-width: 768px) {
-            #sidebarBackdrop {
-                display: none !important;
-            }
-
-            #hamburgerBtn {
-                display: none !important;
-            }
+            #sidebarBackdrop { display: none !important; }
+            #hamburgerBtn { display: none !important; }
         }
     </style>
     <link rel="stylesheet" href="/static/css/dashboard-responsive.css">
@@ -535,22 +414,19 @@
 {# The installation's own pages are for platform administrators only #}
 {% set platform_admin = is_platform_admin(request) if is_platform_admin is defined else true %}
 {% set ws_switcher = workspace_switcher(request) if workspace_switcher is defined else none %}
-
 <body data-platform-admin="{{ 'true' if platform_admin else 'false' }}">
     <!-- Sidebar backdrop (mobile) -->
-    <div id="sidebarBackdrop" class="hidden fixed inset-0 z-40 md:hidden" style="background: rgba(20,15,10,0.45);"
-        aria-hidden="true"></div>
+    <div id="sidebarBackdrop" class="hidden fixed inset-0 z-40 md:hidden" style="background: rgba(20,15,10,0.45);" aria-hidden="true"></div>
 
     <!-- Navigation -->
     <nav class="dashboard-nav">
         {% set cp = request.url.path %}
-        {% if cp.startswith('/dashboard/agents') or cp in ['/dashboard/triggers', '/dashboard/templates',
-        '/dashboard/evals', '/dashboard/traces', '/dashboard/integrations'] %}
-        {% set active_space = 'studio' %}
+        {% if cp.startswith('/dashboard/agents') or cp in ['/dashboard/triggers', '/dashboard/templates', '/dashboard/evals', '/dashboard/traces', '/dashboard/integrations'] %}
+          {% set active_space = 'studio' %}
         {% elif cp == '/dashboard/workroom' %}
-        {% set active_space = 'workroom' %}
+          {% set active_space = 'workroom' %}
         {% else %}
-        {% set active_space = 'control_room' %}
+          {% set active_space = 'control_room' %}
         {% endif %}
         <div class="flex items-center gap-3 min-w-0">
             <button id="hamburgerBtn" type="button" class="touch-target md:hidden" aria-label="Open menu">
@@ -563,15 +439,13 @@
             <!-- Space switcher — desktop only — admin only -->
             {% if is_admin is not defined or is_admin %}
             <div class="mate-space-switch hidden md:flex">
-                <a href="/dashboard/workroom"
-                    class="mate-space-pill {% if active_space == 'workroom' %}active{% endif %}">
+                <a href="/dashboard/workroom" class="mate-space-pill {% if active_space == 'workroom' %}active{% endif %}">
                     <i class="fas fa-comments"></i><span>Work Room</span>
                 </a>
                 <a href="/dashboard/agents" class="mate-space-pill {% if active_space == 'studio' %}active{% endif %}">
                     <i class="fas fa-robot"></i><span>Studio</span>
                 </a>
-                <a href="/dashboard/overview"
-                    class="mate-space-pill {% if active_space == 'control_room' %}active{% endif %}">
+                <a href="/dashboard/overview" class="mate-space-pill {% if active_space == 'control_room' %}active{% endif %}">
                     <i class="fas fa-tachometer-alt"></i><span>Control Room</span>
                 </a>
             </div>
@@ -584,16 +458,13 @@
                 <div id="adkStatusIndicator" class="w-2 h-2 bg-gray-400 rounded-full"></div>
                 <span id="adkStatusText" class="text-sm text-gray-600 dark:text-gray-400">Checking...</span>
                 <div class="flex gap-1">
-                    <button aria-label="Start" id="startAdkBtn" data-click="controlAdkServer" data-args='["start"]'
-                        title="Start" class="mate-adk-btn hidden touch-target">
+                    <button aria-label="Start" id="startAdkBtn" data-click="controlAdkServer" data-args='["start"]' title="Start" class="mate-adk-btn hidden touch-target">
                         <i class="fas fa-play"></i>
                     </button>
-                    <button aria-label="Stop" id="stopAdkBtn" data-click="controlAdkServer" data-args='["stop"]'
-                        title="Stop" class="mate-adk-btn hidden touch-target">
+                    <button aria-label="Stop" id="stopAdkBtn" data-click="controlAdkServer" data-args='["stop"]' title="Stop" class="mate-adk-btn hidden touch-target">
                         <i class="fas fa-stop"></i>
                     </button>
-                    <button aria-label="Restart" id="restartAdkBtn" data-click="controlAdkServer"
-                        data-args='["restart"]' title="Restart" class="mate-adk-btn hidden touch-target">
+                    <button aria-label="Restart" id="restartAdkBtn" data-click="controlAdkServer" data-args='["restart"]' title="Restart" class="mate-adk-btn hidden touch-target">
                         <i class="fas fa-redo"></i>
                     </button>
                 </div>
@@ -601,30 +472,27 @@
             {% endif %}
             <!-- Workspace switcher, with more than one workspace -->
             {% if ws_switcher %}
-            <select id="workspaceSwitcher" data-change="switchWorkspace" data-args='["$value"]' aria-label="Workspace"
-                title="Workspace"
-                style="max-width: 180px; padding: 6px 10px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg-secondary, transparent); color: var(--text-primary); font-size: 12.5px; font-weight: 600;">
+            <select id="workspaceSwitcher" data-change="switchWorkspace" data-args='["$value"]'
+                    aria-label="Workspace" title="Workspace"
+                    style="max-width: 180px; padding: 6px 10px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg-secondary, transparent); color: var(--text-primary); font-size: 12.5px; font-weight: 600;">
                 {% for w in ws_switcher.workspaces %}
-                <option value="{{ w.id }}" {% if w.id==ws_switcher.current %}selected{% endif %}>{{ w.name }}</option>
+                <option value="{{ w.id }}" {% if w.id == ws_switcher.current %}selected{% endif %}>{{ w.name }}</option>
                 {% endfor %}
             </select>
             {% endif %}
             <!-- Theme Switcher -->
-            <div class="theme-switcher touch-target" data-click="toggleTheme" role="button" tabindex="0"
-                aria-label="Toggle theme">
+            <div class="theme-switcher touch-target" data-click="toggleTheme" role="button" tabindex="0" aria-label="Toggle theme">
                 <span class="mate-theme-thumb">
                     <i class="fas fa-sun theme-icon sun"></i>
                     <i class="fas fa-moon theme-icon moon"></i>
                 </span>
             </div>
             <div class="relative">
-                <button id="userMenuButton" data-click="toggleUserMenu" class="mate-avatar touch-target">{{ (username or
-                    'U')[:2] | upper }}</button>
+                <button id="userMenuButton" data-click="toggleUserMenu" class="mate-avatar touch-target">{{ (username or 'U')[:2] | upper }}</button>
                 <div id="userMenuDropdown" class="hidden mate-menu">
                     <div style="padding: 12px 14px; border-bottom: 1px solid var(--border);">
                         <div style="font-weight: 700; font-size: 13px; color: var(--text-primary);">{{ username }}</div>
-                        {% set _provider = request.session.get('user', {}).get('provider', '') if request.session is
-                        defined else '' %}
+                        {% set _provider = request.session.get('user', {}).get('provider', '') if request.session is defined else '' %}
                         <div style="font-size: 11px; color: var(--text-tertiary); margin-top: 2px;">
                             {% if _provider == 'google' %}via Google
                             {% elif _provider == 'github' %}via GitHub
@@ -667,12 +535,9 @@
     <div class="flex">
         <!-- Sidebar -->
         <aside id="sidebar" class="sidebar-collapsible">
-            <div class="flex justify-between items-center p-3 md:hidden"
-                style="border-bottom: 1px solid var(--border);">
+            <div class="flex justify-between items-center p-3 md:hidden" style="border-bottom: 1px solid var(--border);">
                 <span class="text-sm font-semibold" style="color: var(--text-primary);">Menu</span>
-                <button type="button" data-click="closeMobileSidebar" class="touch-target p-2"
-                    style="color: var(--text-secondary); background: none; border: none; cursor: pointer;"
-                    aria-label="Close menu">
+                <button type="button" data-click="closeMobileSidebar" class="touch-target p-2" style="color: var(--text-secondary); background: none; border: none; cursor: pointer;" aria-label="Close menu">
                     <i class="fas fa-times"></i>
                 </button>
             </div>
@@ -682,51 +547,37 @@
                 <!-- ── Studio ────────────────────────── -->
                 <p class="sidebar-section-header">Build</p>
                 <div class="space-y-0.5">
-                    <a href="/dashboard/agents"
-                        class="mate-nav-item {% if request.url.path == '/dashboard/agents' %}sidebar-active{% endif %}"
-                        title="Agents">
+                    <a href="/dashboard/agents" class="mate-nav-item {% if request.url.path == '/dashboard/agents' %}sidebar-active{% endif %}" title="Agents">
                         <i class="fas fa-robot sidebar-icon"></i>
                         <span class="sidebar-text">Agents</span>
                     </a>
-                    <a href="/dashboard/agents/visual" id="sidebarVisualBuilderLink"
-                        class="mate-nav-item {% if request.url.path == '/dashboard/agents/visual' %}sidebar-active{% endif %}"
-                        title="Visual Builder" data-click="handleVisualBuilderNav" data-args='["$event"]'>
+                    <a href="/dashboard/agents/visual" id="sidebarVisualBuilderLink" class="mate-nav-item {% if request.url.path == '/dashboard/agents/visual' %}sidebar-active{% endif %}" title="Visual Builder" data-click="handleVisualBuilderNav" data-args='["$event"]'>
                         <i class="fas fa-sitemap sidebar-icon"></i>
                         <span class="sidebar-text">Visual Builder</span>
                     </a>
-                    <a href="/dashboard/triggers"
-                        class="mate-nav-item {% if request.url.path == '/dashboard/triggers' %}sidebar-active{% endif %}"
-                        title="Triggers">
+                    <a href="/dashboard/triggers" class="mate-nav-item {% if request.url.path == '/dashboard/triggers' %}sidebar-active{% endif %}" title="Triggers">
                         <i class="fas fa-bolt sidebar-icon"></i>
                         <span class="sidebar-text">Triggers</span>
                     </a>
-                    <a href="/dashboard/integrations"
-                        class="mate-nav-item {% if request.url.path == '/dashboard/integrations' %}sidebar-active{% endif %}"
-                        title="Integrations">
+                    <a href="/dashboard/integrations" class="mate-nav-item {% if request.url.path == '/dashboard/integrations' %}sidebar-active{% endif %}" title="Integrations">
                         <i class="fas fa-plug sidebar-icon"></i>
                         <span class="sidebar-text">Integrations</span>
                     </a>
                 </div>
                 <p class="sidebar-section-header">Templates</p>
                 <div class="space-y-0.5">
-                    <a href="/dashboard/templates"
-                        class="mate-nav-item {% if request.url.path == '/dashboard/templates' %}sidebar-active{% endif %}"
-                        title="Template Library">
+                    <a href="/dashboard/templates" class="mate-nav-item {% if request.url.path == '/dashboard/templates' %}sidebar-active{% endif %}" title="Template Library">
                         <i class="fas fa-layer-group sidebar-icon"></i>
                         <span class="sidebar-text">Template Library</span>
                     </a>
                 </div>
                 <p class="sidebar-section-header">Test &amp; Monitoring</p>
                 <div class="space-y-0.5">
-                    <a href="/dashboard/evals"
-                        class="mate-nav-item {% if request.url.path == '/dashboard/evals' %}sidebar-active{% endif %}"
-                        title="Evals">
+                    <a href="/dashboard/evals" class="mate-nav-item {% if request.url.path == '/dashboard/evals' %}sidebar-active{% endif %}" title="Evals">
                         <i class="fas fa-flask sidebar-icon"></i>
                         <span class="sidebar-text">Evals</span>
                     </a>
-                    <a href="/dashboard/traces"
-                        class="mate-nav-item {% if request.url.path == '/dashboard/traces' %}sidebar-active{% endif %}"
-                        title="Traces">
+                    <a href="/dashboard/traces" class="mate-nav-item {% if request.url.path == '/dashboard/traces' %}sidebar-active{% endif %}" title="Traces">
                         <i class="fas fa-project-diagram sidebar-icon"></i>
                         <span class="sidebar-text">Traces</span>
                     </a>
@@ -739,9 +590,8 @@
                 <p class="sidebar-section-header">Chat</p>
                 <div class="space-y-0.5">
                     <a id="newConversationLink"
-                        href="/dashboard/workroom{% if _wr_agent %}?agent={{ _wr_agent }}{% endif %}"
-                        class="mate-nav-item {% if not _wr_session %}sidebar-active{% endif %}"
-                        title="New Conversation">
+                       href="/dashboard/workroom{% if _wr_agent %}?agent={{ _wr_agent }}{% endif %}"
+                       class="mate-nav-item {% if not _wr_session %}sidebar-active{% endif %}" title="New Conversation">
                         <i class="fas fa-plus sidebar-icon"></i>
                         <span class="sidebar-text">New Conversation</span>
                     </a>
@@ -757,36 +607,26 @@
                 <!-- ── Control Room ───────────────────── -->
                 <p class="sidebar-section-header">Overview</p>
                 <div class="space-y-0.5">
-                    <a href="/dashboard/overview"
-                        class="mate-nav-item {% if request.url.path == '/dashboard/overview' %}sidebar-active{% endif %}"
-                        title="Platform Overview">
+                    <a href="/dashboard/overview" class="mate-nav-item {% if request.url.path == '/dashboard/overview' %}sidebar-active{% endif %}" title="Platform Overview">
                         <i class="fas fa-th-large sidebar-icon"></i>
                         <span class="sidebar-text">Platform Overview</span>
                     </a>
                 </div>
                 <p class="sidebar-section-header">Observability</p>
                 <div class="space-y-0.5">
-                    <a href="/dashboard/usage"
-                        class="mate-nav-item {% if request.url.path == '/dashboard/usage' %}sidebar-active{% endif %}"
-                        title="Usage Analytics">
+                    <a href="/dashboard/usage" class="mate-nav-item {% if request.url.path == '/dashboard/usage' %}sidebar-active{% endif %}" title="Usage Analytics">
                         <i class="fas fa-chart-bar sidebar-icon"></i>
                         <span class="sidebar-text">Usage Analytics</span>
                     </a>
-                    <a href="/dashboard/audit-logs"
-                        class="mate-nav-item {% if request.url.path == '/dashboard/audit-logs' %}sidebar-active{% endif %}"
-                        title="Audit Logs">
+                    <a href="/dashboard/audit-logs" class="mate-nav-item {% if request.url.path == '/dashboard/audit-logs' %}sidebar-active{% endif %}" title="Audit Logs">
                         <i class="fas fa-clipboard-list sidebar-icon"></i>
                         <span class="sidebar-text">Audit Logs</span>
                     </a>
-                    <a href="/dashboard/guardrail-logs"
-                        class="mate-nav-item {% if request.url.path == '/dashboard/guardrail-logs' %}sidebar-active{% endif %}"
-                        title="Guardrail Logs">
+                    <a href="/dashboard/guardrail-logs" class="mate-nav-item {% if request.url.path == '/dashboard/guardrail-logs' %}sidebar-active{% endif %}" title="Guardrail Logs">
                         <i class="fas fa-shield-halved sidebar-icon"></i>
                         <span class="sidebar-text">Guardrail Logs</span>
                     </a>
-                    <a href="/dashboard/sessions"
-                        class="mate-nav-item {% if request.url.path == '/dashboard/sessions' %}sidebar-active{% endif %}"
-                        title="Session Tracking">
+                    <a href="/dashboard/sessions" class="mate-nav-item {% if request.url.path == '/dashboard/sessions' %}sidebar-active{% endif %}" title="Session Tracking">
                         <i class="fas fa-comments sidebar-icon"></i>
                         <span class="sidebar-text">Session Tracking</span>
                     </a>
@@ -794,21 +634,15 @@
                 {% if platform_admin %}
                 <p class="sidebar-section-header">Wizard &amp; Commerce</p>
                 <div class="space-y-0.5">
-                    <a href="/dashboard/wizard-leads"
-                        class="mate-nav-item {% if request.url.path == '/dashboard/wizard-leads' %}sidebar-active{% endif %}"
-                        title="Wizard Leads">
+                    <a href="/dashboard/wizard-leads" class="mate-nav-item {% if request.url.path == '/dashboard/wizard-leads' %}sidebar-active{% endif %}" title="Wizard Leads">
                         <i class="fas fa-inbox sidebar-icon"></i>
                         <span class="sidebar-text">Wizard Leads</span>
                     </a>
-                    <a href="/dashboard/wizard-pricing"
-                        class="mate-nav-item {% if request.url.path == '/dashboard/wizard-pricing' %}sidebar-active{% endif %}"
-                        title="Wizard Pricing">
+                    <a href="/dashboard/wizard-pricing" class="mate-nav-item {% if request.url.path == '/dashboard/wizard-pricing' %}sidebar-active{% endif %}" title="Wizard Pricing">
                         <i class="fas fa-tags sidebar-icon"></i>
                         <span class="sidebar-text">Wizard Pricing</span>
                     </a>
-                    <a href="/dashboard/shop-orders"
-                        class="mate-nav-item {% if request.url.path == '/dashboard/shop-orders' %}sidebar-active{% endif %}"
-                        title="Shop Orders">
+                    <a href="/dashboard/shop-orders" class="mate-nav-item {% if request.url.path == '/dashboard/shop-orders' %}sidebar-active{% endif %}" title="Shop Orders">
                         <i class="fas fa-shopping-bag sidebar-icon"></i>
                         <span class="sidebar-text">Shop Orders</span>
                     </a>
@@ -817,40 +651,28 @@
                 <p class="sidebar-section-header">Governance &amp; Access</p>
                 <div class="space-y-0.5">
                     {% if platform_admin %}
-                    <a href="/dashboard/users"
-                        class="mate-nav-item {% if request.url.path == '/dashboard/users' %}sidebar-active{% endif %}"
-                        title="Users">
+                    <a href="/dashboard/users" class="mate-nav-item {% if request.url.path == '/dashboard/users' %}sidebar-active{% endif %}" title="Users">
                         <i class="fas fa-users sidebar-icon"></i>
                         <span class="sidebar-text">Users</span>
                     </a>
-                    <a href="/dashboard/workspaces"
-                        class="mate-nav-item {% if request.url.path == '/dashboard/workspaces' %}sidebar-active{% endif %}"
-                        title="Workspaces">
+                    <a href="/dashboard/workspaces" class="mate-nav-item {% if request.url.path == '/dashboard/workspaces' %}sidebar-active{% endif %}" title="Workspaces">
                         <i class="fas fa-building sidebar-icon"></i>
                         <span class="sidebar-text">Workspaces</span>
                     </a>
                     {% endif %}
-                    <a href="/dashboard/members"
-                        class="mate-nav-item {% if request.url.path == '/dashboard/members' %}sidebar-active{% endif %}"
-                        title="Members">
+                    <a href="/dashboard/members" class="mate-nav-item {% if request.url.path == '/dashboard/members' %}sidebar-active{% endif %}" title="Members">
                         <i class="fas fa-user-friends sidebar-icon"></i>
                         <span class="sidebar-text">Members</span>
                     </a>
-                    <a href="/dashboard/models"
-                        class="mate-nav-item {% if request.url.path == '/dashboard/models' %}sidebar-active{% endif %}"
-                        title="Models and keys">
+                    <a href="/dashboard/models" class="mate-nav-item {% if request.url.path == '/dashboard/models' %}sidebar-active{% endif %}" title="Models and keys">
                         <i class="fas fa-key sidebar-icon"></i>
                         <span class="sidebar-text">Models and keys</span>
                     </a>
-                    <a href="/dashboard/rate-limits"
-                        class="mate-nav-item {% if request.url.path == '/dashboard/rate-limits' %}sidebar-active{% endif %}"
-                        title="Rate Limits">
+                    <a href="/dashboard/rate-limits" class="mate-nav-item {% if request.url.path == '/dashboard/rate-limits' %}sidebar-active{% endif %}" title="Rate Limits">
                         <i class="fas fa-shield-alt sidebar-icon"></i>
                         <span class="sidebar-text">Rate Limits</span>
                     </a>
-                    <a href="/dashboard/alerts"
-                        class="mate-nav-item {% if request.url.path == '/dashboard/alerts' %}sidebar-active{% endif %}"
-                        title="Alerts">
+                    <a href="/dashboard/alerts" class="mate-nav-item {% if request.url.path == '/dashboard/alerts' %}sidebar-active{% endif %}" title="Alerts">
                         <i class="fas fa-bell sidebar-icon"></i>
                         <span class="sidebar-text">Alerts</span>
                     </a>
@@ -858,22 +680,16 @@
                 <p class="sidebar-section-header">System</p>
                 <div class="space-y-0.5">
                     {% if platform_admin %}
-                    <a href="/dashboard/settings"
-                        class="mate-nav-item {% if request.url.path == '/dashboard/settings' %}sidebar-active{% endif %}"
-                        title="Settings">
+                    <a href="/dashboard/settings" class="mate-nav-item {% if request.url.path == '/dashboard/settings' %}sidebar-active{% endif %}" title="Settings">
                         <i class="fas fa-sliders-h sidebar-icon"></i>
                         <span class="sidebar-text">Settings</span>
                     </a>
-                    <a href="/dashboard/migrations"
-                        class="mate-nav-item {% if request.url.path == '/dashboard/migrations' %}sidebar-active{% endif %}"
-                        title="Migrations">
+                    <a href="/dashboard/migrations" class="mate-nav-item {% if request.url.path == '/dashboard/migrations' %}sidebar-active{% endif %}" title="Migrations">
                         <i class="fas fa-database sidebar-icon"></i>
                         <span class="sidebar-text">Migrations</span>
                     </a>
                     {% endif %}
-                    <a href="/dashboard/docs"
-                        class="mate-nav-item {% if request.url.path == '/dashboard/docs' %}sidebar-active{% endif %}"
-                        title="Documentation">
+                    <a href="/dashboard/docs" class="mate-nav-item {% if request.url.path == '/dashboard/docs' %}sidebar-active{% endif %}" title="Documentation">
                         <i class="fas fa-book sidebar-icon"></i>
                         <span class="sidebar-text">Documentation</span>
                     </a>
@@ -886,9 +702,8 @@
                 <p class="sidebar-section-header">Chat</p>
                 <div class="space-y-0.5">
                     <a id="newConversationLink"
-                        href="/dashboard/workroom{% if _wr_agent %}?agent={{ _wr_agent }}{% endif %}"
-                        class="mate-nav-item {% if not _wr_session %}sidebar-active{% endif %}"
-                        title="New Conversation">
+                       href="/dashboard/workroom{% if _wr_agent %}?agent={{ _wr_agent }}{% endif %}"
+                       class="mate-nav-item {% if not _wr_session %}sidebar-active{% endif %}" title="New Conversation">
                         <i class="fas fa-plus sidebar-icon"></i>
                         <span class="sidebar-text">New Conversation</span>
                     </a>
@@ -901,9 +716,7 @@
                 {% endif %}
                 <p class="sidebar-section-header">Analytics</p>
                 <div class="space-y-0.5">
-                    <a href="/dashboard/usage"
-                        class="mate-nav-item {% if request.url.path == '/dashboard/usage' %}sidebar-active{% endif %}"
-                        title="My Usage">
+                    <a href="/dashboard/usage" class="mate-nav-item {% if request.url.path == '/dashboard/usage' %}sidebar-active{% endif %}" title="My Usage">
                         <i class="fas fa-chart-bar sidebar-icon"></i>
                         <span class="sidebar-text">My Usage</span>
                     </a>
@@ -913,68 +726,52 @@
 
             <!-- Minimize Toggle Button -->
             <div class="mate-sidebar-foot">
-                <button aria-label="Toggle sidebar" id="sidebarToggle" data-click="toggleSidebar"
-                    title="Toggle sidebar">
+                <button aria-label="Toggle sidebar" id="sidebarToggle" data-click="toggleSidebar" title="Toggle sidebar">
                     <i id="sidebarToggleIcon" class="fas fa-chevron-left"></i>
                 </button>
             </div>
         </aside>
 
         <!-- Main Content -->
-        <main class="flex-1 min-w-0 dashboard-main" style="padding: 22px 22px 98px; background: var(--bg-page);">
+        <main class="flex-1 min-w-0 dashboard-main" style="padding: 22px; background: var(--bg-page);">
             {% block content %}{% endblock %}
         </main>
     </div>
 
     <!-- Personal Access Tokens Modal -->
-    <div id="tokensModal" class="fixed inset-0 hidden z-[9999] dashboard-modal flex items-center justify-center p-4"
-        style="background: rgba(20,15,10,0.5);">
-        <div class="w-full flex flex-col"
-            style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: 20px; box-shadow: var(--shadow-card); max-width: 640px; max-height: 88vh;">
+    <div id="tokensModal" class="fixed inset-0 hidden z-[9999] dashboard-modal flex items-center justify-center p-4" style="background: rgba(20,15,10,0.5);">
+        <div class="w-full flex flex-col" style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: 20px; box-shadow: var(--shadow-card); max-width: 640px; max-height: 88vh;">
             <!-- Modal Header -->
-            <div class="flex justify-between items-center"
-                style="padding: 18px 22px; border-bottom: 1px solid var(--border);">
-                <h3
-                    style="margin: 0; font-size: 15px; font-weight: 800; color: var(--text-primary); display: flex; align-items: center; gap: 8px;">
+            <div class="flex justify-between items-center" style="padding: 18px 22px; border-bottom: 1px solid var(--border);">
+                <h3 style="margin: 0; font-size: 15px; font-weight: 800; color: var(--text-primary); display: flex; align-items: center; gap: 8px;">
                     <i class="fas fa-key" style="color: var(--accent); font-size: 13px;"></i>
                     Personal Access Tokens
                 </h3>
-                <button aria-label="Close" type="button" data-click="closeTokensModal" class="touch-target"
-                    style="width: 30px; height: 30px; border-radius: 9px; border: none; background: var(--bg-surface-2); color: var(--text-secondary); cursor: pointer;">
+                <button aria-label="Close" type="button" data-click="closeTokensModal" class="touch-target" style="width: 30px; height: 30px; border-radius: 9px; border: none; background: var(--bg-surface-2); color: var(--text-secondary); cursor: pointer;">
                     <i class="fas fa-times"></i>
                 </button>
             </div>
 
             <!-- Modal Body (scrollable) -->
-            <div class="overflow-y-auto flex-1"
-                style="padding: 22px; display: flex; flex-direction: column; gap: 18px;">
+            <div class="overflow-y-auto flex-1" style="padding: 22px; display: flex; flex-direction: column; gap: 18px;">
                 <!-- Description -->
-                <div
-                    style="display: flex; gap: 10px; font-size: 12px; color: var(--text-secondary); background: var(--accent-3-soft); border-radius: 12px; padding: 12px 14px; line-height: 1.5;">
+                <div style="display: flex; gap: 10px; font-size: 12px; color: var(--text-secondary); background: var(--accent-3-soft); border-radius: 12px; padding: 12px 14px; line-height: 1.5;">
                     <i class="fas fa-info-circle" style="color: var(--accent-3); margin-top: 1px;"></i>
-                    <span>Generate a token to authenticate against the MATE API from external tools (VS Code, CI,
-                        etc).</span>
+                    <span>Generate a token to authenticate against the MATE API from external tools (VS Code, CI, etc).</span>
                 </div>
 
                 <!-- Create Token Form -->
-                <div
-                    style="background: var(--bg-surface-2); border-radius: 16px; padding: 16px; display: flex; flex-direction: column; gap: 12px;">
-                    <span
-                        style="font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary);">Generate
-                        New Token</span>
+                <div style="background: var(--bg-surface-2); border-radius: 16px; padding: 16px; display: flex; flex-direction: column; gap: 12px;">
+                    <span style="font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary);">Generate New Token</span>
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div>
-                            <label for="newTokenName"
-                                style="display: block; font-size: 11px; font-weight: 600; color: var(--text-secondary); margin-bottom: 5px;">Name</label>
+                            <label for="newTokenName" style="display: block; font-size: 11px; font-weight: 600; color: var(--text-secondary); margin-bottom: 5px;">Name</label>
                             <input type="text" id="newTokenName" placeholder="e.g. VS Code Continue"
-                                class="w-full focus:outline-none"
-                                style="padding: 9px 11px; border-radius: 9px; border: 1px solid var(--border); background: var(--bg-surface); color: var(--text-primary); font-size: 12.5px;">
+                                class="w-full focus:outline-none" style="padding: 9px 11px; border-radius: 9px; border: 1px solid var(--border); background: var(--bg-surface); color: var(--text-primary); font-size: 12.5px;">
                         </div>
                         <div>
-                            <label for="newTokenExpiry"
-                                style="display: block; font-size: 11px; font-weight: 600; color: var(--text-secondary); margin-bottom: 5px;">Expires</label>
-                            <select id="newTokenExpiry" class="w-full focus:outline-none"
-                                style="padding: 9px 11px; border-radius: 9px; border: 1px solid var(--border); background: var(--bg-surface); color: var(--text-primary); font-size: 12.5px;">
+                            <label for="newTokenExpiry" style="display: block; font-size: 11px; font-weight: 600; color: var(--text-secondary); margin-bottom: 5px;">Expires</label>
+                            <select id="newTokenExpiry" class="w-full focus:outline-none" style="padding: 9px 11px; border-radius: 9px; border: 1px solid var(--border); background: var(--bg-surface); color: var(--text-primary); font-size: 12.5px;">
                                 <option value="7">7 days</option>
                                 <option value="30" selected>30 days</option>
                                 <option value="90">90 days</option>
@@ -984,28 +781,20 @@
                         </div>
                     </div>
                     <div class="flex justify-end">
-                        <button type="button" data-click="generateToken"
-                            style="padding: 9px 16px; border-radius: 9px; border: none; background: var(--accent); color: white; font-size: 12.5px; font-weight: 700; cursor: pointer;">
+                        <button type="button" data-click="generateToken" style="padding: 9px 16px; border-radius: 9px; border: none; background: var(--accent); color: white; font-size: 12.5px; font-weight: 700; cursor: pointer;">
                             <i class="fas fa-plus" style="margin-right: 6px;"></i>Generate Token
                         </button>
                     </div>
                 </div>
 
                 <!-- Display Newly Generated Token (hidden by default) -->
-                <div id="generatedTokenWrapper" class="hidden"
-                    style="background: var(--success-soft); border-radius: 14px; padding: 14px;">
+                <div id="generatedTokenWrapper" class="hidden" style="background: var(--success-soft); border-radius: 14px; padding: 14px;">
                     <div style="display: flex; flex-direction: column; gap: 8px;">
-                        <span style="font-size: 12.5px; font-weight: 700; color: var(--success);"><i
-                                class="fas fa-check-circle" style="margin-right: 6px;"></i>Token generated
-                            successfully</span>
-                        <span style="font-size: 11px; color: var(--text-secondary);">Save it now — it won't be shown
-                            again.</span>
+                        <span style="font-size: 12.5px; font-weight: 700; color: var(--success);"><i class="fas fa-check-circle" style="margin-right: 6px;"></i>Token generated successfully</span>
+                        <span style="font-size: 11px; color: var(--text-secondary);">Save it now — it won't be shown again.</span>
                         <div class="flex items-center gap-2">
-                            <input type="text" id="generatedTokenVal" aria-label="Generated token" readonly
-                                class="flex-1 select-all"
-                                style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: 9px; padding: 9px 11px; font-family: ui-monospace, monospace; font-size: 11.5px; color: var(--text-primary); min-width: 0;">
-                            <button type="button" data-click="copyGeneratedToken"
-                                style="padding: 9px 12px; border-radius: 9px; border: none; background: var(--success); color: white; font-size: 12px; font-weight: 700; cursor: pointer; flex-shrink: 0;">
+                            <input type="text" id="generatedTokenVal" aria-label="Generated token" readonly class="flex-1 select-all" style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: 9px; padding: 9px 11px; font-family: ui-monospace, monospace; font-size: 11.5px; color: var(--text-primary); min-width: 0;">
+                            <button type="button" data-click="copyGeneratedToken" style="padding: 9px 12px; border-radius: 9px; border: none; background: var(--success); color: white; font-size: 12px; font-weight: 700; cursor: pointer; flex-shrink: 0;">
                                 <i class="fas fa-copy" style="margin-right: 5px;"></i>Copy
                             </button>
                         </div>
@@ -1014,15 +803,12 @@
 
                 <!-- Active Tokens List -->
                 <div style="display: flex; flex-direction: column; gap: 10px;">
-                    <span
-                        style="font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary);">Active
-                        Tokens</span>
+                    <span style="font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary);">Active Tokens</span>
                     <div style="border: 1px solid var(--border); border-radius: 14px; overflow: hidden;">
                         <div class="overflow-x-auto">
                             <table class="w-full text-left border-collapse">
                                 <thead>
-                                    <tr
-                                        style="background: var(--bg-surface-2); border-bottom: 1px solid var(--border); font-size: 10px; font-weight: 700; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.05em;">
+                                    <tr style="background: var(--bg-surface-2); border-bottom: 1px solid var(--border); font-size: 10px; font-weight: 700; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.05em;">
                                         <th class="px-4 py-2.5">Name</th>
                                         <th class="px-4 py-2.5">Prefix</th>
                                         <th class="px-4 py-2.5">Created</th>
@@ -1031,8 +817,7 @@
                                         <th class="px-4 py-2.5 text-right">Action</th>
                                     </tr>
                                 </thead>
-                                <tbody id="tokensTableBody"
-                                    class="divide-y divide-gray-200 dark:divide-gray-700 text-xs">
+                                <tbody id="tokensTableBody" class="divide-y divide-gray-200 dark:divide-gray-700 text-xs">
                                     <!-- Rendered dynamically -->
                                 </tbody>
                             </table>
@@ -1043,8 +828,7 @@
 
             <!-- Modal Footer -->
             <div class="flex justify-end" style="padding: 12px 22px; border-top: 1px solid var(--border);">
-                <button type="button" data-click="closeTokensModal"
-                    style="padding: 9px 16px; border-radius: 10px; border: 1px solid var(--border); background: transparent; color: var(--text-secondary); font-size: 12.5px; font-weight: 600; cursor: pointer;">
+                <button type="button" data-click="closeTokensModal" style="padding: 9px 16px; border-radius: 10px; border: 1px solid var(--border); background: transparent; color: var(--text-secondary); font-size: 12.5px; font-weight: 600; cursor: pointer;">
                     Close
                 </button>
             </div>
@@ -1053,9 +837,9 @@
 
     <script nonce="{{ request.state.csp_nonce }}">
         mateActions.allow('controlAdkServer', 'toggleTheme', 'toggleUserMenu', 'showTokensModal',
-            'confirmLogout', 'closeMobileSidebar', 'toggleSidebar', 'closeTokensModal',
-            'generateToken', 'copyGeneratedToken', 'revokeToken',
-            'handleVisualBuilderNav', 'switchWorkspace', 'leaveWorkspace');
+                          'confirmLogout', 'closeMobileSidebar', 'toggleSidebar', 'closeTokensModal',
+                          'generateToken', 'copyGeneratedToken', 'revokeToken',
+                          'handleVisualBuilderNav', 'switchWorkspace', 'leaveWorkspace');
 
         // The workspace switcher: the session works in the chosen workspace from now on.
         // The page reloads without its query, which may name a row of the old one.
@@ -1063,8 +847,8 @@
             const response = await fetch('/dashboard/api/workspaces/current', {
                 method: 'PUT',
                 credentials: 'same-origin',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ workspace_id: parseInt(value, 10) }),
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({workspace_id: parseInt(value, 10)}),
             });
             if (response.ok) {
                 window.location.href = window.location.pathname;
@@ -1080,7 +864,7 @@
             const current = document.getElementById('workspaceSwitcher');
             const name = current ? current.options[current.selectedIndex].text : 'this workspace';
             if (!await showConfirm(`Leave ${name}? You lose access to its agents and conversations until an owner adds you again.`,
-                'Leave workspace', 'Leave', 'Cancel', 'danger')) return;
+                                   'Leave workspace', 'Leave', 'Cancel', 'danger')) return;
             const response = await fetch('/dashboard/api/members/leave', {
                 method: 'POST', credentials: 'same-origin',
             });
@@ -1131,10 +915,10 @@
         initTheme();
 
         // Initialize server control when page loads
-        document.addEventListener('DOMContentLoaded', function () {
-            {% if platform_admin %} initServerControl(); {% endif %}
+        document.addEventListener('DOMContentLoaded', function() {
+            {% if platform_admin %}initServerControl();{% endif %}
             if ('serviceWorker' in navigator) {
-                navigator.serviceWorker.register('/sw.js').catch(function () { });
+                navigator.serviceWorker.register('/sw.js').catch(function() {});
             }
         });
 
@@ -1143,7 +927,7 @@
             var storedProjectId = null;
             try {
                 storedProjectId = localStorage.getItem('agentDashboardSelectedProjectId');
-            } catch (e) { }
+            } catch (e) {}
             if (storedProjectId) {
                 event.preventDefault();
                 window.location.href = '/dashboard/agents/visual?project_id=' + encodeURIComponent(storedProjectId);
@@ -1191,7 +975,7 @@
 
             // Icon + color by type (design token based)
             let icon, iconColor;
-            switch (type) {
+            switch(type) {
                 case 'success':
                     icon = 'fa-check-circle';
                     iconColor = 'var(--success)';
@@ -1249,7 +1033,7 @@
 
                 // Icon chip colors based on type
                 let iconClass, chipFg, chipBg, okBg;
-                switch (type) {
+                switch(type) {
                     case 'danger':
                         iconClass = 'fa-exclamation-triangle';
                         chipFg = 'var(--danger)'; chipBg = 'var(--danger-soft)'; okBg = 'var(--danger)';
@@ -1333,7 +1117,7 @@
         }
 
         // Earlier versions kept the dashboard password here; remove it where it lingers
-        try { localStorage.removeItem('auth_password'); } catch (e) { }
+        try { localStorage.removeItem('auth_password'); } catch (e) {}
 
         async function apiCall(url, method = 'GET', data = null) {
             const options = {
@@ -1424,7 +1208,7 @@
         }
 
         // Initialize sidebar state on page load
-        document.addEventListener('DOMContentLoaded', function () {
+        document.addEventListener('DOMContentLoaded', function() {
             initSidebar();
         });
 
@@ -1435,7 +1219,7 @@
         }
 
         // Close dropdown when clicking outside
-        document.addEventListener('click', function (event) {
+        document.addEventListener('click', function(event) {
             const menuButton = document.getElementById('userMenuButton');
             const dropdown = document.getElementById('userMenuDropdown');
 
@@ -1536,7 +1320,7 @@
             if (!isoStr) return 'Never';
             try {
                 const d = new Date(isoStr);
-                return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
             } catch (e) {
                 return isoStr;
             }
@@ -1662,5 +1446,4 @@
 
     {% block scripts %}{% endblock %}
 </body>
-
 </html>
