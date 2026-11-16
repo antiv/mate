@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **The image data extraction tool ignored the workspace's provider keys** - it read `OPENROUTER_API_KEY` and `OPENAI_API_KEY` from the environment, so an agent in a workspace that may not use the platform's keys called on them. It now looks the key up as every other model call does: the workspace's key for the provider, else the environment where the workspace may use it, else `This workspace has no key for <provider>`. A key in a provider's error is masked. With an Ollama model the tool downloads the image itself; outside Default that download no longer reaches the server's own network unless `OUTBOUND_ALLOW_PRIVATE_NETWORK` is set.
+
 ## [2.0.0] - 2026-11-15
 
 **Read `docs/dev/upgrading-to-2.0.md` before upgrading.** The first start migrates the database (V046–V049) and moves agent roles off `users.roles`; the only way back to 1.x is the backup taken before it. In production the auth server refuses to start without `MATE_SECRET_KEY`. An installation upgraded from 1.x has one workspace, **Default**, holding everything it had, and answers its clients as 1.x did: `shared/test/test_client_contract.py` runs the OpenAI-compatible API with a personal access token, the widget and `/run_sse` through the proxy against the real app, unchanged since 1.6.
