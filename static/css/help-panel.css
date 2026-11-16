@@ -4,7 +4,7 @@
     position: fixed;
     right: 20px;
     bottom: 20px;
-    z-index: 60;
+    z-index: 40;
     width: 44px;
     height: 44px;
     border-radius: 999px;
@@ -23,7 +23,7 @@
     position: fixed;
     right: 20px;
     bottom: 76px;
-    z-index: 60;
+    z-index: 40;
     width: min(400px, calc(100vw - 32px));
     height: min(560px, calc(100vh - 120px));
     display: flex;
@@ -129,4 +129,7 @@
 @media (max-width: 767px) {
     .mate-help-button { right: 14px; bottom: 14px; }
     .mate-help-panel { right: 8px; left: 8px; bottom: 68px; width: auto; height: calc(100vh - 150px); }
+     main.dashboard-main {
+        padding-bottom: 90px !important;
+    }
 }
