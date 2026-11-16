@@ -225,9 +225,13 @@ Drawn with the tokens of `static/css/redesign.css` and its font. The data in the
 
 ![Control Room sidebar](images/dashboard-2.1/navigation-light.png)
 
-**The Work Room with a search:**
+**The Work Room: searching the agents on its welcome page:**
 
-![Work Room search](images/dashboard-2.1/workroom-search-light.png)
+![Work Room agent search](images/dashboard-2.1/workroom-agent-search-light.png)
+
+**The Work Room: searching the sessions:**
+
+![Work Room session search](images/dashboard-2.1/workroom-search-light.png)
 
 ## Order
 
