@@ -7,9 +7,10 @@ Handles token generation, revocation, login/logout, and the login page.
 import logging
 import os
 from pathlib import Path
+from typing import Any, Dict
 
 from fastapi import APIRouter, Depends, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.security import HTTPBasicCredentials
 from fastapi.templating import Jinja2Templates
 
@@ -30,7 +31,7 @@ project_root = Path(__file__).parent.parent
 
 
 @router.get("/login", tags=["Dashboard - Pages"])
-async def login_page(request: Request):
+async def login_page(request: Request) -> HTMLResponse:
     """Login page for dashboard (no auth required)."""
     from urllib.parse import quote
     from server.oauth_routes import _safe_next, google_enabled, github_enabled
@@ -60,7 +61,7 @@ async def login_page(request: Request):
 async def generate_auth_token(
     request: Request,
     credentials: HTTPBasicCredentials = Depends(verify_credentials),
-):
+) -> Dict[str, Any]:
     """Generate a Bearer token for authenticated users."""
     clear_logged_out_status(credentials.username, credentials.password)
     token = generate_token()
@@ -87,14 +88,14 @@ async def generate_auth_token(
 
 
 @router.post("/auth/revoke", tags=["Authentication"])
-async def revoke_auth_token(token: str, credentials=Depends(verify_bearer_token)):
+async def revoke_auth_token(token: str, credentials=Depends(verify_bearer_token)) -> Dict[str, Any]:
     """Revoke a Bearer token."""
     revoke_token(token)
     return {"message": "Token revoked successfully"}
 
 
 @router.delete("/auth/token", tags=["Authentication"])
-async def revoke_auth_token_delete(request: Request, username: str = Depends(get_auth_user)):
+async def revoke_auth_token_delete(request: Request, username: str = Depends(get_auth_user)) -> Dict[str, Any]:
     """Revoke the current Bearer token."""
     auth_header = request.headers.get("Authorization", "")
     if auth_header.startswith("Bearer "):
@@ -105,7 +106,7 @@ async def revoke_auth_token_delete(request: Request, username: str = Depends(get
 
 
 @router.post("/auth/logout", tags=["Authentication"])
-async def logout(request: Request):
+async def logout(request: Request) -> JSONResponse:
     """Logout endpoint - clears session, revokes token, invalidates basic auth."""
     import base64
 
