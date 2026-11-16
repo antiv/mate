@@ -139,7 +139,7 @@ The same applies to everything posted on GitHub: PR descriptions, issues, commen
 - `AGENTS.md` — Architecture patterns and development guidelines (read before adding new agents or tools)
 - `docs/` — User guides (`docs/user/`), developer guides (`docs/dev/`) and the generated reference (`docs/reference/`), also served at `/dashboard/docs`. Feature documentation lives here.
 - `documents/` — Not documentation: screenshots for the README, the architecture PDF and its source, announcements.
-- `shared/sql/README.md` — Database schema reference
+- `shared/sql/README.md` — SQL directory guide: migration workflow, status queries, and links to the generated database reference
 
 
 Behavioral guidelines to reduce common LLM coding mistakes. Merge with project-specific instructions as needed.
