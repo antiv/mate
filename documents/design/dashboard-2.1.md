@@ -199,6 +199,28 @@ New pages use only these, as classes on the tokens in a new `static/css/componen
 
 It is built on the same data as the sidebar and the agent list. It can wait until 1–5 are done.
 
+## Mockups
+
+Drawn with the tokens of `static/css/redesign.css` and its font. The data in them is made up.
+
+**The agent page, Settings tab: the editor**, light and dark:
+
+![Agent page, Settings tab, light](images/dashboard-2.1/agent-settings-light.png)
+
+![Agent page, Settings tab, dark](images/dashboard-2.1/agent-settings-dark.png)
+
+**The agent page, Sessions tab: the shared table:**
+
+![Agent page, Sessions tab](images/dashboard-2.1/agent-sessions-light.png)
+
+**The Control Room sidebar, today and proposed:**
+
+![Control Room sidebar](images/dashboard-2.1/navigation-light.png)
+
+**The Work Room with a search:**
+
+![Work Room search](images/dashboard-2.1/workroom-search-light.png)
+
 ## Order
 
 1. **The Help button** (#380), a contributor issue. It can go first, on its own.
