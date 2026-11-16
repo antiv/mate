@@ -130,4 +130,6 @@ server is up, not which model or keys are set.
 
 - Image editing (`litellm.aimage_edit`).
 - The vision tool, `image_data_extraction`, still has its own provider routing at
-  the end of `image_tools.py`.
+  the end of `image_tools.py`, through the OpenAI SDK rather than LiteLLM. Its key is
+  looked up as for any model call (`_vision_endpoint`, see
+  [Agent runtime](agent-runtime.md)).

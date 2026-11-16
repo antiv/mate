@@ -167,6 +167,7 @@ the workspace's own endpoint outside the default workspace:
 | The hallucination guardrail | The agent (`GuardrailEngine(..., context)`, both runtimes; every check that takes a `context` parameter is given it, and one written without it still runs) |
 | Memory block embeddings | The block's project |
 | The image tool | Its agent; also picks the workspace's image model |
+| The image data extraction tool | Its agent. It calls through the OpenAI SDK with `litellm_credentials()`'s key and base URL, and with Ollama downloads the image itself, under `guarded()` outside the default workspace |
 | The murder-mystery game master | Its agent |
 
 A bare model name there is LiteLLM's to place (`litellm_provider_of`: `dall-e-3` is

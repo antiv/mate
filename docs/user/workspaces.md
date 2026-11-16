@@ -132,7 +132,7 @@ to the next call, without reloading agents.
 
 This covers every model call made for the workspace: the agents' models, Gemini's
 own backend (`gemini-*`) included, their fallback models, subagents, the
-conversation summarizer, File Search, the image tool, memory search, the eval judge
+conversation summarizer, File Search, the image tool, image data extraction, memory search, the eval judge
 and **Suggest a fix**, Work Room titles and the hallucination guardrail. Memory
 search, titles and the hallucination check carry on without a key, as they do when
 their model fails: by keywords, with the first words of the message, and letting the

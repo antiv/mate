@@ -752,20 +752,104 @@ def _extract_inline_image_from_context(tool_context) -> str | None:
     return None
 
 
+class _NoVisionKey(Exception):
+    """No key the vision call may use; the message says which is missing."""
+
+
+_VISION_PREFIXES = {"ollama_chat": "ollama", "ollama": "ollama", "openrouter": "openrouter", "openai": "openai"}
+
+
+def _vision_endpoint(model: str, context: ModelContext) -> Tuple[str, Optional[str], str, str, Optional[int]]:
+    """(api_key, base_url, model name sent, provider, workspace to guard the call for)
+    for the vision call.
+
+    The key is looked up as for any model call (provider_keys): the agent's workspace's
+    key for the provider, else the environment where the workspace may use it. A name
+    without a known prefix goes to OpenRouter, else OpenAI, as before workspaces.
+    Raises _NoVisionKey.
+    """
+    from ..provider_keys import NoProviderKey, litellm_credentials
+    prefix = model.split("/", 1)[0] if "/" in model else ""
+    if prefix in _VISION_PREFIXES:
+        candidates = [_VISION_PREFIXES[prefix]]
+        api_model = model.split("/", 1)[1]
+    else:
+        candidates = ["openrouter", "openai"]
+        api_model = model
+
+    refused: Optional[NoProviderKey] = None
+    for provider in candidates:
+        try:
+            credentials, guard = litellm_credentials(context, f"{provider}/{api_model}")
+        except NoProviderKey as e:
+            refused = refused or e
+            continue
+        if not credentials:
+            continue  # the environment applies
+        base_url = credentials["api_base"]
+        if provider == "ollama" and not base_url.rstrip("/").endswith("/v1"):
+            base_url = base_url.rstrip("/") + "/v1"
+        return credentials["api_key"], base_url, api_model, provider, guard
+    if refused is not None:
+        # No workspace key, and the platform's keys aren't the workspace's to use
+        raise _NoVisionKey(str(refused))
+
+    # The environment: the default workspace, and those allowed the platform's keys
+    if candidates == ["ollama"]:
+        return "ollama", f"{os.getenv('OLLAMA_HOST', 'http://localhost:11434')}/v1", api_model, "ollama", None
+    if candidates == ["openrouter"]:
+        api_key = os.getenv("OPENROUTER_API_KEY")
+        if not api_key:
+            raise _NoVisionKey("OPENROUTER_API_KEY not configured.")
+        return api_key, os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"), api_model, "openrouter", None
+    if candidates == ["openai"]:
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            raise _NoVisionKey("OPENAI_API_KEY not configured.")
+        return api_key, None, api_model, "openai", None
+    # No recognized prefix: OpenRouter first, then OpenAI
+    openrouter_api_key = os.getenv("OPENROUTER_API_KEY")
+    api_key = openrouter_api_key or os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        raise _NoVisionKey("API key not configured. Please set OPENROUTER_API_KEY or OPENAI_API_KEY.")
+    if openrouter_api_key:
+        return api_key, "https://openrouter.ai/api/v1", api_model, "openrouter", None
+    return api_key, None, api_model, "openai", None
+
+
+def _download_guard(context: ModelContext) -> Optional[int]:
+    """The workspace to guard a download the server makes for this agent (None: none),
+    as outbound_refusal decides: the default workspace and OUTBOUND_ALLOW_PRIVATE_NETWORK
+    are not guarded. A workspace the database can't name is guarded."""
+    from ..outbound import private_network_allowed, workspace_of_run
+    from ..models import DEFAULT_WORKSPACE_ID
+    if private_network_allowed():
+        return None
+    workspace_id = workspace_of_run(context.agent_name, context.project_id)
+    if workspace_id == DEFAULT_WORKSPACE_ID:
+        return None
+    return workspace_id if workspace_id is not None else -1
+
+
 async def _extract_data_from_image_internal(
     image_url: str,
     extraction_prompt: str,
     tool_context: ToolContext = None,
     model: str = "google/gemini-2.5-flash",
+    context: Optional[ModelContext] = None,
 ) -> dict:
     """
     Internal implementation for image data extraction using a vision model.
 
     Supports multiple providers via model name prefix:
-    - ``ollama_chat/model`` or ``ollama/model`` → local Ollama (http://localhost:11434/v1)
-    - ``openrouter/model`` → OpenRouter API (needs OPENROUTER_API_KEY)
-    - ``openai/model`` → OpenAI API (needs OPENAI_API_KEY)
-    - No prefix (e.g. ``google/gemini-2.5-flash``) → OpenRouter or OpenAI fallback
+    - ``ollama_chat/model`` or ``ollama/model`` → Ollama
+    - ``openrouter/model`` → OpenRouter
+    - ``openai/model`` → OpenAI
+    - No prefix (e.g. ``google/gemini-2.5-flash``) → OpenRouter, else OpenAI
+
+    The key is the agent's workspace's for that provider, else the environment's
+    (OLLAMA_HOST, OPENROUTER_API_KEY, OPENAI_API_KEY) where the workspace may use the
+    platform's keys (_vision_endpoint).
 
     If the image_url is empty or invalid and a tool_context is available,
     the function will attempt to extract the image from the user's uploaded
@@ -776,6 +860,8 @@ async def _extract_data_from_image_internal(
         extraction_prompt: Instructions on what to extract.
         tool_context: Optional tool context.
         model: The vision model to use. Prefix determines routing.
+        context: The agent the call is for: its workspace's key. None for the
+            installation.
 
     Returns:
         A dictionary containing the extracted data or an error message.
@@ -809,80 +895,42 @@ async def _extract_data_from_image_internal(
                     "success": False,
                 }
 
-        # Detect provider from model name prefix
-        provider = ""
-        api_model = model  # model name sent to the API
-        if "/" in model:
-            provider = model.split("/")[0]
-
-        if provider in ("ollama_chat", "ollama"):
-            # Ollama: local API, no key needed, strip prefix for API call
-            api_key = "ollama"  # Ollama doesn't check this but OpenAI client requires it
-            ollama_host = os.getenv("OLLAMA_HOST", "http://localhost:11434")
-            base_url = f"{ollama_host}/v1"
-            # Strip the provider prefix: ollama_chat/llava → llava
-            api_model = model.split("/", 1)[1]
+        try:
+            api_key, base_url, api_model, provider, guard = _vision_endpoint(model, context or ModelContext())
+        except _NoVisionKey as missing:
+            return {
+                "error": str(missing),
+                "image_url": image_url,
+                "error_type": "missing_api_key",
+                "success": False,
+            }
+        if provider == "ollama":
             logger.info(f"Image extraction using Ollama model '{api_model}' at {base_url}")
-
-        elif provider == "openrouter":
-            api_key = os.getenv("OPENROUTER_API_KEY")
-            if not api_key:
-                return {
-                    "error": "OPENROUTER_API_KEY not configured.",
-                    "image_url": image_url,
-                    "error_type": "missing_api_key",
-                    "success": False,
-                }
-            base_url = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
-            # Strip 'openrouter/' prefix: openrouter/google/gemini-2.5-flash → google/gemini-2.5-flash
-            api_model = model.split("/", 1)[1]
-
-        elif provider == "openai":
-            api_key = os.getenv("OPENAI_API_KEY")
-            if not api_key:
-                return {
-                    "error": "OPENAI_API_KEY not configured.",
-                    "image_url": image_url,
-                    "error_type": "missing_api_key",
-                    "success": False,
-                }
-            base_url = None  # use default OpenAI URL
-            api_model = model.split("/", 1)[1]
-
-        else:
-            # No recognized prefix → try OpenRouter first, fall back to OpenAI
-            openrouter_api_key = os.getenv("OPENROUTER_API_KEY")
-            openai_api_key = os.getenv("OPENAI_API_KEY")
-            api_key = openrouter_api_key or openai_api_key
-            if not api_key:
-                return {
-                    "error": "API key not configured. Please set OPENROUTER_API_KEY or OPENAI_API_KEY.",
-                    "image_url": image_url,
-                    "error_type": "missing_api_key",
-                    "success": False,
-                }
-            base_url = "https://openrouter.ai/api/v1" if openrouter_api_key else None
 
         client = OpenAI(api_key=api_key, base_url=base_url)
 
         # For Ollama, convert image URL to base64 data URI (Ollama doesn't support URLs)
         effective_image_url = image_url
-        if provider in ("ollama_chat", "ollama") and not image_url.startswith("data:"):
+        if provider == "ollama" and not image_url.startswith("data:"):
             try:
                 import base64
                 import httpx
+                from ..provider_keys import guarded
                 dl_headers = {
                     "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
                 }
                 logger.info(f"Downloading image for Ollama base64 encoding: {image_url[:100]}...")
-                async with httpx.AsyncClient(follow_redirects=True) as ac:
-                    resp = await ac.get(image_url, timeout=30, headers=dl_headers)
-                    # Retry once on 429 rate limit
-                    if resp.status_code == 429:
-                        retry_after = int(resp.headers.get("Retry-After", "2"))
-                        logger.warning(f"Rate limited (429), retrying after {retry_after}s...")
-                        await asyncio.sleep(min(retry_after, 5))
+                # The server fetches this URL itself: outside the default workspace, no
+                # internal address and no redirect, as for the workspace's other requests
+                with guarded(_download_guard(context or ModelContext())):
+                    async with httpx.AsyncClient(follow_redirects=True) as ac:
                         resp = await ac.get(image_url, timeout=30, headers=dl_headers)
+                        # Retry once on 429 rate limit
+                        if resp.status_code == 429:
+                            retry_after = int(resp.headers.get("Retry-After", "2"))
+                            logger.warning(f"Rate limited (429), retrying after {retry_after}s...")
+                            await asyncio.sleep(min(retry_after, 5))
+                            resp = await ac.get(image_url, timeout=30, headers=dl_headers)
                 resp.raise_for_status()
                 content_type = resp.headers.get("content-type", "image/png").split(";")[0].strip()
                 b64_data = base64.b64encode(resp.content).decode("utf-8")
@@ -903,18 +951,21 @@ async def _extract_data_from_image_internal(
             {"type": "text", "text": extraction_prompt},
         ]
 
-        # Sync SDK call — run in a worker thread to keep the event loop free
-        response = await asyncio.to_thread(
-            client.chat.completions.create,
-            model=api_model,
-            messages=[
-                {
-                    "role": "user",
-                    "content": content_parts,
-                }
-            ],
-            max_tokens=4096,
-        )
+        # Sync SDK call — run in a worker thread to keep the event loop free. A
+        # workspace's own endpoint is guarded, and its key masked in an error.
+        from ..provider_keys import guarded, redacting
+        with guarded(guard), redacting(api_key):
+            response = await asyncio.to_thread(
+                client.chat.completions.create,
+                model=api_model,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": content_parts,
+                    }
+                ],
+                max_tokens=4096,
+            )
 
         extracted_text = response.choices[0].message.content or ""
 
@@ -991,28 +1042,31 @@ def create_image_data_extraction_tools_from_config(config: Dict[str, Any]) -> li
         if not ide_config:
             return tools
 
+        # The agent's workspace picks the key
+        context = model_context_of(config)
+
+        def create_configured_tool(model_name: str):
+            async def configured_extract_data_from_image(
+                image_url: str,
+                extraction_prompt: str = "Extract all data from this image. If there is text, perform OCR. If there are tables, return them in markdown table format. If there are charts, describe the data points. Return the extracted information in a well-structured format.",
+                tool_context: ToolContext = None,
+            ) -> dict:
+                return await _extract_data_from_image_internal(
+                    image_url, extraction_prompt, tool_context, model_name, context
+                )
+            configured_extract_data_from_image.__doc__ = extract_data_from_image.__doc__
+            configured_extract_data_from_image.__name__ = "extract_data_from_image"
+            return configured_extract_data_from_image
+
         if isinstance(ide_config, bool) and ide_config:
-            tools.append(extract_data_from_image)
+            tools.append(create_configured_tool("google/gemini-2.5-flash"))
             logger.info(
                 f"Created image data extraction tool with default model for agent "
                 f"{config.get('name', 'unknown')}"
             )
         elif isinstance(ide_config, dict):
             model = ide_config.get("model", "google/gemini-2.5-flash")
-
-            def create_configured_tool(model_name: str):
-                async def configured_extract_data_from_image(
-                    image_url: str,
-                    extraction_prompt: str = "Extract all data from this image. If there is text, perform OCR. If there are tables, return them in markdown table format. If there are charts, describe the data points. Return the extracted information in a well-structured format.",
-                    tool_context: ToolContext = None,
-                ) -> dict:
-                    return await _extract_data_from_image_internal(
-                        image_url, extraction_prompt, tool_context, model_name
-                    )
-                return configured_extract_data_from_image
-
             tool = create_configured_tool(model)
-            tool.__name__ = "extract_data_from_image"
             tools.append(tool)
             logger.info(
                 f"Created image data extraction tool with model='{model}' for agent "

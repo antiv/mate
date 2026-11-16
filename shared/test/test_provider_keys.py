@@ -671,6 +671,61 @@ class TestDirectCalls(_OverHttp):
         self.assertEqual(image_tools.default_image_model(CLIENT), ("openai/gpt-image-1", "workspace"))
         self.assertEqual(image_tools.default_image_model(DEPARTMENT)[1], "default")
 
+    def extraction_tool(self, workspace_id: int, model=None):
+        from shared.utils.tools import image_tools
+        name = {DEFAULT: "default", CLIENT: "client", DEPARTMENT: "department"}[workspace_id]
+        config = {"name": f"{name}_agent", "project_id": self.projects[workspace_id],
+                  "tool_config": json.dumps({"image_data_extraction": {"model": model} if model else True})}
+        [tool] = image_tools.create_image_data_extraction_tools_from_config(config)
+        return tool
+
+    def test_the_image_data_extraction_tool_takes_the_workspace_s_key(self):
+        # The platform's keys are set, and the client's workspace may not use them
+        with patch.dict(os.environ, {"OPENROUTER_API_KEY": "sk-platform-or", "OPENAI_API_KEY": "sk-platform-oa"}):
+            # A name without a prefix: OpenRouter, which the client has no key for, then OpenAI
+            result = asyncio.run(self.extraction_tool(CLIENT)("https://example.com/a.png"))
+            self.assertTrue(result["success"], result)
+            self.assertEqual(self.provider.keys, ["Bearer sk-client"])
+            # A provider the workspace has no key for makes no call
+            result = asyncio.run(self.extraction_tool(CLIENT, "openrouter/x/y")("https://example.com/a.png"))
+            self.assertEqual(result["error_type"], "missing_api_key", result)
+            self.assertIn("no key for openrouter", result["error"])
+        self.assertEqual(self.provider.keys, ["Bearer sk-client"])
+
+    def test_the_image_data_extraction_tool_in_the_default_workspace_uses_the_environment(self):
+        with patch.dict(os.environ, {"OPENROUTER_API_KEY": "sk-platform-or",
+                                     "OPENROUTER_BASE_URL": self.provider.url}):
+            result = asyncio.run(self.extraction_tool(DEFAULT, "openrouter/x/y")("https://example.com/a.png"))
+        self.assertTrue(result["success"], result)
+        self.assertEqual(self.provider.keys, ["Bearer sk-platform-or"])
+
+    def test_the_image_data_extraction_tool_s_error_has_the_key_masked(self):
+        from shared.utils.tools import image_tools
+        self.set_key(CLIENT, "openai", "sk-client-echoed-9999", base_url=self.provider.url)
+        client = MagicMock()
+        client.chat.completions.create.side_effect = RuntimeError("Invalid API key: sk-client-echoed-9999")
+        with patch.object(image_tools, "OpenAI", return_value=client):
+            result = asyncio.run(self.extraction_tool(CLIENT, "openai/m")("https://example.com/a.png"))
+        self.assertFalse(result["success"])
+        self.assertNotIn("sk-client-echoed-9999", result["error"])
+        self.assertIn("••••9999", result["error"])
+
+    def test_the_image_data_extraction_tool_s_download_is_guarded_outside_default(self):
+        # Ollama gets the image inline, so the server downloads it, here from 127.0.0.1
+        self.set_key(CLIENT, "ollama", "unused", base_url=self.provider.url)
+        self.set_key(DEFAULT, "ollama", "unused", base_url=self.provider.url)
+        image_url = self.provider.url.replace("/v1", "/image.png")
+        with patch.dict(os.environ, {"OUTBOUND_ALLOW_PRIVATE_NETWORK": "false"}):
+            refused = asyncio.run(self.extraction_tool(CLIENT, "ollama_chat/llava")(image_url))
+            # The default workspace may reach its own network, as with webhooks and MCP
+            allowed = asyncio.run(self.extraction_tool(DEFAULT, "ollama_chat/llava")(image_url))
+        self.assertEqual(refused["error_type"], "image_download_error", refused)
+        self.assertIn("internal address", refused["error"])
+        # The fake provider answers GET with 501: the download was made
+        self.assertEqual(allowed["error_type"], "image_download_error", allowed)
+        self.assertIn("501", allowed["error"])
+        self.assertEqual(self.provider.keys, [])
+
     def test_the_image_setup_check_is_per_workspace(self):
         from shared.utils.tools import image_tools
         self.assertTrue(image_tools.validate_image_generation_setup(self.context(CLIENT))[0])
