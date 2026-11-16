@@ -37,7 +37,7 @@ The dashboard grew page by page, and 2.0 added workspaces on top. These are the 
   - Pagination is coded separately on Audit Logs, Guardrail Logs, Sessions, Usage and Users.
   - Triggers, Integrations, Alerts, Members, Workspaces and Evals have no search.
   - The Help button covers the bottom-right corner, pagination included (#380).
-- **The Work Room can't find an old conversation.** The sidebar shows the 20 most recent sessions (`renderSessions` in `templates/dashboard/workroom.html`), with no search.
+- **The Work Room has no search.** The welcome page lists every agent the user may run as cards, with no way to filter them. The sidebar shows the 20 most recent sessions (`renderSessions` in `templates/dashboard/workroom.html`), with no search.
 
 ## Goals
 
@@ -185,6 +185,14 @@ New pages use only these, as classes on the tokens in a new `static/css/componen
 - **Everything works under `CSP_MODE=enforce`:** no inline `style=` or `on*=` in new markup; `data-click` actions as `docs/dev/content-security-policy.md` describes.
 
 ### 5. Search in the Work Room
+
+**Agents.** The welcome page (`/dashboard/workroom` with no agent) shows every root agent the user may run as a grid of cards (`wr-agents-grid`), with no search. With twenty or so agents, the grid runs over several screens.
+
+- **A search box above the grid** filters the cards by name and description as you type. The page already has the whole list, so no route is needed.
+- **Enter opens the only match;** no match says so, with the search to clear.
+- **The grid leaves room for the Help button** (#380).
+
+**Sessions.**
 
 - **A search box above the session list.** It matches titles as you type, and message text on Enter.
 - **The list shows all of the user's sessions** with the agent, loaded as they scroll, not only the latest 20.
