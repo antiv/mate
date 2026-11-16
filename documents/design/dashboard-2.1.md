@@ -66,13 +66,19 @@ Control Room
   Observability        Usage · Audit Logs · Guardrail Logs · Sessions
   Workspace            Members · Models and keys · Rate Limits · Alerts
   Platform             Workspaces · Users · Settings · Migrations      (platform administrators)
-  Apps                 Wizard Leads · Wizard Pricing · Shop Orders     (only when in use)
+    Wizard             Leads · Partners and pricing                    (when in use)
+    Shop               Orders                                          (when in use)
   Documentation
 ```
 
 - **Workspace** holds what an owner or admin of a workspace manages.
 - **Platform** holds what only a platform administrator sees. Its name matches what the guides already say.
-- **Apps** is shown only when the installation uses the wizard or the shop, judged by whether they have any rows. Its pages stay reachable by URL.
+- **Wizard and Shop** are platform features, under Platform:
+  - **The wizard** is embedded on a website (`/wizard/embed`, `mate-wizard.js`). Each partner site has its own key (`?partner=<key>`), allowed origins, pricing and contact (`WizardPartner`, `shared/utils/wizard/partners.py`). Its leads are the platform's.
+  - **Shop orders** are stored only for an agent whose `shop` tool config sets a `partner_key` (`shared/utils/tools/shop_tools.py`), and are filed by that key. Wizard trial agents set none, so their test orders aren't stored. Only Default may set `partner_key` (platform-only, `server_credentials`).
+  - **Wizard is shown** when there is a wizard partner, lead or session.
+  - **Shop is shown** when there is a stored order, or an agent's shop sets a `partner_key`.
+  - Both pages stay reachable by URL either way.
 - **Studio is unchanged:**
   - Agents, Visual Builder, Triggers and Integrations;
   - Templates;
@@ -142,7 +148,12 @@ Where each of today's fields goes:
   - JSON stays available as a "JSON" toggle inside the section, as `toggleJsonEditor` does today.
 - **Pickers:**
   - **Parent agents:** choose from the workspace's agents; it writes `parent_agents` as today.
-  - **Roles:** choose from the roles in use in the workspace, or type a new one.
+  - **Roles:** there is no list of roles to manage. A role is a name, matched between an agent's `allowed_for_roles` and a member's agent roles in the workspace (`roles_allow`, `caller_access` in `shared/utils/workspaces.py`).
+    - The picker offers the names in use in the workspace: its agents' `allowed_for_roles` and its members' agent roles.
+    - A new name can be typed, with the rule the Members page checks (letters, digits, `_`, `.` and `-`; `server/member_routes.py`).
+    - The platform roles `admin`, `pending` and `widget` are never offered.
+    - With no role chosen, the picker says what that means: only owners and admins of the workspace and platform administrators can run the agent (`roles_allow`: none means admin-only).
+    - Each offered name shows how many members hold it, so a role nobody has stands out.
 - **Saving:**
   - one Save bar at the bottom, shown when something changed;
   - the dirty check and Escape of #312 carry over;
@@ -151,7 +162,8 @@ Where each of today's fields goes:
 - **Create and Copy use the same editor:**
   - Create is `/dashboard/agents/new`;
   - Copy is `/dashboard/agents/new?from=<name>`.
-- **The Visual Builder** opens the agent page instead of the side panel, and its "back" link returns to the canvas.
+- **The Visual Builder** opens the agent page instead of the side panel, and its "back" link returns to the canvas (decided: a page, not a dialog over the canvas).
+- **The side panel goes** in the editor's PR, on Agents and in the Visual Builder (decided).
 
 ### 4. Components
 
@@ -204,15 +216,14 @@ Each PR:
 - updates the user guides that name what changed (`docs/user/agents.md`, `docs/user/work-room.md` and others);
 - is checked in a browser in both themes, at desktop and phone width, with no CSP report.
 
-## Open questions
+## Decisions
 
-1. **Own page, or a full-screen dialog over the Visual Builder?**
-   - The proposal is a page: it has a URL, can be linked to and survives a reload.
-   - A dialog would keep the canvas behind it.
-   - Decide with the mockup.
-2. **The side panel during the move:** removed in the editor's PR, or kept behind a link for one release?
-3. **Roles picker:** what does "roles in use" read? Workspace members' agent roles and agents' `allowed_for_roles`, or a list to manage?
-4. **Apps section:** is "has rows" the right test for showing it, or a setting?
+Taken by the maintainer on 2026-11-16:
+
+1. **The editor is a page,** `/dashboard/agents/<name>`, not a full-screen dialog over the Visual Builder. A page has a URL, can be linked to and survives a reload.
+2. **The side panel is removed** in the editor's PR. It isn't kept for a release once the editor works.
+3. **The roles picker reads the roles in use** in the workspace, as above. There is no table of roles.
+4. **Wizard and Shop are shown when in use,** by the tests above, under Platform.
 
 ## Testing
 
