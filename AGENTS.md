@@ -220,7 +220,7 @@ Use environment variables for all API keys, database settings, and system toggle
   - `docs/dev/tracing.md` — OpenTelemetry and LangSmith tracing setup
   - `docs/dev/agent-wizard.md` — Public self-service agent builder wizard
   - `docs/dev/template-format.md` — Agent templates and presets
-- `shared/sql/README.md` — Database schema reference
+- `shared/sql/README.md` — SQL directory guide: migration workflow, status queries, and links to the generated database reference
 - **Rules**:
   - Do not create a separate README.md for each feature; add a guide under `docs/user/` or `docs/dev/` with a `covers:` list, and update the guides that cover the code you change
   - Update `AGENTS.md` when adding new patterns or architectural requirements
