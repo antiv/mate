@@ -9,10 +9,11 @@ the tables.
 - `migrations/` — one SQL file per schema change, in one folder per database type:
   `migrations/{postgresql,mysql,sqlite}/V<NNN>__<name>.sql`. See
   [migrations/README.md](./migrations/README.md).
-- `migrate.py` — the migration CLI: `python shared/migrate.py run`, `status` and
-  `create <name>`.
 - `status_queries.sql` — ad-hoc queries for monitoring request statuses, errors and
   access denials in `token_usage_logs`.
+
+The migration CLI is one level up, at `shared/migrate.py`: `python shared/migrate.py run`,
+`status` and `create <name>`.
 
 ## The schema
 
