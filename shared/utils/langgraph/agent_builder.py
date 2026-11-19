@@ -20,6 +20,15 @@ PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 CHECKPOINT_DB_PATH = PROJECT_ROOT / "lg_checkpoints.db"
 
 TRANSFER_TOOL_NAME = "transfer_to_agent"
+# ADK's name for the tool that carries a structured final answer
+SET_MODEL_RESPONSE_TOOL_NAME = "set_model_response"
+
+_STRUCTURED_RESPONSE_NOTE = (
+    "IMPORTANT: You have access to other tools, but you must provide your final "
+    f"response using the {SET_MODEL_RESPONSE_TOOL_NAME} tool with the required structured "
+    f"format. After using any other tools needed to complete the task, always call "
+    f"{SET_MODEL_RESPONSE_TOOL_NAME} with your final answer in the specified schema format."
+)
 
 
 class AgentNotFoundError(Exception):
@@ -122,6 +131,61 @@ def _json_field(config: Dict[str, Any], key: str) -> Dict[str, Any]:
         return {}
 
 
+def _schema_model(config: Dict[str, Any], key: str, suffix: str) -> Optional[Any]:
+    """The Pydantic model for the agent's `input_schema` / `output_schema`, or None.
+
+    Parsed as AgentManager does on ADK: a JSON string or a dict, converted with
+    json_schema_to_pydantic_model. An invalid schema is logged and ignored.
+    """
+    from shared.utils.agent_manager import json_schema_to_pydantic_model
+
+    agent_name = config.get("name", "unknown")
+    raw = config.get(key)
+    if not raw:
+        return None
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except json.JSONDecodeError:
+            logger.warning(f"Invalid JSON in {key} for agent {agent_name}")
+            return None
+    if not raw:
+        return None
+    try:
+        return json_schema_to_pydantic_model(raw, f"{agent_name.replace('_', '').title()}{suffix}")
+    except Exception as e:
+        logger.warning(f"Failed to convert {key} to Pydantic model for agent {agent_name}: {e}")
+        return None
+
+
+def _make_set_model_response_tool(output_model: Any):
+    """ADK's set_model_response: the agent ends its turn by calling it with the
+    final answer, which must match the output schema. return_direct ends the
+    run there, with the validated JSON as the tool's result."""
+    from langchain_core.tools import StructuredTool
+
+    def set_model_response(**kwargs: Any) -> str:
+        return output_model(**kwargs).model_dump_json(exclude_none=True)
+
+    return StructuredTool.from_function(
+        func=set_model_response,
+        name=SET_MODEL_RESPONSE_TOOL_NAME,
+        description="Provide the final structured response in the required format.",
+        args_schema=output_model,
+        return_direct=True,
+    )
+
+
+def _current_turn(messages: List[Any]) -> List[Any]:
+    """Messages from the latest human message on: include_contents="none"."""
+    from langchain_core.messages import HumanMessage
+
+    for index in range(len(messages) - 1, -1, -1):
+        if isinstance(messages[index], HumanMessage):
+            return messages[index:]
+    return messages
+
+
 def _fallback_model(config: Dict[str, Any]) -> Optional[str]:
     """The agent's fallback model, or None when unset or the same as its own model."""
     from shared.utils.langgraph.model_factory import litellm_model_name
@@ -133,8 +197,11 @@ def _fallback_model(config: Dict[str, Any]) -> Optional[str]:
     return fallback
 
 
-def _make_prompt(instruction: Optional[str], transfer_note: Optional[str] = None):
-    """Prompt runnable: instruction + optional transfer note + per-user profile block."""
+def _make_prompt(instruction: Optional[str], transfer_note: Optional[str] = None,
+                 structured_note: Optional[str] = None, include_contents: Optional[str] = None):
+    """Prompt runnable: instruction + optional transfer note + per-user profile block.
+
+    include_contents="none" shows the model only the current turn, as on ADK."""
     from langchain_core.messages import SystemMessage
     from langchain_core.runnables import RunnableLambda
     from shared.utils.langgraph.hooks import get_user_profile_block
@@ -145,11 +212,15 @@ def _make_prompt(instruction: Optional[str], transfer_note: Optional[str] = None
             sections.append(instruction)
         if transfer_note:
             sections.append(transfer_note)
+        if structured_note:
+            sections.append(structured_note)
         user_id = ((config or {}).get("configurable") or {}).get("user_id")
         profile_block = get_user_profile_block(user_id)
         if profile_block:
             sections.append(profile_block)
         messages = list(state["messages"])
+        if include_contents == "none":
+            messages = _current_turn(messages)
         if sections:
             return [SystemMessage(content="\n\n".join(sections))] + messages
         return messages
@@ -384,7 +455,16 @@ class AgentBuilder:
                                    generate_content_config=_json_field(config, "generate_content_config"),
                                    context=model_context_of(config))],
                 exceptions_to_handle=PROVIDER_OUTAGE_ERRORS)
+        # Accepted and parsed as on ADK, where input_schema only shapes an agent
+        # called through AgentTool, which MATE does not use: no run-time effect.
+        if _schema_model(config, "input_schema", "InputModel") is not None:
+            logger.debug(f"Agent '{app_name}': input_schema has no effect at run time (as on ADK)")
+        output_model = _schema_model(config, "output_schema", "OutputModel")
+        include_contents = (config.get("include_contents") or "").strip() or None
+
         tools = await self._build_tools(config)
+        if output_model is not None:
+            tools.append(_make_set_model_response_tool(output_model))
         if extra_tools:
             tools.extend(extra_tools)
         if client_tools:
@@ -395,7 +475,9 @@ class AgentBuilder:
         return create_react_agent(
             model,
             tools=tools,
-            prompt=_make_prompt(config.get("instruction"), transfer_note),
+            prompt=_make_prompt(config.get("instruction"), transfer_note,
+                                _STRUCTURED_RESPONSE_NOTE if output_model is not None else None,
+                                include_contents),
             name=app_name,
             checkpointer=checkpointer,
         )

@@ -8,6 +8,7 @@ emitted as a final (non-partial) event carrying the full segment text plus
 functionCall parts and usage metadata.
 """
 
+import json
 import logging
 import uuid
 from datetime import datetime, timezone
@@ -19,6 +20,8 @@ logger = logging.getLogger(__name__)
 
 TRANSFER_TOOL_NAME = "transfer_to_agent"
 CONFIRMATION_CALL_NAME = "adk_request_confirmation"
+# The call that carries an output_schema agent's final answer (see agent_builder)
+SET_MODEL_RESPONSE_TOOL_NAME = "set_model_response"
 
 
 def text_of(content: Any) -> str:
@@ -67,6 +70,11 @@ def ai_message_to_event(message: AIMessage, author: str, invocation_id: str) -> 
         parts.append({"text": text})
     actions: Dict[str, Any] = {}
     for tool_call in (message.tool_calls or []):
+        if tool_call.get("name") == SET_MODEL_RESPONSE_TOOL_NAME:
+            # As ADK: the structured answer is the reply, as JSON text
+            args = {k: v for k, v in (tool_call.get("args") or {}).items() if v is not None}
+            parts.append({"text": json.dumps(args, ensure_ascii=False)})
+            continue
         parts.append({"functionCall": {
             "id": tool_call.get("id") or str(uuid.uuid4()),
             "name": tool_call.get("name"),
@@ -171,6 +179,9 @@ async def translate_stream(
                     continue
                 for message in (update.get("messages") or []):
                     if isinstance(message, ToolMessage):
+                        if (getattr(message, "name", None) == SET_MODEL_RESPONSE_TOOL_NAME
+                                and getattr(message, "status", None) != "error"):
+                            continue  # its JSON went out with the call
                         yield tool_message_to_event(message, event_author, invocation_id), True
                     elif isinstance(message, AIMessage):
                         event = ai_message_to_event(message, event_author, invocation_id)
