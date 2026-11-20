@@ -51,6 +51,29 @@ LangGraph uses `lg_sessions`/`lg_events` + a checkpointer database. Switching
 frameworks starts with fresh conversation history (agents, users, RBAC, token
 logs, memory blocks and artifacts are shared).
 
+## Schemas and include_contents
+
+These agent settings behave as they do on ADK, with the same JSON-schema-to-Pydantic
+conversion (`json_schema_to_pydantic_model`). A schema that is not valid JSON or not an
+`object` schema is logged and ignored, on both runtimes.
+
+- **`output_schema`**: the agent keeps its tools and transfers, and ends its turn by
+  calling `set_model_response`, a tool whose arguments are the schema (ADK's name for
+  the same mechanism). The call returns directly, so the run ends there. The event
+  stream carries the answer as one JSON text event, as ADK does. The text is the
+  tool's validated output (after Pydantic coercion and defaults), not the raw
+  arguments, and the call itself is not shown. The prompt tells the model to answer
+  through that tool. If the arguments do not match the schema, the call and the
+  tool's error are sent as a function call and response and the run ends with no
+  JSON text. A model that answers in plain text without calling
+  the tool is not forced to; its text is returned as it is.
+- **`include_contents`**: `none` shows the model the messages from the latest user
+  message on (so the current turn's tool calls and results stay), as on ADK. The
+  checkpoint still holds the whole conversation. Empty or `default` shows all of it.
+- **`input_schema`**: parsed and checked like `output_schema`, with no effect at run
+  time. On ADK it only shapes an agent called through `AgentTool`, which MATE does
+  not use, so neither runtime validates an agent's input.
+
 ## Multi-agent trees
 
 Sub-agent delegation mirrors ADK semantics: every agent in the tree gets a
@@ -90,13 +113,13 @@ Unlike ADK, an agent that appears under multiple parents is a single node (no
 - Token usage tracking (`token_usage_logs`, same fields)
 - Human-in-the-loop `require_confirmation` (approve/reject round-trip)
 - Evals against a stored version and "Check against suite" (see [Evals](evals.md))
+- `output_schema`, `input_schema` and `include_contents`, as on ADK (below)
 
 ## Not supported in v1 (use `AGENT_FRAMEWORK=adk`)
 
 - `graph` / `loop` workflow agents (a friendly error event is returned)
 - `/run_live` (voice WebSocket), A2A, eval UI, ADK builder UI
 - ADK planners (`planner_config`), context caching/compaction, resumability
-- Input/output schemas, `include_contents`
 - ADK-native tool objects (e.g. `google_search` builtin) — skipped with a warning
 - ADK state namespaces `user:` / `app:` are stored session-scoped only
 
@@ -192,8 +215,8 @@ the latter).
 python -m unittest discover -s shared/test -t . -p "test_langgraph_*.py" -v
 ```
 
-That covers the event translator, tool adapter, agent builder, client tools, remote
-MCP, resumed-agent RBAC and sessions. `-t .` matters: without it the tests skip the
+That covers the event translator, tool adapter, agent builder, schemas and
+`include_contents`, client tools, remote MCP, resumed-agent RBAC and sessions. `-t .` matters: without it the tests skip the
 package setup and use the database `.env` configures. Tests of other features cover
 the runtime too, such as `test_model_fallback.py`, `test_eval_version_runner.py`,
 `test_rbac_fail_closed.py` and `test_file_search_assigned_stores.py`.
