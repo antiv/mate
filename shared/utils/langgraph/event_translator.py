@@ -8,11 +8,10 @@ emitted as a final (non-partial) event carrying the full segment text plus
 functionCall parts and usage metadata.
 """
 
-import json
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import Any, AsyncGenerator, AsyncIterator, Dict, Optional, Tuple
+from typing import Any, AsyncGenerator, AsyncIterator, Dict, Iterator, Optional, Tuple
 
 from langchain_core.messages import AIMessage, AIMessageChunk, ToolMessage
 
@@ -71,9 +70,8 @@ def ai_message_to_event(message: AIMessage, author: str, invocation_id: str) -> 
     actions: Dict[str, Any] = {}
     for tool_call in (message.tool_calls or []):
         if tool_call.get("name") == SET_MODEL_RESPONSE_TOOL_NAME:
-            # As ADK: the structured answer is the reply, as JSON text
-            args = {k: v for k, v in (tool_call.get("args") or {}).items() if v is not None}
-            parts.append({"text": json.dumps(args, ensure_ascii=False)})
+            # Hidden here: the reply is the tool's validated JSON, sent when
+            # its result arrives (see translate_stream)
             continue
         parts.append({"functionCall": {
             "id": tool_call.get("id") or str(uuid.uuid4()),
@@ -111,6 +109,26 @@ def tool_message_to_event(message: ToolMessage, author: str, invocation_id: str)
         "response": {"result": text_of(message.content)},
     }}]}
     return event
+
+
+def model_response_events(
+    message: ToolMessage, args: Dict[str, Any], author: str, invocation_id: str
+) -> Iterator[Dict[str, Any]]:
+    """Events for a set_model_response result. As ADK, the reply is the
+    validated JSON as text. A failed validation has no reply: the call and its
+    error are shown as normal function events."""
+    if getattr(message, "status", None) != "error":
+        event = _new_event(author, invocation_id)
+        event["content"] = {"role": "model", "parts": [{"text": text_of(message.content)}]}
+        yield event
+        return
+    call_id = getattr(message, "tool_call_id", None) or str(uuid.uuid4())
+    event = _new_event(author, invocation_id)
+    event["content"] = {"role": "model", "parts": [{"functionCall": {
+        "id": call_id, "name": SET_MODEL_RESPONSE_TOOL_NAME, "args": args,
+    }}]}
+    yield event
+    yield tool_message_to_event(message, author, invocation_id)
 
 
 def interrupt_to_event(interrupt_value: Any, author: str, invocation_id: str) -> Dict[str, Any]:
@@ -151,6 +169,7 @@ async def translate_stream(
     are persisted by the caller. Sub-agent events get the sub-agent's name as
     author (derived from the subgraph namespace).
     """
+    set_response_args: Dict[str, Dict[str, Any]] = {}  # call id -> args of hidden calls
     async for namespace, mode, payload in stream:
         event_author = _author_from_namespace(namespace, author)
 
@@ -179,11 +198,16 @@ async def translate_stream(
                     continue
                 for message in (update.get("messages") or []):
                     if isinstance(message, ToolMessage):
-                        if (getattr(message, "name", None) == SET_MODEL_RESPONSE_TOOL_NAME
-                                and getattr(message, "status", None) != "error"):
-                            continue  # its JSON went out with the call
+                        if getattr(message, "name", None) == SET_MODEL_RESPONSE_TOOL_NAME:
+                            args = set_response_args.pop(getattr(message, "tool_call_id", None), {})
+                            for event in model_response_events(message, args, event_author, invocation_id):
+                                yield event, True
+                            continue
                         yield tool_message_to_event(message, event_author, invocation_id), True
                     elif isinstance(message, AIMessage):
+                        for tool_call in (message.tool_calls or []):
+                            if tool_call.get("name") == SET_MODEL_RESPONSE_TOOL_NAME and tool_call.get("id"):
+                                set_response_args[tool_call["id"]] = tool_call.get("args") or {}
                         event = ai_message_to_event(message, event_author, invocation_id)
                         if event:
                             yield event, True

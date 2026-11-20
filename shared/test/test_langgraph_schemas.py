@@ -36,7 +36,7 @@ OUTPUT_SCHEMA = {
 
 
 def _run(coro):
-    return asyncio.get_event_loop_policy().new_event_loop().run_until_complete(coro)
+    return asyncio.run(coro)
 
 
 class ScriptedModel(BaseChatModel):
@@ -127,7 +127,7 @@ class TestOutputSchema(unittest.TestCase):
         events = _run(_events(graph, [HumanMessage(content="weather in Oslo?")]))
         texts = _texts(events)
         self.assertEqual(json.loads(texts[-1]), {"city": "Oslo", "temp": 4})
-        # the call itself is not shown, only its JSON text
+        # the call itself is not shown, only its validated JSON text
         calls = [p for e in events for p in e.get("content", {}).get("parts", []) if "functionCall" in p]
         self.assertEqual(calls, [])
         # the model was told to answer through the tool
@@ -156,6 +156,18 @@ class TestOutputSchema(unittest.TestCase):
         self.assertEqual(len(responses), 1)
         self.assertEqual(responses[0]["name"], SET_MODEL_RESPONSE_TOOL_NAME)
         self.assertIn("temp", responses[0]["response"]["result"])
+        # no text event carries the invalid JSON, and the call is shown with its error
+        self.assertEqual(_texts(events), [])
+        calls = [p["functionCall"] for e in events
+                 for p in e.get("content", {}).get("parts", []) if "functionCall" in p]
+        self.assertEqual([c["name"] for c in calls], [SET_MODEL_RESPONSE_TOOL_NAME])
+        self.assertEqual(calls[0]["args"], {"city": "Oslo", "temp": "warm"})
+
+    def test_reply_is_the_validated_json_not_the_raw_arguments(self):
+        model = ScriptedModel(script=[_call(SET_MODEL_RESPONSE_TOOL_NAME, {"city": "Oslo", "temp": "4"})])
+        graph = _build(_config(output_schema=OUTPUT_SCHEMA), model)
+        events = _run(_events(graph, [HumanMessage(content="weather in Oslo?")]))
+        self.assertEqual(_texts(events), ['{"city":"Oslo","temp":4}'])
 
     def test_without_output_schema_nothing_changes(self):
         model = ScriptedModel(script=[AIMessage(content="It is cold.")])
@@ -192,7 +204,7 @@ class TestIncludeContents(unittest.TestCase):
         model = ScriptedModel(script=[AIMessage(content="done")])
         graph = _build(_config(include_contents=include_contents), model)
         _run(_events(graph, list(self.HISTORY)))
-        return [m.content for m in model.seen[0] if not m.type == "system"]
+        return [m.content for m in model.seen[0] if m.type != "system"]
 
     def test_none_hides_earlier_turns(self):
         self.assertEqual(self._shown("none"), ["second question"])

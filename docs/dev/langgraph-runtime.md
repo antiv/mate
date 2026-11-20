@@ -60,10 +60,12 @@ conversion (`json_schema_to_pydantic_model`). A schema that is not valid JSON or
 - **`output_schema`**: the agent keeps its tools and transfers, and ends its turn by
   calling `set_model_response`, a tool whose arguments are the schema (ADK's name for
   the same mechanism). The call returns directly, so the run ends there. The event
-  stream carries the answer as one JSON text event, as ADK does; the call itself is
-  not shown. The prompt tells the model to answer through that tool. If the arguments
-  do not match the schema, the tool's error is sent as a function response and the
-  run ends with no JSON answer. A model that answers in plain text without calling
+  stream carries the answer as one JSON text event, as ADK does. The text is the
+  tool's validated output (after Pydantic coercion and defaults), not the raw
+  arguments, and the call itself is not shown. The prompt tells the model to answer
+  through that tool. If the arguments do not match the schema, the call and the
+  tool's error are sent as a function call and response and the run ends with no
+  JSON text. A model that answers in plain text without calling
   the tool is not forced to; its text is returned as it is.
 - **`include_contents`**: `none` shows the model the messages from the latest user
   message on (so the current turn's tool calls and results stay), as on ADK. The
