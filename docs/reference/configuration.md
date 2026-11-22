@@ -108,7 +108,7 @@ Every environment variable the code reads: **136** in total. Descriptions come f
 | `PRINT_CONTEXT_FEATURES_STATUS` | `true` | Log context-feature flags at agent startup | `shared/template_agent/agent.py` |
 | `RATE_LIMIT_ENABLED` | `false` | Rate Limits & Budgets (optional) | `auth_server.py`, `server/openai_routes.py`, `server/proxy_routes.py` |
 | `REDIS_URL` | — | Optional: distributed rate limiting | `shared/utils/rate_limit_service.py` |
-| `RESUMABILITY_ENABLED` | `false` | Resumability: pause/resume invocations, human-in-the-loop tool approval (requires ADK >= 2.0) | `shared/utils/utils.py` |
+| `RESUMABILITY_ENABLED` | `false` | Resumability: resume paused or failed invocations (requires ADK >= 2.0). Tool approval works without it; with it, a turn that waits on several approvals continues once all are answered. | `shared/utils/utils.py` |
 | `ROOT_AGENT_NAME` | — | Root agent served by the standalone server | `standalone_server.py` |
 | `SECRET_KEY` | — | Signs the encrypted session cookie; set in production! | `auth_server.py` |
 | `SESSION_DB_URL` | `sqlite+aiosqlite:///standalone_session.db` | Session store URL (standalone builds) | `standalone_server.py` |

@@ -8,6 +8,7 @@ covers:
   - static/js/agent-tools.js
   - shared/utils/tools/tool_factory.py
   - shared/utils/tools/mcp_tools.py
+  - shared/utils/langgraph/hitl.py
 ---
 
 # Tools and MCP servers
@@ -64,8 +65,23 @@ list the tool's function name under `require_confirmation` in the JSON:
 }
 ```
 
-Pausing and resuming depends on the server's resumability setting
-(`RESUMABILITY_ENABLED`); ask your administrator if approvals do not appear.
+When the agent reaches the tool, the chat shows an approve/reject card with the
+tool's name and arguments, and the agent waits. Approve and the tool runs; reject
+and the agent is told it may not. The paused conversation is saved, so it can be
+answered later, even after the server has restarted.
+
+If the agent asks for several approvals at once (it wants to run the tool more
+than once in the same step), each gets its own card, and each answer runs or skips
+only that call:
+
+- the agent carries on once every card has been answered;
+- the exception is the ADK runtime with `RESUMABILITY_ENABLED` off, the default:
+  there the agent replies after the first answer, treating the calls not yet
+  answered as still waiting, and answering them later still runs or skips them.
+
+Approval only comes from a chat. A run that nobody is chatting in, such as a
+trigger, an A2A or MCP call or the OpenAI-compatible API, stops at the tool and
+nothing can answer it, so don't require approval for tools those runs use.
 
 ## Connect an MCP server
 
