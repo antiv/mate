@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Audit:** each decision, expiry and cancellation has its audit entry.
   - **A2A and MCP:** runs are now recorded as `a2a` and `mcp`, not as a chat's.
   - **What's missing:** a dashboard page for the waiting requests, which comes next
+- **Dashboard components** (dashboard redesign, step 2, #376) - `static/css/components.css` holds `m-` classes for cards, buttons, form fields, badges, switches, notices, dialogs and tables, on the design tokens only, so they are right in both themes without the Tailwind remap. `static/js/data-table.js` is a shared table with search, sorting, pagination and an empty state, for lists a page loads whole and for lists the API pages; `static/js/dialogs.js` opens and closes dialogs, with Escape, focus and Tab kept inside. See `docs/dev/dashboard-components.md`
 
 ### Security
 
@@ -32,6 +33,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Triggers page** - built on the new components. The list has a search box, sorting by any column and pages of 25; the trigger dialog keeps focus inside it, closes on Escape and takes the whole screen on a phone
+- **The confirm dialog** (`showConfirm`) moved from `base.html` to `static/js/dialogs.js`, on the dialog component. A question about deleting something starts with focus on Cancel
 - **google-adk 2.11.0 → 2.15.0, LangGraph 1.2.12 → 1.2.22, and the rest of the lock** - the lock takes releases at least a week old, apart from google-adk. litellm goes to 1.105.7, and mcp stays below 2: langchain-mcp-adapters 0.3.2 requires it, and moving MATE's MCP server and client to mcp 2 is its own change
   - **Among ADK's fixes:** OAuth2 secrets no longer leak over `/run`, `/run_sse` and the session endpoints (2.12); a confirmed tool runs once per approval (2.12); writes to a SQLite session database are serialized (2.14); an MCP tool call is retried once after the server drops the session (2.15)
   - **Traces:** ADK 2.13 moved to the OpenTelemetry GenAI v2 conventions, which drop the `call_llm` and `invocation` spans. The trace replay reads the model calls from `generate_content` and MATE's own `gen_ai.inference` spans, so it shows the same turn as before. In the trace list, a new trace's top span is now `POST /run_sse`

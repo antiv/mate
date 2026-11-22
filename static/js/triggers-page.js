@@ -4,7 +4,7 @@
  */
 
 // Handlers this file's markup calls through data-click and friends (csp-actions.js)
-mateActions.allow('TriggerPage.closeModal', 'TriggerPage.deleteTrigger',
+mateActions.allow('TriggerPage.applyTypeFilter', 'TriggerPage.closeModal', 'TriggerPage.deleteTrigger',
                   'TriggerPage.hideSecretsBanner', 'TriggerPage.loadTriggers',
                   'TriggerPage.openCreateModal', 'TriggerPage.openEditModal',
                   'TriggerPage.regenerateKey', 'TriggerPage.regenerateSigningSecret',
@@ -15,6 +15,7 @@ const TriggerPage = (function () {
 
     let _triggers = [];
     let _editMode = false;
+    let _table = null;
 
     // ------------------------------------------------------------------ //
     // Public API                                                           //
@@ -22,6 +23,7 @@ const TriggerPage = (function () {
 
     function init() {
         _populateSelects();
+        _table = _buildTable();
         loadTriggers();
         const projectSel = document.getElementById('triggerProject');
         if (projectSel) projectSel.addEventListener('change', onProjectChange);
@@ -29,7 +31,6 @@ const TriggerPage = (function () {
 
     async function loadTriggers() {
         const projectId = document.getElementById('filterProject')?.value || '';
-        const typeFilter = document.getElementById('filterType')?.value || '';
 
         const params = new URLSearchParams();
         if (projectId) params.set('project_id', projectId);
@@ -41,63 +42,63 @@ const TriggerPage = (function () {
             if (!resp.ok) throw new Error('Failed to load triggers');
             const data = await resp.json();
             _triggers = data.triggers || [];
-            const filtered = typeFilter
-                ? _triggers.filter(t => t.trigger_type === typeFilter)
-                : _triggers;
-            renderTable(filtered);
+            _table.setRows(_triggers);
         } catch (err) {
+            _table.setError(err.message);
             _showNotification('Failed to load triggers: ' + err.message, 'error');
         }
     }
 
-    function renderTable(triggers) {
-        const tbody = document.getElementById('triggerTableBody');
-        if (!tbody) return;
+    // The type filter narrows the loaded list; the project filter asks the API again
+    function applyTypeFilter() {
+        _table.reload();
+    }
 
-        if (!triggers.length) {
-            tbody.innerHTML = `<tr><td colspan="8" class="px-4 py-6 text-center text-gray-400 dark:text-gray-500">No triggers yet — click <strong>New Trigger</strong> to create one.</td></tr>`;
-            return;
-        }
-
-        tbody.innerHTML = triggers.map(t => {
-            const typeLabel = _typeLabel(t.trigger_type);
-            const typeBadge = _typeBadge(t.trigger_type);
-            const scheduleInfo = _scheduleInfo(t);
-            const outputLabel = _outputLabel(t);
-            const lastRun = t.last_fired_at ? _relativeTime(t.last_fired_at) : '<span class="text-gray-400">Never</span>';
-            const lastStatus = _lastStatus(t);
-            const enabledToggle = `
-                <button data-click="TriggerPage.toggleTrigger" data-args="[${t.id}]" title="${t.is_enabled ? 'Disable' : 'Enable'}"
-                    class="relative inline-flex items-center h-4 rounded-full w-7 transition-colors focus:outline-none ${t.is_enabled ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-600'}">
-                    <span class="inline-block w-3 h-3 transform bg-white rounded-full transition-transform shadow ${t.is_enabled ? 'translate-x-3.5' : 'translate-x-0.5'}"></span>
-                </button>`;
-
-            return `<tr class="border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                <td class="px-4 py-2">
-                    <div class="font-medium text-gray-900 dark:text-white">${_esc(t.name)}</div>
-                    ${t.description ? `<div class="text-gray-400 text-xs truncate max-w-[160px]" title="${_esc(t.description)}">${_esc(t.description)}</div>` : ''}
-                </td>
-                <td class="px-4 py-2">${typeBadge}</td>
-                <td class="px-4 py-2 text-gray-700 dark:text-gray-300 font-mono">${_esc(t.agent_name)}</td>
-                <td class="px-4 py-2 text-gray-600 dark:text-gray-400 font-mono text-xs">${scheduleInfo}</td>
-                <td class="px-4 py-2 text-gray-600 dark:text-gray-400">${outputLabel}</td>
-                <td class="px-4 py-2 text-center">${enabledToggle}</td>
-                <td class="px-4 py-2 text-gray-500 dark:text-gray-400">${lastRun} ${lastStatus}</td>
-                <td class="px-4 py-2 text-right">
-                    <div class="flex items-center justify-end gap-2">
-                        <button data-click="TriggerPage.testFire" data-args="[${t.id}]" title="Test fire" class="text-green-600 dark:text-green-400 hover:text-green-800">
-                            <i class="fas fa-play text-xs"></i>
-                        </button>
-                        <button data-click="TriggerPage.openEditModal" data-args="[${t.id}]" title="Edit" class="text-blue-600 dark:text-blue-400 hover:text-blue-800">
-                            <i class="fas fa-edit text-xs"></i>
-                        </button>
-                        <button data-click="TriggerPage.deleteTrigger" data-args="[${t.id}]" title="Delete" class="text-red-500 dark:text-red-400 hover:text-red-700">
-                            <i class="fas fa-trash text-xs"></i>
-                        </button>
-                    </div>
-                </td>
-            </tr>`;
-        }).join('');
+    function _buildTable() {
+        const esc = MateTable.esc;
+        return new MateTable(document.getElementById('triggerTable'), {
+            noun: ['trigger', 'triggers'],
+            label: 'Triggers',
+            empty: 'No triggers yet. Click New Trigger to create one.',
+            filters: document.getElementById('triggerFilters'),
+            filter: (t) => {
+                const type = document.getElementById('filterType')?.value || '';
+                return !type || t.trigger_type === type;
+            },
+            columns: [
+                {
+                    key: 'name', label: 'Name',
+                    search: (t) => `${t.name || ''} ${t.description || ''}`,
+                    render: (t) => `<span class="m-cell-strong">${esc(t.name)}</span>`
+                        + (t.description ? `<span class="m-cell-sub" title="${esc(t.description)}">${esc(t.description)}</span>` : ''),
+                },
+                { key: 'trigger_type', label: 'Type', value: (t) => _typeLabel(t.trigger_type), render: (t) => _typeBadge(t.trigger_type) },
+                { key: 'agent_name', label: 'Agent', className: 'm-mono' },
+                { key: 'schedule', label: 'Schedule / Path', className: 'm-mono', value: _scheduleText, render: _scheduleInfo },
+                { key: 'output_type', label: 'Output', value: _outputLabel },
+                {
+                    key: 'is_enabled', label: 'Enabled', align: 'center', searchable: false,
+                    render: (t) => `<button type="button" class="m-switch" role="switch" aria-checked="${!!t.is_enabled}"
+                        aria-label="Enabled: ${esc(t.name)}" title="${t.is_enabled ? 'Disable' : 'Enable'}"
+                        data-click="TriggerPage.toggleTrigger" data-args="[${t.id}]"></button>`,
+                },
+                {
+                    key: 'last_fired_at', label: 'Last Run', searchable: false,
+                    render: (t) => (t.last_fired_at ? _relativeTime(t.last_fired_at) : '<span class="m-muted">Never</span>') + _lastStatus(t),
+                },
+                {
+                    label: 'Actions', align: 'right',
+                    render: (t) => `<span class="m-cell-actions">
+                        <button type="button" class="m-btn m-btn-ghost m-btn-icon" title="Test fire" aria-label="Test fire ${esc(t.name)}"
+                            data-click="TriggerPage.testFire" data-args="[${t.id}]"><i class="fas fa-play" aria-hidden="true"></i></button>
+                        <button type="button" class="m-btn m-btn-ghost m-btn-icon" title="Edit" aria-label="Edit ${esc(t.name)}"
+                            data-click="TriggerPage.openEditModal" data-args="[${t.id}]"><i class="fas fa-edit" aria-hidden="true"></i></button>
+                        <button type="button" class="m-btn m-btn-ghost m-btn-danger m-btn-icon" title="Delete" aria-label="Delete ${esc(t.name)}"
+                            data-click="TriggerPage.deleteTrigger" data-args="[${t.id}]"><i class="fas fa-trash" aria-hidden="true"></i></button>
+                    </span>`,
+                },
+            ],
+        });
     }
 
     function openCreateModal() {
@@ -105,11 +106,10 @@ const TriggerPage = (function () {
         _resetForm();
         document.getElementById('triggerModalTitle').textContent = 'Create Trigger';
         document.getElementById('triggerSubmitText').textContent = 'Create Trigger';
-        document.getElementById('triggerWebhookSection').classList.add('hidden');
+        document.getElementById('triggerWebhookSection').hidden = true;
         updateTypeVisibility();
         updateOutputVisibility();
-        document.getElementById('triggerModal').classList.remove('hidden');
-        document.getElementById('triggerName').focus();
+        mateDialog.open('triggerModal', { focus: 'triggerName' });
     }
 
     function openEditModal(triggerId) {
@@ -146,18 +146,18 @@ const TriggerPage = (function () {
         if (trigger.trigger_type === 'webhook' && trigger.webhook_path) {
             const webhookUrl = window.location.origin + '/triggers/' + triggerId + '/fire';
             document.getElementById('triggerWebhookUrl').value = webhookUrl;
-            document.getElementById('triggerWebhookSection').classList.remove('hidden');
+            document.getElementById('triggerWebhookSection').hidden = false;
         } else {
-            document.getElementById('triggerWebhookSection').classList.add('hidden');
+            document.getElementById('triggerWebhookSection').hidden = true;
         }
 
         updateTypeVisibility();
         updateOutputVisibility();
-        document.getElementById('triggerModal').classList.remove('hidden');
+        mateDialog.open('triggerModal', { focus: 'triggerName' });
     }
 
     function closeModal() {
-        document.getElementById('triggerModal').classList.add('hidden');
+        mateDialog.close('triggerModal');
     }
 
     function updateTypeVisibility() {
@@ -165,20 +165,20 @@ const TriggerPage = (function () {
         const cronSection = document.getElementById('triggerCronSection');
         const stubWarning = document.getElementById('triggerStubWarning');
 
-        cronSection.classList.toggle('hidden', type !== 'cron');
-        stubWarning.classList.toggle('hidden', !['file_watch', 'event_bus'].includes(type));
+        cronSection.hidden = type !== 'cron';
+        stubWarning.hidden = !['file_watch', 'event_bus'].includes(type);
 
         // Webhook section is only shown in edit mode when type=webhook and path exists
         if (!_editMode) {
-            document.getElementById('triggerWebhookSection').classList.add('hidden');
+            document.getElementById('triggerWebhookSection').hidden = true;
         }
     }
 
     function updateOutputVisibility() {
         const type = document.getElementById('triggerOutputType').value;
-        document.getElementById('outputMemoryConfig').classList.toggle('hidden', type !== 'memory_block');
-        document.getElementById('outputHttpConfig').classList.toggle('hidden', type !== 'http_callback');
-        document.getElementById('outputEmailConfig').classList.toggle('hidden', type !== 'email');
+        document.getElementById('outputMemoryConfig').hidden = type !== 'memory_block';
+        document.getElementById('outputHttpConfig').hidden = type !== 'http_callback';
+        document.getElementById('outputEmailConfig').hidden = type !== 'email';
     }
 
     async function submitForm() {
@@ -220,7 +220,7 @@ const TriggerPage = (function () {
         const loader = document.getElementById('triggerSubmitLoader');
         const btnText = document.getElementById('triggerSubmitText');
         btn.disabled = true;
-        loader.classList.remove('hidden');
+        loader.hidden = false;
         btnText.textContent = formId ? 'Updating…' : 'Creating…';
 
         try {
@@ -242,7 +242,7 @@ const TriggerPage = (function () {
             _showNotification('Error: ' + err.message, 'error');
         } finally {
             btn.disabled = false;
-            loader.classList.add('hidden');
+            loader.hidden = true;
             btnText.textContent = formId ? 'Update Trigger' : 'Create Trigger';
         }
     }
@@ -470,19 +470,19 @@ const TriggerPage = (function () {
 
         const keyRow = document.getElementById('fireKeyRow');
         if (fireKey) document.getElementById('fireKeyValue').textContent = fireKey;
-        keyRow.classList.toggle('hidden', !fireKey);
+        keyRow.hidden = !fireKey;
 
         const secretRow = document.getElementById('signingSecretRow');
         if (signingSecret) document.getElementById('signingSecretValue').textContent = signingSecret;
-        secretRow.classList.toggle('hidden', !signingSecret);
+        secretRow.hidden = !signingSecret;
 
-        banner.classList.remove('hidden');
+        banner.hidden = false;
         // Auto-hide after 60 seconds
         setTimeout(hideSecretsBanner, 60000);
     }
 
     function hideSecretsBanner() {
-        document.getElementById('fireKeyBanner').classList.add('hidden');
+        document.getElementById('fireKeyBanner').hidden = true;
     }
 
     function _typeLabel(type) {
@@ -490,20 +490,20 @@ const TriggerPage = (function () {
     }
 
     function _typeBadge(type) {
-        const colors = {
-            cron:       'bg-blue-100  dark:bg-blue-900  text-blue-800  dark:text-blue-200',
-            webhook:    'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200',
-            file_watch: 'bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200',
-            event_bus:  'bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200',
-        };
-        const cls = colors[type] || 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300';
-        return `<span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium ${cls}">${_typeLabel(type)}</span>`;
+        const tones = { cron: 'm-badge-accent', webhook: 'm-badge-success', file_watch: 'm-badge-warning', event_bus: 'm-badge-violet' };
+        return `<span class="m-badge ${tones[type] || ''}">${_esc(_typeLabel(type))}</span>`;
+    }
+
+    function _scheduleText(t) {
+        if (t.trigger_type === 'cron') return t.cron_expression || '';
+        if (t.trigger_type === 'webhook') return t.webhook_path || '';
+        return '';
     }
 
     function _scheduleInfo(t) {
         if (t.trigger_type === 'cron') return _esc(t.cron_expression || '—');
-        if (t.trigger_type === 'webhook' && t.webhook_path) return '<span class="text-gray-400">' + _esc(t.webhook_path) + '</span>';
-        return '<span class="text-gray-400">—</span>';
+        if (t.trigger_type === 'webhook' && t.webhook_path) return '<span class="m-muted">' + _esc(t.webhook_path) + '</span>';
+        return '<span class="m-muted">—</span>';
     }
 
     function _outputLabel(t) {
@@ -514,10 +514,14 @@ const TriggerPage = (function () {
     function _lastStatus(t) {
         const r = t.last_result;
         if (!r) return '';
-        const waiting = r.status === 'awaiting_approval';
-        const cls = r.status === 'ok' ? 'text-green-500' : r.status === 'skipped' ? 'text-yellow-500' : waiting ? 'text-blue-500' : 'text-red-500';
-        const icon = r.status === 'ok' ? 'fa-check-circle' : r.status === 'skipped' ? 'fa-minus-circle' : waiting ? 'fa-hourglass-half' : 'fa-exclamation-circle';
-        return `<i class="fas ${icon} ${cls} ml-1" title="${_esc(r.message || r.status)}"></i>`;
+        const looks = {
+            ok: ['fa-check-circle', 'm-tone-success'],
+            skipped: ['fa-minus-circle', 'm-tone-warning'],
+            awaiting_approval: ['fa-hourglass-half', 'm-tone-accent'],
+        };
+        const [icon, tone] = looks[r.status] || ['fa-exclamation-circle', 'm-tone-danger'];
+        const text = _esc(r.message || r.status);
+        return ` <i class="fas ${icon} ${tone}" title="${text}" aria-label="${text}"></i>`;
     }
 
     function _relativeTime(isoStr) {
@@ -548,6 +552,7 @@ const TriggerPage = (function () {
     return {
         init,
         loadTriggers,
+        applyTypeFilter,
         openCreateModal,
         openEditModal,
         closeModal,

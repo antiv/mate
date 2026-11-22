@@ -18,7 +18,7 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const source = fs.readFileSync(process.argv[1], 'utf8');
 const start = source.indexOf('function showNotification(');
-const end = source.indexOf('// Custom confirm dialog', start);
+const end = source.indexOf('// Earlier versions kept the dashboard password', start);
 if (start < 0 || end < 0) throw new Error('notification function not found');
 const timers = [];
 const notification = {
