@@ -231,7 +231,7 @@ Web interface pages for system management.
 | `GET` | `/dashboard/members` | Workspace settings → Members (server/member_routes.py) | shared/utils/dashboard/dashboard_server.py · dashboard_members |
 | `GET` | `/dashboard/migrations` | Dashboard migrations page | shared/utils/dashboard/dashboard_server.py · dashboard_migrations |
 | `GET` | `/dashboard/models` | Workspace settings → Models and keys (server/workspace_model_routes.py) | shared/utils/dashboard/dashboard_server.py · dashboard_models |
-| `GET` | `/dashboard/overview` | Platform Overview — Control Room landing page | shared/utils/dashboard/dashboard_server.py · dashboard_overview |
+| `GET` | `/dashboard/overview` | Overview — Control Room landing page | shared/utils/dashboard/dashboard_server.py · dashboard_overview |
 | `GET` | `/dashboard/rate-limits` | Dashboard rate limits and budgets page | shared/utils/dashboard/dashboard_server.py · dashboard_rate_limits |
 | `GET` | `/dashboard/sessions` | Dashboard session tracking page (ADK & LangGraph) | shared/utils/dashboard/dashboard_server.py · dashboard_sessions |
 | `GET` | `/dashboard/settings` | — | shared/utils/dashboard/dashboard_server.py · dashboard_settings |

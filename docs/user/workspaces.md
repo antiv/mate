@@ -68,7 +68,7 @@ workspace.
 ## The Workspaces page
 
 The **Workspaces** page is for platform administrators. Open it from the Control
-Room, under **Governance & Access**. Owners of a workspace don't see it.
+Room, under **Platform**. Owners of a workspace don't see it.
 
 ### The list
 

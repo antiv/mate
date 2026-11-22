@@ -24,7 +24,7 @@ person chatting answers. Requests wait on the **Approvals** page instead when:
 The agent's `notify` setting, or your administrator's default, sends a message when
 a request starts waiting. The message has a link that opens the request on this page.
 
-**Approvals** is in the Control Room, under **Governance & Access**. It is for admins
+**Approvals** is in the Control Room, under **Workspace**. It is for admins
 of the workspace. The number beside it counts the requests waiting.
 
 ## Waiting

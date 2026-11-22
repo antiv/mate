@@ -34,7 +34,7 @@ The switch at the top of every page moves between three spaces:
 |---|---|
 | **Work Room** | Talking to agents. Everyone who can sign in has this. |
 | **Studio** | Building: agents, the visual builder, triggers, integrations, templates, evals, traces. |
-| **Control Room** | Running the installation: usage, audit and guardrail logs, sessions, users, [workspaces](workspaces.md), members, [models and keys](workspaces.md#models-and-keys), rate limits, alerts, server-wide [settings](settings.md), migrations, and this documentation. |
+| **Control Room** | Running the installation, in three groups: **Observability** (usage, audit and guardrail logs, sessions); **Workspace** ([approvals](approvals.md), members, [models and keys](workspaces.md#models-and-keys), rate limits, alerts); and, for platform administrators, **Platform** ([workspaces](workspaces.md), users, server-wide [settings](settings.md), migrations, and the [wizard and shop](wizard.md) pages when in use). This documentation is at the bottom. |
 
 Studio and Control Room are for administrators. Someone signed in without the admin
 role sees only the Work Room and their own usage.

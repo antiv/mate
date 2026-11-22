@@ -28,8 +28,9 @@ confuse:
   workspace.
 - **Agent access** depends on their agent roles in the workspace.
 
-People are managed on two pages. **Control Room → Users** holds every user record of
-the installation and their platform roles. **Control Room → Members** holds the
+People are managed on two pages. **Control Room → Platform → Users** holds every user
+record of the installation and their platform roles. **Control Room → Workspace →
+Members** holds the
 people of the current workspace, with their role and agent roles there.
 
 ## Dashboard access
@@ -181,7 +182,7 @@ When someone signs in through Google or GitHub for the first time without an
 invitation, MATE creates their user record with the `pending` role. They can sign in
 but cannot use any agent.
 
-1. Open **Control Room → Users**. Filter by **Provider** or search for their email.
+1. Open **Control Room → Platform → Users**. Filter by **Provider** or search for their email.
 2. Click edit on their row.
 3. Remove `pending` from **Platform roles** and save. They join the Default workspace
    as a member with the `user` agent role.

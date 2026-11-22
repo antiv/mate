@@ -40,10 +40,11 @@ the choice stays in the page's address, so a reload or a shared link keeps it. O
 and admins of a workspace don't have the box, and the API refuses them the view (403).
 The audit export then has two more columns, `workspace_id` and `workspace`.
 
-## Platform Overview
+## Overview
 
-The landing page of the Control Room. It shows the last seven days at a glance
-(requests, tokens, active users, number of agents, the busiest agents) and whether
+The landing page of the Control Room. It shows the current workspace's last seven
+days at a glance (requests, tokens, active users, number of agents, the busiest
+agents) and whether
 the agent server, the database, authentication and the rate limiter are up.
 
 ## Usage Analytics

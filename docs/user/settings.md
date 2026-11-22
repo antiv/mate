@@ -14,7 +14,8 @@ covers:
 
 # Settings
 
-**Control Room → Settings** holds server-wide defaults. Only admins can open it. A
+**Control Room → Platform → Settings** holds server-wide defaults. Only platform
+administrators can open it. A
 value set here wins over the matching environment variable; **Clear** removes it, and
 the environment variable (or the built-in default) applies again. Every change is
 recorded in the [audit log](usage-and-audit.md) as `config.change`, with the old and
