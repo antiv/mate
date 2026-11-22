@@ -24,11 +24,6 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def _user_key(app_name: str, user_id: str) -> str:
-    """Generate user key for memory operations."""
-    return f'{app_name}/{user_id}'
-
-
 def _extract_words_lower(text: str) -> set[str]:
     """Extract words from a string and convert them to lowercase."""
     return set([word.lower() for word in re.findall(r'[A-Za-z]+', text)])

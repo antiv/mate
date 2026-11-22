@@ -24,7 +24,7 @@ from fastapi.staticfiles import StaticFiles
 from shared.utils import audit_service
 from ..ai_disclosure import resolve_disclosure, validate_waiver
 from shared.utils.path_safety import resolve_within_base
-from shared.utils.platform_only import features_added, features_of, has_code_folder, is_agent_name
+from shared.utils.platform_only import features_added, has_code_folder, is_agent_name
 from shared.utils.models import DEFAULT_WORKSPACE_ID
 from shared.utils.utils import ModelContext
 from shared.utils.workspaces import (
@@ -8387,8 +8387,6 @@ class DashboardServer:
             Returns trigger + fire_key and signing_secret (webhook triggers only,
             both shown once).
             """
-            import re as _re
-            import secrets as _secrets
             from shared.utils.trigger_runner import (
                 UNIMPLEMENTED_TRIGGER_TYPES, get_trigger_runner, generate_webhook_path,
                 trigger_config_error,

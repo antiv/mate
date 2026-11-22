@@ -21,6 +21,7 @@ from ..agent_cleanup import left_behind
 from ..platform_only import features_added, has_code_folder, is_agent_name
 from ..workspaces import agent_workspace
 from ...utils.utils import mask_config_secrets, reload_agent_cache
+from ..context_values import user_id_of as _get_user_id_from_context
 
 # Hardcoded agents' code, which the agent server loads by name
 _AGENTS_DIR = Path(__file__).resolve().parents[3] / "agents"
@@ -55,20 +56,6 @@ def _create_root_agent_folder(agent_name: str) -> Dict[str, Any]:
         return {"success": True, "message": f"Agent folder '{agent_name}' created"}
     except Exception as e:
         return {"success": False, "message": str(e)}
-
-
-def _get_user_id_from_context(tool_context: ToolContext) -> Optional[str]:
-    """Extract user_id from tool context using the standard ADK pattern."""
-    if not tool_context:
-        return None
-    user_id = None
-    if hasattr(tool_context, '_invocation_context') and tool_context._invocation_context:
-        user_id = getattr(tool_context._invocation_context, 'user_id', None)
-    if not user_id:
-        user_id = getattr(tool_context, 'user_id', None)
-    if not user_id and hasattr(tool_context, 'session') and tool_context.session:
-        user_id = getattr(tool_context.session, 'user_id', None)
-    return user_id
 
 
 def _is_admin_user(tool_context: ToolContext) -> bool:

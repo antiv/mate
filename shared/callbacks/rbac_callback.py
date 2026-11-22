@@ -10,7 +10,8 @@ from typing import Optional
 from google.adk.agents.callback_context import CallbackContext
 from google.adk.models.llm_request import LlmRequest
 from google.adk.models.llm_response import LlmResponse
-from ..utils.rbac_middleware import get_rbac_middleware, AccessDeniedException
+from ..utils.rbac_middleware import get_rbac_middleware
+from ..utils.context_values import user_id_of as _get_user_id
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +41,7 @@ def rbac_before_model_callback(callback_context: CallbackContext, llm_request: L
         if is_tracing_enabled():
             from opentelemetry import trace
             from shared.utils.tracing.tracer import get_tracer
-            from shared.utils.tracing.genai_attributes import MATE_AGENT_NAME, MATE_USER_ID, MATE_RBAC_ALLOWED
+            from shared.utils.tracing.genai_attributes import MATE_AGENT_NAME, MATE_USER_ID
             tracer = get_tracer("mate", "1.0.0")
             span = tracer.start_span("mate.rbac_check")
             logger.debug(
@@ -273,36 +274,6 @@ def _log_access_denied_event(callback_context: CallbackContext, user_id: str, ag
         # Don't fail the RBAC check if logging fails
 
 
-def _get_user_id(callback_context: CallbackContext) -> Optional[str]:
-    """
-    Get user ID from ADK callback context.
-    
-    Args:
-        callback_context: The callback context
-        
-    Returns:
-        User ID if found, None otherwise
-    """
-    # Try to get user_id from invocation context first (proper ADK way)
-    if hasattr(callback_context, '_invocation_context') and callback_context._invocation_context:
-        user_id = getattr(callback_context._invocation_context, 'user_id', None)
-        if user_id:
-            return user_id
-    
-    # Fallback to direct context attributes
-    user_id = getattr(callback_context, 'user_id', None)
-    if user_id:
-        return user_id
-    
-    # Additional fallback attempts
-    if hasattr(callback_context, 'session') and callback_context.session:
-        user_id = getattr(callback_context.session, 'user_id', None)
-        if user_id:
-            return user_id
-    
-    return None
-
-
 def _should_skip_rbac_check(callback_context: CallbackContext) -> bool:
     """
     Determine if RBAC check should be skipped for the agent in this context.
@@ -356,31 +327,3 @@ def _create_access_denied_response(message: str, user_id: str, agent_name: str,
     )
 
 
-def combined_rbac_and_token_callback(callback_context: CallbackContext, llm_request: LlmRequest) -> Optional[LlmResponse]:
-    """
-    Combined callback that performs RBAC check and then token usage capture.
-    
-    This is a convenience callback that combines RBAC checking with the existing
-    token usage capture functionality.
-    
-    Args:
-        callback_context: The callback context
-        llm_request: The LLM request being processed
-        
-    Returns:
-        LlmResponse if access denied, None to continue normally
-    """
-    # Always capture model name first (even if access will be denied)
-    try:
-        from .token_usage_callback import capture_model_name_callback
-        capture_model_name_callback(callback_context, llm_request)
-    except Exception as e:
-        logger.warning(f"Error in token usage callback: {e}")
-    
-    # Then perform RBAC check
-    rbac_response = rbac_before_model_callback(callback_context, llm_request)
-    if rbac_response:
-        return rbac_response  # Access denied, but model name was captured
-    
-    # If RBAC passed, continue normally
-    return None

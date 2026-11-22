@@ -7,7 +7,7 @@ import logging
 import hashlib
 import os
 from datetime import datetime, timedelta
-from typing import Dict, Tuple
+from typing import Dict
 
 logger = logging.getLogger(__name__)
 
@@ -101,9 +101,6 @@ def _cleanup_logged_out_credentials():
     for key in expired_keys:
         del _logged_out_credentials[key]
 
-def get_active_tokens():
-    """Get the active tokens set (for debugging/monitoring)."""
-    return _active_tokens
 
 # Export active_tokens for backward compatibility
 active_tokens = _active_tokens

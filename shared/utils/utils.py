@@ -7,7 +7,6 @@ import logging
 import re
 from dataclasses import dataclass
 from google.adk.models.lite_llm import LiteLlm
-from google.adk.models import Gemini
 from typing import Dict, Any, Optional, Set, Tuple, Any as AnyType
 
 logger = logging.getLogger(__name__)
@@ -62,7 +61,6 @@ def _is_gemini_model(model_name: str) -> bool:
     if not provider:
         return True
     return model_name.startswith(('gemini-', 'models/'))
-
 
 
 # Secrets belong in the environment, not in database config rows, so string values
@@ -242,7 +240,6 @@ def create_model(model_name: str = None, api_key: str = None, base_url: str = No
     # the environment where the workspace may use it (shared/utils/provider_keys.py)
     from .provider_keys import with_provider_keys
     return with_provider_keys(model, "llm_client", context, requested_name)
-
 
 
 def resolve_agent_endpoint(config: Dict[str, Any]) -> Tuple[Optional[str], Optional[str]]:
@@ -754,39 +751,6 @@ def fix_session_events_compaction(session) -> None:
     
     for event in session.events:
         fix_event_compaction_deserialization(event)
-
-
-def get_session_with_compaction_fix(session_service, session_id: str):
-    """
-    Get a session from session service and automatically fix EventCompaction deserialization.
-    
-    Workaround for ADK bug #3633. Use this instead of directly calling session_service.get_session()
-    when you need to access events with compaction.
-    
-    Args:
-        session_service: ADK session service instance
-        session_id: Session ID to retrieve
-    
-    Returns:
-        Session object with fixed EventCompaction objects
-    """
-    import asyncio
-    
-    # Get session (handle both sync and async)
-    if asyncio.iscoroutinefunction(session_service.get_session):
-        # Async session service
-        async def _get_async():
-            session = await session_service.get_session(session_id)
-            if session:
-                fix_session_events_compaction(session)
-            return session
-        return _get_async()
-    else:
-        # Sync session service
-        session = session_service.get_session(session_id)
-        if session:
-            fix_session_events_compaction(session)
-        return session
 
 
 def check_compaction_availability_runtime() -> Dict[str, Any]:

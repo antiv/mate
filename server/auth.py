@@ -59,17 +59,6 @@ def _get_session_user(request: Request):
     return None
 
 
-def _get_oauth_session_user_id(request: Request):
-    """Return the user_id from an OAuth session, or None if not an OAuth session."""
-    try:
-        user = request.session.get("user")
-        if user and user.get("provider") in ("google", "github", "microsoft", "gitlab"):
-            return user.get("user_id") or user.get("email") or ""
-    except Exception:
-        pass
-    return None
-
-
 def _oauth_user_has_admin_role(user_id: str) -> bool:
     """Check if an OAuth user has the 'admin' role in the database."""
     try:

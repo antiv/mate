@@ -142,11 +142,6 @@ def _defining(config: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     return found
 
 
-def features_of(config: Optional[Dict[str, Any]]) -> Set[str]:
-    """The platform-only features an agent config has."""
-    return set(_defining(config))
-
-
 def features_added(config: Dict[str, Any], before: Optional[Dict[str, Any]] = None) -> Set[str]:
     """The features that saving `config` over `before` (None for a new agent) adds or
     changes. A field the config leaves out keeps its value from before."""

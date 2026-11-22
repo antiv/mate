@@ -84,7 +84,6 @@ class GraphWorkflow(Workflow):
     max_iterations: Optional[int] = None
 
 
-
 class AgentManager:
     """Manages agent initialization and configuration from database."""
     
@@ -206,9 +205,6 @@ class AgentManager:
         finally:
             session.close()
     
-    def get_agents_by_parent(self, parent_name: str) -> List[AgentConfig]:
-        """Get all agents that have a specific parent agent."""
-        return self.get_subagents(parent_name)
     
     def initialize_agent_from_config(self, config: AgentConfig, sub_agents: List[Any] = None) -> Any:
         """Initialize an agent from its configuration."""
@@ -352,7 +348,6 @@ class AgentManager:
         from google.adk.agents import Agent
         from .utils import create_model_from_agent_config
         from ..callbacks.token_usage_callback import log_token_usage_callback
-        from ..callbacks.rbac_callback import combined_rbac_and_token_callback
         from ..callbacks.user_profile_callback import combined_user_profile_and_rbac_callback
         from ..callbacks.guardrail_callback import guardrail_after_model_callback
         from ..callbacks.error_callback import record_model_error_callback
@@ -877,51 +872,6 @@ class AgentManager:
         
         return agent
     
-    def build_agent_tree(self, root_agent_name: str, hardcoded_agents: List[Any] = None) -> Optional[Any]:
-        """
-        Build a complete agent tree starting from a root agent, handling multiple parent relationships.
-        
-        This method first creates all agents independently, then builds the tree relationships
-        to handle multi-parent scenarios properly.
-        
-        Args:
-            root_agent_name: Name of the root agent to start the tree from
-            hardcoded_agents: Optional list of hardcoded agent instances to include
-            
-        Returns:
-            Initialized root agent with complete tree structure
-        """
-        logger.info(f"Building agent tree for root agent: {root_agent_name}")
-        
-        # Clear any existing initialized agents to start fresh
-        self.clear_initialized_agents()
-        
-        
-        # Get root agent configuration
-        root_config = self.get_root_agent_by_name(root_agent_name)
-        if not root_config:
-            logger.error(f"Root agent {root_agent_name} not found")
-            return None
-        
-        self.last_error = None
-        
-        # Step 1: Create all agents independently (without subagents)
-        self._create_all_agents_independently(root_agent_name)
-        
-        # Step 2: Build the tree relationships
-        root_agent = self._build_tree_relationships(root_config)
-        if not root_agent:
-            err_msg = self.last_error or f"Failed to build agent tree for root agent {root_agent_name}"
-            logger.error(err_msg)
-            raise ValueError(err_msg)
-        
-        # Add hardcoded agents as additional subagents to root
-        if hardcoded_agents:
-            self._add_hardcoded_subagents(root_agent, hardcoded_agents)
-        
-        logger.info(f"Successfully built agent tree with {len(self.initialized_agents)} total agents")
-        return root_agent
-    
     def build_tree_for_config(self, config: AgentConfig) -> Optional[Any]:
         """
         Build an agent from a config that need not be the stored one, such as a
@@ -971,43 +921,6 @@ class AgentManager:
             logger.info(f"Successfully built agent: {config.name} with {len(initialized_subagents)} subagents")
         
         return agent
-    
-    def _create_all_agents_independently(self, root_agent_name: str):
-        """Create all agents independently without subagent relationships."""
-        session = self.db_client.get_session()
-        if not session:
-            return
-        
-        try:
-            # Get all agent configurations
-            from shared.utils.models import AgentConfig
-            all_configs = session.query(AgentConfig).filter_by(disabled=False).all()
-            
-            # Create each agent independently (without subagents)
-            for config in all_configs:
-                if config.name not in self.initialized_agents:
-                    logger.info(f"Creating agent independently: {config.name}")
-                    agent = self.initialize_agent_from_config(config, [])
-                    if agent:
-                        self.initialized_agents[config.name] = agent
-                        logger.info(f"Successfully created independent agent: {config.name}")
-                    else:
-                        logger.error(f"Failed to create independent agent: {config.name}")
-        finally:
-            session.close()
-    
-    def _build_tree_relationships(self, root_config: AgentConfig) -> Optional[Any]:
-        """Build the tree relationships between already created agents."""
-        # Get the root agent
-        root_agent = self.initialized_agents.get(root_config.name)
-        if not root_agent:
-            logger.error(f"Root agent {root_config.name} not found in initialized agents")
-            return None
-        
-        # Build relationships recursively
-        self._build_relationships_recursive(root_config)
-        
-        return root_agent
     
     def _build_relationships_recursive(self, config: AgentConfig):
         """Recursively build relationships for an agent and its subagents."""
@@ -1094,21 +1007,6 @@ class AgentManager:
             return None
     
     
-    def _agent_has_parent(self, agent_name: str) -> bool:
-        """Check if an agent already has a parent by looking at the database configuration."""
-        session = self.db_client.get_session()
-        if not session:
-            return False
-        
-        try:
-            from shared.utils.models import AgentConfig
-            agent_config = session.query(AgentConfig).filter_by(name=agent_name).first()
-            if agent_config:
-                parent_agents = agent_config.get_parent_agents()
-                return len(parent_agents) > 0
-            return False
-        finally:
-            session.close()
     
     def get_initialized_agent(self, name: str) -> Optional[Any]:
         """Get an already initialized agent by name."""

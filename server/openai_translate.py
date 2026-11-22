@@ -382,10 +382,6 @@ def part_function_call(part: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     return part.get("functionCall") or part.get("function_call")
 
 
-def part_function_response(part: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    return part.get("functionResponse") or part.get("function_response")
-
-
 def text_chunk(completion_id: str, model: str, created: int, delta: str) -> Dict[str, Any]:
     return {
         "id": completion_id,

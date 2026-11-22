@@ -129,13 +129,7 @@ class AgentMCPManager:
         finally:
             session.close()
     
-    def get_agent_mcp_server(self, agent_name: str) -> Optional[AgentMCPServer]:
-        """Get MCP server for a specific agent"""
-        return self.agent_mcp_servers.get(agent_name)
     
-    def list_agent_mcp_servers(self) -> List[str]:
-        """List all agent names with MCP servers"""
-        return list(self.agent_mcp_servers.keys())
     
     def verify_routes_registered(self):
         """Verify that routes are actually registered in the FastAPI app"""

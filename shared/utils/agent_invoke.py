@@ -2,10 +2,9 @@
 Shared agent invocation helper for headless callers (chat-platform bridges, etc.).
 
 Sends a single user message to an ADK agent under a caller-supplied, stable
-conversation id and returns the final assistant text. Mirrors the collection
-logic in trigger_runner._invoke_agent (author-change reset, tool-call filtering,
-overlapping-delta de-duplication) but is async and lets the caller pin the
-session_id so multi-turn threads persist.
+conversation id and returns the final assistant text, and lets the caller pin the
+session_id so multi-turn threads persist. ReplyCollector reads the reply out of
+/run_sse for this and for trigger_runner.collect_reply.
 """
 
 import json
@@ -16,6 +15,57 @@ import httpx
 from shared.utils.utils import get_adk_config
 
 logger = logging.getLogger(__name__)
+
+
+class ReplyCollector:
+    """
+    The reply of a run, read from /run_sse as its bytes arrive: the last text of
+    the last author. Text that preceded a tool call is dropped, and a streamed
+    delta that repeats or extends what came before is merged, not doubled.
+    """
+
+    def __init__(self) -> None:
+        self._buffer = ""
+        self._author = ""
+        self._text = ""
+
+    def feed(self, chunk: bytes) -> None:
+        self._buffer += chunk.decode("utf-8", errors="replace")
+        while "\n" in self._buffer:
+            line, self._buffer = self._buffer.split("\n", 1)
+            if not line.startswith("data: "):
+                continue
+            raw = line[6:].rstrip("\r")
+            if raw == "[DONE]":
+                break
+            try:
+                event = json.loads(raw)
+            except json.JSONDecodeError:
+                continue
+            self._event(event)
+
+    def _event(self, event: dict) -> None:
+        author = event.get("author", "")
+        if author != self._author:
+            self._author = author
+            self._text = ""
+        parts = (event.get("content") or {}).get("parts") or []
+        if any(p.get("functionCall") or p.get("functionResponse")
+               or p.get("function_call") or p.get("function_response") for p in parts):
+            self._text = ""
+            return
+        for part in parts:
+            text = part.get("text")
+            if not text:
+                continue
+            if self._text and text.startswith(self._text):
+                self._text = text
+            elif not (self._text and self._text.startswith(text)):
+                self._text += text
+
+    @property
+    def reply(self) -> str:
+        return self._text.strip()
 
 
 async def _ensure_session(client: httpx.AsyncClient, base: str, agent_name: str,
@@ -48,9 +98,7 @@ async def run_agent_message(agent_name: str, user_id: str, session_id: str,
         "streaming": True,
     }
 
-    last_text = ""
-    last_author = ""
-    buffer = ""
+    collector = ReplyCollector()
 
     async with httpx.AsyncClient(timeout=timeout) as client:
         await _ensure_session(client, base, agent_name, user_id, session_id)
@@ -60,38 +108,6 @@ async def run_agent_message(agent_name: str, user_id: str, session_id: str,
             if r.status_code != 200:
                 raise RuntimeError(f"run_sse returned HTTP {r.status_code}")
             async for chunk in r.aiter_bytes():
-                buffer += chunk.decode("utf-8", errors="replace")
-                while "\n" in buffer:
-                    line, buffer = buffer.split("\n", 1)
-                    if not line.startswith("data: "):
-                        continue
-                    raw = line[6:].rstrip("\r")
-                    if raw == "[DONE]":
-                        break
-                    try:
-                        evt = json.loads(raw)
-                    except json.JSONDecodeError:
-                        continue
-                    author = evt.get("author", "")
-                    if author != last_author:
-                        last_author = author
-                        last_text = ""
-                    parts = (evt.get("content") or {}).get("parts") or []
-                    has_tool = any(
-                        p.get("functionCall") or p.get("functionResponse")
-                        or p.get("function_call") or p.get("function_response")
-                        for p in parts
-                    )
-                    if has_tool:
-                        last_text = ""
-                        continue
-                    for part in parts:
-                        part_text = part.get("text")
-                        if not part_text:
-                            continue
-                        if last_text and part_text.startswith(last_text):
-                            last_text = part_text
-                        elif not (last_text and last_text.startswith(part_text)):
-                            last_text += part_text
+                collector.feed(chunk)
 
-    return last_text.strip()
+    return collector.reply
