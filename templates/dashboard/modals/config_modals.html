@@ -1,23 +1,9 @@
 {# Macro for Config Modals - Tool, MCP, Planner, GenerateContent, InputSchema, OutputSchema #}
-{% macro config_modals(id_prefix) %}
-<!-- Tool Configuration Modal -->
-<div id="{{ id_prefix }}ToolConfigModal" class="fixed inset-0 z-[120] hidden">
-    <div class="absolute inset-0 bg-black/60" data-click="closeConfigModal" data-args='[{{ id_prefix|string|tojson }}, "ToolConfig"]'></div>
-    <div class="relative z-10 mx-auto my-6 w-full max-w-3xl px-2">
-        <div
-            class="config-modal-box bg-white dark:bg-gray-800 rounded-lg shadow-2xl border border-gray-200 dark:border-gray-700 flex flex-col min-h-[560px] max-h-[90vh]">
-            <div class="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
-                <div>
-                    <h4 class="text-sm font-semibold text-gray-900 dark:text-white">Tool Configuration</h4>
-                    <p class="text-xs text-gray-500 dark:text-gray-400">Toggle built-in tools or author custom JSON.</p>
-                </div>
-                <button type="button" aria-label="Close"
-                    class="text-gray-500 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-100"
-                    data-click="closeConfigModal" data-args='[{{ id_prefix|string|tojson }}, "ToolConfig"]'>
-                    <i class="fas fa-times text-base"></i>
-                </button>
-            </div>
-            <div class="px-4 py-4 overflow-y-auto flex-1 min-h-0 space-y-4">
+{# The fields of each dialog below, one macro each. The dialogs (config_modals) hold
+   them for the Visual Builder; the agent page (agent_page.html) puts them in its
+   sections. Either way the ids are <prefix><Field>, which agent-forms.js,
+   agent-tools.js and agent-config.js read. #}
+{% macro tool_config_fields(id_prefix) %}
                 <div class="grid gap-3 md:grid-cols-3">
                     <div class="space-y-2 md:col-span-1">
                         <div class="flex items-center mb-1">
@@ -189,46 +175,9 @@
                             vendor_email enables order emails; partner_key enables saving to Shop Orders.</p>
                     </div>
                 </div>
-            </div>
-            <div class="px-4 py-3 border-t border-gray-200 dark:border-gray-700 flex justify-end space-x-2">
-                <button type="button"
-                    class="px-3 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded text-gray-600 dark:text-gray-300 hover:border-gray-400 dark:hover:border-gray-500"
-                    data-click="closeConfigModal" data-args='[{{ id_prefix|string|tojson }}, "ToolConfig"]'>
-                    Cancel
-                </button>
-                <button type="button"
-                    class="px-3 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded text-gray-600 dark:text-gray-300 hover:border-gray-400 dark:hover:border-gray-500"
-                    data-click="resetToolConfig" data-args='[{{ id_prefix|string|tojson }}]'>
-                    Reset
-                </button>
-                <button type="button" class="px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded"
-                    data-click="applyConfigModal" data-args='[{{ id_prefix|string|tojson }}, "ToolConfig"]'>
-                    Save
-                </button>
-            </div>
-        </div>
-    </div>
-</div>
+{% endmacro %}
 
-<!-- MCP Configuration Modal -->
-<div id="{{ id_prefix }}McpServersConfigModal" class="fixed inset-0 z-[120] hidden">
-    <div class="absolute inset-0 bg-black/60" data-click="closeConfigModal" data-args='[{{ id_prefix|string|tojson }}, "McpServersConfig"]'></div>
-    <div class="relative z-10 mx-auto my-6 w-full max-w-3xl px-2">
-        <div
-            class="config-modal-box bg-white dark:bg-gray-800 rounded-lg shadow-2xl border border-gray-200 dark:border-gray-700 flex flex-col min-h-[480px] max-h-[85vh]">
-            <div class="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
-                <div>
-                    <h4 class="text-sm font-semibold text-gray-900 dark:text-white">MCP Servers Configuration</h4>
-                    <p class="text-xs text-gray-500 dark:text-gray-400">Define remote MCP endpoints and auth headers.
-                    </p>
-                </div>
-                <button type="button" aria-label="Close"
-                    class="text-gray-500 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-100"
-                    data-click="closeConfigModal" data-args='[{{ id_prefix|string|tojson }}, "McpServersConfig"]'>
-                    <i class="fas fa-times text-base"></i>
-                </button>
-            </div>
-            <div class="px-4 py-4 overflow-y-auto space-y-2">
+{% macro mcp_servers_fields(id_prefix) %}
                 <div class="flex items-center justify-between">
                     <span class="text-xs font-medium text-gray-700 dark:text-gray-300">JSON Configuration</span>
                     <button type="button"
@@ -254,45 +203,9 @@
                     subprocess. Write secrets as <code>${AUTH_TOKEN}</code> to read them from the server
                     environment instead of storing them here; if the variable is unset, the server is
                     skipped rather than called without it.</p>
-            </div>
-            <div class="px-4 py-3 border-t border-gray-200 dark:border-gray-700 flex justify-end space-x-2">
-                <button type="button"
-                    class="px-3 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded text-gray-600 dark:text-gray-300 hover:border-gray-400 dark:hover:border-gray-500"
-                    data-click="closeConfigModal" data-args='[{{ id_prefix|string|tojson }}, "McpServersConfig"]'>
-                    Cancel
-                </button>
-                <button type="button"
-                    class="px-3 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded text-gray-600 dark:text-gray-300 hover:border-gray-400 dark:hover:border-gray-500"
-                    data-click="clearJsonField" data-args='[{{ id_prefix|string|tojson }}, "McpServersConfig"]'>
-                    Clear
-                </button>
-                <button type="button" class="px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded"
-                    data-click="applyConfigModal" data-args='[{{ id_prefix|string|tojson }}, "McpServersConfig"]'>
-                    Save
-                </button>
-            </div>
-        </div>
-    </div>
-</div>
+{% endmacro %}
 
-<!-- Planner Configuration Modal -->
-<div id="{{ id_prefix }}PlannerConfigModal" class="fixed inset-0 z-[120] hidden">
-    <div class="absolute inset-0 bg-black/60" data-click="closeConfigModal" data-args='[{{ id_prefix|string|tojson }}, "PlannerConfig"]'></div>
-    <div class="relative z-10 mx-auto my-6 w-full max-w-3xl px-2">
-        <div
-            class="config-modal-box bg-white dark:bg-gray-800 rounded-lg shadow-2xl border border-gray-200 dark:border-gray-700 flex flex-col min-h-[480px] max-h-[85vh]">
-            <div class="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
-                <div>
-                    <h4 class="text-sm font-semibold text-gray-900 dark:text-white">Planner Configuration</h4>
-                    <p class="text-xs text-gray-500 dark:text-gray-400">Select presets or fine-tune planner JSON.</p>
-                </div>
-                <button type="button" aria-label="Close"
-                    class="text-gray-500 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-100"
-                    data-click="closeConfigModal" data-args='[{{ id_prefix|string|tojson }}, "PlannerConfig"]'>
-                    <i class="fas fa-times text-base"></i>
-                </button>
-            </div>
-            <div class="px-4 py-4 overflow-y-auto space-y-4">
+{% macro planner_fields(id_prefix) %}
                 <div class="grid gap-3 md:grid-cols-3">
                     <div class="space-y-2 md:col-span-1">
                         <div>
@@ -351,47 +264,9 @@
                         </p>
                     </div>
                 </div>
-            </div>
-            <div class="px-4 py-3 border-t border-gray-200 dark:border-gray-700 flex justify-end space-x-2">
-                <button type="button"
-                    class="px-3 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded text-gray-600 dark:text-gray-300 hover:border-gray-400 dark:hover:border-gray-500"
-                    data-click="closeConfigModal" data-args='[{{ id_prefix|string|tojson }}, "PlannerConfig"]'>
-                    Cancel
-                </button>
-                <button type="button"
-                    class="px-3 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded text-gray-600 dark:text-gray-300 hover:border-gray-400 dark:hover:border-gray-500"
-                    data-click="resetPlannerConfig" data-args='[{{ id_prefix|string|tojson }}]'>
-                    Reset
-                </button>
-                <button type="button" class="px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded"
-                    data-click="applyConfigModal" data-args='[{{ id_prefix|string|tojson }}, "PlannerConfig"]'>
-                    Save
-                </button>
-            </div>
-        </div>
-    </div>
-</div>
+{% endmacro %}
 
-<!-- Generate Content Modal -->
-<div id="{{ id_prefix }}GenerateContentConfigModal" class="fixed inset-0 z-[120] hidden">
-    <div class="absolute inset-0 bg-black/60" data-click="closeConfigModal" data-args='[{{ id_prefix|string|tojson }}, "GenerateContentConfig"]'>
-    </div>
-    <div class="relative z-10 mx-auto my-6 w-full max-w-3xl px-2">
-        <div
-            class="config-modal-box bg-white dark:bg-gray-800 rounded-lg shadow-2xl border border-gray-200 dark:border-gray-700 flex flex-col min-h-[480px] max-h-[85vh]">
-            <div class="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
-                <div>
-                    <h4 class="text-sm font-semibold text-gray-900 dark:text-white">Generate Content Config</h4>
-                    <p class="text-xs text-gray-500 dark:text-gray-400">Adjust temperature, tokens, and sampling
-                        strategies.</p>
-                </div>
-                <button type="button" aria-label="Close"
-                    class="text-gray-500 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-100"
-                    data-click="closeConfigModal" data-args='[{{ id_prefix|string|tojson }}, "GenerateContentConfig"]'>
-                    <i class="fas fa-times text-base"></i>
-                </button>
-            </div>
-            <div class="px-4 py-4 overflow-y-auto space-y-4">
+{% macro generate_content_fields(id_prefix) %}
                 <div class="grid gap-3 md:grid-cols-3">
                     <div class="space-y-2 md:col-span-1">
                         <div>
@@ -454,46 +329,9 @@
                             to the ADK <code>generate_content</code> call.</p>
                     </div>
                 </div>
-            </div>
-            <div class="px-4 py-3 border-t border-gray-200 dark:border-gray-700 flex justify-end space-x-2">
-                <button type="button"
-                    class="px-3 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded text-gray-600 dark:text-gray-300 hover:border-gray-400 dark:hover:border-gray-500"
-                    data-click="closeConfigModal" data-args='[{{ id_prefix|string|tojson }}, "GenerateContentConfig"]'>
-                    Cancel
-                </button>
-                <button type="button"
-                    class="px-3 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded text-gray-600 dark:text-gray-300 hover:border-gray-400 dark:hover:border-gray-500"
-                    data-click="resetContentConfig" data-args='[{{ id_prefix|string|tojson }}]'>
-                    Reset
-                </button>
-                <button type="button" class="px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded"
-                    data-click="applyConfigModal" data-args='[{{ id_prefix|string|tojson }}, "GenerateContentConfig"]'>
-                    Save
-                </button>
-            </div>
-        </div>
-    </div>
-</div>
+{% endmacro %}
 
-<!-- Input Schema Modal -->
-<div id="{{ id_prefix }}InputSchemaModal" class="fixed inset-0 z-[120] hidden">
-    <div class="absolute inset-0 bg-black/60" data-click="closeConfigModal" data-args='[{{ id_prefix|string|tojson }}, "InputSchema"]'></div>
-    <div class="relative z-10 mx-auto my-6 w-full max-w-3xl px-2">
-        <div
-            class="config-modal-box bg-white dark:bg-gray-800 rounded-lg shadow-2xl border border-gray-200 dark:border-gray-700 flex flex-col min-h-[440px] max-h-[85vh]">
-            <div class="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
-                <div>
-                    <h4 class="text-sm font-semibold text-gray-900 dark:text-white">Input Schema</h4>
-                    <p class="text-xs text-gray-500 dark:text-gray-400">Define the JSON schema that validates incoming
-                        payloads.</p>
-                </div>
-                <button type="button" aria-label="Close"
-                    class="text-gray-500 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-100"
-                    data-click="closeConfigModal" data-args='[{{ id_prefix|string|tojson }}, "InputSchema"]'>
-                    <i class="fas fa-times text-base"></i>
-                </button>
-            </div>
-            <div class="px-4 py-4 overflow-y-auto space-y-2">
+{% macro input_schema_fields(id_prefix) %}
                 <div class="flex items-center justify-between">
                     <span class="text-xs font-medium text-gray-700 dark:text-gray-300">JSON Schema</span>
                     <button type="button"
@@ -510,46 +348,9 @@
                     class="mt-0.5"></div>
                 <p class="text-xs text-gray-500 dark:text-gray-400">Use standard JSON schema. Leave empty if the agent
                     accepts free-form input.</p>
-            </div>
-            <div class="px-4 py-3 border-t border-gray-200 dark:border-gray-700 flex justify-end space-x-2">
-                <button type="button"
-                    class="px-3 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded text-gray-600 dark:text-gray-300 hover:border-gray-400 dark:hover:border-gray-500"
-                    data-click="closeConfigModal" data-args='[{{ id_prefix|string|tojson }}, "InputSchema"]'>
-                    Cancel
-                </button>
-                <button type="button"
-                    class="px-3 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded text-gray-600 dark:text-gray-300 hover:border-gray-400 dark:hover:border-gray-500"
-                    data-click="clearJsonField" data-args='[{{ id_prefix|string|tojson }}, "InputSchema"]'>
-                    Clear
-                </button>
-                <button type="button" class="px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded"
-                    data-click="applyConfigModal" data-args='[{{ id_prefix|string|tojson }}, "InputSchema"]'>
-                    Save
-                </button>
-            </div>
-        </div>
-    </div>
-</div>
+{% endmacro %}
 
-<!-- Guardrail Configuration Modal -->
-<div id="{{ id_prefix }}GuardrailConfigModal" class="fixed inset-0 z-[120] hidden">
-    <div class="absolute inset-0 bg-black/60" data-click="closeConfigModal" data-args='[{{ id_prefix|string|tojson }}, "GuardrailConfig"]'></div>
-    <div class="relative z-10 mx-auto my-6 w-full max-w-4xl px-2">
-        <div
-            class="config-modal-box bg-white dark:bg-gray-800 rounded-lg shadow-2xl border border-gray-200 dark:border-gray-700 flex flex-col min-h-[600px] max-h-[90vh]">
-            <div class="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
-                <div>
-                    <h4 class="text-sm font-semibold text-gray-900 dark:text-white">Guardrail Configuration</h4>
-                    <p class="text-xs text-gray-500 dark:text-gray-400">Toggle built-in guardrails, set actions (block /
-                        warn / log / redact), or edit raw JSON.</p>
-                </div>
-                <button type="button" aria-label="Close"
-                    class="text-gray-500 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-100"
-                    data-click="closeConfigModal" data-args='[{{ id_prefix|string|tojson }}, "GuardrailConfig"]'>
-                    <i class="fas fa-times text-base"></i>
-                </button>
-            </div>
-            <div class="px-4 py-4 overflow-y-auto space-y-4">
+{% macro guardrail_fields(id_prefix) %}
                 <div class="grid gap-3 md:grid-cols-3">
                     <div class="space-y-3 md:col-span-1">
                         <div class="flex items-center mb-1">
@@ -717,6 +518,252 @@
                         </p>
                     </div>
                 </div>
+{% endmacro %}
+
+{% macro output_schema_fields(id_prefix) %}
+                <div class="flex items-center justify-between">
+                    <span class="text-xs font-medium text-gray-700 dark:text-gray-300">JSON Schema</span>
+                    <button type="button"
+                        data-click="toggleJsonEditor" data-args='[{{ (id_prefix ~ "OutputSchema")|tojson }}, {{ (id_prefix ~ "OutputSchemaEditor")|tojson }}]'
+                        class="text-xs bg-blue-500 hover:bg-blue-600 text-white px-1.5 py-0.5 rounded">
+                        <i class="fas fa-code mr-0.5"></i>JSON
+                    </button>
+                </div>
+                <textarea id="{{ id_prefix }}OutputSchema" name="{{ id_prefix }}OutputSchema" rows="10"
+                    placeholder='{"type": "object", "properties": {"result": {"type": "string"}}}'
+                    class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500 text-xs font-mono"></textarea>
+                <div id="{{ id_prefix }}OutputSchemaEditor"
+                    style="display: none; height: 200px; border: 1px solid #d1d5db; border-radius: 0.25rem;"
+                    class="mt-0.5"></div>
+                <p class="text-xs text-gray-500 dark:text-gray-400">Leave empty to allow arbitrary output. Otherwise
+                    provide a schema to validate responses.</p>
+{% endmacro %}
+
+{% macro config_modals(id_prefix) %}
+<!-- Tool Configuration Modal -->
+<div id="{{ id_prefix }}ToolConfigModal" class="fixed inset-0 z-[120] hidden">
+    <div class="absolute inset-0 bg-black/60" data-click="closeConfigModal" data-args='[{{ id_prefix|string|tojson }}, "ToolConfig"]'></div>
+    <div class="relative z-10 mx-auto my-6 w-full max-w-3xl px-2">
+        <div
+            class="config-modal-box bg-white dark:bg-gray-800 rounded-lg shadow-2xl border border-gray-200 dark:border-gray-700 flex flex-col min-h-[560px] max-h-[90vh]">
+            <div class="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                <div>
+                    <h4 class="text-sm font-semibold text-gray-900 dark:text-white">Tool Configuration</h4>
+                    <p class="text-xs text-gray-500 dark:text-gray-400">Toggle built-in tools or author custom JSON.</p>
+                </div>
+                <button type="button" aria-label="Close"
+                    class="text-gray-500 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-100"
+                    data-click="closeConfigModal" data-args='[{{ id_prefix|string|tojson }}, "ToolConfig"]'>
+                    <i class="fas fa-times text-base"></i>
+                </button>
+            </div>
+            <div class="px-4 py-4 overflow-y-auto flex-1 min-h-0 space-y-4">
+                {{ tool_config_fields(id_prefix) }}
+            </div>
+            <div class="px-4 py-3 border-t border-gray-200 dark:border-gray-700 flex justify-end space-x-2">
+                <button type="button"
+                    class="px-3 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded text-gray-600 dark:text-gray-300 hover:border-gray-400 dark:hover:border-gray-500"
+                    data-click="closeConfigModal" data-args='[{{ id_prefix|string|tojson }}, "ToolConfig"]'>
+                    Cancel
+                </button>
+                <button type="button"
+                    class="px-3 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded text-gray-600 dark:text-gray-300 hover:border-gray-400 dark:hover:border-gray-500"
+                    data-click="resetToolConfig" data-args='[{{ id_prefix|string|tojson }}]'>
+                    Reset
+                </button>
+                <button type="button" class="px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded"
+                    data-click="applyConfigModal" data-args='[{{ id_prefix|string|tojson }}, "ToolConfig"]'>
+                    Save
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- MCP Configuration Modal -->
+<div id="{{ id_prefix }}McpServersConfigModal" class="fixed inset-0 z-[120] hidden">
+    <div class="absolute inset-0 bg-black/60" data-click="closeConfigModal" data-args='[{{ id_prefix|string|tojson }}, "McpServersConfig"]'></div>
+    <div class="relative z-10 mx-auto my-6 w-full max-w-3xl px-2">
+        <div
+            class="config-modal-box bg-white dark:bg-gray-800 rounded-lg shadow-2xl border border-gray-200 dark:border-gray-700 flex flex-col min-h-[480px] max-h-[85vh]">
+            <div class="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                <div>
+                    <h4 class="text-sm font-semibold text-gray-900 dark:text-white">MCP Servers Configuration</h4>
+                    <p class="text-xs text-gray-500 dark:text-gray-400">Define remote MCP endpoints and auth headers.
+                    </p>
+                </div>
+                <button type="button" aria-label="Close"
+                    class="text-gray-500 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-100"
+                    data-click="closeConfigModal" data-args='[{{ id_prefix|string|tojson }}, "McpServersConfig"]'>
+                    <i class="fas fa-times text-base"></i>
+                </button>
+            </div>
+            <div class="px-4 py-4 overflow-y-auto space-y-2">
+                {{ mcp_servers_fields(id_prefix) }}
+            </div>
+            <div class="px-4 py-3 border-t border-gray-200 dark:border-gray-700 flex justify-end space-x-2">
+                <button type="button"
+                    class="px-3 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded text-gray-600 dark:text-gray-300 hover:border-gray-400 dark:hover:border-gray-500"
+                    data-click="closeConfigModal" data-args='[{{ id_prefix|string|tojson }}, "McpServersConfig"]'>
+                    Cancel
+                </button>
+                <button type="button"
+                    class="px-3 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded text-gray-600 dark:text-gray-300 hover:border-gray-400 dark:hover:border-gray-500"
+                    data-click="clearJsonField" data-args='[{{ id_prefix|string|tojson }}, "McpServersConfig"]'>
+                    Clear
+                </button>
+                <button type="button" class="px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded"
+                    data-click="applyConfigModal" data-args='[{{ id_prefix|string|tojson }}, "McpServersConfig"]'>
+                    Save
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Planner Configuration Modal -->
+<div id="{{ id_prefix }}PlannerConfigModal" class="fixed inset-0 z-[120] hidden">
+    <div class="absolute inset-0 bg-black/60" data-click="closeConfigModal" data-args='[{{ id_prefix|string|tojson }}, "PlannerConfig"]'></div>
+    <div class="relative z-10 mx-auto my-6 w-full max-w-3xl px-2">
+        <div
+            class="config-modal-box bg-white dark:bg-gray-800 rounded-lg shadow-2xl border border-gray-200 dark:border-gray-700 flex flex-col min-h-[480px] max-h-[85vh]">
+            <div class="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                <div>
+                    <h4 class="text-sm font-semibold text-gray-900 dark:text-white">Planner Configuration</h4>
+                    <p class="text-xs text-gray-500 dark:text-gray-400">Select presets or fine-tune planner JSON.</p>
+                </div>
+                <button type="button" aria-label="Close"
+                    class="text-gray-500 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-100"
+                    data-click="closeConfigModal" data-args='[{{ id_prefix|string|tojson }}, "PlannerConfig"]'>
+                    <i class="fas fa-times text-base"></i>
+                </button>
+            </div>
+            <div class="px-4 py-4 overflow-y-auto space-y-4">
+                {{ planner_fields(id_prefix) }}
+            </div>
+            <div class="px-4 py-3 border-t border-gray-200 dark:border-gray-700 flex justify-end space-x-2">
+                <button type="button"
+                    class="px-3 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded text-gray-600 dark:text-gray-300 hover:border-gray-400 dark:hover:border-gray-500"
+                    data-click="closeConfigModal" data-args='[{{ id_prefix|string|tojson }}, "PlannerConfig"]'>
+                    Cancel
+                </button>
+                <button type="button"
+                    class="px-3 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded text-gray-600 dark:text-gray-300 hover:border-gray-400 dark:hover:border-gray-500"
+                    data-click="resetPlannerConfig" data-args='[{{ id_prefix|string|tojson }}]'>
+                    Reset
+                </button>
+                <button type="button" class="px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded"
+                    data-click="applyConfigModal" data-args='[{{ id_prefix|string|tojson }}, "PlannerConfig"]'>
+                    Save
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Generate Content Modal -->
+<div id="{{ id_prefix }}GenerateContentConfigModal" class="fixed inset-0 z-[120] hidden">
+    <div class="absolute inset-0 bg-black/60" data-click="closeConfigModal" data-args='[{{ id_prefix|string|tojson }}, "GenerateContentConfig"]'>
+    </div>
+    <div class="relative z-10 mx-auto my-6 w-full max-w-3xl px-2">
+        <div
+            class="config-modal-box bg-white dark:bg-gray-800 rounded-lg shadow-2xl border border-gray-200 dark:border-gray-700 flex flex-col min-h-[480px] max-h-[85vh]">
+            <div class="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                <div>
+                    <h4 class="text-sm font-semibold text-gray-900 dark:text-white">Generate Content Config</h4>
+                    <p class="text-xs text-gray-500 dark:text-gray-400">Adjust temperature, tokens, and sampling
+                        strategies.</p>
+                </div>
+                <button type="button" aria-label="Close"
+                    class="text-gray-500 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-100"
+                    data-click="closeConfigModal" data-args='[{{ id_prefix|string|tojson }}, "GenerateContentConfig"]'>
+                    <i class="fas fa-times text-base"></i>
+                </button>
+            </div>
+            <div class="px-4 py-4 overflow-y-auto space-y-4">
+                {{ generate_content_fields(id_prefix) }}
+            </div>
+            <div class="px-4 py-3 border-t border-gray-200 dark:border-gray-700 flex justify-end space-x-2">
+                <button type="button"
+                    class="px-3 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded text-gray-600 dark:text-gray-300 hover:border-gray-400 dark:hover:border-gray-500"
+                    data-click="closeConfigModal" data-args='[{{ id_prefix|string|tojson }}, "GenerateContentConfig"]'>
+                    Cancel
+                </button>
+                <button type="button"
+                    class="px-3 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded text-gray-600 dark:text-gray-300 hover:border-gray-400 dark:hover:border-gray-500"
+                    data-click="resetContentConfig" data-args='[{{ id_prefix|string|tojson }}]'>
+                    Reset
+                </button>
+                <button type="button" class="px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded"
+                    data-click="applyConfigModal" data-args='[{{ id_prefix|string|tojson }}, "GenerateContentConfig"]'>
+                    Save
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Input Schema Modal -->
+<div id="{{ id_prefix }}InputSchemaModal" class="fixed inset-0 z-[120] hidden">
+    <div class="absolute inset-0 bg-black/60" data-click="closeConfigModal" data-args='[{{ id_prefix|string|tojson }}, "InputSchema"]'></div>
+    <div class="relative z-10 mx-auto my-6 w-full max-w-3xl px-2">
+        <div
+            class="config-modal-box bg-white dark:bg-gray-800 rounded-lg shadow-2xl border border-gray-200 dark:border-gray-700 flex flex-col min-h-[440px] max-h-[85vh]">
+            <div class="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                <div>
+                    <h4 class="text-sm font-semibold text-gray-900 dark:text-white">Input Schema</h4>
+                    <p class="text-xs text-gray-500 dark:text-gray-400">Define the JSON schema that validates incoming
+                        payloads.</p>
+                </div>
+                <button type="button" aria-label="Close"
+                    class="text-gray-500 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-100"
+                    data-click="closeConfigModal" data-args='[{{ id_prefix|string|tojson }}, "InputSchema"]'>
+                    <i class="fas fa-times text-base"></i>
+                </button>
+            </div>
+            <div class="px-4 py-4 overflow-y-auto space-y-2">
+                {{ input_schema_fields(id_prefix) }}
+            </div>
+            <div class="px-4 py-3 border-t border-gray-200 dark:border-gray-700 flex justify-end space-x-2">
+                <button type="button"
+                    class="px-3 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded text-gray-600 dark:text-gray-300 hover:border-gray-400 dark:hover:border-gray-500"
+                    data-click="closeConfigModal" data-args='[{{ id_prefix|string|tojson }}, "InputSchema"]'>
+                    Cancel
+                </button>
+                <button type="button"
+                    class="px-3 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded text-gray-600 dark:text-gray-300 hover:border-gray-400 dark:hover:border-gray-500"
+                    data-click="clearJsonField" data-args='[{{ id_prefix|string|tojson }}, "InputSchema"]'>
+                    Clear
+                </button>
+                <button type="button" class="px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded"
+                    data-click="applyConfigModal" data-args='[{{ id_prefix|string|tojson }}, "InputSchema"]'>
+                    Save
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Guardrail Configuration Modal -->
+<div id="{{ id_prefix }}GuardrailConfigModal" class="fixed inset-0 z-[120] hidden">
+    <div class="absolute inset-0 bg-black/60" data-click="closeConfigModal" data-args='[{{ id_prefix|string|tojson }}, "GuardrailConfig"]'></div>
+    <div class="relative z-10 mx-auto my-6 w-full max-w-4xl px-2">
+        <div
+            class="config-modal-box bg-white dark:bg-gray-800 rounded-lg shadow-2xl border border-gray-200 dark:border-gray-700 flex flex-col min-h-[600px] max-h-[90vh]">
+            <div class="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                <div>
+                    <h4 class="text-sm font-semibold text-gray-900 dark:text-white">Guardrail Configuration</h4>
+                    <p class="text-xs text-gray-500 dark:text-gray-400">Toggle built-in guardrails, set actions (block /
+                        warn / log / redact), or edit raw JSON.</p>
+                </div>
+                <button type="button" aria-label="Close"
+                    class="text-gray-500 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-100"
+                    data-click="closeConfigModal" data-args='[{{ id_prefix|string|tojson }}, "GuardrailConfig"]'>
+                    <i class="fas fa-times text-base"></i>
+                </button>
+            </div>
+            <div class="px-4 py-4 overflow-y-auto space-y-4">
+                {{ guardrail_fields(id_prefix) }}
             </div>
             <div class="px-4 py-3 border-t border-gray-200 dark:border-gray-700 flex justify-end space-x-2">
                 <button type="button"
@@ -757,22 +804,7 @@
                 </button>
             </div>
             <div class="px-4 py-4 overflow-y-auto space-y-2">
-                <div class="flex items-center justify-between">
-                    <span class="text-xs font-medium text-gray-700 dark:text-gray-300">JSON Schema</span>
-                    <button type="button"
-                        data-click="toggleJsonEditor" data-args='[{{ (id_prefix ~ "OutputSchema")|tojson }}, {{ (id_prefix ~ "OutputSchemaEditor")|tojson }}]'
-                        class="text-xs bg-blue-500 hover:bg-blue-600 text-white px-1.5 py-0.5 rounded">
-                        <i class="fas fa-code mr-0.5"></i>JSON
-                    </button>
-                </div>
-                <textarea id="{{ id_prefix }}OutputSchema" name="{{ id_prefix }}OutputSchema" rows="10"
-                    placeholder='{"type": "object", "properties": {"result": {"type": "string"}}}'
-                    class="w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500 text-xs font-mono"></textarea>
-                <div id="{{ id_prefix }}OutputSchemaEditor"
-                    style="display: none; height: 200px; border: 1px solid #d1d5db; border-radius: 0.25rem;"
-                    class="mt-0.5"></div>
-                <p class="text-xs text-gray-500 dark:text-gray-400">Leave empty to allow arbitrary output. Otherwise
-                    provide a schema to validate responses.</p>
+                {{ output_schema_fields(id_prefix) }}
             </div>
             <div class="px-4 py-3 border-t border-gray-200 dark:border-gray-700 flex justify-end space-x-2">
                 <button type="button"

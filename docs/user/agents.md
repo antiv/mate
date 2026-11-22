@@ -119,9 +119,10 @@ specialist") and each sub-agent a narrow one with a precise description.
 
 ## Give an agent abilities
 
-The sections of the right-hand column. Most show a summary of what is set, with
-**Configure** to open its dialog and **Clear** to empty it; the change is stored with
-the next **Save**.
+The sections of the right-hand column. Click one to open it and set it there: the
+checkboxes and fields, and the JSON beside them, follow each other as you type, and
+**JSON** swaps the box for a code editor. **Clear** empties a section. A change is
+stored with the next **Save**.
 
 | Section | What it does |
 |---|---|

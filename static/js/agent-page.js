@@ -2,9 +2,10 @@
  * The agent page (templates/dashboard/agent_page.html): an agent's settings in the
  * agent editor, a new agent, or a copy of one (/dashboard/agents/new?from=<name>).
  *
- * The form's fields have the prefix "agent". Its configuration dialogs, their
- * summaries and the tool, planner and content listeners are the shared ones
- * (agent-forms.js, agent-tools.js, agent-config.js), which take that prefix.
+ * The form's fields have the prefix "agent". The right-hand sections hold the fields
+ * of the configuration dialogs (config_modals.html); the shared listeners of
+ * agent-tools.js and agent-config.js keep their controls and JSON in step as you
+ * type, and this file does the same for the guardrails, whose dialog did it on Save.
  *
  * Saving makes a version, as before: POST /dashboard/api/agents for a new agent,
  * PUT /dashboard/api/agents/<id> for this one. The save bar shows while something
@@ -13,7 +14,8 @@
 mateActions.allow('mateAgentPage.save', 'mateAgentPage.discard', 'mateAgentPage.history',
                   'mateAgentPage.remove', 'mateAgentPage.exportAgent', 'mateAgentPage.approvals',
                   'mateAgentPage.addParent', 'mateAgentPage.removeParent',
-                  'mateAgentPage.roleKey', 'mateAgentPage.addRoleFromInput', 'mateAgentPage.removeRole');
+                  'mateAgentPage.roleKey', 'mateAgentPage.addRoleFromInput', 'mateAgentPage.removeRole',
+                  'mateAgentPage.clearGuardrails');
 
 (function () {
     'use strict';
@@ -187,7 +189,8 @@ mateActions.allow('mateAgentPage.save', 'mateAgentPage.discard', 'mateAgentPage.
         setState('memory', memory ? 'on' : '');
         if (el('agentMemoryHint')) el('agentMemoryHint').hidden = !!memory;
         if (typeof updateMemoryBlocksSectionVisibility === 'function') updateMemoryBlocksSectionVisibility(P, tools);
-        setState('guardrails', parsed('GuardrailConfig') ? 'on' : '');
+        const guardrails = ((parsed('GuardrailConfig') || {}).guardrails || []).filter((g) => g && g.enabled !== false);
+        setState('guardrails', guardrails.length ? `${guardrails.length} on` : '');
         const planner = parsed('PlannerConfig');
         setState('planner', planner && planner.type ? String(planner.type).replace(/Planner$/, '') : '');
         setState('generation', parsed('GenerateContentConfig') ? 'set' : '');
@@ -490,6 +493,32 @@ mateActions.allow('mateAgentPage.save', 'mateAgentPage.discard', 'mateAgentPage.
             });
     }
 
+    // ── Guardrails: presets and JSON in step ──────────────────────────────
+
+    function writeGuardrailJson(config) {
+        const text = JSON.stringify(config, null, 2);
+        field('GuardrailConfig').value = text;
+        const editor = (typeof monacoEditors !== 'undefined') && monacoEditors[P + 'GuardrailConfigEditor'];
+        if (editor) setJsonInEditor(editor, text);
+    }
+
+    function watchGuardrails() {
+        const fields = el('agentGuardrailFields');
+        if (!fields) return;
+        const onEdit = (event) => {
+            if (event.target === field('GuardrailConfig')) syncJsonToGuardrailConfig(P);
+            else writeGuardrailJson(buildGuardrailConfigFromPresets(P));
+        };
+        fields.addEventListener('input', onEdit);
+        fields.addEventListener('change', onEdit);
+    }
+
+    function clearGuardrails() {
+        clearJsonField(P, 'GuardrailConfig');
+        syncJsonToGuardrailConfig(P);
+        changed();
+    }
+
     function roleKey(event) {
         if (event.key === 'Enter') {
             event.preventDefault();
@@ -502,11 +531,12 @@ mateActions.allow('mateAgentPage.save', 'mateAgentPage.discard', 'mateAgentPage.
     function start() {
         fill();
         field('Type').addEventListener('change', showMaxIterations);
+        watchGuardrails();
         // Enter in the role field adds the role rather than submitting the form
         el('agentRoleAdd').addEventListener('keydown', (event) => { if (event.key === 'Enter') event.preventDefault(); });
         el('agentForm').addEventListener('input', changed);
         el('agentForm').addEventListener('change', changed);
-        // The configuration dialogs write their fields outside the form
+        // Clear, the dialogs (file search, memory blocks, approvals) and the pickers' chips
         document.addEventListener('click', () => setTimeout(changed, 0));
         startInstructionEditor();
         if (mode === 'edit' && typeof loadFileSearchData === 'function') loadFileSearchData(P);
@@ -529,7 +559,7 @@ mateActions.allow('mateAgentPage.save', 'mateAgentPage.discard', 'mateAgentPage.
 
     window.mateAgentPage = {
         save, discard, history, remove, exportAgent, approvals,
-        addParent, removeParent, removeRole, roleKey,
+        addParent, removeParent, removeRole, roleKey, clearGuardrails,
         addRoleFromInput: () => addRole(el('agentRoleAdd').value),
         reloadAs: (name) => leave(pageUrl(name)),
         isDirty,

@@ -233,9 +233,16 @@ The page's state is a JSON `<script id="agent-page-data">`; `static/js/agent-pag
 runs it as `window.mateAgentPage`.
 
 - **The fields have the prefix `agent`** (`agentName`, `agentToolConfig`, ...),
-  which the configuration dialogs of `config_modals.html` and their helpers in
-  `agent-forms.js`, `agent-tools.js` and `agent-config.js` take. Those dialogs hold
-  the JSON fields, outside the `<form>`.
+  which the helpers in `agent-forms.js`, `agent-tools.js` and `agent-config.js`
+  take.
+- **The right-hand sections hold the configuration fields** of
+  `config_modals.html`: each dialog's fields are a macro there
+  (`tool_config_fields`, `guardrail_fields`, ...), which the Visual Builder's
+  dialogs and the agent page's sections both call. The ids are the same either
+  way. The tool, planner and generation listeners keep the controls and the JSON
+  in step as you type; `agent-page.js` does it for the guardrails, whose dialog
+  builds its JSON only on Save. Inside a section the fields' `md:` columns are one
+  column (`agent-page.css`).
 - **Saving** posts the same form fields the agents API always took: `POST
   /dashboard/api/agents`, or `PUT /dashboard/api/agents/<id>`. The page then
   reloads at the agent's address, which a rename changes, and shows "Saved." from

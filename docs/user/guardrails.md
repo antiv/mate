@@ -18,8 +18,9 @@ forbidden word, an answer that is too long. Guardrails are set per agent.
 
 ## Switch guardrails on
 
-Open the agent on **Studio → Agents** and click **Configure** under **Guardrails**.
-Tick the checks you want and choose an action for each.
+Open the agent's page from **Studio → Agents** and open its **Guardrails** section.
+Tick the checks you want, choose an action for each, and **Save** the agent. In the
+Visual Builder, **Configure** under **Guardrails** opens the same checks in a dialog.
 
 | Guardrail | Looks for | Checked on |
 |---|---|---|
