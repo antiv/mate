@@ -218,7 +218,7 @@ class TestRateLimitBudget(_Db):
 class TestBudgetAlertInDollars(_AlertTestCase):
 
     def _fire(self):
-        with patch("shared.utils.alert_service.post_json", return_value=(True, "ok")) as post:
+        with patch("shared.utils.notify.post_json", return_value=(True, "ok")) as post:
             fired = self.service.evaluate_all()
         return fired, post
 

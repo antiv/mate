@@ -10,10 +10,17 @@ looks the same whichever runtime wrote it (documents/design/approvals-inbox.md):
 - LangGraph: the executor (shared/utils/langgraph/executor.py).
 
 A row is decided by the answer coming back in the same session (a chat), or in
-the inbox (claim_decision), which then resumes the run (approval_resume.py). A
-run with nobody in a chat (source other than chat) can only be answered in the
-inbox, and expires after APPROVALS_EXPIRE_MINUTES. The functions that run beside
-a live response return quietly on failure.
+the inbox (claim_decision), which then resumes the run (approval_resume.py). Who
+may answer is the agent's approver setting (approval_config.py); a run with nobody
+in a chat (source other than chat) can only be answered in the inbox. A request
+the inbox answers expires after the agent's expires_after_minutes, else
+APPROVALS_EXPIRE_MINUTES, and is announced to its notify destination
+(approval_notify.py).
+
+Every answer on its way to a run passes gate_answer, so a request is answered at
+most once, and only as decided: a chat's late or forged answer never runs a tool
+the inbox rejected, nor runs it a second time. The functions that run beside a
+live response return quietly on failure.
 """
 
 import hashlib
@@ -23,11 +30,12 @@ import os
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
-from sqlalchemy import update
+from sqlalchemy import or_, update
 from sqlalchemy.exc import IntegrityError
 
 from .database_client import get_database_client
-from .models import ApprovalRequest
+from .approval_config import APPROVER_CHAT, APPROVER_EITHER, APPROVER_INBOX, ApprovalConfig, parse
+from .models import AgentConfig, ApprovalRequest
 
 logger = logging.getLogger(__name__)
 
@@ -111,6 +119,40 @@ def args_digest(stored_args: Optional[str]) -> Optional[str]:
     return hashlib.sha256(stored_args.encode("utf-8")).hexdigest()
 
 
+def chat_may_answer(source: Optional[str], approver: Optional[str]) -> bool:
+    """Whether the person chatting may answer: a chat's request, unless the agent sends it to the inbox."""
+    return (source or SOURCE_CHAT) == SOURCE_CHAT and (approver or APPROVER_CHAT) != APPROVER_INBOX
+
+
+def inbox_decides(source: Optional[str], approver: Optional[str]) -> bool:
+    """Whether the inbox may answer: a run nobody chats in, or an agent that sends its requests there."""
+    return (source or SOURCE_CHAT) != SOURCE_CHAT or (approver or APPROVER_CHAT) != APPROVER_CHAT
+
+
+def inbox_clause():
+    """inbox_decides as a filter on ApprovalRequest."""
+    return or_(ApprovalRequest.source != SOURCE_CHAT,
+               ApprovalRequest.approver.in_([APPROVER_INBOX, APPROVER_EITHER]))
+
+
+def answered_in(source: Optional[str], approver: Optional[str]) -> str:
+    """What a chat shows for a request: "chat" (buttons), "inbox" (none) or "either" (both)."""
+    if not chat_may_answer(source, approver):
+        return APPROVER_INBOX
+    return APPROVER_EITHER if (approver or APPROVER_CHAT) == APPROVER_EITHER else APPROVER_CHAT
+
+
+def _approval_config(session: Any, *names: str) -> ApprovalConfig:
+    """The approval settings of the first of names the database knows (an agent, then its root)."""
+    for name in names:
+        if not name:
+            continue
+        found = session.query(AgentConfig.tool_config).filter(AgentConfig.name == name).first()
+        if found is not None:
+            return parse(found[0])
+    return ApprovalConfig()
+
+
 def expire_minutes() -> int:
     """How long a request answered in the inbox waits before it expires (APPROVALS_EXPIRE_MINUTES)."""
     try:
@@ -163,6 +205,7 @@ def record_request(*, confirmation_call_id: Optional[str], args: Any, agent_name
             trigger = int(trigger_id) if trigger_id is not None else None
         except (TypeError, ValueError):
             trigger = None
+        config = _approval_config(session, agent, app_name)
         row = ApprovalRequest(
             status=PENDING,
             agent_name=agent,
@@ -179,11 +222,14 @@ def record_request(*, confirmation_call_id: Optional[str], args: Any, agent_name
             hint=parsed["hint"],
             source=source or resolve_origin(user_id, session_id),
             trigger_id=trigger,
-            expires_at=_now() + timedelta(minutes=expire_minutes()),
+            approver=config.approver,
+            expires_at=_now() + timedelta(minutes=config.expires_after_minutes or expire_minutes()),
         )
         session.add(row)
         try:
             session.commit()
+            if inbox_decides(row.source, row.approver):
+                _announce(row, config)
         except IntegrityError:
             session.rollback()
             existing = (session.query(ApprovalRequest.id)
@@ -194,6 +240,105 @@ def record_request(*, confirmation_call_id: Optional[str], args: Any, agent_name
         return row.id
     except Exception as e:
         logger.warning("Approval request not recorded: %s", e)
+        try:
+            session.rollback()
+        except Exception:
+            pass
+        return None
+    finally:
+        session.close()
+
+
+def _announce(row: ApprovalRequest, config: ApprovalConfig) -> None:
+    """Send the notification for a request the inbox answers; never raises."""
+    try:
+        from . import approval_notify
+        args = row.get_tool_args() if hasattr(row, "get_tool_args") else None
+        request = {
+            "id": row.id, "agent_name": row.agent_name, "tool_name": row.tool_name,
+            "source": row.source, "workspace_id": row.workspace_id,
+            "expires_at": row.expires_at.isoformat() if row.expires_at else None,
+            "arg_names": sorted(args) if isinstance(args, dict) else [],
+        }
+        approval_notify.send_in_background(request, config.notify)
+    except Exception as e:
+        logger.warning("Approval request %s: notification not started: %s", row.id, e)
+
+
+def answering(request_id: Optional[int]) -> str:
+    """answered_in for a recorded request; "chat" when there is none."""
+    session = _session() if request_id else None
+    if not session:
+        return APPROVER_CHAT
+    try:
+        row = session.get(ApprovalRequest, request_id)
+        return answered_in(row.source, row.approver) if row else APPROVER_CHAT
+    except Exception as e:
+        logger.debug("Approval request lookup failed: %s", e)
+        return APPROVER_CHAT
+    finally:
+        session.close()
+
+
+def gate_answer(*, session_id: str, confirmation_call_id: str, confirmed: bool,
+                answered_by: Optional[str]) -> Optional[bool]:
+    """
+    The answer a run may receive for a confirmation call, or None when it may receive none.
+
+    - No row (the database didn't record the call): the answer as given.
+    - Pending, and the chat may answer (chat_may_answer): decided by this answer,
+      as record_decision, and passed on.
+    - Pending otherwise: the inbox answers it, so the chat's answer is dropped.
+    - Decided (approved, rejected, expired) and not yet answered: the decision,
+      whatever the answer said; this is how the inbox's resume reaches the run.
+    - Answered already, or cancelled: None.
+    """
+    session = _session()
+    if not session:
+        return confirmed
+    try:
+        row = (session.query(ApprovalRequest)
+               .filter_by(session_id=session_id, confirmation_call_id=confirmation_call_id).first())
+        if not row:
+            return confirmed
+        source, approver, status = row.source, row.approver, row.status
+        request_id = row.id
+    except Exception as e:
+        logger.warning("Approval answer not checked: %s", e)
+        return confirmed
+    finally:
+        session.close()
+
+    if status == PENDING:
+        if not chat_may_answer(source, approver):
+            logger.info("Approval request %s: the chat's answer dropped; the inbox answers it", request_id)
+            return None
+        if record_decision(session_id=session_id, confirmation_call_id=confirmation_call_id,
+                           confirmed=confirmed, decided_by=answered_by, via="chat"):
+            return confirmed
+        # Decided meanwhile, in the inbox: what it decided, if not yet sent
+    return _claim_answer(request_id)
+
+
+def _claim_answer(request_id: int) -> Optional[bool]:
+    """Mark a decided request answered, once; its decision, or None."""
+    session = _session()
+    if not session:
+        return None
+    try:
+        result = session.execute(
+            update(ApprovalRequest)
+            .where(ApprovalRequest.id == request_id, ApprovalRequest.answered_at.is_(None),
+                   ApprovalRequest.status.in_([APPROVED, REJECTED, EXPIRED]))
+            .values(answered_at=_now()))
+        session.commit()
+        if result.rowcount != 1:
+            logger.info("Approval request %s: a second answer dropped", request_id)
+            return None
+        status = session.query(ApprovalRequest.status).filter(ApprovalRequest.id == request_id).scalar()
+        return status == APPROVED
+    except Exception as e:
+        logger.warning("Approval answer not claimed: %s", e)
         try:
             session.rollback()
         except Exception:
@@ -222,7 +367,7 @@ def record_decision(*, session_id: str, confirmation_call_id: str, confirmed: bo
                    ApprovalRequest.confirmation_call_id == confirmation_call_id,
                    ApprovalRequest.status == PENDING)
             .values(status=status, decided_by=decided_by or "unknown", decided_via=via,
-                    decided_at=datetime.now(timezone.utc)))
+                    decided_at=datetime.now(timezone.utc), answered_at=datetime.now(timezone.utc)))
         session.commit()
         if result.rowcount != 1:
             return False
@@ -299,7 +444,7 @@ def claim_decision(request_id: int, *, decision: Any, decided_by: str, note: Any
             return 400, 'decision must be "approve" or "reject"'
         if note is not None and not isinstance(note, str):
             return 400, "note must be text"
-        if row.source == SOURCE_CHAT:
+        if not inbox_decides(row.source, row.approver):
             return 409, "This request is answered in the chat it came from."
         status = APPROVED if DECISIONS[decision] else REJECTED
         note = (note or "").strip()[:2000] or None
@@ -330,8 +475,9 @@ def expire_due(now: Optional[datetime] = None) -> List[Dict[str, Any]]:
     Expire the inbox's pending requests whose time is up; returns their snapshots.
 
     Each becomes "expired" with an approval.expired audit entry by "system", and is
-    left "resuming": the caller resumes its run with a rejection. A chat's request
-    doesn't expire: the person chatting may still answer it.
+    left "resuming": the caller resumes its run with a rejection. A request only a
+    chat answers (inbox_decides is false) doesn't expire: the person chatting may
+    still answer it.
     """
     session = _session()
     if not session:
@@ -340,7 +486,7 @@ def expire_due(now: Optional[datetime] = None) -> List[Dict[str, Any]]:
     try:
         cutoff = now or _now()
         due = (session.query(ApprovalRequest.id)
-               .filter(ApprovalRequest.status == PENDING, ApprovalRequest.source != SOURCE_CHAT,
+               .filter(ApprovalRequest.status == PENDING, inbox_clause(),
                        ApprovalRequest.expires_at.isnot(None), ApprovalRequest.expires_at <= cutoff)
                .all())
         for (request_id,) in due:

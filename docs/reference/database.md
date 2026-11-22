@@ -10,7 +10,7 @@ generated: true
 
 # Database reference
 
-**40** tables defined in `shared/utils/models.py`; migrations are at **V050**. Migrations apply automatically on startup and are the source of truth for the schema: the models describe it, the migrations create it.
+**40** tables defined in `shared/utils/models.py`; migrations are at **V051**. Migrations apply automatically on startup and are the source of truth for the schema: the models describe it, the migrations create it.
 
 ## Migrations
 
@@ -68,6 +68,7 @@ A ✗ means that dialect has no file for that version. All dialects are in step.
 | V048 | workspace management | ✓ | ✓ | ✓ |
 | V049 | workspace provider keys | ✓ | ✓ | ✓ |
 | V050 | approval requests | ✓ | ✓ | ✓ |
+| V051 | approval approver | ✓ | ✓ | ✓ |
 
 ## `users`
 
@@ -430,6 +431,8 @@ Model `ApprovalRequest`. A tool call an agent paused on for approval (require_co
 | `note` | `Text` | — | — | — |
 | `resume_status` | `String(20)` | — | — | — |
 | `resume_result` | `Text` | — | — | — |
+| `approver` | `String(10)` | — | — | V051: who may answer (chat, inbox, either; NULL is chat), and when the answer reached the run |
+| `answered_at` | `DateTime` | — | — | — |
 
 ## `system_settings`
 

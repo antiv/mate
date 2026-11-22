@@ -270,9 +270,10 @@ class TestLangGraph(_Database):
                          ("adk-confirm-call_1", "call_1", 3))
 
     def test_the_answer_decides_the_row(self):
-        from shared.utils.langgraph.executor import _record_decisions
+        from shared.utils.langgraph.executor import _gate_decisions
         self.record(confirmation_call_id="adk-confirm-call_1")
-        asyncio.run(_record_decisions({"adk-confirm-call_1": True}, "s1", "alice"))
+        allowed = asyncio.run(_gate_decisions({"adk-confirm-call_1": True}, "s1", "alice"))
+        self.assertEqual(allowed, {"adk-confirm-call_1": True})
         self.assertEqual(self.rows()[0].status, "approved")
 
 

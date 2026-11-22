@@ -80,7 +80,9 @@ router/join pills for graph agents with `planner_config.edges`.
 
 - `tool_config: {"require_confirmation": ["tool_name", ...]}` wraps the named
   tools in `FunctionTool(require_confirmation=True)`: the invocation pauses
-  and waits for user approval before executing the tool.
+  and waits for user approval before executing the tool. The object form also
+  says who approves and who is told: see
+  [Who approves, and who is told](tools-and-mcp.md#who-approves-and-who-is-told).
 - `RESUMABILITY_ENABLED=true` (env, ADK runtime) makes the App resumable so paused/failed
   invocations can be resumed from the last event.
 

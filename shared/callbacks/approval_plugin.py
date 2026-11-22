@@ -1,14 +1,18 @@
 """
-Approval capture for the ADK runtime.
+Approvals for the ADK runtime.
 
 Registered on every App, like MetricsPlugin, because it is the one place that sees
-every surface: A2A and MCP calls never reach the auth server. It only records
-(shared/utils/approval_service.py) and never changes an event or a message:
+every surface: A2A and MCP calls never reach the auth server
+(shared/utils/approval_service.py):
 
 - on_event_callback: each adk_request_confirmation call an agent emits becomes a
-  pending row;
-- on_user_message_callback: each answer to one marks its row approved or rejected,
-  with an audit entry.
+  pending row. When the chat may not answer it, the call's args get
+  "mateApprover": "inbox" ("either" when both may), which the chat clients read
+  to show no buttons.
+- on_user_message_callback: each answer to one passes approval_service.gate_answer.
+  An answer the chat may give decides its row; the inbox's resume carries its
+  decision; any other answer (to a request the inbox answers, or a second one) is
+  taken out of the message, and a message left empty says so in text.
 """
 
 import asyncio
@@ -24,6 +28,10 @@ from ..utils import approval_service
 
 logger = logging.getLogger(__name__)
 
+APPROVER_ARG = "mateApprover"
+DROPPED_TEXT = ("(An answer to an approval request was not passed on: the request is decided "
+                "in the approvals inbox, or was answered already.)")
+
 
 def _decisions(content: Optional[types.Content]) -> Dict[str, bool]:
     """The approve/reject answers in a user message, by confirmation call id."""
@@ -37,8 +45,29 @@ def _decisions(content: Optional[types.Content]) -> Dict[str, bool]:
     return decisions
 
 
+def _rewritten(message: types.Content, allowed: Dict[str, Optional[bool]]) -> types.Content:
+    """The message with each confirmation answer as allowed: its decision, or taken out."""
+    parts = []
+    for part in message.parts or ():
+        response = part.function_response
+        if not (response and response.name == approval_service.CONFIRMATION_CALL_NAME
+                and response.id in allowed):
+            parts.append(part)
+            continue
+        confirmed = allowed[response.id]
+        if confirmed is None:
+            continue
+        payload = dict(response.response) if isinstance(response.response, dict) else {}
+        payload["confirmed"] = confirmed
+        parts.append(types.Part(function_response=types.FunctionResponse(
+            id=response.id, name=response.name, response=payload)))
+    if not parts:
+        parts = [types.Part(text=DROPPED_TEXT)]
+    return types.Content(role=message.role or "user", parts=parts)
+
+
 class ApprovalCapturePlugin(BasePlugin):
-    """Records approval requests and the chat's answers to them."""
+    """Records approval requests, and lets each one be answered once, by whoever may."""
 
     def __init__(self, name: str = "mate_approvals"):
         super().__init__(name)
@@ -48,17 +77,21 @@ class ApprovalCapturePlugin(BasePlugin):
     ) -> Optional[types.Content]:
         try:
             decisions = _decisions(user_message)
-            if decisions:
-                session_id = invocation_context.session.id
-                user_id = invocation_context.user_id
-                for call_id, confirmed in decisions.items():
-                    await asyncio.to_thread(
-                        approval_service.record_decision, session_id=session_id,
-                        confirmation_call_id=call_id, confirmed=confirmed,
-                        decided_by=user_id, via="chat")
+            if not decisions:
+                return None
+            session_id = invocation_context.session.id
+            user_id = invocation_context.user_id
+            allowed: Dict[str, Optional[bool]] = {}
+            for call_id, confirmed in decisions.items():
+                allowed[call_id] = await asyncio.to_thread(
+                    approval_service.gate_answer, session_id=session_id,
+                    confirmation_call_id=call_id, confirmed=confirmed, answered_by=user_id)
+            if all(allowed[c] == decisions[c] for c in decisions):
+                return None
+            return _rewritten(user_message, allowed)
         except Exception as e:
-            logger.debug("Approval decision capture skipped: %s", e)
-        return None
+            logger.warning("Approval answer check failed: %s", e)
+            return None
 
     async def on_event_callback(
         self, *, invocation_context: InvocationContext, event: Event
@@ -72,13 +105,16 @@ class ApprovalCapturePlugin(BasePlugin):
                 trigger_id = (session.state or {}).get(approval_service.TRIGGER_STATE_KEY)
                 surface = run_surface.current()
                 for call in calls:
-                    await asyncio.to_thread(
-                        approval_service.record_request,
-                        confirmation_call_id=call.id, args=call.args,
+                    request_id = await asyncio.to_thread(
+                        approval_service.record_request, confirmation_call_id=call.id, args=call.args,
                         agent_name=event.author, app_name=invocation_context.app_name,
                         user_id=invocation_context.user_id, session_id=session.id,
                         invocation_id=invocation_context.invocation_id,
                         trigger_id=trigger_id, source=surface)
+                    answered_in = await asyncio.to_thread(approval_service.answering, request_id)
+                    if answered_in != "chat" and isinstance(call.args, dict):
+                        # In place: the runner appends and streams this same event
+                        call.args[APPROVER_ARG] = answered_in
         except Exception as e:
             logger.debug("Approval request capture skipped: %s", e)
         return None

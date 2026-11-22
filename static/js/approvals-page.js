@@ -65,6 +65,7 @@ const ApprovalsPage = (function () {
             }
         });
         loadWaiting();
+        _openLinked();
         setInterval(() => {
             if (document.hidden || current) return;
             if (!document.getElementById('panel-waiting').hidden) loadWaiting();
@@ -85,6 +86,25 @@ const ApprovalsPage = (function () {
             if (typeof refreshApprovalsCount === 'function') refreshApprovalsCount();
         } catch (err) {
             waiting.setError(err.message);
+        }
+    }
+
+    // A notification links to /dashboard/approvals?id=<id>: open that request
+    async function _openLinked() {
+        const id = Number(new URLSearchParams(window.location.search).get('id'));
+        if (!Number.isInteger(id) || id <= 0) return;
+        try {
+            const resp = await fetch(`${API}?id=${id}&limit=1`, { credentials: 'same-origin' });
+            if (!resp.ok) throw new Error(`Server returned ${resp.status}`);
+            const request = ((await resp.json()).requests || [])[0];
+            if (!request) {
+                _notify('That approval request is not in this workspace.', 'error');
+                return;
+            }
+            rows.set(request.id, request);
+            open(request.id);
+        } catch (err) {
+            _notify(`Could not open the approval request: ${err.message}`, 'error');
         }
     }
 
@@ -112,7 +132,7 @@ const ApprovalsPage = (function () {
         const r = rows.get(id);
         if (!r) return;
         current = r;
-        const decidable = r.status === 'pending' && r.source !== 'chat';
+        const decidable = r.status === 'pending' && _inboxDecides(r);
         document.getElementById('approvalDialogTitle').textContent = decidable
             ? `Approve ${r.tool_name}?` : `${r.tool_name}: ${_statusLabel(r)}`;
 
@@ -125,7 +145,8 @@ const ApprovalsPage = (function () {
         ];
         if (r.status === 'pending') {
             if (r.expires_at) details.push(['Expires', esc(`${_when(r.expires_at)} (${_until(r.expires_at)})`)]);
-            if (r.source === 'chat') details.push(['Answered by', 'the person in the chat']);
+            if (!_inboxDecides(r)) details.push(['Answered by', 'the person in the chat']);
+            else if (r.approver === 'either') details.push(['Answered by', 'the inbox or the person in the chat, whichever is first']);
         } else {
             details.push(['Decision', _statusBadge(r)]);
             if (r.decided_at) details.push(['Decided', esc(_when(r.decided_at))]);
@@ -223,8 +244,13 @@ const ApprovalsPage = (function () {
         return `<span class="m-badge ${tone || ''}">${esc(r.source)}</span>`;
     }
 
+    // approval_service.inbox_decides: a run nobody chats in, or an agent that sends requests here
+    function _inboxDecides(r) {
+        return r.source !== 'chat' || (r.approver && r.approver !== 'chat');
+    }
+
     function _statusLabel(r) {
-        if (r.status === 'pending') return r.source === 'chat' ? 'waiting in the chat' : 'waiting';
+        if (r.status === 'pending') return _inboxDecides(r) ? 'waiting' : 'waiting in the chat';
         return r.status;
     }
 

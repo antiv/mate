@@ -1,6 +1,6 @@
 ---
 title: Approval requests
-summary: How a require_confirmation pause is recorded, decided in a chat or in the inbox, resumed, expired and cancelled, on both runtimes.
+summary: How a require_confirmation pause is recorded, answered once by whoever may answer it, resumed, announced, expired and cancelled, on both runtimes.
 audience: dev
 order: 65
 covers:
@@ -8,7 +8,11 @@ covers:
   - shared/utils/approval_resume.py
   - shared/utils/run_surface.py
   - shared/callbacks/approval_plugin.py
+  - shared/utils/approval_config.py
+  - shared/utils/approval_notify.py
+  - shared/utils/notify.py
   - shared/sql/migrations/*/V050__approval_requests.sql
+  - shared/sql/migrations/*/V051__approval_approver.sql
   - templates/dashboard/approvals.html
   - static/js/approvals-page.js
 ---
@@ -20,20 +24,47 @@ emits an `adk_request_confirmation` function call. The run continues when a
 function response with the same id comes back on the same session. The user guide
 explains what the person chatting sees ([Tools and MCP servers](../user/tools-and-mcp.md)).
 
-Each pause is recorded as a row of `approval_requests` (migration V050)
+Each pause is recorded as a row of `approval_requests` (migrations V050 and V051)
 (`documents/design/approvals-inbox.md`). Who answers depends on where the run came
-from:
+from and on the agent's `approver` setting (below):
 
-- **A chat** (`source` `chat`): the person chatting answers on the card, as before;
-  the row records the answer.
+- **A chat** (`source` `chat`), with `approver` `chat` (the default): the person
+  chatting answers on the card; the row records the answer.
+- **A chat with `approver` `inbox`:** the card has no buttons, and only an admin
+  answers, in the inbox. With `either`, both may, and the first answer wins.
 - **Any other run** (a trigger, the OpenAI-compatible API, Slack, an eval, A2A, MCP):
-  nobody is there to answer, so the request waits in the inbox. An admin decides it
-  with `POST /dashboard/api/approvals/{id}/decide`, the auth server sends the
-  answer to the paused run, and a trigger's output goes out once it has finished.
-  A request nobody decides expires.
+  nobody is there to answer, so the request waits in the inbox, whatever `approver` says.
 
-The dashboard has no page for the inbox yet; it comes with the dashboard
-redesign's components.
+An admin decides an inbox request on the Approvals page or with
+`POST /dashboard/api/approvals/{id}/decide`. The auth server then sends the answer
+to the paused run, and a trigger's output goes out once it has finished. A request
+nobody decides expires. A request the inbox answers is announced to the agent's
+`notify` destination.
+
+## The agent's settings
+
+`require_confirmation` in the agent's `tool_config` is a list of tool names, or an
+object (`shared/utils/approval_config.py`):
+
+```json
+{"require_confirmation": {
+    "tools": ["issue_refund"],
+    "approver": "inbox",
+    "notify": {"type": "slack", "url": "https://hooks.slack.com/..."},
+    "expires_after_minutes": 1440
+}}
+```
+
+| Field | Meaning |
+|---|---|
+| `tools` | the tools that ask first; the list form is this alone |
+| `approver` | `chat` (default), `inbox` or `either`: who answers a chat's request |
+| `notify` | `{"type": "http" \| "email" \| "slack" \| "discord", "url" or "to", ...}`, as an alert rule's destination |
+| `expires_after_minutes` | 1 to 129,600; else `APPROVALS_EXPIRE_MINUTES` |
+
+- **Both runtimes read `tools` through `approval_config.parse`:** `ToolFactory._apply_confirmation_wrapping` on ADK, and `AgentBuilder._build_tools` on LangGraph. A value that doesn't validate is read with defaults, so an older agent still loads.
+- **Saving checks it.** Creating, updating and importing an agent answer 400 with `approval_config.validate`'s messages (`_refuse_bad_approval_config`).
+- **The row keeps the settings of its time.** `record_request` copies `approver`, and sets `expires_at` from `expires_after_minutes`. It reads the agent that asked, else the run's root, as for the scope. A later change of the agent doesn't move requests already waiting.
 
 ## Where rows are written
 
@@ -44,11 +75,12 @@ the auth server's proxy, and the runtime sees them all.
 | Runtime | The pause | The answer |
 |---|---|---|
 | ADK | `ApprovalCapturePlugin.on_event_callback` (`shared/callbacks/approval_plugin.py`), for each `adk_request_confirmation` call in an event | `ApprovalCapturePlugin.on_user_message_callback`, for each `adk_request_confirmation` function response in the user's message |
-| LangGraph | `_record_requests` in `shared/utils/langgraph/executor.py`, as each complete event is stored | `_record_decisions`, for the answers the graph resumes on. An answer naming no paused call gets "This conversation is not waiting on that approval." and is not recorded |
+| LangGraph | `_record_requests` in `shared/utils/langgraph/executor.py`, before each complete event is stored | `_gate_decisions`, for the answers to calls the graph is paused on. An answer naming no paused call gets "This conversation is not waiting on that approval."; one the gate takes out, "This approval is decided in the approvals inbox, or was answered already." |
 
 **On ADK:**
 - The plugin is registered on every App, whatever `MATE_PLUGINS_ENABLED` says, as `MetricsPlugin` is (`create_app_with_context_caching` in `shared/utils/utils.py`).
-- It returns `None` from both hooks, so it never changes an event or a message.
+- `on_event_callback` returns `None`, and changes the event in place: a call the chat may not answer gets `"mateApprover"` in its args (below), before the runner stores and streams it.
+- `on_user_message_callback` returns `None` when every answer passes as given. Otherwise it returns the message with each answer as the gate allows: its `confirmed` replaced, or the part taken out. A message left with no part gets a text part saying an answer was not passed on, so the run still has a message.
 - The database writes run in a thread (`asyncio.to_thread`).
 
 **On both runtimes:** the calls go to `shared/utils/approval_service.py`, so a row is the same whichever runtime wrote it. Its functions log and return on failure; they never raise into a run.
@@ -65,7 +97,9 @@ the auth server's proxy, and the runtime sees them all.
 | `source` | `a2a` or `mcp` from `run_surface` (below); otherwise `response_metrics.resolve_origin`: `trigger` for user `trigger_runner`, `eval` for `eval_runner`, `api` for sessions starting `openai_sess_`, `slack` for `slack_`, else `chat` |
 | `trigger_id` | the session state key `mate_trigger_id`, which `TriggerRunner._invoke_agent` sets when it creates the session |
 | `status` | `pending`, then `approved`, `rejected`, `expired` or `cancelled` |
-| `expires_at` | `requested_at` plus `APPROVALS_EXPIRE_MINUTES` (default 1440) |
+| `approver` | the agent's `approver` when the row was written (V051); `NULL` in rows from before means `chat` |
+| `expires_at` | `requested_at` plus the agent's `expires_after_minutes`, else `APPROVALS_EXPIRE_MINUTES` (default 1440) |
+| `answered_at` | when an answer reached the run (V051). Rows decided before V051 take their `decided_at` |
 | `decided_by`, `decided_via`, `decided_at`, `note` | who decided and how: the run's user and `chat`; the admin, `inbox` and their note; or `system` for an expiry or a cancellation |
 | `resume_status`, `resume_result` | after an inbox decision or an expiry: `resuming`, then `ok` with the run's reply (cut at 4,000 characters) or `error` with the failure |
 
@@ -77,10 +111,71 @@ the auth server's proxy, and the runtime sees them all.
 - **Unique pair.** `(session_id, confirmation_call_id)` is unique: a LangGraph confirmation id comes from the model's tool call id, which is only unique within a conversation. Writing the same call again returns the first row's id.
 - **No foreign keys.** `project_id`, `workspace_id` and `trigger_id` have none, as in the log tables, so the history stays when an agent, project or trigger is deleted.
 
+## Who may answer, and answering once
+
+Two predicates in `approval_service` say who may answer a row:
+
+- **`chat_may_answer(source, approver)`:** the source is `chat` and `approver` isn't `inbox`.
+- **`inbox_decides(source, approver)`:** the source isn't `chat`, or `approver` is `inbox` or `either`. `inbox_clause()` is the same as a filter. The Waiting tab (`inbox=true`), `claim_decision` and expiry use it.
+
+**What the chat shows.** `answered_in(source, approver)` gives `inbox` when the chat
+may not answer, and `either` when both may. Both runtimes put that value in the call's
+args as `"mateApprover"`, in the stored event and the streamed one. The chat clients
+(`static/js/widget/chat.js`, `static/js/standalone/chat.js`, which the Work Room uses)
+then draw the card:
+- with `inbox`, without buttons, saying an administrator decides;
+- with `either`, with buttons, adding that an administrator may decide too.
+
+ADK keeps the extra key in the args, and reads only `originalFunctionCall` and
+`toolConfirmation` when the answer comes.
+
+**The gate.** Every answer on its way to a run passes
+`gate_answer(session_id, confirmation_call_id, confirmed, answered_by)`:
+
+| The row | The run receives |
+|---|---|
+| none (the call was never recorded) | the answer as given |
+| pending, and the chat may answer | the answer, which decides the row as `record_decision` does |
+| pending, and only the inbox may answer | nothing |
+| approved, rejected or expired, not yet answered | the decision, whatever the answer said. This is how the inbox's resume reaches the run |
+| answered already, or cancelled | nothing |
+
+**Marking it answered.** "Answered" is `answered_at`, set by a conditional update
+(`... WHERE answered_at IS NULL`), or with the decision itself for a chat's answer.
+So the tool runs at most once, and only as decided:
+- a second click on the card is dropped;
+- so is a late or forged answer after the inbox decided;
+- an answer from a client to a run nobody chats in (an API caller answering its own request) is dropped too.
+
+If a chat's answer reaches a decided row before the inbox's own resume does, the
+run gets the inbox's decision from it, and the resume's message is the one dropped.
+
+## Notifications
+
+When `record_request` writes a row that `inbox_decides`, it starts
+`approval_notify.send_in_background` (`shared/utils/approval_notify.py`), in a thread
+of its own:
+
+- **The destination** is the agent's `notify`. Without one, an agent of the default
+  workspace uses `APPROVALS_NOTIFY_TYPE` with `APPROVALS_NOTIFY_URL` or
+  `APPROVALS_NOTIFY_TO`. Other workspaces get none from the environment, so their
+  requests never reach the platform's channel.
+- **Delivery** is `notify.deliver`, which alert rules use too:
+  - http gets the payload as JSON;
+  - email gets the text, then the payload's fields;
+  - Slack and Discord get the text in the body their webhooks take.
+  - The outbound guard and the workspace's email permission apply, as for alerts.
+- **The payload:** `event` `approval.requested`, `message`, `request_id`, `agent`,
+  `tool`, `source`, `arguments` (the argument names, never their values),
+  `expires_at` and `link`.
+- **`link`** is `/dashboard/approvals?id=<id>`, under `MATE_PUBLIC_URL` when that is
+  set. The page opens that request.
+- **A failure** is logged and never reaches the run.
+
 ## Decisions and the audit log
 
-A chat's answer goes through `record_decision`, an inbox decision through
-`claim_decision`. Both change the row only while it is pending:
+A chat's answer goes through `record_decision` (from the gate), an inbox decision
+through `claim_decision`. Both change the row only while it is pending:
 `UPDATE ... WHERE session_id = ? AND confirmation_call_id = ? AND status = 'pending'`.
 A second answer to the same call changes nothing and writes no audit entry.
 
@@ -103,7 +198,7 @@ When the row changes, it writes one audit entry:
 - **Answers, in this order:**
   - **404** for an id that isn't in the caller's workspace, whatever the body says;
   - **400** for a decision other than those two, or a note that isn't text;
-  - **409** for a chat's request, which the chat answers;
+  - **409** for a request only the chat answers (`inbox_decides` is false);
   - **409** for a request that is no longer pending: of two clicks, one wins, and the second sends nothing.
 - **On 200** the row is decided and audited, `resume_status` is `resuming`, and the run is resumed in a thread (`approval_resume.resume_in_background`).
 
@@ -138,7 +233,7 @@ runner's scheduler (`approval_expiry`). An inbox request past `expires_at`:
 - becomes `expired`, by `system`, with an `approval.expired` entry;
 - has its run resumed with `{"confirmed": false}`, so the agent is told no and a trigger's output still goes out.
 
-A chat's request doesn't expire: the person chatting may still answer it.
+A request only the chat answers doesn't expire: the person chatting may still answer it.
 
 **Cancellation.** Deleting an agent cancels the pending requests it asked or whose
 run it is the root of:
@@ -150,7 +245,8 @@ run it is the root of:
 
 `GET /dashboard/api/approvals` lists the rows, newest first.
 - **Filters:** `status`, `agent_name` and `source`, with `limit` (at most 500) and `offset`.
-- **`inbox=true`** leaves out a chat's requests: the ones the inbox decides.
+- **`inbox=true`** keeps the requests the inbox decides (`inbox_clause()`).
+- **`id`** picks one request; the Approvals page uses it for `?id=` links.
 - **`q`** matches the agent, the tool and the user who started the run, case-insensitively; with several words, a row must match each.
 - **Scope:** the caller's workspace, through `rows_of`. A row with no workspace counts as the default workspace's.
 - **`all_workspaces=true`:** every workspace, for a platform administrator.
@@ -190,8 +286,14 @@ run it is the root of:
 - cancellation, committed and rolled back;
 - the A2A and MCP surface.
 
-`shared/test/test_cross_workspace.py` covers the list's `inbox` and `q` filters, and
-the workspace scope of the list and the decide route.
+`shared/test/test_approvals_phase3.py` covers:
+- the settings: both forms, defaults for what doesn't validate, validation, a save refused;
+- recording: the approver and expiry kept on the row, a sub-agent taking its root's, the notification and what it leaves out;
+- the gate: the chat answering once, the chat refused where the inbox answers, the inbox's decision delivered once and as decided, a cancelled row, an unknown call;
+- the inbox deciding a chat's request by `approver`, and expiry following `inbox_decides`;
+- the ADK plugin: `mateApprover`, an answer taken out, an answer replaced;
+- notifications: the default destination, the message, nowhere to send.
 
 `shared/test/test_cross_workspace.py` checks both routes against another
-workspace's row, and that a workspace decides its own.
+workspace's row, that a workspace decides its own, and the list's `inbox` and `q`
+filters.

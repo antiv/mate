@@ -1956,7 +1956,7 @@ class TestThirdReviewOfPhase2(_TwoWorkspaces):
             {"destination_config": json.dumps({"url": internal})})
         session.commit()
         session.close()
-        with patch("shared.utils.alert_service.post_json") as sent:
+        with patch("shared.utils.notify.post_json") as sent:
             response = self._as(BOB).post(f"/dashboard/api/alert-rules/{self.b_rows['rule_id']}/test")
         self.assertIn("internal address", response.text)
         sent.assert_not_called()
@@ -2081,7 +2081,7 @@ class TestFourthReviewOfPhase2(_TwoWorkspaces):
             sent.assert_called_once()
         rule = MagicMock(workspace_id=B, destination_type="email")
         rule.get_destination_config.return_value = {"to": "x@example.com"}
-        with patch("shared.utils.alert_service.send_email", return_value=(True, "ok")) as sent:
+        with patch("shared.utils.notify.send_email", return_value=(True, "ok")) as sent:
             ok, detail = AlertService._deliver(MagicMock(), rule, {"message": "m"})
             self.assertFalse(ok)
             sent.assert_not_called()
@@ -2936,7 +2936,7 @@ class TestClosedOrSuspendedWorkspace(_TwoWorkspaces):
     def test_email_follows_the_feature(self):
         rule = MagicMock(workspace_id=B, destination_type="email")
         rule.get_destination_config.return_value = {"to": "x@example.com"}
-        with patch("shared.utils.alert_service.send_email", return_value=(True, "ok")) as sent:
+        with patch("shared.utils.notify.send_email", return_value=(True, "ok")) as sent:
             self.assertFalse(AlertService._deliver(MagicMock(), rule, {"message": "m"})[0])
             self._set_b(platform_features=json.dumps(["email"]))
             self.assertTrue(AlertService._deliver(MagicMock(), rule, {"message": "m"})[0])

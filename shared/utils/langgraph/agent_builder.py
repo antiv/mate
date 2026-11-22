@@ -539,9 +539,8 @@ class AgentBuilder:
 
         # The stores assigned in the dashboard, as AgentManager adds them on ADK
         tool_config = add_assigned_stores(_json_field(config, "tool_config"), app_name)
-        confirm_names = tool_config.pop("require_confirmation", None) or []
-        if not isinstance(confirm_names, list):
-            confirm_names = [confirm_names]
+        from shared.utils.approval_config import KEY, parse
+        confirm_names = parse({KEY: tool_config.pop(KEY, None)}).tools
         factory_config["tool_config"] = json.dumps(tool_config) if tool_config else None
 
         raw_tools = get_tool_factory().create_tools(factory_config)

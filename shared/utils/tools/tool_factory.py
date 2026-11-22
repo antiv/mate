@@ -169,11 +169,10 @@ class ToolFactory:
         if not isinstance(tool_config_dict, dict):
             return tools
 
-        confirm_names = tool_config_dict.get('require_confirmation')
+        from ..approval_config import parse
+        confirm_names = parse(tool_config_dict).tools
         if not confirm_names:
             return tools
-        if not isinstance(confirm_names, list):
-            confirm_names = [confirm_names]
 
         try:
             from google.adk.tools.function_tool import FunctionTool

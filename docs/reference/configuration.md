@@ -10,7 +10,7 @@ generated: true
 
 # Configuration reference
 
-Every environment variable the code reads: **137** in total. Descriptions come from the comments in `.env.example`; defaults come from the code. A ⚠ marks a variable read with different defaults in different places.
+Every environment variable the code reads: **141** in total. Descriptions come from the comments in `.env.example`; defaults come from the code. A ⚠ marks a variable read with different defaults in different places.
 
 | Variable | Default | Description | Read in |
 |---|---|---|---|
@@ -24,7 +24,10 @@ Every environment variable the code reads: **137** in total. Descriptions come f
 | `ALERTS_INTERVAL_SECONDS` | `60` | Seconds between alert rule evaluations (minimum 10) | `shared/utils/trigger_runner.py` |
 | `ALLOWED_API_ROLES` | — | Comma-separated roles allowed on the OpenAI-compatible API (empty = admin,developer) | `server/pat_auth.py` |
 | `ALLOWED_ORIGINS` | `http://localhost:8000,http://127.0.0.1:8000` | Comma-separated CORS allowlist. Dashboard and widget chat are same-origin; /widget/public-config stays open on its own. | `auth_server.py` |
-| `APPROVALS_EXPIRE_MINUTES` | `(computed)` | Minutes a tool approval waits in the inbox before it is rejected | `shared/utils/approval_service.py` |
+| `APPROVALS_EXPIRE_MINUTES` | `(computed)` | Minutes a tool approval waits in the inbox before it is rejected (an agent's expires_after_minutes wins) | `shared/utils/approval_service.py` |
+| `APPROVALS_NOTIFY_TO` | — | ...the address for email | `shared/utils/approval_notify.py` |
+| `APPROVALS_NOTIFY_TYPE` | — | Default workspace: where a waiting request is announced (http, email, slack, discord), unless the agent sets notify | `shared/utils/approval_notify.py` |
+| `APPROVALS_NOTIFY_URL` | — | ...the webhook URL for http, slack and discord | `shared/utils/approval_notify.py` |
 | `ARTIFACT_SERVICE` | `none` | local_folder, supabase or s3; unset or none keeps artifacts in memory, lost on restart | `shared/utils/settings.py` |
 | `AUDIT_RETENTION_DAYS` | `0` | Audit log retention (EU AI Act compliance). 0 = keep forever; N = delete entries older than N days | `shared/utils/audit_service.py` |
 | `AUTH_PASSWORD` | `mate` | default mate, which MATE_ENV=production refuses; set your own | `shared/utils/settings.py` |
@@ -87,6 +90,7 @@ Every environment variable the code reads: **137** in total. Descriptions come f
 | `MATE_FEEDBACK_KEY` | — | API key for the standalone feedback endpoint | `shared/utils/standalone_feedback.py` |
 | `MATE_FEEDBACK_URL` | — | Standalone feedback endpoint base URL | `shared/utils/standalone_feedback.py` |
 | `MATE_PLUGINS_ENABLED` | `false` | App-wide MATE plugin: RBAC/guardrails/token tracking as ADK Plugin instead of per-agent callbacks; covers all agents incl. runtime-created ones (requires ADK >= 2.0) | `shared/utils/agent_manager.py`, `shared/utils/utils.py` |
+| `MATE_PUBLIC_URL` | — | The dashboard's address, for links in notifications (e.g. https://mate.example.com) | `shared/utils/approval_notify.py` |
 | `MATE_SECRET_KEY` | — | Encrypts stored secrets: Slack bot tokens and signing secrets, trigger signing secrets, agent model keys. Unset = stored in the clear, with a startup warning; MATE_ENV=production refuses to start without it. Generate: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())" Keep it: secrets stored with it cannot be read without it. | `shared/utils/secret_box.py` |
 | `MCP_EXPOSED_AGENTS` | — | Agents to expose as MCP servers at /agents/<name>/mcp (none when unset) | `shared/utils/mcp/agent_mcp_manager.py` |
 | `MEMORY_SERVICE` | `database` | database; any other value keeps memory in RAM (lost on restart) | `adk_main.py` |
