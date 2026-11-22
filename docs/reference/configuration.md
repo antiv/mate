@@ -10,7 +10,7 @@ generated: true
 
 # Configuration reference
 
-Every environment variable the code reads: **136** in total. Descriptions come from the comments in `.env.example`; defaults come from the code. A ⚠ marks a variable read with different defaults in different places.
+Every environment variable the code reads: **137** in total. Descriptions come from the comments in `.env.example`; defaults come from the code. A ⚠ marks a variable read with different defaults in different places.
 
 | Variable | Default | Description | Read in |
 |---|---|---|---|
@@ -24,6 +24,7 @@ Every environment variable the code reads: **136** in total. Descriptions come f
 | `ALERTS_INTERVAL_SECONDS` | `60` | Seconds between alert rule evaluations (minimum 10) | `shared/utils/trigger_runner.py` |
 | `ALLOWED_API_ROLES` | — | Comma-separated roles allowed on the OpenAI-compatible API (empty = admin,developer) | `server/pat_auth.py` |
 | `ALLOWED_ORIGINS` | `http://localhost:8000,http://127.0.0.1:8000` | Comma-separated CORS allowlist. Dashboard and widget chat are same-origin; /widget/public-config stays open on its own. | `auth_server.py` |
+| `APPROVALS_EXPIRE_MINUTES` | `(computed)` | Minutes a tool approval waits in the inbox before it is rejected | `shared/utils/approval_service.py` |
 | `ARTIFACT_SERVICE` | `none` | local_folder, supabase or s3; unset or none keeps artifacts in memory, lost on restart | `shared/utils/settings.py` |
 | `AUDIT_RETENTION_DAYS` | `0` | Audit log retention (EU AI Act compliance). 0 = keep forever; N = delete entries older than N days | `shared/utils/audit_service.py` |
 | `AUTH_PASSWORD` | `mate` | default mate, which MATE_ENV=production refuses; set your own | `shared/utils/settings.py` |

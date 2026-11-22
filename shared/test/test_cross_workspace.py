@@ -344,12 +344,14 @@ class _TwoWorkspaces(unittest.TestCase):
             AgentResponse(invocation_id=f"{B_MARKER}-invocation", agent_name=B_ROOT, user_id=BOB,
                           started_at=datetime.now(timezone.utc).replace(tzinfo=None), workspace_id=B),
             LangGraphSession(id=f"{B_MARKER}-lg-session", app_name=B_ROOT, user_id=BOB),
-            ApprovalRequest(agent_name=B_ROOT, app_name=B_ROOT, user_id=BOB,
-                            session_id=f"{B_MARKER}-session", confirmation_call_id=f"{B_MARKER}-call",
-                            tool_name=B_MARKER, tool_args=json.dumps({"order": B_MARKER}),
-                            project_id=self.ids["project_b"], workspace_id=B),
         ])
         b_ops = {
+            # A trigger's request, which the inbox may decide
+            "approval_id": ApprovalRequest(agent_name=B_ROOT, app_name=B_ROOT, user_id="trigger_runner",
+                                           session_id=f"{B_MARKER}-session",
+                                           confirmation_call_id=f"{B_MARKER}-call", tool_name=B_MARKER,
+                                           tool_args=json.dumps({"order": B_MARKER}), source="trigger",
+                                           project_id=self.ids["project_b"], workspace_id=B),
             "trigger_id": AgentTrigger(name=f"{B_MARKER}-trigger", agent_name=B_ROOT,
                                        project_id=self.ids["project_b"], prompt=B_MARKER),
             "rule_id": AlertRule(name=f"{B_MARKER}-rule", scope="agent", scope_id=B_ROOT,
@@ -493,6 +495,28 @@ class TestLogsAndOperations(_TwoWorkspaces):
         for page in ("/dashboard/usage?view=logs", "/dashboard/overview"):
             self.assertIn(B_ROOT, self._get(page, B).text, page)
             self.assertNotIn(B_ROOT, self._get(page, A).text, page)
+
+    def test_an_approval_is_decided_in_its_own_workspace(self):
+        path = f"/dashboard/api/approvals/{self.b_rows['approval_id']}/decide"
+        with patch("shared.utils.approval_resume.resume_in_background") as resume:
+            refused = self.client.post(path, json={"decision": "approve"}, headers=_platform_admin(A))
+            self.assertEqual(refused.status_code, 404)
+            resume.assert_not_called()
+            decided = self.client.post(path, json={"decision": "reject", "note": B_MARKER},
+                                       headers=_platform_admin(B))
+            self.assertEqual(decided.status_code, 200, decided.text)
+            self.assertEqual(decided.json()["status"], "rejected")
+            request, = resume.call_args.args
+            self.assertEqual((request["session_id"], resume.call_args.kwargs["confirmed"]),
+                             (f"{B_MARKER}-session", False))
+            again = self.client.post(path, json={"decision": "approve"}, headers=_platform_admin(B))
+            self.assertEqual(again.status_code, 409)
+        session = self.Session()
+        try:
+            row = session.get(ApprovalRequest, self.b_rows["approval_id"])
+            self.assertEqual((row.status, row.decided_via, row.note), ("rejected", "inbox", B_MARKER))
+        finally:
+            session.close()
 
     def test_another_workspace_s_session_is_left_alone(self):
         params = {"session_id": f"{B_MARKER}-lg-session", "app_name": B_ROOT, "user_id": BOB,

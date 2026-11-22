@@ -123,6 +123,8 @@ Every route except health and CORS preflight, and `GET /mcp`, needs a caller:
 `shared/utils/mcp/mcp_auth.py` does the check, using `get_pat_user` from
 `server/pat_auth.py` and `RBACMiddleware.check_agent_access`. It sits on the route
 because the tool call reaches the agent over A2A without the caller's identity.
+The call carries `x-mate-surface: mcp`, so an approval request the agent makes is
+recorded as an MCP run's, answered in the inbox ([Approval requests](approvals.md)).
 `/gdrive/mcp` applies the first two checks.
 
 **Available Tools (1 per agent):**

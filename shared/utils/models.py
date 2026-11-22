@@ -853,7 +853,7 @@ class ApprovalRequest(Base):
     tool_name = Column(String(255), nullable=False)
     tool_args = Column(Text, nullable=True)  # JSON, capped (approval_service.MAX_ARGS_CHARS)
     hint = Column(Text, nullable=True)
-    # chat | api | trigger | slack | eval (response_metrics.resolve_origin)
+    # chat | api | trigger | slack | eval (response_metrics.resolve_origin) | a2a | mcp (run_surface)
     source = Column(String(20), nullable=False, default='chat')
     trigger_id = Column(Integer, nullable=True)
     requested_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
@@ -895,6 +895,7 @@ class ApprovalRequest(Base):
             'decided_at': iso(self.decided_at),
             'note': self.note,
             'resume_status': self.resume_status,
+            'resume_result': self.resume_result,
         }
 
 

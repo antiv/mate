@@ -6820,6 +6820,34 @@ class DashboardServer:
             finally:
                 session.close()
 
+        @self.app.post("/dashboard/api/approvals/{approval_id}/decide", tags=["Dashboard - Approvals"])
+        async def decide_approval(
+            approval_id: int,
+            request: Request,
+            ctx: RequestContext = Depends(get_request_context),
+        ):
+            """Approve or reject a waiting request, then resume its run in the background.
+
+            Body: {"decision": "approve" | "reject", "note": optional text}. 404 for
+            another workspace's request; 409 for one already decided, or one the
+            chat it came from answers.
+            """
+            from shared.utils import approval_resume, approval_service
+            from shared.utils.models import ApprovalRequest
+            try:
+                body = await request.json()
+            except Exception:
+                body = None
+            body = body if isinstance(body, dict) else {}
+            status, outcome = approval_service.claim_decision(
+                approval_id, decision=body.get("decision"), decided_by=ctx.user_id,
+                note=body.get("note"), row_filters=rows_of(ApprovalRequest, ctx.workspace_id))
+            if status != 200:
+                raise HTTPException(status_code=status, detail=outcome)
+            approval_resume.resume_in_background(outcome, confirmed=outcome["confirmed"])
+            return {"id": approval_id, "status": outcome["status"],
+                    "resume_status": approval_service.RESUMING}
+
         # ─── Audit Logs API (evidence toward EU AI Act Art. 12) ────────
 
         @self.app.get("/dashboard/api/audit-logs", tags=["Dashboard - Audit"])

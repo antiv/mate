@@ -149,6 +149,67 @@ def generate_webhook_path(name: str) -> str:
     return f"{slug}-{suffix}"
 
 
+class AgentReply(str):
+    """An agent's reply text, carrying the id of the session it was given in."""
+
+    session_id: Optional[str] = None
+
+
+def collect_reply(host: str, port: Any, payload: Dict[str, Any], timeout: float = 120.0) -> str:
+    """
+    POST payload to the agent server's /run_sse and return the run's reply: the
+    last text produced by the last author, discarding text that preceded a tool
+    call. Raises RuntimeError when the server doesn't answer 200.
+    """
+    last_text = ""
+    last_author = ""
+    buffer = ""
+
+    with httpx.Client(timeout=timeout) as client:
+        with client.stream(
+            "POST", f"http://{host}:{port}/run_sse", json=payload,
+            headers={"Content-Type": "application/json", "Accept": "text/event-stream"},
+        ) as r:
+            if r.status_code != 200:
+                raise RuntimeError(f"run_sse returned HTTP {r.status_code}")
+            for chunk in r.iter_bytes():
+                buffer += chunk.decode("utf-8", errors="replace")
+                while "\n" in buffer:
+                    line, buffer = buffer.split("\n", 1)
+                    if not line.startswith("data: "):
+                        continue
+                    raw = line[6:]
+                    if raw == "[DONE]":
+                        break
+                    try:
+                        evt = json.loads(raw)
+                    except json.JSONDecodeError:
+                        continue
+                    author = evt.get("author", "")
+                    if author != last_author:
+                        last_author = author
+                        last_text = ""
+                    parts = (evt.get("content") or {}).get("parts") or []
+                    has_tool = any(
+                        p.get("functionCall") or p.get("functionResponse")
+                        or p.get("function_call") or p.get("function_response")
+                        for p in parts
+                    )
+                    if has_tool:
+                        last_text = ""
+                        continue
+                    for part in parts:
+                        text = part.get("text")
+                        if not text:
+                            continue
+                        if last_text and text.startswith(last_text):
+                            last_text = text
+                        elif not (last_text and last_text.startswith(text)):
+                            last_text += text
+
+    return last_text.strip()
+
+
 def _project_is_open(project_id: Optional[int]) -> bool:
     """True if the project's workspace is open (workspaces.project_is_open). False when
     the database can't say: a trigger doesn't fire on a guess."""
@@ -206,6 +267,26 @@ class TriggerRunner:
         self._register_wizard_cleanup()
         self._register_user_cleanup()
         self._register_alert_evaluation()
+        self._register_approval_expiry()
+
+    def _register_approval_expiry(self) -> None:
+        """Every minute: expire the inbox's approval requests that are due, and
+        resume each run with a rejection (approval_resume.expire_and_resume)."""
+        try:
+            from apscheduler.triggers.interval import IntervalTrigger
+            from .approval_resume import expire_and_resume
+            with self._scheduler_lock:
+                if not self._scheduler:
+                    return
+                self._scheduler.add_job(
+                    expire_and_resume,
+                    trigger=IntervalTrigger(seconds=60),
+                    id="approval_expiry",
+                    replace_existing=True,
+                )
+            logger.info("TriggerRunner: registered approval expiry every 60s")
+        except Exception as exc:
+            logger.warning("Could not register approval expiry job: %s", exc)
 
     def _register_alert_evaluation(self) -> None:
         """Register the periodic alert-rule evaluation pass.
@@ -432,6 +513,24 @@ class TriggerRunner:
         except Exception as exc:
             return {"status": "error", "message": f"Agent invocation failed: {exc}"}
 
+        # A run that paused for approval has not finished: its output goes out
+        # when the inbox has decided every request (deliver_after_approval).
+        from shared.utils import approval_service
+        session_id = getattr(agent_response, "session_id", None)
+        waiting = approval_service.pending_in_session(session_id) if session_id else []
+        if waiting:
+            return {
+                "status": "awaiting_approval",
+                "message": "The agent is waiting for approval in the inbox.",
+                "agent_response": str(agent_response),
+                "session_id": session_id,
+                "approval_requests": waiting,
+            }
+
+        return self._deliver(trigger, str(agent_response))
+
+    def _deliver(self, trigger: Any, agent_response: str) -> Dict[str, Any]:
+        """Route a finished run's reply and say how it went."""
         try:
             self._route_output(trigger, agent_response)
         except Exception as exc:
@@ -442,6 +541,33 @@ class TriggerRunner:
             }
 
         return {"status": "ok", "agent_response": agent_response}
+
+    def deliver_after_approval(self, trigger_id: int, agent_response: str) -> Dict[str, Any]:
+        """
+        Finish a firing that waited for approval: route the reply the resumed run
+        gave, and store the outcome as the trigger's last result.
+        """
+        from shared.utils.database_client import get_database_client
+        from shared.utils.models import AgentTrigger
+        db = get_database_client()
+        session = db.get_session() if db else None
+        if not session:
+            return {"status": "error", "message": "Database unavailable"}
+        try:
+            trigger = session.query(AgentTrigger).filter(AgentTrigger.id == trigger_id).first()
+            if not trigger:
+                return {"status": "error", "message": "Trigger not found"}
+            result = self._deliver(trigger, agent_response)
+            result["after_approval"] = True
+            trigger.set_last_result(result)
+            session.commit()
+            return result
+        except Exception as exc:
+            session.rollback()
+            logger.error("deliver_after_approval %s error: %s", trigger_id, exc)
+            return {"status": "error", "message": str(exc)}
+        finally:
+            session.close()
 
     # ------------------------------------------------------------------ #
     # Agent invocation                                                     #
@@ -454,7 +580,8 @@ class TriggerRunner:
         Uses synchronous httpx because this runs in APScheduler background threads.
 
         The session's state names the trigger, so an approval request the run makes
-        is recorded with it (approval_service.TRIGGER_STATE_KEY).
+        is recorded with it (approval_service.TRIGGER_STATE_KEY). The reply carries
+        the session's id (AgentReply.session_id), where such a request waits.
         """
         from shared.utils.utils import get_adk_config
         cfg = get_adk_config()
@@ -471,62 +598,15 @@ class TriggerRunner:
                 raise RuntimeError(f"Session creation failed: HTTP {resp.status_code}")
             session_id = resp.json().get("id", "")
 
-        run_url = f"http://{host}:{port}/run_sse"
-        payload = {
+        reply = AgentReply(collect_reply(host, port, {
             "app_name": agent_name,
             "user_id": user_id,
             "session_id": session_id,
             "new_message": {"role": "user", "parts": [{"text": prompt}]},
             "streaming": True,
-        }
-
-        last_text = ""
-        last_author = ""
-        buffer = ""
-
-        with httpx.Client(timeout=120.0) as client:
-            with client.stream(
-                "POST", run_url, json=payload,
-                headers={"Content-Type": "application/json", "Accept": "text/event-stream"},
-            ) as r:
-                if r.status_code != 200:
-                    raise RuntimeError(f"run_sse returned HTTP {r.status_code}")
-                for chunk in r.iter_bytes():
-                    buffer += chunk.decode("utf-8", errors="replace")
-                    while "\n" in buffer:
-                        line, buffer = buffer.split("\n", 1)
-                        if not line.startswith("data: "):
-                            continue
-                        raw = line[6:]
-                        if raw == "[DONE]":
-                            break
-                        try:
-                            evt = json.loads(raw)
-                        except json.JSONDecodeError:
-                            continue
-                        author = evt.get("author", "")
-                        if author != last_author:
-                            last_author = author
-                            last_text = ""
-                        parts = (evt.get("content") or {}).get("parts") or []
-                        has_tool = any(
-                            p.get("functionCall") or p.get("functionResponse")
-                            or p.get("function_call") or p.get("function_response")
-                            for p in parts
-                        )
-                        if has_tool:
-                            last_text = ""
-                            continue
-                        for part in parts:
-                            text = part.get("text")
-                            if not text:
-                                continue
-                            if last_text and text.startswith(last_text):
-                                last_text = text
-                            elif not (last_text and last_text.startswith(text)):
-                                last_text += text
-
-        return last_text.strip()
+        }))
+        reply.session_id = session_id
+        return reply
 
     # ------------------------------------------------------------------ #
     # Output routing                                                       #

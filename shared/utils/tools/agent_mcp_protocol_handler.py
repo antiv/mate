@@ -265,8 +265,10 @@ class AgentMCPProtocolHandler:
             if session_id:
                 a2a_payload["params"]["sessionId"] = session_id
             
+            from shared.utils.run_surface import SURFACE_HEADER
             async with httpx.AsyncClient(timeout=300.0) as client:
-                response = await client.post(adk_url, json=a2a_payload)
+                response = await client.post(adk_url, json=a2a_payload,
+                                             headers={SURFACE_HEADER: "mcp"})
                 
                 if response.status_code == 200:
                     result_data = response.json()

@@ -215,7 +215,8 @@ agent:
   them, and the accounts they connected for it (Google Drive, Calendar).
 
 Usage, guardrail, feedback and audit logs stay, so the cost and history of what it
-did remain on the Usage and Audit Log pages.
+did remain on the Usage and Audit Log pages. So does the record of its approval
+requests; any still waiting for a decision are cancelled.
 
 This is so that an agent created later with the same name starts with none of it.
 Before MATE 1.6 these were left behind and passed to the new agent.

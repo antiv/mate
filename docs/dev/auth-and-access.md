@@ -556,7 +556,8 @@ non-admin can't use (`caller_access`, below), before the agent server is reached
 closes the WebSocket with 1008.
 
 For a non-admin's `/a2a/*` request the proxy sets `x-mate-a2a-user` to the caller,
-and drops that header from every request a client sends. On the agent server
+and drops that header, and `x-mate-surface` (`shared/utils/run_surface.py`), from
+every request a client sends. On the agent server
 `a2a_routes.CallerAsA2AUser` puts it in the request's `scope["user"]`, which a2a-sdk
 hands to the executor, and ADK runs the agent as that user. Without it ADK runs the
 agent as `A2A_USER_<context id>`, an id the client picks: anyone sending another

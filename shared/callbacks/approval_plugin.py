@@ -67,8 +67,10 @@ class ApprovalCapturePlugin(BasePlugin):
             calls = [fc for fc in event.get_function_calls()
                      if fc.name == approval_service.CONFIRMATION_CALL_NAME]
             if calls:
+                from ..utils import run_surface
                 session = invocation_context.session
                 trigger_id = (session.state or {}).get(approval_service.TRIGGER_STATE_KEY)
+                surface = run_surface.current()
                 for call in calls:
                     await asyncio.to_thread(
                         approval_service.record_request,
@@ -76,7 +78,7 @@ class ApprovalCapturePlugin(BasePlugin):
                         agent_name=event.author, app_name=invocation_context.app_name,
                         user_id=invocation_context.user_id, session_id=session.id,
                         invocation_id=invocation_context.invocation_id,
-                        trigger_id=trigger_id)
+                        trigger_id=trigger_id, source=surface)
         except Exception as e:
             logger.debug("Approval request capture skipped: %s", e)
         return None

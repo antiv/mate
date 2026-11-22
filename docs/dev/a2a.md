@@ -116,6 +116,11 @@ a member the proxy sets `x-mate-a2a-user` to their id, and `CallerAsA2AUser` in
 with their sessions and roles. An admin's request runs as ADK's
 `A2A_USER_<contextId>`, as before.
 
+`CallerAsA2AUser` also marks the run as an A2A run (`shared/utils/run_surface.py`),
+or an MCP one when the request has `x-mate-surface: mcp`, which MATE's MCP bridge
+sends. An approval request the run makes is then answered in the inbox rather than in
+a chat ([Approval requests](approvals.md)).
+
 ## MCP Integration
 
 An agent exposed as an MCP server (`MCP_EXPOSED_AGENTS`, see
