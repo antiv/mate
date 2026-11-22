@@ -15,6 +15,8 @@ from typing import Any, AsyncGenerator, AsyncIterator, Dict, Iterator, Optional,
 
 from langchain_core.messages import AIMessage, AIMessageChunk, ToolMessage
 
+from shared.utils.langgraph.hitl import confirmation_call_id
+
 logger = logging.getLogger(__name__)
 
 TRANSFER_TOOL_NAME = "transfer_to_agent"
@@ -137,7 +139,7 @@ def interrupt_to_event(interrupt_value: Any, author: str, invocation_id: str) ->
     original_call = payload.get("originalFunctionCall") or {}
     event = _new_event(author, invocation_id)
     event["content"] = {"role": "model", "parts": [{"functionCall": {
-        "id": original_call.get("id") or str(uuid.uuid4()),
+        "id": confirmation_call_id(original_call["id"]) if original_call.get("id") else str(uuid.uuid4()),
         "name": CONFIRMATION_CALL_NAME,
         "args": payload,
     }}]}

@@ -156,7 +156,8 @@ def _client_tool_declarations(custom_metadata: Optional[Dict[str, Any]]) -> List
 
 
 async def _resume_map(graph: Any, config: Dict[str, Any],
-                      answers: Dict[str, Any]) -> Dict[str, Any]:
+                      answers: Dict[str, Any],
+                      decisions: Optional[Dict[str, bool]] = None) -> Dict[str, Any]:
     """
     Resume values for the interrupts the graph is paused on, when the caller
     has answered them.
@@ -164,17 +165,20 @@ async def _resume_map(graph: Any, config: Dict[str, Any],
     Every paused client call is handed the whole answer map: the tool picks its
     own result by call id, because LangGraph matches resume values to
     interrupts by call order and parallel tool calls do not pause in a fixed
-    order. Returns an empty map when the graph is not paused on anything the
-    caller has answered, which is what ends the resume loop.
+    order. Approve/reject decisions for require_confirmation tools work the same
+    way, by confirmation call id. Returns an empty map when the graph is not
+    paused on anything the caller has answered, which is what ends the resume
+    loop.
     """
     from shared.utils.langgraph.client_tools import (CLIENT_TOOL_RESULTS_KEY,
                                                      pending_client_calls)
-    if not answers:
+    from shared.utils.langgraph.hitl import CONFIRMATIONS_KEY, pending_confirmations
+    if not answers and not decisions:
         return {}
     try:
         state = await graph.aget_state(config)
     except Exception:
-        logger.exception("[LangGraph] could not read the paused state to resume client tools")
+        logger.exception("[LangGraph] could not read the paused state to resume")
         return {}
 
     resume_map: Dict[str, Any] = {}
@@ -182,7 +186,43 @@ async def _resume_map(graph: Any, config: Dict[str, Any],
         call_id, interrupt_id = call.get("id"), call.get("interrupt_id")
         if interrupt_id and call_id in answers:
             resume_map[interrupt_id] = {CLIENT_TOOL_RESULTS_KEY: answers}
+    for pending in pending_confirmations(state) if decisions else ():
+        if pending["interrupt_id"] and pending["confirmation_id"] in decisions:
+            resume_map[pending["interrupt_id"]] = {CONFIRMATIONS_KEY: decisions}
     return resume_map
+
+
+async def _already_sent_ids(graph: Any, config: Dict[str, Any]) -> set:
+    """
+    Ids of what the caller already has before this turn resumes the graph: the
+    confirmations it is paused on, and the tool calls that have finished.
+    """
+    from shared.utils.langgraph.client_tools import finished_tool_call_ids
+    from shared.utils.langgraph.hitl import pending_confirmations
+    try:
+        state = await graph.aget_state(config)
+    except Exception:
+        return set()
+    return ({p["confirmation_id"] for p in pending_confirmations(state)}
+            | finished_tool_call_ids(state))
+
+
+def _repeats_what_was_sent(event: Dict[str, Any], already_sent: set) -> bool:
+    """
+    An event made only of calls or results the caller already has.
+
+    Resuming one of several paused calls re-runs the others, and each pauses
+    again for its own answer: the chat already shows a card for it. Once the
+    last one is answered, the results of the ones answered earlier come again.
+    """
+    parts = (event.get("content") or {}).get("parts") or []
+    ids = []
+    for part in parts:
+        item = part.get("functionCall") or part.get("functionResponse")
+        if not item:
+            return False
+        ids.append(item.get("id"))
+    return bool(ids) and all(i in already_sent for i in ids)
 
 
 async def _resumed_agent(built: Any, config: Dict[str, Any]) -> str:
@@ -254,25 +294,27 @@ async def execute_run(app_name: str, user_id: str, session_id: str,
         return
 
     from shared.utils.langgraph.hitl import (extract_client_tool_responses,
-                                             extract_confirmation_response)
+                                             extract_confirmation_responses)
     # Client tool results the caller delivered, by tool call id.
     answers: Dict[str, Any] = {}
-    confirmation = extract_confirmation_response(new_message)
+    # Approve/reject decisions the caller gave, by confirmation call id.
+    decisions = extract_confirmation_responses(new_message)
     tool_responses = extract_client_tool_responses(new_message)
-    if confirmation is not None:
-        # HITL resume: deliver the approve/reject decision to the paused interrupt
-        from langgraph.types import Command
-        graph_input = Command(resume={"confirmed": confirmation})
-    elif tool_responses:
-        # The caller ran the tools the graph paused on. Resume values are keyed
-        # by interrupt id, which only the checkpointed state carries, so the
-        # answered tool call ids have to be matched back to it.
+    already_sent: set = set()
+    if decisions or tool_responses:
+        # The caller answered what the graph paused on: decisions for
+        # require_confirmation tools, results for client tools. Resume values
+        # are keyed by interrupt id, which only the checkpointed state carries,
+        # so the answered call ids have to be matched back to it.
         from langgraph.types import Command
         answers.update({r["id"]: r["result"] for r in tool_responses if r.get("id")})
-        resume_map = await _resume_map(built.graph, config, answers)
+        if decisions:
+            already_sent = await _already_sent_ids(built.graph, config)
+        resume_map = await _resume_map(built.graph, config, answers, decisions)
         if not resume_map:
             yield _notice_event(app_name, invocation_id,
-                                "This conversation is not waiting on a tool result.")
+                                "This conversation is not waiting on that approval." if decisions
+                                else "This conversation is not waiting on a tool result.")
             return
         graph_input = Command(resume=resume_map)
     else:
@@ -302,6 +344,8 @@ async def execute_run(app_name: str, user_id: str, session_id: str,
             )
             async for event, is_complete in translate_stream(
                     stream, author=built.name, invocation_id=invocation_id):
+                if already_sent and _repeats_what_was_sent(event, already_sent):
+                    continue
                 if is_complete:
                     _apply_output_guardrails(event, built.guardrail_engines, meta)
                     artifact_delta = run_context.pop_artifact_delta()
@@ -322,7 +366,7 @@ async def execute_run(app_name: str, user_id: str, session_id: str,
             # one message, so drain the rest here rather than asking again for a
             # result it has already given. Each round satisfies one more call,
             # so this ends after at most as many rounds as there were calls.
-            resume_map = await _resume_map(built.graph, config, answers)
+            resume_map = await _resume_map(built.graph, config, answers, decisions)
             if not resume_map:
                 break
             from langgraph.types import Command

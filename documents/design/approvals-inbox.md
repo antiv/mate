@@ -1,6 +1,7 @@
 # Design: approvals inbox
 
-Status: proposal for 1.5.0, to be built later. Tracking: #178, feature 3.
+Status: being built for 2.1.0, tracking #376 (first proposed in #178, feature 3).
+Open questions 1 and 2 are settled.
 
 ## Problem
 
@@ -242,20 +243,75 @@ runs every minute:
 
 ## Open questions
 
-1. **Is `RESUMABILITY_ENABLED` really needed for approvals?**
-   - `docs/user/tools-and-mcp.md` says approvals depend on it.
-   - In ADK 2.9 the confirmation is resumed by the request processor, which reads
-     the answer from the session's events. That doesn't look like it needs
-     `ResumabilityConfig`.
-   - Check on a running server. If the guide is wrong, fix it before building this.
-2. **Several confirmations in one turn** (parallel tool calls). ADK emits one
-   `adk_request_confirmation` per call. Check whether the run resumes on the first
-   answer or waits for all of them, and whether each inbox decision should resume
-   on its own or the inbox should collect them.
-3. **The `approver` role.** Should it be per project, or is admin-only enough for
+Questions 1 and 2 were settled on 2026-11-22, on a running server (ADK 2.11.0 and
+LangGraph 1.2.12), with an agent that had `require_confirmation` on
+`create_shared_block`. Each case was run on ADK with `RESUMABILITY_ENABLED` on and
+off, and on LangGraph. See [Settled: questions 1 and 2](#settled-questions-1-and-2).
+
+1. **The `approver` role.** Should it be per project, or is admin-only enough for
    the first version?
-4. **Showing a chat the inbox's decision live.** Polling the session, or a small
+2. **Showing a chat the inbox's decision live.** Polling the session, or a small
    event stream? This can wait for the first version.
+
+### Settled: questions 1 and 2
+
+**1. Approval doesn't need `RESUMABILITY_ENABLED`.** On ADK, the request processor
+(`google/adk/flows/llm_flows/tools/_confirmation.py`) reads the answer from the last
+user event in the session and runs or skips the tool. It never looks at
+`ResumabilityConfig`. With the setting off:
+
+- one approval, approved or rejected, runs or skips the tool, and the agent replies;
+- a run paused before a restart is answered after it, because the session is in the
+  session database.
+
+The user guide said approvals depend on the setting. It now says they don't
+(`docs/user/tools-and-mcp.md`).
+
+**2. Several confirmations in one turn.** The model asked for `create_shared_block`
+twice in one step. Both runtimes emitted two `adk_request_confirmation` calls, one
+per tool call.
+
+| Answer | ADK, resumability on | ADK, resumability off | LangGraph |
+|---|---|---|---|
+| The first only | that tool runs; the model isn't called | that tool runs; the model replies, seeing the second as still waiting | that tool runs; the model isn't called |
+| Then the second | that tool runs; the model replies | that tool runs; the model replies again | that tool runs; the model replies |
+| Both in one message | both run or are skipped; the model replies once | the same | the same |
+
+So each decision can resume the run on its own, and the inbox doesn't have to
+collect them. On every runtime, the answer to a confirmation runs or skips only
+the call it names.
+
+- **LangGraph failed this case before.** Any answer with two confirmations pending
+  raised `When there are multiple pending interrupts, you must specify the interrupt
+  id`, and the session stayed stuck. Fixed alongside this note: the pause carries the
+  model's tool call id, each answer resumes the interrupt it names, and the
+  confirmation id is `adk-confirm-<tool call id>`, the same each time LangGraph
+  re-runs the paused tool (`shared/utils/langgraph/hitl.py`, tests in
+  `shared/test/test_langgraph_hitl.py`).
+- **ADK with resumability off replies after each decision.** A trigger run there
+  would produce a reply after the first decision, with the other call still
+  waiting. So the trigger's output should go out only when no request from that
+  invocation is still pending. Until then, each reply is kept in `resume_result`.
+
+**Found along the way, for phase 1:**
+
+- **ADK writes a placeholder result for the paused tool.** In the same turn as the
+  `adk_request_confirmation` call, it records a function response for the original
+  call: `{"error": "This tool call requires confirmation, please approve or
+  reject."}`. Capture must not take it for the tool's result. LangGraph emits no
+  such response.
+- **The ids differ in shape.**
+  - ADK: the confirmation call has its own id (`adk-<uuid>`), and `args.originalFunctionCall.id` is the model's tool call id.
+  - LangGraph: the confirmation id is `adk-confirm-<tool call id>`, and `args.originalFunctionCall.id` is the model's tool call id.
+  - The row keys on the confirmation call id, which is what the answer carries, so both work.
+- **LangGraph puts the tool's default arguments in `args`** (`"description": null`
+  and so on). The inbox shows them as they are.
+- **Only plain-function tools are wrapped on ADK.**
+  - `ToolFactory._apply_confirmation_wrapping` skips anything that is already a
+    `FunctionTool` and anything that isn't callable.
+  - From the code, that would leave MCP tools without approval on ADK. This
+    wasn't run.
+  - To check before phase 3, whose config editor offers the tools to pick.
 
 ## Phases
 

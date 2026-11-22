@@ -14,7 +14,7 @@ only the resume value is the tool's return value rather than an approval flag.
 import hashlib
 import json
 import logging
-from typing import Annotated, Any, Dict, List, Optional
+from typing import Annotated, Any, Dict, List, Optional, Set
 
 logger = logging.getLogger(__name__)
 
@@ -122,6 +122,19 @@ def _build_one(structured_tool_cls: Any, name: str, description: str, parameters
     )
 
 
+def finished_tool_call_ids(state: Any) -> Set[str]:
+    """
+    Ids of the tool calls that already have a result in the conversation.
+
+    While one call of a turn is still paused, a sibling that has finished keeps
+    listing the interrupt it paused on in the state's tasks; resuming it again
+    would never end the resume loop.
+    """
+    messages = (getattr(state, "values", None) or {}).get("messages") or []
+    return {m.tool_call_id for m in messages
+            if getattr(m, "type", None) == "tool" and getattr(m, "tool_call_id", None)}
+
+
 def pending_client_calls(state: Any) -> List[Dict[str, Any]]:
     """
     The client tool calls a paused graph is waiting on, as
@@ -131,13 +144,14 @@ def pending_client_calls(state: Any) -> List[Dict[str, Any]]:
     resume has to be addressed by interrupt id, which only the state carries.
     """
     pending: List[Dict[str, Any]] = []
+    finished = finished_tool_call_ids(state)
     for task in getattr(state, "tasks", None) or ():
         for pending_interrupt in getattr(task, "interrupts", None) or ():
             value = getattr(pending_interrupt, "value", None)
             if not isinstance(value, dict):
                 continue
             call = value.get(CLIENT_TOOL_INTERRUPT_KEY)
-            if not isinstance(call, dict):
+            if not isinstance(call, dict) or call.get("id") in finished:
                 continue
             pending.append({
                 "interrupt_id": getattr(pending_interrupt, "id", None),

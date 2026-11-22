@@ -110,7 +110,9 @@ class TestInterruptToEvent(unittest.TestCase):
         event = interrupt_to_event(value, "my_agent", "e-inv1")
         fc = event["content"]["parts"][0]["functionCall"]
         self.assertEqual(fc["name"], "adk_request_confirmation")
-        self.assertEqual(fc["id"], "call_9")
+        # Distinct from the tool call's id, as on ADK, and the same each time it pauses
+        self.assertEqual(fc["id"], "adk-confirm-call_9")
+        self.assertEqual(fc["args"]["originalFunctionCall"]["id"], "call_9")
         self.assertEqual(fc["args"]["originalFunctionCall"]["name"], "delete_all")
 
 

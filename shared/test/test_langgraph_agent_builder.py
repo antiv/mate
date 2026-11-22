@@ -21,7 +21,7 @@ from shared.utils.langgraph.agent_builder import (
 )
 from shared.utils.langgraph.hitl import (
     apply_confirmation_wrapping,
-    extract_confirmation_response,
+    extract_confirmation_responses,
 )
 
 
@@ -215,14 +215,23 @@ class TestHitl(unittest.TestCase):
         self.assertIsNot(wrapped[1], dangerous_tool)
         self.assertEqual(wrapped[1].__name__, "dangerous_tool")
 
-    def test_extract_confirmation_response(self):
-        self.assertIsNone(extract_confirmation_response({"parts": [{"text": "hi"}]}))
+    def test_extract_confirmation_responses(self):
+        self.assertEqual(extract_confirmation_responses({"parts": [{"text": "hi"}]}), {})
         approve = {"parts": [{"function_response": {
             "id": "c1", "name": "adk_request_confirmation", "response": {"confirmed": True}}}]}
         reject = {"parts": [{"functionResponse": {
             "id": "c1", "name": "adk_request_confirmation", "response": {"confirmed": False}}}]}
-        self.assertIs(extract_confirmation_response(approve), True)
-        self.assertIs(extract_confirmation_response(reject), False)
+        self.assertEqual(extract_confirmation_responses(approve), {"c1": True})
+        self.assertEqual(extract_confirmation_responses(reject), {"c1": False})
+
+    def test_several_answers_in_one_message_are_all_read(self):
+        message = {"parts": [
+            {"function_response": {"id": "c1", "name": "adk_request_confirmation",
+                                   "response": {"confirmed": True}}},
+            {"function_response": {"id": "c2", "name": "adk_request_confirmation",
+                                   "response": {"confirmed": False}}},
+        ]}
+        self.assertEqual(extract_confirmation_responses(message), {"c1": True, "c2": False})
 
 
 if __name__ == "__main__":
