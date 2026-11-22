@@ -137,6 +137,53 @@ def model_supports_vision(model_name: str) -> bool:
     return info.get("supports_vision") is not False
 
 
+_TEXT_EXTENSIONS = ("txt", "md", "json", "py", "js", "css", "csv", "html", "xml", "yaml", "yml")
+
+
+def prepare_attachments(message_parts: list, model_name: str) -> list:
+    """
+    The message's parts ready for the model: images as they are, a PDF as it is
+    for Gemini and as its text otherwise, a text file as its text. 400 for any
+    other file, and for an image when the model can't take one. Used by the
+    widget's chat and the proxied Work Room chat.
+    """
+    has_images = False
+    processed_parts = []
+    for part in message_parts:
+        if not (isinstance(part, dict) and "inline_data" in part):
+            processed_parts.append(part)
+            continue
+        mime_type = part["inline_data"].get("mime_type", "")
+        base64_data = part["inline_data"].get("data", "")
+        filename = part.get("filename", "file")
+        if mime_type.startswith("image/"):
+            has_images = True
+            processed_parts.append(part)
+        elif mime_type == "application/pdf":
+            if model_name and "gemini" in model_name.lower():
+                # Gemini reads PDFs itself
+                processed_parts.append(part)
+            else:
+                extracted_text = extract_text_from_pdf_base64(base64_data)
+                processed_parts.append({"text": f"[Attached PDF file '{filename}']:\n{extracted_text}\n"})
+        elif (mime_type.startswith("text/")
+              or mime_type in ("application/json", "application/javascript")
+              or filename.split(".")[-1].lower() in _TEXT_EXTENSIONS):
+            extracted_text = extract_text_from_text_base64(base64_data)
+            processed_parts.append({"text": f"[Attached file '{filename}']:\n{extracted_text}\n"})
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unsupported file type: {filename} ({mime_type or 'unknown'}). Only images, PDFs, and text files are supported."
+            )
+    if has_images and not model_supports_vision(model_name):
+        raise HTTPException(
+            status_code=400,
+            detail=f"The configured model ({model_name or 'unknown'}) does not support vision/images. Please use a vision-enabled model (e.g. Gemini) or upload text/PDF files instead."
+        )
+    return processed_parts
+
+
 def configure_widget_proxy(adk_host: str, adk_port: int):
     global ADK_HOST, ADK_PORT
     ADK_HOST = adk_host
@@ -528,51 +575,7 @@ async def widget_chat(request: Request, wk: WidgetApiKey = Depends(verify_widget
     if not model_name:
         model_name = os.getenv("MODEL_NAME", "")
 
-    # Extract PDFs and text files if model doesn't support them natively
-    has_images = False
-    processed_parts = []
-    for part in message_parts:
-        if isinstance(part, dict) and "inline_data" in part:
-            mime_type = part["inline_data"].get("mime_type", "")
-            base64_data = part["inline_data"].get("data", "")
-            filename = part.get("filename", "file")
-            
-            if mime_type.startswith("image/"):
-                has_images = True
-                processed_parts.append(part)
-            elif mime_type == "application/pdf":
-                if model_name and "gemini" in model_name.lower():
-                    # Gemini supports PDF natively
-                    processed_parts.append(part)
-                else:
-                    # Extract text for other models
-                    extracted_text = extract_text_from_pdf_base64(base64_data)
-                    processed_parts.append({
-                        "text": f"[Attached PDF file '{filename}']:\n{extracted_text}\n"
-                    })
-            elif (mime_type.startswith("text/") or 
-                  mime_type in ["application/json", "application/javascript"] or 
-                  filename.split(".")[-1].lower() in ["txt", "md", "json", "py", "js", "css", "csv", "html", "xml", "yaml", "yml"]):
-                # Always extract text for text files
-                extracted_text = extract_text_from_text_base64(base64_data)
-                processed_parts.append({
-                    "text": f"[Attached file '{filename}']:\n{extracted_text}\n"
-                })
-            else:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Unsupported file type: {filename} ({mime_type or 'unknown'}). Only images, PDFs, and text files are supported."
-                )
-        else:
-            processed_parts.append(part)
-
-    if has_images and not model_supports_vision(model_name):
-        raise HTTPException(
-            status_code=400,
-            detail=f"The configured model ({model_name or 'unknown'}) does not support vision/images. Please use a vision-enabled model (e.g. Gemini) or upload text/PDF files instead."
-        )
-
-    message_parts = processed_parts
+    message_parts = prepare_attachments(message_parts, model_name)
 
     adk_payload = {
         "app_name": app_name,

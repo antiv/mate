@@ -43,7 +43,7 @@ docker-compose up
 - **All requests go through auth server** — no direct external access to agent runtime server
 - A2A (Agent-to-Agent) and MCP protocol requests are proxied through auth server
 - Business logic is strictly separated from database operations
-- `shared/callbacks/` hooks into agent lifecycle for RBAC (`rbac_callback.py`), token tracking (`token_usage_callback.py`), and guardrails (`model_guardrail.py`, `function_call_guardrail.py`)
+- `shared/callbacks/` hooks into agent lifecycle for RBAC (`rbac_callback.py`), token tracking (`token_usage_callback.py`), and guardrails (`guardrail_callback.py`, `function_call_guardrail.py`)
 - Rate limiting and request throttling via `server/rate_limit_middleware.py`
 
 ## Database & Migrations
@@ -111,7 +111,7 @@ docker-compose up
 ## Security & Guardrails
 - **RBAC**: Mandatory user role validation before agent access
 - **Input Sanitization**: Sanitize user inputs and tool parameters
-- **Guardrails**: Implement pre-call and post-call model guardrails (`model_guardrail.py`) and tool call constraints (`function_call_guardrail.py`)
+- **Guardrails**: Implement pre-call and post-call model guardrails (`guardrail_callback.py`) and tool call constraints (`function_call_guardrail.py`)
 - **Endpoint Security**:
   - Stored endpoint keys never reach the browser (sentinel values used in API responses)
   - Unresolvable `${VAR}` secrets abort agent construction rather than falling back to provider defaults

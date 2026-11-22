@@ -506,16 +506,6 @@ class MigrationSystem:
             return None
 
 
-def run_migrations_on_startup() -> bool:
-    """Run migrations automatically on application startup."""
-    try:
-        migration_system = MigrationSystem()
-        return migration_system.run_migrations()
-    except Exception as e:
-        logger.error(f"Failed to run migrations on startup: {e}")
-        return False
-
-
 if __name__ == "__main__":
     # CLI for migration management
     import sys

@@ -74,22 +74,3 @@ def create_cv_tools_from_config(config: Dict[str, Any]) -> List[Any]:
     return tools
 
 
-def get_available_cv_tools() -> List[str]:
-    """
-    Get list of available CV tool names.
-    
-    Returns:
-        List of CV tool names
-    """
-    return [
-        'list_files_in_folder',
-        'read_google_doc',
-        'read_google_doc_by_name', 
-        'search_files',
-        'get_file_metadata',
-        'find_by_name',
-        'read_and_analyze_cv',
-        'read_and_analyze_cv_by_name',
-        'analyze_cv_content',
-        'analyze_cv_by_name'
-    ]

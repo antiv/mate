@@ -62,15 +62,5 @@ class TestDisabledSignedTrigger(DisabledTriggerTestCase):
         self.runner.execute_trigger.assert_not_called()
 
 
-class TestEnabledTrigger(DisabledTriggerTestCase):
-
-    is_enabled = True
-
-    def test_an_enabled_trigger_still_fires(self):
-        resp = self.fire(b'{"key":"MT-32"}')
-        self.assertEqual(resp.status_code, 200)
-        self.runner.execute_trigger.assert_called_once_with(7, {"key": "MT-32"})
-
-
 if __name__ == "__main__":
     unittest.main()

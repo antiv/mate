@@ -191,7 +191,7 @@ price per model.
    - In live mode, `before_model` gets the transcription as the request content.
    - `after_model` gets a response whose text is in `output_transcription`, not in
      `content.parts`.
-   - Check that `model_guardrail.py` and the RBAC callback read both, before
+   - Check that `guardrail_callback.py` and the RBAC callback read both, before
      relying on them for voice.
 2. **Current Live model names and audio prices.** Look them up when building. They
    change often, so the form takes a free-text model name with suggestions.

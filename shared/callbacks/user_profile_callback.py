@@ -13,38 +13,9 @@ from google.adk.models.llm_request import LlmRequest
 from google.adk.models.llm_response import LlmResponse
 from google.genai import types
 from ..utils.user_service import get_user_service
+from ..utils.context_values import user_id_of as _get_user_id
 
 logger = logging.getLogger(__name__)
-
-
-def _get_user_id(callback_context: CallbackContext) -> Optional[str]:
-    """
-    Get user ID from ADK callback context.
-    
-    Args:
-        callback_context: The callback context
-        
-    Returns:
-        User ID if found, None otherwise
-    """
-    # Try to get user_id from invocation context first (proper ADK way)
-    if hasattr(callback_context, '_invocation_context') and callback_context._invocation_context:
-        user_id = getattr(callback_context._invocation_context, 'user_id', None)
-        if user_id:
-            return user_id
-    
-    # Fallback to direct context attributes
-    user_id = getattr(callback_context, 'user_id', None)
-    if user_id:
-        return user_id
-    
-    # Additional fallback attempts
-    if hasattr(callback_context, 'session') and callback_context.session:
-        user_id = getattr(callback_context.session, 'user_id', None)
-        if user_id:
-            return user_id
-    
-    return None
 
 
 def user_profile_context_callback(

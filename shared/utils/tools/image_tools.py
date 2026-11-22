@@ -28,49 +28,9 @@ from .. import settings
 from ..outbound import is_internal_address
 from ..content_marking import is_marked_as_ai_generated, mark_png_as_ai_generated
 from ..utils import ModelContext, model_context_of
+from ..context_values import context_values as _get_context_values
 
 logger = logging.getLogger(__name__)
-
-
-def _get_context_values(tool_context: ToolContext) -> tuple[str, str, str]:
-    """
-    Extract app_name, user_id, and session_id from ToolContext.
-    
-    Args:
-        tool_context: The tool context
-        
-    Returns:
-        tuple[str, str, str]: (app_name, user_id, session_id)
-    """
-    # Get app name
-    app_name = getattr(tool_context, 'app_name', None)
-    if not app_name and hasattr(tool_context, '_invocation_context') and tool_context._invocation_context:
-        app_name = getattr(tool_context._invocation_context, 'app_name', None)
-    if not app_name:
-        app_name = 'unknown'
-    
-    # Get user_id from invocation context (proper ADK way)
-    user_id = None
-    if hasattr(tool_context, '_invocation_context') and tool_context._invocation_context:
-        user_id = getattr(tool_context._invocation_context, 'user_id', None)
-    if not user_id:
-        user_id = getattr(tool_context, 'user_id', None)
-    if not user_id and hasattr(tool_context, 'session') and tool_context.session:
-        user_id = getattr(tool_context.session, 'user_id', None)
-    if not user_id:
-        user_id = 'default'
-    
-    # Get session_id from invocation context (proper ADK way)
-    session_id = None
-    if hasattr(tool_context, '_invocation_context') and tool_context._invocation_context:
-        if hasattr(tool_context._invocation_context, 'session') and tool_context._invocation_context.session:
-            session_id = getattr(tool_context._invocation_context.session, 'id', None)
-    if not session_id:
-        session_id = getattr(tool_context, 'session_id', None)
-    if not session_id:
-        session_id = 'default'
-    
-    return app_name, user_id, session_id
 
 
 def _construct_public_url(app_name: str, user_id: str, session_id: str, filename: str, saved_version: int) -> str:

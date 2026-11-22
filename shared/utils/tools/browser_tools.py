@@ -15,9 +15,10 @@ from typing import Dict, Any, List, Optional, Tuple
 from urllib.parse import urlparse
 
 from google.adk.tools.tool_context import ToolContext
-from playwright.async_api import async_playwright, Browser, BrowserContext, Page
+from playwright.async_api import async_playwright, Page
 
 from ..outbound import is_internal_address
+from ..context_values import context_values as _get_context_values
 
 logger = logging.getLogger(__name__)
 
@@ -246,39 +247,6 @@ class BrowserSessionManager:
 
 # Global instance
 browser_manager = BrowserSessionManager()
-
-
-def _get_context_values(tool_context: ToolContext) -> Tuple[str, str, str]:
-    """Extract app_name, user_id, and session_id from ToolContext."""
-    if not tool_context:
-        return 'unknown', 'default', 'default'
-        
-    app_name = getattr(tool_context, 'app_name', None)
-    if not app_name and hasattr(tool_context, '_invocation_context') and tool_context._invocation_context:
-        app_name = getattr(tool_context._invocation_context, 'app_name', None)
-    if not app_name:
-        app_name = 'unknown'
-    
-    user_id = None
-    if hasattr(tool_context, '_invocation_context') and tool_context._invocation_context:
-        user_id = getattr(tool_context._invocation_context, 'user_id', None)
-    if not user_id:
-        user_id = getattr(tool_context, 'user_id', None)
-    if not user_id and hasattr(tool_context, 'session') and tool_context.session:
-        user_id = getattr(tool_context.session, 'user_id', None)
-    if not user_id:
-        user_id = 'default'
-    
-    session_id = None
-    if hasattr(tool_context, '_invocation_context') and tool_context._invocation_context:
-        if hasattr(tool_context._invocation_context, 'session') and tool_context._invocation_context.session:
-            session_id = getattr(tool_context._invocation_context.session, 'id', None)
-    if not session_id:
-        session_id = getattr(tool_context, 'session_id', None)
-    if not session_id:
-        session_id = 'default'
-    
-    return app_name, user_id, session_id
 
 
 async def _save_screenshot_artifact(page: Page, tool_context: ToolContext) -> Optional[Dict[str, Any]]:

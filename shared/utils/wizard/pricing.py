@@ -209,7 +209,6 @@ def _apply_pricing_cfg(prices: dict, show_from: dict, cfg: dict):
     return default_currency
 
 
-
 def _load_config(partner: str = None) -> dict:
     """Effective pricing: seed defaults <- global (wizard_config 'pricing') <- partner override.
 
@@ -270,11 +269,6 @@ def normalize_currency(currency: Optional[str], cfg: Optional[dict] = None, part
     return code if code in cfg["currencies"] else cfg["default_currency"]
 
 
-def get_currencies(partner: str = None) -> list:
-    """List of configured currency codes."""
-    return _load_config(partner)["currencies"]
-
-
 def _resolve_price(tier: dict, lang: str, currency: str, cfg: dict) -> str:
     """Display price for a tier in the given currency (fallback to default currency / first)."""
     show_from = cfg.get("show_from", {}).get(tier["id"], False)
@@ -307,11 +301,6 @@ def get_tiers(lang: str = DEFAULT_LANG, currency: str = None, partner: str = Non
             "features": loc["features"],
         })
     return out
-
-
-def get_tier(tier_id: str) -> Optional[dict]:
-    """Return a single (raw) tier config by id, or None."""
-    return _TIERS_BY_ID.get(tier_id)
 
 
 def get_estimated_price(tier_id: str, currency: str = None, partner: str = None) -> Optional[str]:

@@ -449,52 +449,9 @@ async def proxy_adk(request: Request, path: str, username: str = Depends(get_aut
                     if not model_name:
                         model_name = os.getenv("MODEL_NAME", "")
                         
-                    from server.widget_routes import (
-                        extract_text_from_pdf_base64,
-                        extract_text_from_text_base64,
-                        model_supports_vision
-                    )
-                    
-                    has_images = False
-                    processed_parts = []
-                    for part in message_parts:
-                        if isinstance(part, dict) and "inline_data" in part:
-                            mime_type = part["inline_data"].get("mime_type", "")
-                            base64_data = part["inline_data"].get("data", "")
-                            filename = part.get("filename", "file")
-                            
-                            if mime_type.startswith("image/"):
-                                has_images = True
-                                processed_parts.append(part)
-                            elif mime_type == "application/pdf":
-                                if model_name and "gemini" in model_name.lower():
-                                    processed_parts.append(part)
-                                else:
-                                    extracted_text = extract_text_from_pdf_base64(base64_data)
-                                    processed_parts.append({
-                                        "text": f"[Attached PDF file '{filename}']:\n{extracted_text}\n"
-                                    })
-                            elif (mime_type.startswith("text/") or 
-                                  mime_type in ["application/json", "application/javascript"] or 
-                                  filename.split(".")[-1].lower() in ["txt", "md", "json", "py", "js", "css", "csv", "html", "xml", "yaml", "yml"]):
-                                extracted_text = extract_text_from_text_base64(base64_data)
-                                processed_parts.append({
-                                    "text": f"[Attached file '{filename}']:\n{extracted_text}\n"
-                                })
-                            else:
-                                raise HTTPException(
-                                    status_code=400,
-                                    detail=f"Unsupported file type: {filename} ({mime_type or 'unknown'}). Only images, PDFs, and text files are supported."
-                                )
-                        else:
-                            processed_parts.append(part)
-                            
-                    if has_images and not model_supports_vision(model_name):
-                        raise HTTPException(
-                            status_code=400,
-                            detail=f"The configured model ({model_name or 'unknown'}) does not support vision/images. Please use a vision-enabled model (e.g. Gemini) or upload text/PDF files instead."
-                        )
-                        
+                    from server.widget_routes import prepare_attachments
+                    processed_parts = prepare_attachments(message_parts, model_name)
+
                     payload["new_message"]["parts"] = processed_parts
                     body = json.dumps(payload).encode("utf-8")
         except HTTPException:

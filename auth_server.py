@@ -231,18 +231,6 @@ def _encrypt_stored_secrets():
         session.close()
 
 
-def initialize_agent_folders():
-    try:
-        server_control = ServerControlService(
-            adk_host=ADK_HOST,
-            adk_port=ADK_PORT,
-            session_service_uri=SESSION_SERVICE_URI,
-        )
-        server_control._initialize_agent_folders()
-    except Exception as e:
-        logger.warning("Agent folder initialization error: %s", e)
-
-
 # ---------- Middleware and Instrumentation ----------
 Instrumentator().instrument(app).expose(app)
 

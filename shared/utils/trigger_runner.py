@@ -161,9 +161,8 @@ def collect_reply(host: str, port: Any, payload: Dict[str, Any], timeout: float 
     last text produced by the last author, discarding text that preceded a tool
     call. Raises RuntimeError when the server doesn't answer 200.
     """
-    last_text = ""
-    last_author = ""
-    buffer = ""
+    from .agent_invoke import ReplyCollector
+    collector = ReplyCollector()
 
     with httpx.Client(timeout=timeout) as client:
         with client.stream(
@@ -173,41 +172,9 @@ def collect_reply(host: str, port: Any, payload: Dict[str, Any], timeout: float 
             if r.status_code != 200:
                 raise RuntimeError(f"run_sse returned HTTP {r.status_code}")
             for chunk in r.iter_bytes():
-                buffer += chunk.decode("utf-8", errors="replace")
-                while "\n" in buffer:
-                    line, buffer = buffer.split("\n", 1)
-                    if not line.startswith("data: "):
-                        continue
-                    raw = line[6:]
-                    if raw == "[DONE]":
-                        break
-                    try:
-                        evt = json.loads(raw)
-                    except json.JSONDecodeError:
-                        continue
-                    author = evt.get("author", "")
-                    if author != last_author:
-                        last_author = author
-                        last_text = ""
-                    parts = (evt.get("content") or {}).get("parts") or []
-                    has_tool = any(
-                        p.get("functionCall") or p.get("functionResponse")
-                        or p.get("function_call") or p.get("function_response")
-                        for p in parts
-                    )
-                    if has_tool:
-                        last_text = ""
-                        continue
-                    for part in parts:
-                        text = part.get("text")
-                        if not text:
-                            continue
-                        if last_text and text.startswith(last_text):
-                            last_text = text
-                        elif not (last_text and last_text.startswith(text)):
-                            last_text += text
+                collector.feed(chunk)
 
-    return last_text.strip()
+    return collector.reply
 
 
 def _project_is_open(project_id: Optional[int]) -> bool:

@@ -6,21 +6,9 @@ List/get/create/modify/delete blocks backed by DB, scoped by the agent's project
 import logging
 from typing import Dict, Any, List, Optional
 from google.adk.tools.tool_context import ToolContext
+from ..context_values import user_id_of as _get_user_id_from_context
 
 logger = logging.getLogger(__name__)
-
-
-def _get_user_id_from_context(tool_context: ToolContext) -> Optional[str]:
-    if not tool_context:
-        return None
-    user_id = None
-    if hasattr(tool_context, '_invocation_context') and tool_context._invocation_context:
-        user_id = getattr(tool_context._invocation_context, 'user_id', None)
-    if not user_id:
-        user_id = getattr(tool_context, 'user_id', None)
-    if not user_id and hasattr(tool_context, 'session') and tool_context.session:
-        user_id = getattr(tool_context.session, 'user_id', None)
-    return user_id
 
 
 def _is_admin_user(tool_context: ToolContext) -> bool:

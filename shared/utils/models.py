@@ -2,9 +2,9 @@
 SQLAlchemy models for the application.
 """
 
-from sqlalchemy import Column, Integer, String, DateTime, create_engine, UUID, Text, ForeignKey, Boolean, Date, JSON, Float, Index, UniqueConstraint, event, text, Table
+from sqlalchemy import Column, Integer, String, DateTime, Text, ForeignKey, Boolean, JSON, Float, Index, UniqueConstraint, event, text, Table
 from sqlalchemy.engine import Connection
-from sqlalchemy.orm import sessionmaker, relationship, declarative_base
+from sqlalchemy.orm import relationship, declarative_base
 from datetime import datetime, timezone
 from typing import Any, Optional
 import json
@@ -66,12 +66,6 @@ class User(Base):
             current_roles.append(role)
             self.set_roles(current_roles)
     
-    def remove_role(self, role: str):
-        """Remove a role from the user."""
-        current_roles = self.get_roles()
-        if role in current_roles:
-            current_roles.remove(role)
-            self.set_roles(current_roles)
     
     def get_profile_data(self) -> Optional[str]:
         """Get user profile data as text."""
@@ -419,38 +413,11 @@ class AgentConfig(Base):
             current_parents.remove(parent_agent)
             self.set_parent_agents(current_parents)
     
-    def get_mcp_servers_config(self) -> dict:
-        """Get MCP servers configuration as a dictionary."""
-        try:
-            return json.loads(self.mcp_servers_config) if self.mcp_servers_config else {}
-        except json.JSONDecodeError:
-            return {}
     
-    def set_mcp_servers_config(self, config: dict):
-        """Set MCP servers configuration from a dictionary."""
-        self.mcp_servers_config = json.dumps(config) if config else None
     
-    def get_planner_config(self) -> dict:
-        """Get planner configuration as a dictionary."""
-        try:
-            return json.loads(self.planner_config) if self.planner_config else {}
-        except json.JSONDecodeError:
-            return {}
     
-    def set_planner_config(self, config: dict):
-        """Set planner configuration from a dictionary."""
-        self.planner_config = json.dumps(config) if config else None
     
-    def get_guardrail_config(self) -> dict:
-        """Get guardrail configuration as a dictionary."""
-        try:
-            return json.loads(self.guardrail_config) if self.guardrail_config else {}
-        except json.JSONDecodeError:
-            return {}
 
-    def set_guardrail_config(self, config: dict):
-        """Set guardrail configuration from a dictionary."""
-        self.guardrail_config = json.dumps(config) if config else None
 
     def has_parent_agent(self, parent_agent: str) -> bool:
         """Check if agent has a specific parent agent."""

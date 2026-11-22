@@ -78,57 +78,6 @@ def load_custom_function(func_name: str) -> Optional[Any]:
     return None
 
 
-def register_custom_tool_path(path: str) -> None:
-    """
-    Register a new search path for custom tools.
-    
-    Args:
-        path: Module path to search for custom tools
-    """
-    # This could be extended to maintain a registry of custom tool paths
-    logger.info(f"Custom tool path registration requested: {path}")
     # Implementation would depend on how you want to manage custom tool paths
 
 
-# Example custom tool implementations
-def example_custom_tool(input_data: str) -> str:
-    """
-    Example custom tool implementation.
-    
-    Args:
-        input_data: Input data for the tool
-        
-    Returns:
-        Processed output
-    """
-    return f"Processed: {input_data}"
-
-
-# Registry of built-in custom tools
-BUILTIN_CUSTOM_TOOLS = {
-    'example_tool': example_custom_tool,
-    'create_agent': None,  # Will be imported dynamically from create_agent_tool
-}
-
-
-def get_builtin_custom_tool(tool_name: str) -> Optional[Any]:
-    """
-    Get a built-in custom tool by name.
-    
-    Args:
-        tool_name: Name of the built-in custom tool
-        
-    Returns:
-        Custom tool function or None if not found
-    """
-    tool = BUILTIN_CUSTOM_TOOLS.get(tool_name)
-    
-    # Lazy import for create_agent tool
-    if tool_name == 'create_agent' and tool is None:
-        try:
-            from .create_agent_tool import create_agent
-            return create_agent
-        except ImportError:
-            return None
-    
-    return tool

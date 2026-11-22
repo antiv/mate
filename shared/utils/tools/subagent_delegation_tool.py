@@ -22,7 +22,6 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 from google.adk.agents import Agent
 from google.adk.runners import Runner
 from google.adk.sessions.in_memory_session_service import InMemorySessionService
-from google.adk.tools import FunctionTool
 from google.adk.tools.tool_context import ToolContext
 from google.genai import types
 from pydantic import BaseModel, Field
@@ -32,6 +31,7 @@ from shared.callbacks.token_usage_callback import (
     log_token_usage_callback,
 )
 from shared.utils.utils import create_model, model_context_of, resolve_agent_endpoint
+from ..context_values import context_values as _get_context_values
 
 logger = logging.getLogger(__name__)
 
@@ -107,39 +107,6 @@ class SubtaskSpec(BaseModel):
             "If omitted, uses configured default or parent model."
         ),
     )
-
-
-def _get_context_values(tool_context: Optional[ToolContext]) -> Tuple[str, str, str]:
-    """Extract app_name, user_id, and session_id from ToolContext."""
-    if not tool_context:
-        return "unknown", "default", "default"
-
-    app_name = getattr(tool_context, "app_name", None)
-    if not app_name and hasattr(tool_context, "_invocation_context") and tool_context._invocation_context:
-        app_name = getattr(tool_context._invocation_context, "app_name", None)
-    if not app_name:
-        app_name = "unknown"
-
-    user_id = None
-    if hasattr(tool_context, "_invocation_context") and tool_context._invocation_context:
-        user_id = getattr(tool_context._invocation_context, "user_id", None)
-    if not user_id:
-        user_id = getattr(tool_context, "user_id", None)
-    if not user_id and hasattr(tool_context, "session") and tool_context.session:
-        user_id = getattr(tool_context.session, "user_id", None)
-    if not user_id:
-        user_id = "default"
-
-    session_id = None
-    if hasattr(tool_context, "_invocation_context") and tool_context._invocation_context:
-        if hasattr(tool_context._invocation_context, "session") and tool_context._invocation_context.session:
-            session_id = getattr(tool_context._invocation_context.session, "id", None)
-    if not session_id:
-        session_id = getattr(tool_context, "session_id", None)
-    if not session_id:
-        session_id = "default"
-
-    return app_name, user_id, session_id
 
 
 def _parent_effective_tools(
