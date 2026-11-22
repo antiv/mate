@@ -20,7 +20,7 @@ from shared.utils.langgraph.client_tools import (CLIENT_TOOL_INTERRUPT_KEY,
                                                  pending_client_calls)
 from shared.utils.langgraph.hitl import (CONFIRMATION_RESPONSE_NAME,
                                          extract_client_tool_responses,
-                                         extract_confirmation_response)
+                                         extract_confirmation_responses)
 
 READ = {
     "name": "read",
@@ -45,8 +45,9 @@ class _Task:
 
 
 class _State:
-    def __init__(self, tasks):
+    def __init__(self, tasks, messages=()):
         self.tasks = tasks
+        self.values = {"messages": list(messages)}
 
 
 class TestCacheKey(unittest.TestCase):
@@ -114,6 +115,15 @@ class TestPendingCalls(unittest.TestCase):
         state = _State([_Task([_Interrupt("int-1", {"toolConfirmation": {"confirmed": False}})])])
         self.assertEqual(pending_client_calls(state), [])
 
+    def test_a_finished_call_is_not_pending(self):
+        # A finished task still lists its interrupt while a sibling is paused
+        done = {CLIENT_TOOL_INTERRUPT_KEY: {"id": "c1", "name": "read", "args": {}}}
+        paused = {CLIENT_TOOL_INTERRUPT_KEY: {"id": "c2", "name": "bash", "args": {}}}
+        from langchain_core.messages import ToolMessage
+        state = _State([_Task([_Interrupt("int-1", done)]), _Task([_Interrupt("int-2", paused)])],
+                       messages=[ToolMessage(content="body", tool_call_id="c1")])
+        self.assertEqual([c["id"] for c in pending_client_calls(state)], ["c2"])
+
     def test_an_unpaused_state_has_nothing_pending(self):
         self.assertEqual(pending_client_calls(_State([])), [])
 
@@ -132,7 +142,7 @@ class TestResponseExtraction(unittest.TestCase):
             "id": "c1", "name": CONFIRMATION_RESPONSE_NAME,
             "response": {"confirmed": True}}}]}
         self.assertEqual(extract_client_tool_responses(message), [])
-        self.assertTrue(extract_confirmation_response(message))
+        self.assertEqual(extract_confirmation_responses(message), {"c1": True})
 
     def test_parallel_results_keep_their_order(self):
         message = {"parts": [
