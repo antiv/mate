@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **litellm is held below 1.106, and moved by hand** - LiteLLM's 1.107.0 release on PyPI carried a credential stealer, and LiteLLM has not ruled out further access to its release accounts, so the monthly dependency upgrade no longer takes new litellm releases on its own. No release of MATE installed it: the lock had 1.103.2, and the 1 November upgrade run resolved 1.103.9. From 1.106.0, litellm's completion path also imports types that only mcp 2 has, which fails every model call while mcp is below 2
+
+### Changed
+
+- **google-adk 2.11.0 → 2.15.0, LangGraph 1.2.12 → 1.2.22, and the rest of the lock** - the lock takes releases at least a week old, apart from google-adk. litellm goes to 1.105.7, and mcp stays below 2: langchain-mcp-adapters 0.3.2 requires it, and moving MATE's MCP server and client to mcp 2 is its own change
+  - **Among ADK's fixes:** OAuth2 secrets no longer leak over `/run`, `/run_sse` and the session endpoints (2.12); a confirmed tool runs once per approval (2.12); writes to a SQLite session database are serialized (2.14); an MCP tool call is retried once after the server drops the session (2.15)
+  - **Traces:** ADK 2.13 moved to the OpenTelemetry GenAI v2 conventions, which drop the `call_llm` and `invocation` spans. The trace replay reads the model calls from `generate_content` and MATE's own `gen_ai.inference` spans, so it shows the same turn as before. In the trace list, a new trace's top span is now `POST /run_sse`
+  - **ADK's dev UI** no longer has a Visual Agent Builder (2.15). MATE's own Visual Builder is not affected
+  - **LangGraph's fixes** include a subgraph no longer re-running its finished tasks on resume (1.2.16), and each `interrupt()` in a task getting its own id (1.2.20)
+  - Checked with the unit tests, tool approval on both runtimes (one, several in one turn, reject), and a traced turn replayed on ADK 2.11 and 2.15
+
 ## [2.0.1] - 2026-11-16
 
 ### Security
