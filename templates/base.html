@@ -272,6 +272,12 @@
             flex-shrink: 0;
         }
         .mate-nav-item .mate-nav-count { margin-left: auto; }
+        .mate-nav-foot {
+            margin: 14px 8px 0;
+            padding-top: 10px;
+            border-top: 1px solid var(--border);
+        }
+        .mate-nav-foot .mate-nav-item { margin: 0; }
         .sidebar-active {
             background: var(--accent-soft) !important;
             color: var(--accent) !important;
@@ -610,99 +616,56 @@
 
                 {% else %}
                 <!-- ── Control Room ───────────────────── -->
-                <p class="sidebar-section-header">Overview</p>
-                <div class="space-y-0.5">
-                    <a href="/dashboard/overview" class="mate-nav-item {% if request.url.path == '/dashboard/overview' %}sidebar-active{% endif %}" title="Platform Overview">
-                        <i class="fas fa-th-large sidebar-icon"></i>
-                        <span class="sidebar-text">Platform Overview</span>
+                {% macro nav_item(path, icon, label) -%}
+                    <a href="{{ path }}" class="mate-nav-item {% if request.url.path == path %}sidebar-active{% endif %}" title="{{ label }}">
+                        <i class="fas {{ icon }} sidebar-icon"></i>
+                        <span class="sidebar-text">{{ label }}</span>
                     </a>
+                {%- endmacro %}
+                <div class="space-y-0.5">
+                    {{ nav_item('/dashboard/overview', 'fa-th-large', 'Overview') }}
                 </div>
                 <p class="sidebar-section-header">Observability</p>
                 <div class="space-y-0.5">
-                    <a href="/dashboard/usage" class="mate-nav-item {% if request.url.path == '/dashboard/usage' %}sidebar-active{% endif %}" title="Usage Analytics">
-                        <i class="fas fa-chart-bar sidebar-icon"></i>
-                        <span class="sidebar-text">Usage Analytics</span>
-                    </a>
-                    <a href="/dashboard/audit-logs" class="mate-nav-item {% if request.url.path == '/dashboard/audit-logs' %}sidebar-active{% endif %}" title="Audit Logs">
-                        <i class="fas fa-clipboard-list sidebar-icon"></i>
-                        <span class="sidebar-text">Audit Logs</span>
-                    </a>
-                    <a href="/dashboard/guardrail-logs" class="mate-nav-item {% if request.url.path == '/dashboard/guardrail-logs' %}sidebar-active{% endif %}" title="Guardrail Logs">
-                        <i class="fas fa-shield-halved sidebar-icon"></i>
-                        <span class="sidebar-text">Guardrail Logs</span>
-                    </a>
-                    <a href="/dashboard/sessions" class="mate-nav-item {% if request.url.path == '/dashboard/sessions' %}sidebar-active{% endif %}" title="Session Tracking">
-                        <i class="fas fa-comments sidebar-icon"></i>
-                        <span class="sidebar-text">Session Tracking</span>
-                    </a>
+                    {{ nav_item('/dashboard/usage', 'fa-chart-bar', 'Usage Analytics') }}
+                    {{ nav_item('/dashboard/audit-logs', 'fa-clipboard-list', 'Audit Logs') }}
+                    {{ nav_item('/dashboard/guardrail-logs', 'fa-shield-halved', 'Guardrail Logs') }}
+                    {{ nav_item('/dashboard/sessions', 'fa-comments', 'Session Tracking') }}
                 </div>
-                {% if platform_admin %}
-                <p class="sidebar-section-header">Wizard &amp; Commerce</p>
+                {# The workspace's own pages: what its owners and admins manage #}
+                <p class="sidebar-section-header">Workspace</p>
                 <div class="space-y-0.5">
-                    <a href="/dashboard/wizard-leads" class="mate-nav-item {% if request.url.path == '/dashboard/wizard-leads' %}sidebar-active{% endif %}" title="Wizard Leads">
-                        <i class="fas fa-inbox sidebar-icon"></i>
-                        <span class="sidebar-text">Wizard Leads</span>
-                    </a>
-                    <a href="/dashboard/wizard-pricing" class="mate-nav-item {% if request.url.path == '/dashboard/wizard-pricing' %}sidebar-active{% endif %}" title="Wizard Pricing">
-                        <i class="fas fa-tags sidebar-icon"></i>
-                        <span class="sidebar-text">Wizard Pricing</span>
-                    </a>
-                    <a href="/dashboard/shop-orders" class="mate-nav-item {% if request.url.path == '/dashboard/shop-orders' %}sidebar-active{% endif %}" title="Shop Orders">
-                        <i class="fas fa-shopping-bag sidebar-icon"></i>
-                        <span class="sidebar-text">Shop Orders</span>
-                    </a>
-                </div>
-                {% endif %}
-                <p class="sidebar-section-header">Governance &amp; Access</p>
-                <div class="space-y-0.5">
-                    {% if platform_admin %}
-                    <a href="/dashboard/users" class="mate-nav-item {% if request.url.path == '/dashboard/users' %}sidebar-active{% endif %}" title="Users">
-                        <i class="fas fa-users sidebar-icon"></i>
-                        <span class="sidebar-text">Users</span>
-                    </a>
-                    <a href="/dashboard/workspaces" class="mate-nav-item {% if request.url.path == '/dashboard/workspaces' %}sidebar-active{% endif %}" title="Workspaces">
-                        <i class="fas fa-building sidebar-icon"></i>
-                        <span class="sidebar-text">Workspaces</span>
-                    </a>
-                    {% endif %}
                     <a href="/dashboard/approvals" class="mate-nav-item {% if request.url.path == '/dashboard/approvals' %}sidebar-active{% endif %}" title="Approvals">
                         <i class="fas fa-user-check sidebar-icon"></i>
                         <span class="sidebar-text">Approvals</span>
                         <span id="approvalsNavCount" class="m-count sidebar-text mate-nav-count" hidden></span>
                     </a>
-                    <a href="/dashboard/members" class="mate-nav-item {% if request.url.path == '/dashboard/members' %}sidebar-active{% endif %}" title="Members">
-                        <i class="fas fa-user-friends sidebar-icon"></i>
-                        <span class="sidebar-text">Members</span>
-                    </a>
-                    <a href="/dashboard/models" class="mate-nav-item {% if request.url.path == '/dashboard/models' %}sidebar-active{% endif %}" title="Models and keys">
-                        <i class="fas fa-key sidebar-icon"></i>
-                        <span class="sidebar-text">Models and keys</span>
-                    </a>
-                    <a href="/dashboard/rate-limits" class="mate-nav-item {% if request.url.path == '/dashboard/rate-limits' %}sidebar-active{% endif %}" title="Rate Limits">
-                        <i class="fas fa-shield-alt sidebar-icon"></i>
-                        <span class="sidebar-text">Rate Limits</span>
-                    </a>
-                    <a href="/dashboard/alerts" class="mate-nav-item {% if request.url.path == '/dashboard/alerts' %}sidebar-active{% endif %}" title="Alerts">
-                        <i class="fas fa-bell sidebar-icon"></i>
-                        <span class="sidebar-text">Alerts</span>
-                    </a>
+                    {{ nav_item('/dashboard/members', 'fa-user-friends', 'Members') }}
+                    {{ nav_item('/dashboard/models', 'fa-key', 'Models and keys') }}
+                    {{ nav_item('/dashboard/rate-limits', 'fa-shield-alt', 'Rate Limits') }}
+                    {{ nav_item('/dashboard/alerts', 'fa-bell', 'Alerts') }}
                 </div>
-                <p class="sidebar-section-header">System</p>
+                {% if platform_admin %}
+                {# The installation's pages, for platform administrators; the wizard's and
+                   the shop's only when in use (shared/utils/features_in_use.py) #}
+                {% set _in_use = features_in_use() if features_in_use is defined else {} %}
+                <p class="sidebar-section-header">Platform</p>
                 <div class="space-y-0.5">
-                    {% if platform_admin %}
-                    <a href="/dashboard/settings" class="mate-nav-item {% if request.url.path == '/dashboard/settings' %}sidebar-active{% endif %}" title="Settings">
-                        <i class="fas fa-sliders-h sidebar-icon"></i>
-                        <span class="sidebar-text">Settings</span>
-                    </a>
-                    <a href="/dashboard/migrations" class="mate-nav-item {% if request.url.path == '/dashboard/migrations' %}sidebar-active{% endif %}" title="Migrations">
-                        <i class="fas fa-database sidebar-icon"></i>
-                        <span class="sidebar-text">Migrations</span>
-                    </a>
+                    {{ nav_item('/dashboard/workspaces', 'fa-building', 'Workspaces') }}
+                    {{ nav_item('/dashboard/users', 'fa-users', 'Users') }}
+                    {{ nav_item('/dashboard/settings', 'fa-sliders-h', 'Settings') }}
+                    {{ nav_item('/dashboard/migrations', 'fa-database', 'Migrations') }}
+                    {% if _in_use.wizard %}
+                    {{ nav_item('/dashboard/wizard-leads', 'fa-inbox', 'Wizard Leads') }}
+                    {{ nav_item('/dashboard/wizard-pricing', 'fa-tags', 'Wizard Partners & Pricing') }}
                     {% endif %}
-                    <a href="/dashboard/docs" class="mate-nav-item {% if request.url.path == '/dashboard/docs' %}sidebar-active{% endif %}" title="Documentation">
-                        <i class="fas fa-book sidebar-icon"></i>
-                        <span class="sidebar-text">Documentation</span>
-                    </a>
+                    {% if _in_use.shop %}
+                    {{ nav_item('/dashboard/shop-orders', 'fa-shopping-bag', 'Shop Orders') }}
+                    {% endif %}
+                </div>
+                {% endif %}
+                <div class="space-y-0.5 mate-nav-foot">
+                    {{ nav_item('/dashboard/docs', 'fa-book', 'Documentation') }}
                 </div>
                 {% endif %}
                 {% else %}

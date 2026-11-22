@@ -11,6 +11,7 @@ covers:
   - templates/dashboard/wizard_pricing.html
   - templates/dashboard/wizard_orders.html
   - shared/utils/shop_service.py
+  - shared/utils/features_in_use.py
 ---
 
 # Agent Builder Wizard and shop orders
@@ -53,9 +54,23 @@ are already about their business.
 | `data-partner` | The partner this site belongs to; see below. |
 | `data-contact-email` | The contact address shown at the end. |
 
+## Where the pages are
+
+The wizard's and the shop's pages are in the Control Room, under **Platform**, for
+platform administrators. The sidebar shows them only when they are in use:
+
+- **Wizard Leads** and **Wizard Partners & Pricing** once a wizard partner, lead or
+  session exists;
+- **Shop Orders** once an order is stored, or an agent's shop configuration sets a
+  `partner_key`.
+
+The sidebar checks at most once a minute, so a new partner or `partner_key` can take
+that long to show. The pages open by their address either way: `/dashboard/wizard-pricing`,
+`/dashboard/wizard-leads` and `/dashboard/shop-orders`.
+
 ## Prices and partners
 
-**Control Room → Wizard Pricing** sets the estimates the wizard shows. They are
+**Wizard Partners & Pricing** sets the estimates the wizard shows. They are
 display text only, for example `€49` or `5.900 RSD`.
 
 - **Global default** applies to every site.
@@ -72,7 +87,7 @@ rewrite history.
 
 ## Follow up on leads
 
-**Control Room → Wizard Leads** lists everyone who completed the wizard: contact,
+**Wizard Leads** lists everyone who completed the wizard: contact,
 company, partner, tier, the estimate they were shown, and their trial.
 
 - Open a lead's trial to see the agent they built and tried, while the trial still
@@ -89,7 +104,7 @@ lead stays. To keep what a prospect built, copy it out before it expires; one wa
 ## Shop orders
 
 An agent with the Shop tool takes orders in conversation. Orders from agents whose
-shop configuration has a `partner_key` are listed in **Control Room → Shop Orders**,
+shop configuration has a `partner_key` are listed in **Shop Orders**,
 grouped by partner. As with leads, MATE records the order and you fulfil it: move
 each one through **New → Contacted → Fulfilled**, or **Cancelled**.
 

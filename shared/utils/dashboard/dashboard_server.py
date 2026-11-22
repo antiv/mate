@@ -3436,6 +3436,9 @@ class DashboardServer:
         from server.workspace_routes import switcher_for
         self.templates.env.globals["is_platform_admin"] = is_admin_user
         self.templates.env.globals["workspace_switcher"] = switcher_for
+        # ...and the wizard's and the shop's pages only when they are in use
+        from shared.utils.features_in_use import in_use
+        self.templates.env.globals["features_in_use"] = in_use
 
         # Mount static files
         self.app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
@@ -3859,13 +3862,13 @@ class DashboardServer:
 
         @self.app.get("/dashboard/overview", response_class=HTMLResponse, tags=["Dashboard - Pages"])
         async def dashboard_overview(request: Request, ctx: RequestContext = Depends(get_request_context)):
-            """Platform Overview — Control Room landing page."""
+            """Overview — Control Room landing page."""
             if not ctx.is_admin:
                 return RedirectResponse(url="/dashboard/workroom", status_code=302)
             stats = self._get_usage_stats(7, workspace_id=ctx.workspace_id)
             return self.templates.TemplateResponse(request, "dashboard/index.html", {
                 "request": request,
-                "page_title": "Platform Overview",
+                "page_title": "Overview",
                 "username": ctx.user_id,
                 "stats": stats,
                 "is_admin": True,

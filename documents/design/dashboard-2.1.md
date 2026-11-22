@@ -64,12 +64,14 @@ The three spaces stay: Work Room, Studio, Control Room. Control Room is regroupe
 Control Room
   Overview
   Observability        Usage · Audit Logs · Guardrail Logs · Sessions
-  Workspace            Members · Models and keys · Rate Limits · Alerts
+  Workspace            Approvals · Members · Models and keys · Rate Limits · Alerts
   Platform             Workspaces · Users · Settings · Migrations      (platform administrators)
-    Wizard             Leads · Partners and pricing                    (when in use)
-    Shop               Orders                                          (when in use)
+                       Wizard Leads · Wizard Partners & Pricing        (when in use)
+                       Shop Orders                                     (when in use)
   Documentation
 ```
+
+As built (step 3): Approvals, added in 2.1, is under Workspace. The wizard's and the shop's pages are items of Platform rather than sub-groups, so the minimized sidebar needs no nested headers. `shared/utils/features_in_use.py` answers "in use" and keeps the answer for a minute.
 
 - **Workspace** holds what an owner or admin of a workspace manages.
 - **Platform** holds what only a platform administrator sees. Its name matches what the guides already say.

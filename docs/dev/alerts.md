@@ -141,7 +141,7 @@ endpoint is not retried in a tight loop.
 
 ## Dashboard
 
-**Alerts** in the sidebar, under Governance & Access. Each rule shows its last fired time,
+**Alerts** in the Control Room sidebar, under Workspace. Each rule shows its last fired time,
 fire count and last delivery error. The test button measures the rule now and sends a
 clearly-marked test notification without touching the cooldown or the fire count.
 
