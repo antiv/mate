@@ -83,6 +83,13 @@ Approval only comes from a chat. A run that nobody is chatting in, such as a
 trigger, an A2A or MCP call or the OpenAI-compatible API, stops at the tool and
 nothing can answer it, so don't require approval for tools those runs use.
 
+MATE keeps a record of each request: the agent, the tool and its arguments, where
+the run came from (a chat, a trigger, the API, Slack or an eval), and how it was
+answered. Each answer given in a chat goes into the audit log as
+`approval.approved` or `approval.rejected`, with who answered (see
+[Usage and audit logs](usage-and-audit.md)). The audit entry doesn't hold the
+arguments. The dashboard has no page for these requests yet.
+
 ## Connect an MCP server
 
 MCP (Model Context Protocol) is a standard way for a program to offer tools to

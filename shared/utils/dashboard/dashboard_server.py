@@ -6779,6 +6779,47 @@ class DashboardServer:
             finally:
                 session.close()
 
+        # ─── Approval requests (documents/design/approvals-inbox.md) ────
+
+        @self.app.get("/dashboard/api/approvals", tags=["Dashboard - Approvals"])
+        async def get_approvals(
+            request: Request,
+            ctx: RequestContext = Depends(get_request_context),
+            status: Optional[str] = None,
+            agent_name: Optional[str] = None,
+            source: Optional[str] = None,
+            limit: int = 100,
+            offset: int = 0,
+            all_workspaces: bool = False,
+        ):
+            """The tool calls agents paused on for approval, newest first, with their decision."""
+            from shared.utils.models import ApprovalRequest
+            view = self._view_workspace(ctx, all_workspaces)
+            if not self.db_client:
+                return {"requests": [], "total": 0}
+            session = self.db_client.get_session()
+            if not session:
+                return {"requests": [], "total": 0}
+            try:
+                query = session.query(ApprovalRequest).filter(*rows_of(ApprovalRequest, view))
+                if status:
+                    query = query.filter(ApprovalRequest.status == status)
+                if agent_name:
+                    query = query.filter(ApprovalRequest.agent_name == agent_name)
+                if source:
+                    query = query.filter(ApprovalRequest.source == source)
+                total = query.count()
+                rows = (query.order_by(ApprovalRequest.requested_at.desc(), ApprovalRequest.id.desc())
+                        .offset(max(offset, 0)).limit(min(max(limit, 1), 500)).all())
+                return {"requests": self._with_workspaces([r.to_dict() for r in rows],
+                                                          [r.workspace_id for r in rows], view),
+                        "total": total}
+            except Exception as e:
+                logger.error(f"Error fetching approval requests: {e}")
+                return {"requests": [], "total": 0, "error": str(e)}
+            finally:
+                session.close()
+
         # ─── Audit Logs API (evidence toward EU AI Act Art. 12) ────────
 
         @self.app.get("/dashboard/api/audit-logs", tags=["Dashboard - Audit"])

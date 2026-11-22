@@ -136,7 +136,9 @@ installation the insert may run for the first time over rows an admin has edited
 rows set both, and `shared/utils/log_projects.py` does the lookup:
 
 - token usage, guardrail hits and responses get their agent's project and that
-  project's workspace, or NULL for an agent that is not configured;
+  project's workspace, or NULL for an agent that is not configured. `approval_requests`
+  (V050) copies both the same way, taking its root agent's for an agent that is not
+  configured ([Approval requests](approvals.md));
 - an audit entry gets the project of the agent or project its `resource_id` names,
   NULL for installation-wide entries. `audit_service.log(..., project_id=...)` sets
   it when the agent is already gone, as on agent delete. The workspace is the

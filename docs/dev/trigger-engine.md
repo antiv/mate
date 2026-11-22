@@ -37,7 +37,7 @@ Both entry points end in `_execute_trigger_sync`:
 cron:     APScheduler thread → _run_trigger_by_id(id) ─┐
 webhook:  POST /triggers/{id}/fire → execute_trigger ──┼→ _execute_trigger_sync
 test:     POST …/triggers/{id}/test-fire ──────────────┘     ├ render_prompt(prompt, payload)
-                                                             ├ _invoke_agent(agent_name, prompt)
+                                                             ├ _invoke_agent(agent_name, prompt, trigger_id)
                                                              └ _route_output(trigger, response)
 ```
 
@@ -54,7 +54,9 @@ outcome:
 
 `_invoke_agent` is a plain HTTP client of the agent server at `ADK_HOST:ADK_PORT`:
 
-1. `POST /apps/{agent}/users/trigger_runner/sessions` creates a fresh session.
+1. `POST /apps/{agent}/users/trigger_runner/sessions` creates a fresh session. Its
+   state names the trigger, `{"mate_trigger_id": <id>}`, so an approval request the
+   run makes is recorded with the trigger ([Approval requests](approvals.md)).
 2. `POST /run_sse` streams the run. The runner keeps the last text produced by the
    last author, discarding text that preceded a tool call.
 
@@ -63,6 +65,9 @@ Consequences:
 - The user id is always `trigger_runner`. Usage is attributed to the `trigger`
   origin (`shared/utils/response_metrics.py`).
 - Every firing is a new session, so there is no conversation state between runs.
+- **A run that reaches a `require_confirmation` tool stops there.**
+  - The reply is the text before the pause, often empty, and the firing is recorded as `ok`.
+  - The request is in `approval_requests` as `pending`, with `source` `trigger`, and nothing answers it yet.
 - It uses synchronous `httpx` because it runs on APScheduler worker threads. A
   webhook or test-fire request therefore blocks until the agent finishes.
 - Timeouts are 30 s for session creation and 120 s without data on the stream.

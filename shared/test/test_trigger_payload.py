@@ -95,13 +95,13 @@ class TestExecuteTriggerThreadsPayload(unittest.TestCase):
         self.runner._invoke_agent = MagicMock(return_value="done")
         self.runner._execute_trigger_sync(self.trigger, {"key": "MT-99"})
         self.runner._invoke_agent.assert_called_once_with(
-            "a1", "Issue MT-99 needs attention")
+            "a1", "Issue MT-99 needs attention", trigger_id=self.trigger.id)
 
     def test_cron_firing_passes_no_payload(self):
         self.runner._invoke_agent = MagicMock(return_value="done")
         self.runner._execute_trigger_sync(self.trigger)
         self.runner._invoke_agent.assert_called_once_with(
-            "a1", "Issue {{ payload.key }} needs attention")
+            "a1", "Issue {{ payload.key }} needs attention", trigger_id=self.trigger.id)
 
 
 class TestFireEndpointReadsTheBody(unittest.TestCase):

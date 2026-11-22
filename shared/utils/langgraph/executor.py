@@ -225,6 +225,35 @@ def _repeats_what_was_sent(event: Dict[str, Any], already_sent: set) -> bool:
     return bool(ids) and all(i in already_sent for i in ids)
 
 
+async def _record_requests(event: Dict[str, Any], app_name: str, user_id: str, session_id: str,
+                           invocation_id: str, state: Any) -> None:
+    """A pending approval row for each adk_request_confirmation call in event."""
+    import asyncio
+
+    from shared.utils import approval_service
+    calls = list(approval_service.confirmation_calls(
+        (event.get("content") or {}).get("parts") or []))
+    if not calls:
+        return
+    trigger_id = state.get(approval_service.TRIGGER_STATE_KEY) if hasattr(state, "get") else None
+    for call in calls:
+        await asyncio.to_thread(
+            approval_service.record_request, confirmation_call_id=call["id"], args=call["args"],
+            agent_name=event.get("author"), app_name=app_name, user_id=user_id,
+            session_id=session_id, invocation_id=invocation_id, trigger_id=trigger_id)
+
+
+async def _record_decisions(decisions: Dict[str, bool], session_id: str, user_id: str) -> None:
+    """Mark the answered approval rows decided in the chat."""
+    import asyncio
+
+    from shared.utils import approval_service
+    for call_id, confirmed in decisions.items():
+        await asyncio.to_thread(
+            approval_service.record_decision, session_id=session_id,
+            confirmation_call_id=call_id, confirmed=confirmed, decided_by=user_id, via="chat")
+
+
 async def _resumed_agent(built: Any, config: Dict[str, Any]) -> str:
     """The agent this turn runs in: the one the conversation was transferred to.
 
@@ -317,6 +346,9 @@ async def execute_run(app_name: str, user_id: str, session_id: str,
                                 else "This conversation is not waiting on a tool result.")
             return
         graph_input = Command(resume=resume_map)
+        # The answers to what the graph is paused on, recorded as decided in the chat
+        await _record_decisions({cid: ok for cid, ok in decisions.items() if cid in already_sent},
+                                session_id, user_id)
     else:
         user_text = _text_of_new_message(new_message)
         root_engine = built.guardrail_engines.get(app_name)
@@ -359,6 +391,8 @@ async def execute_run(app_name: str, user_id: str, session_id: str,
                     store.append_event(session_id, event)
                     _log_token_usage(event, app_name, user_id, session_id, built.model_names,
                                      built.fallback_models)
+                    await _record_requests(event, app_name, user_id, session_id, invocation_id,
+                                           run_context.state)
                 yield event
 
             # A tool node surfaces one pause at a time, so a turn with several

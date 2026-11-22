@@ -1,7 +1,7 @@
 # Design: approvals inbox
 
 Status: being built for 2.1.0, tracking #376 (first proposed in #178, feature 3).
-Open questions 1 and 2 are settled.
+Open questions 1 and 2 are settled. Phase 1 is built; see [Phase 1, as built](#phase-1-as-built).
 
 ## Problem
 
@@ -313,13 +313,36 @@ the call it names.
     wasn't run.
   - To check before phase 3, whose config editor offers the tools to pick.
 
+### Phase 1, as built
+
+The table, capture on both runtimes, the audit entries for chat decisions, and a
+history route (`docs/dev/approvals.md`). Where it differs from the proposal above:
+
+- **Three more columns:**
+  - `invocation_id`, so phase 2 can tell whether a run still has a request pending (see question 2);
+  - `tool_call_id`, the model's own call id;
+  - `decided_via`, which is `chat`, `inbox` or `system`.
+- **The rest of the schema:**
+  - `(session_id, confirmation_call_id)` is unique;
+  - `project_id`, `workspace_id` and `trigger_id` have no foreign keys, as in the log tables.
+- **`source` takes the values `response_metrics.resolve_origin` already uses:** `chat`, `api`, `trigger`, `slack` and `eval`.
+  - A2A and MCP can't be told apart from a chat yet, which settles the "to check" under [Source](#1-record-each-request).
+  - An A2A run's user is `A2A_USER_<context id>`, or the caller when the proxy sends `x-mate-a2a-user`.
+  - MATE's MCP servers call agents over A2A with the caller's id.
+  - Phase 2 needs a marker on both before "runs with no chat always go to the inbox" can hold for them.
+- **The trigger id:** the trigger runner puts it in the new session's state as `mate_trigger_id`, and capture copies it to the row.
+  - A trigger run that pauses still returns an empty reply and leaves its row `pending`. That is the behaviour phase 2 changes.
+- **The page moved to phase 2.** Phase 1 has the route `GET /dashboard/api/approvals`.
+  - The Approvals page, with Waiting and History, is built in phase 2.
+  - It uses the components of the dashboard redesign (`documents/design/dashboard-2.1.md`), whose step 2 comes before it.
+
 ## Phases
 
 1. **Table, capture and history.** The table, the plugin and translator hooks, the
-   history list, and audit entries for decisions made in the chat. No behaviour
-   changes.
-2. **The inbox.** The Waiting tab, approve and reject, resuming, triggers
-   end-to-end, and expiry.
+   history route, and audit entries for decisions made in the chat. No behaviour
+   changes. Built.
+2. **The inbox.** The Approvals page with the Waiting and History tabs, approve and
+   reject, resuming, triggers end-to-end, and expiry.
 3. **Notifications**, and the `approver`/`notify`/`expires_after_minutes` config
    with its editor in the visual builder.
 4. **Later:** A2A `input-required`, Slack interactive buttons, and decisions shown
