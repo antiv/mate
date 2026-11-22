@@ -9,6 +9,8 @@ covers:
   - shared/utils/run_surface.py
   - shared/callbacks/approval_plugin.py
   - shared/sql/migrations/*/V050__approval_requests.sql
+  - templates/dashboard/approvals.html
+  - static/js/approvals-page.js
 ---
 
 # Approval requests
@@ -148,10 +150,24 @@ run it is the root of:
 
 `GET /dashboard/api/approvals` lists the rows, newest first.
 - **Filters:** `status`, `agent_name` and `source`, with `limit` (at most 500) and `offset`.
+- **`inbox=true`** leaves out a chat's requests: the ones the inbox decides.
+- **`q`** matches the agent, the tool and the user who started the run, case-insensitively; with several words, a row must match each.
 - **Scope:** the caller's workspace, through `rows_of`. A row with no workspace counts as the default workspace's.
 - **`all_workspaces=true`:** every workspace, for a platform administrator.
 - **Admins only:** as every `/dashboard/api/` route outside the allowlists.
 - **Rows carry the arguments,** which may hold personal data.
+
+## The page
+
+`/dashboard/approvals` (`templates/dashboard/approvals.html`, `static/js/approvals-page.js`), for admins, is built on the
+[dashboard components](dashboard-components.md):
+
+- **Waiting** loads `?status=pending&inbox=true&limit=500` into a client-side table, and again every 30 seconds while the tab is shown, the page is visible and no request is open.
+- **History** is a table the API pages (`offset`, `limit`, `q`, `status`, `source`).
+- **A row** opens a dialog with the arguments, the hint and, once decided, `resume_result`. Approve and Reject post to the decide route with the note.
+  - ADK's default hint, which tells a client how to answer, is not shown.
+  - **Open the session** links to `/dashboard/sessions?session_id=…&app_name=…&user_id=…`, which opens that session in the Session Tracking inspector.
+- **The sidebar's count** beside Approvals is the `total` of `?status=pending&inbox=true&limit=1` (`refreshApprovalsCount` in `static/js/dashboard-nav.js`). It is fetched on every page that has the Control Room sidebar, and again after a decision.
 
 ## Tests
 
@@ -173,6 +189,9 @@ run it is the root of:
 - expiry;
 - cancellation, committed and rolled back;
 - the A2A and MCP surface.
+
+`shared/test/test_cross_workspace.py` covers the list's `inbox` and `q` filters, and
+the workspace scope of the list and the decide route.
 
 `shared/test/test_cross_workspace.py` checks both routes against another
 workspace's row, and that a workspace decides its own.

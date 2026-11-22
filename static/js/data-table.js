@@ -122,8 +122,13 @@
             this.render();
         }
 
-        /** Ask the API again (fetch mode), or apply a changed filter to the rows (client mode). */
-        reload() {
+        /**
+         * Ask the API again (fetch mode), or apply a changed filter to the rows (client mode,
+         * which starts again from the first page). firstPage: start from the first page in
+         * fetch mode too, as after a filter changed.
+         */
+        reload(options = {}) {
+            if (options.firstPage) this.page = 1;
             if (!this.fetcher) {
                 this.page = 1;
                 this.render();

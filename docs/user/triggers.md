@@ -130,7 +130,7 @@ delivery fails anyway, **Last Run** shows the run as failed with the reason.
 
 **An agent that must ask before a tool.** Some agents ask for approval before they
 run a tool (`require_confirmation`, see [Tools and MCP servers](tools-and-mcp.md)).
-The run then waits for an administrator to decide:
+The run then waits for an administrator to decide on the [Approvals](approvals.md) page:
 - **Last Run** shows an hourglass, and **Test fire** says the run is waiting;
 - nothing is sent until the request is decided or expires;
 - then the answer the agent gives goes to the destination, and **Last Run** shows how

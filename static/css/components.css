@@ -110,6 +110,7 @@ textarea.m-input { resize: vertical; }
 .m-stack { display: flex; flex-direction: column; gap: 14px; }
 .m-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .m-grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.m-spacer { flex: 1; }
 .m-divider { border: 0; border-top: 1px solid var(--border); margin: 0; }
 @media (max-width: 640px) {
     .m-grid-2 { grid-template-columns: minmax(0, 1fr); }
@@ -132,6 +133,20 @@ textarea.m-input { resize: vertical; }
 .m-tone-success { color: var(--success); }
 .m-tone-warning { color: var(--warning); }
 .m-tone-danger { color: var(--danger); }
+
+/* A button that reads as a link: a name in a table that opens its row */
+.m-link.m-link {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--accent);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+.m-link:hover { text-decoration: underline; }
+.m-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+.m-link.m-mono { font-family: var(--m-font-mono); }
 
 /* ── Badge ────────────────────────────────────────────────── */
 .m-badge {
@@ -284,6 +299,8 @@ textarea.m-input { resize: vertical; }
     /* A form dialog takes the whole screen on a phone */
     .m-dialog-backdrop:has(.m-dialog-lg) { padding: 0; align-items: stretch; }
     .m-dialog-lg { max-width: none; max-height: none; min-height: 100%; border-radius: 0; border: 0; }
+    /* A link at the start of the foot gets its own line; the buttons share the next */
+    .m-dialog-lg .m-dialog-foot .m-spacer { flex-basis: 100%; }
 }
 
 /* ── Table: static/js/data-table.js builds it ─────────────── */
@@ -371,3 +388,78 @@ textarea.m-input { resize: vertical; }
     font-size: 12px;
 }
 .m-table-pager { display: flex; align-items: center; gap: 6px; }
+
+/* ── Tabs: static/js/tabs.js wires them up ──────────────────
+   <div class="m-tabs" role="tablist" data-m-tabs>
+     <button class="m-tab" role="tab" id="tab-a" aria-controls="panel-a" aria-selected="true">
+   <div id="panel-a" role="tabpanel" aria-labelledby="tab-a">                     */
+.m-tabs {
+    display: flex;
+    gap: 2px;
+    border-bottom: 1px solid var(--border);
+    overflow-x: auto;
+    scrollbar-width: none;
+}
+.m-tab.m-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    margin-bottom: -1px;
+    padding: 9px 14px;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    background: none;
+    color: var(--text-secondary);
+    font: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+    cursor: pointer;
+}
+.m-tab:hover { color: var(--text-primary); }
+.m-tab.m-tab[aria-selected="true"] { border-bottom-color: var(--accent); color: var(--text-primary); }
+.m-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 6px; }
+
+/* A count beside a tab or a sidebar item */
+.m-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    border-radius: 999px;
+    background: var(--accent);
+    color: #fff;
+    font-size: 10.5px;
+    font-weight: 700;
+    line-height: 1;
+}
+
+/* ── Details: label and value pairs ───────────────────────── */
+.m-details {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    gap: 7px 16px;
+    margin: 0;
+    font-size: 12.5px;
+}
+.m-details dt { color: var(--text-tertiary); font-weight: 600; }
+.m-details dd { margin: 0; color: var(--text-primary); overflow-wrap: anywhere; }
+
+/* A block of code or JSON */
+.m-pre {
+    margin: 0;
+    max-height: 320px;
+    padding: 10px 12px;
+    overflow: auto;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--bg-surface-2);
+    color: var(--text-primary);
+    font-family: var(--m-font-mono);
+    font-size: 12px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-word;
+}

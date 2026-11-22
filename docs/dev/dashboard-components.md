@@ -7,6 +7,7 @@ covers:
   - static/css/components.css
   - static/js/data-table.js
   - static/js/dialogs.js
+  - static/js/tabs.js
   - templates/dashboard/triggers.html
   - templates/dashboard/modals/trigger_modal.html
 ---
@@ -23,11 +24,15 @@ colour in them is a token, so both themes are right without a remap. The prefix
 keeps them apart from Tailwind's classes. The plan they come from is
 `documents/design/dashboard-2.1.md`, "Components".
 
-`base.html` loads `components.css`, `data-table.js` and `dialogs.js` on every page.
+`base.html` loads `components.css`, `data-table.js`, `dialogs.js` and `tabs.js` on every page.
 
-**Triggers** is the first page built on them: its table, filters, dialog and
-banner use nothing else. Copy from `templates/dashboard/triggers.html`,
-`templates/dashboard/modals/trigger_modal.html` and `static/js/triggers-page.js`.
+Two pages are built on them alone; copy from them:
+
+- **Triggers:** a table with filters, a form dialog and a banner
+  (`templates/dashboard/triggers.html`, `templates/dashboard/modals/trigger_modal.html`,
+  `static/js/triggers-page.js`).
+- **Approvals:** tabs, a client-side table and one the API pages, and a dialog of
+  details (`templates/dashboard/approvals.html`, `static/js/approvals-page.js`).
 
 ## The classes
 
@@ -42,6 +47,12 @@ banner use nothing else. Copy from `templates/dashboard/triggers.html`,
 | `m-check` | A label around a checkbox and its text |
 | `m-stack`, `m-row`, `m-grid-2`, `m-divider` | Layout: a column with gaps, a wrapping row, two columns that stack on a phone, a rule |
 | `m-badge` + `-accent` / `-success` / `-warning` / `-danger` / `-violet` | A short label in a pill |
+| `m-count` | A number in a pill, beside a tab or a sidebar item |
+| `m-link` | A button that reads as a link, such as a name in a table that opens its row |
+| `m-details` | A `<dl>` of labels and values in two columns |
+| `m-pre` | A block of code or JSON, scrolled when long |
+| `m-spacer` | Takes the free space in a row, such as between a link and the buttons of a dialog's foot |
+| `m-tabs`, `m-tab` | Tabs; see below |
 | `m-switch` | An on/off switch: `<button class="m-switch" role="switch" aria-checked="true" aria-label="…">` |
 | `m-notice`, `m-notice-warning`, `m-notice-floating` | An icon and a message on a tinted background; floating puts it at the bottom of the screen |
 | `m-code`, `m-mono`, `m-muted`, `m-tone-*` | Inline code, monospace text, quieter text, text in a token's colour |
@@ -115,6 +126,8 @@ The table:
 - **`setRows(rows)`** sets the whole list; the search, the filter, the sort and the
   pages are worked out in the browser.
 - **`reload()`** applies a changed `filter`, as the Triggers type filter does.
+  In fetch mode it asks the API again for the same page; `reload({ firstPage: true })`
+  starts from the first, as after a filter changed.
 - **`setError(message)`** shows the failure in the table.
 
 `search: false` drops the search box, for a short list such as the system
@@ -172,6 +185,26 @@ The message and the title go in as text, not HTML. With `type` `danger`, the
 confirm button is red and focus starts on Cancel. `cancelText` `null` shows a
 single button.
 
+## Tabs
+
+`static/js/tabs.js` sets up every `[data-m-tabs]` on the page:
+
+```html
+<div class="m-tabs" role="tablist" data-m-tabs aria-label="Approvals">
+    <button type="button" class="m-tab" role="tab" id="tab-waiting" aria-controls="panel-waiting" aria-selected="true">Waiting</button>
+    <button type="button" class="m-tab" role="tab" id="tab-history" aria-controls="panel-history" aria-selected="false">History</button>
+</div>
+<div id="panel-waiting" role="tabpanel" aria-labelledby="tab-waiting">…</div>
+<div id="panel-history" role="tabpanel" aria-labelledby="tab-history" hidden>…</div>
+```
+
+- **A click,** or the arrow keys, Home and End on a focused tab, selects it. Its
+  panel is shown and the others hidden.
+- **Only the selected tab** is in the Tab order.
+- **The tab list fires `m-tab-change`** with `detail.id`, the selected tab's id, when
+  the selection changes. The Approvals page reloads a tab's list then.
+- **`mateTabs.select('tab-history')`** selects one from code.
+
 ## Tests
 
 - `shared/test/js/data_table.test.js` covers searching, sorting, paging and
@@ -179,5 +212,5 @@ single button.
   `node --test shared/test/js/data_table.test.js`.
 - `shared/test/test_static_js_units.py` runs it with the other tests, and is
   skipped where node is not installed.
-- `shared/test/test_csp.py` checks that `data-table.js`, `dialogs.js` and the
-  Triggers templates have no inline handlers.
+- `shared/test/test_csp.py` checks that the component scripts and the Triggers and
+  Approvals templates have no inline handlers.

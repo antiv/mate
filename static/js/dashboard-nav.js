@@ -57,3 +57,24 @@ function initMobileNav() {
 }
 
 document.addEventListener('DOMContentLoaded', initMobileNav);
+
+/**
+ * The count beside Approvals in the sidebar: requests waiting for the inbox.
+ * The Approvals page calls it again after a decision.
+ */
+async function refreshApprovalsCount() {
+  const badge = document.getElementById('approvalsNavCount');
+  if (!badge) return;
+  try {
+    const resp = await fetch('/dashboard/api/approvals?status=pending&inbox=true&limit=1', { credentials: 'same-origin' });
+    if (!resp.ok) return;
+    const total = (await resp.json()).total || 0;
+    badge.textContent = total > 99 ? '99+' : String(total);
+    badge.hidden = total === 0;
+    badge.setAttribute('aria-label', `${total} waiting`);
+  } catch (e) {
+    // The count is a hint; a failed request leaves it as it was
+  }
+}
+
+document.addEventListener('DOMContentLoaded', refreshApprovalsCount);

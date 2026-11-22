@@ -496,6 +496,26 @@ class TestLogsAndOperations(_TwoWorkspaces):
             self.assertIn(B_ROOT, self._get(page, B).text, page)
             self.assertNotIn(B_ROOT, self._get(page, A).text, page)
 
+    def test_the_approvals_list_filters_for_the_inbox_and_by_search(self):
+        from shared.utils.models import ApprovalRequest
+        with self.Session() as db:
+            db.add(ApprovalRequest(agent_name=B_ROOT, app_name=B_ROOT, user_id="someone",
+                                   session_id="chat-session", confirmation_call_id="chat-call",
+                                   tool_name="chat_tool", source="chat",
+                                   project_id=self.ids["project_b"], workspace_id=B))
+            db.commit()
+
+        def tools(**params):
+            return sorted(r["tool_name"] for r in self._get("/dashboard/api/approvals", B, **params).json()["requests"])
+
+        self.assertEqual(tools(), sorted(["chat_tool", B_MARKER]))
+        self.assertEqual(tools(inbox="true"), [B_MARKER])
+        self.assertEqual(tools(q="CHAT"), ["chat_tool"])
+        self.assertEqual(tools(q="trigger_runner"), [B_MARKER])
+        self.assertEqual(tools(q=f"{B_ROOT} chat_tool"), ["chat_tool"])
+        self.assertEqual(tools(q="nothing-like-it"), [])
+        self.assertEqual(self._get("/dashboard/api/approvals", A, q="chat").json()["requests"], [])
+
     def test_an_approval_is_decided_in_its_own_workspace(self):
         path = f"/dashboard/api/approvals/{self.b_rows['approval_id']}/decide"
         with patch("shared.utils.approval_resume.resume_in_background") as resume:

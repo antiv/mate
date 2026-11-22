@@ -93,11 +93,7 @@ the tool and its request waits for an administrator of the workspace.
   Your administrator can change the wait (`APPROVALS_EXPIRE_MINUTES`, in minutes).
 - **The agent is deleted first:** its waiting requests are cancelled.
 
-The dashboard has no page for waiting requests yet. Until it does, an
-administrator decides one through the dashboard API:
-`POST /dashboard/api/approvals/<id>/decide`, with `{"decision": "approve"}` or
-`{"decision": "reject"}` and an optional `"note"`. `GET /dashboard/api/approvals`
-lists them.
+An administrator decides on the **Approvals** page: see [Approvals](approvals.md).
 
 ### The record
 
