@@ -1302,6 +1302,7 @@ class DashboardServer:
                     'status': log.status,
                     'error_description': log.error_description,
                     'timestamp': log.timestamp.isoformat() if log.timestamp else None,
+                    'cost_usd': log.cost_usd,
                     'workspace_id': log.workspace_id,
                 } for log in logs],
                 "total_records": total_count,

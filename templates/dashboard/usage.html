@@ -55,6 +55,8 @@
         </div>
     </div>
 
+    {% macro usd(value) %}{% if value >= 1 or value == 0 %}${{ "{:,.2f}".format(value) }}{% else %}${{ "%.4f"|format(value) }}{% endif %}{% endmacro %}
+
     {% if view == "analytics" %}
     <!-- Summary Stats -->
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
@@ -186,7 +188,6 @@
         </div>
     </div>
 
-    {% macro usd(value) %}{% if value >= 1 or value == 0 %}${{ "{:,.2f}".format(value) }}{% else %}${{ "%.4f"|format(value) }}{% endif %}{% endmacro %}
     {% if stats.cost %}
     <!-- Cost: list prices in US dollars; calls whose model has no price are left out -->
     <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -426,6 +427,7 @@
                         <th class="px-3 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-1/4">Model</th>
                         <th class="px-3 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-1/12">Prompt Tokens</th>
                         <th class="px-3 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-1/12">Response Tokens</th>
+                        <th class="px-3 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-1/12">Cost</th>
                         <th class="px-3 py-1.5 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-1/12">Status</th>
                     </tr>
                 </thead>
@@ -459,6 +461,14 @@
                         <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate" data-label="Response Tokens">
                             {{ log.response_tokens or 0 }}
                         </td>
+                        <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate" data-label="Cost"
+                            data-sort="{{ log.cost_usd if (log.cost_usd is defined and log.cost_usd is not none) else -1 }}">
+                            {% if log.cost_usd is not defined or log.cost_usd is none %}
+                                <span title="Model has no price">—</span>
+                            {% else %}
+                                {{ usd(log.cost_usd) }}
+                            {% endif %}
+                        </td>
                         <td class="px-3 py-1.5" data-label="Status">
                             {% if log.status == 'SUCCESS' %}
                                 <span class="inline-flex items-center px-1 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-800 dark:text-green-100">
@@ -478,7 +488,7 @@
                     {% endfor %}
                     {% if not logs %}
                     <tr>
-                        <td colspan="8" class="px-3 py-6 text-center text-gray-500 dark:text-gray-400">
+                        <td colspan="9" class="px-3 py-6 text-center text-gray-500 dark:text-gray-400">
                             <i class="fas fa-database text-2xl mb-2"></i>
                             <p class="text-sm font-medium">No usage logs found</p>
                             <p class="text-xs">No token usage data available for the selected time period.</p>
@@ -543,6 +553,14 @@ function esc(value) {
     return String(value == null ? '' : value)
         .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function formatUsd(value) {
+    const num = Number(value);
+    if (num >= 1 || num === 0) {
+        return '$' + num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    return '$' + num.toFixed(4);
 }
     let dailyChart, tokenChart, agentsChart, hourlyChart;
     
@@ -745,6 +763,10 @@ function esc(value) {
                         <strong class="text-gray-700 dark:text-gray-300">Total Tokens:</strong>
                         <p class="text-gray-600 dark:text-gray-400 mt-1">${(log.prompt_tokens || 0) + (log.response_tokens || 0) + (log.thoughts_tokens || 0) + (log.tool_use_tokens || 0)}</p>
                     </div>
+                    <div>
+                        <strong class="text-gray-700 dark:text-gray-300">Cost:</strong>
+                        <p class="text-gray-600 dark:text-gray-400 mt-1">${log.cost_usd == null ? `<span title="Model has no price">${esc(EMPTY_VALUE)}</span>` : esc(formatUsd(log.cost_usd))}</p>
+                    </div>
                 </div>
                 <div class="mt-4">
                     <strong class="text-gray-700 dark:text-gray-300">Token Breakdown:</strong>
@@ -879,7 +901,7 @@ function esc(value) {
         if (logs.length === 0) {
             tbody.innerHTML = `
                 <tr>
-                    <td colspan="8" class="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
+                    <td colspan="9" class="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
                         <i class="fas fa-database text-4xl mb-4"></i>
                         <p class="text-lg font-medium">No usage logs found</p>
                         <p class="text-sm">No token usage data available for the selected time period.</p>
@@ -913,6 +935,9 @@ function esc(value) {
                 </td>
                 <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate" data-label="Response Tokens">
                     ${log.response_tokens || 0}
+                </td>
+                <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate" data-label="Cost" data-sort="${log.cost_usd != null ? log.cost_usd : -1}">
+                    ${log.cost_usd == null ? `<span title="Model has no price">${esc(EMPTY_VALUE)}</span>` : esc(formatUsd(log.cost_usd))}
                 </td>
                 <td class="px-3 py-1.5" data-label="Status">
                     ${getStatusBadge(log.status)}
@@ -1044,7 +1069,9 @@ function esc(value) {
             4: { sortable: true, dataType: 'text' }, // Model
             5: { sortable: true, dataType: 'number' }, // Prompt Tokens
             6: { sortable: true, dataType: 'number' }, // Response Tokens
-            7: { sortable: true, dataType: 'text' } // Status
+            7: { sortable: true, dataType: 'number',
+                 valueExtractor: (cell) => cell.dataset.sort || -1 }, // Cost
+            8: { sortable: true, dataType: 'text' } // Status
         });
         {% endif %}
     });
