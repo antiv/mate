@@ -1,7 +1,7 @@
 # Design: approvals inbox
 
 Status: being built for 2.1.0, tracking #376 (first proposed in #178, feature 3).
-Open questions 1 and 2 are settled. Phases 1 and 2 are built, and phase 3 apart from its editor; see
+Open questions 1 and 2 are settled. Phases 1, 2 and 3 are built; see
 [Phase 1, as built](#phase-1-as-built), [Phase 2, as built](#phase-2-as-built) and [Phase 3, as built](#phase-3-as-built).
 
 ## Problem
@@ -380,6 +380,7 @@ Builder. See `docs/dev/approvals.md`. Where 3a differs from the proposal above:
 - **Notifications carry the arguments' names, not their values.**
 - **The link** is absolute when `MATE_PUBLIC_URL` is set, else a path.
 - **Alerts and approvals share `notify.deliver`,** moved out of `AlertService._deliver`.
+- **3b, the editor,** is a dialog of its own (`static/js/approval-settings.js`), opened from the Visual Builder's agent panel, so the agent page of the dashboard redesign can open it too.
 
 ## Phases
 

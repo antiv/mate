@@ -9,6 +9,8 @@ covers:
   - shared/utils/run_surface.py
   - shared/callbacks/approval_plugin.py
   - shared/utils/approval_config.py
+  - static/js/approval-settings.js
+  - templates/dashboard/modals/approval_settings_modal.html
   - shared/utils/approval_notify.py
   - shared/utils/notify.py
   - shared/sql/migrations/*/V050__approval_requests.sql
@@ -64,6 +66,13 @@ object (`shared/utils/approval_config.py`):
 
 - **Both runtimes read `tools` through `approval_config.parse`:** `ToolFactory._apply_confirmation_wrapping` on ADK, and `AgentBuilder._build_tools` on LangGraph. A value that doesn't validate is read with defaults, so an older agent still loads.
 - **Saving checks it.** Creating, updating and importing an agent answer 400 with `approval_config.validate`'s messages (`_refuse_bad_approval_config`).
+- **The editor** is `static/js/approval-settings.js` with its dialog in `templates/dashboard/modals/approval_settings_modal.html`, opened from the Visual Builder's agent panel (**Approvals → Configure**).
+  - `mateApprovalSettings.open(agent, onSave)` reads the agent's `tool_config`, and `write` puts the settings back into it, keeping its other keys.
+  - It writes the list when only tools are set, and the object otherwise.
+  - No tools removes the entry.
+  - It checks what `validate` checks before calling `onSave`, which saves the agent and resolves to `true`. On anything else the dialog stays open.
+  - `summary` is the line the panel shows.
+  - A notify destination keeps the fields the dialog doesn't show (`headers`, `timeout`, `subject`) while its type stays the same.
 - **The row keeps the settings of its time.** `record_request` copies `approver`, and sets `expires_at` from `expires_after_minutes`. It reads the agent that asked, else the run's root, as for the scope. A later change of the agent doesn't move requests already waiting.
 
 ## Where rows are written
@@ -292,6 +301,7 @@ run it is the root of:
 - the gate: the chat answering once, the chat refused where the inbox answers, the inbox's decision delivered once and as decided, a cancelled row, an unknown call;
 - the inbox deciding a chat's request by `approver`, and expiry following `inbox_decides`;
 - the ADK plugin: `mateApprover`, an answer taken out, an answer replaced;
+- (in `shared/test/js/approval_settings.test.js`) the editor's reading, writing, validation and summary;
 - notifications: the default destination, the message, nowhere to send.
 
 `shared/test/test_cross_workspace.py` checks both routes against another

@@ -4,6 +4,8 @@ summary: Give an agent built-in tools, connect external MCP servers, and require
 audience: user
 order: 30
 covers:
+  - templates/dashboard/modals/approval_settings_modal.html
+  - static/js/approval-settings.js
   - templates/dashboard/modals/config_modals.html
   - static/js/agent-tools.js
   - shared/utils/tools/tool_factory.py
@@ -84,7 +86,17 @@ decided, is not passed on to the agent.
 
 ### Who approves, and who is told
 
-Instead of the list, `require_confirmation` can be an object with more settings:
+The easiest way to set this is the **Visual Builder**: select the agent and click
+**Configure** under **Approvals**. The dialog has:
+- the tools that ask first;
+- who decides a request from a chat;
+- where to send a message when a request waits;
+- how long to wait before rejecting.
+
+It checks what you enter before it saves. The panel then shows a summary, such as
+"1 tool · an administrator decides · tells slack".
+
+In the agent's JSON, `require_confirmation` is then an object instead of the list:
 
 ```json
 {

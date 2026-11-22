@@ -1,0 +1,62 @@
+<!-- An agent's approval settings: require_confirmation in its tool_config (static/js/approval-settings.js) -->
+<div id="approvalSettingsDialog" class="m-dialog-backdrop" hidden>
+    <div class="m-dialog m-dialog-lg" role="dialog" aria-modal="true" aria-labelledby="approvalSettingsTitle">
+        <div class="m-dialog-head">
+            <h3 id="approvalSettingsTitle" class="m-dialog-title">Approvals</h3>
+            <button type="button" aria-label="Close" data-click="mateApprovalSettings.close" class="m-btn m-btn-ghost m-btn-icon">
+                <i class="fas fa-times" aria-hidden="true"></i>
+            </button>
+        </div>
+        <div class="m-dialog-body m-stack">
+            <p class="m-hint">The agent stops before these tools and waits for someone to approve or reject the call.</p>
+
+            <div class="m-field" id="approvalSettingsToolsField">
+                <label for="approvalSettingsTools">Tools that ask first</label>
+                <input type="text" id="approvalSettingsTools" class="m-input m-input-mono" autocomplete="off"
+                    placeholder="delete_shared_block, issue_refund" aria-describedby="approvalSettingsToolsHint">
+                <p id="approvalSettingsToolsHint" class="m-hint">The tools' function names, separated by commas. Leave empty to turn approvals off.</p>
+            </div>
+
+            <div class="m-field">
+                <label for="approvalSettingsApprover">Who decides a request from a chat</label>
+                <select id="approvalSettingsApprover" class="m-input" aria-describedby="approvalSettingsApproverHint">
+                    <option value="chat">The person chatting</option>
+                    <option value="inbox">An administrator, on the Approvals page</option>
+                    <option value="either">Either, whoever answers first</option>
+                </select>
+                <p id="approvalSettingsApproverHint" class="m-hint">A run nobody is chatting in (a trigger, the API, A2A, MCP, Slack, an eval) always waits for an administrator.</p>
+            </div>
+
+            <div class="m-grid-2">
+                <div class="m-field">
+                    <label for="approvalSettingsNotifyType">Tell someone a request waits</label>
+                    <select id="approvalSettingsNotifyType" data-change="mateApprovalSettings.showTarget" class="m-input">
+                        <option value="">No message</option>
+                        <option value="slack">Slack</option>
+                        <option value="discord">Discord</option>
+                        <option value="http">Webhook (HTTP POST)</option>
+                        <option value="email">Email</option>
+                    </select>
+                </div>
+                <div class="m-field" id="approvalSettingsTargetField" hidden>
+                    <label for="approvalSettingsTarget" id="approvalSettingsTargetLabel">Webhook URL</label>
+                    <input type="text" id="approvalSettingsTarget" class="m-input" autocomplete="off">
+                </div>
+            </div>
+            <p class="m-hint">The message names the agent, the tool and the arguments' names, never their values, with a link to the request. Without one here, agents of the Default workspace use the server's default, if one is set.</p>
+
+            <div class="m-field">
+                <label for="approvalSettingsExpires">Minutes to wait before rejecting</label>
+                <input type="number" id="approvalSettingsExpires" class="m-input" min="1" max="129600" step="1"
+                    placeholder="The server's default: a day unless changed" aria-describedby="approvalSettingsExpiresHint">
+                <p id="approvalSettingsExpiresHint" class="m-hint">Only for requests an administrator decides. A request the person chatting decides waits for them.</p>
+            </div>
+
+            <p id="approvalSettingsError" class="m-error" role="alert" hidden></p>
+        </div>
+        <div class="m-dialog-foot">
+            <button type="button" data-click="mateApprovalSettings.close" class="m-btn m-btn-secondary">Cancel</button>
+            <button type="button" id="approvalSettingsSave" data-click="mateApprovalSettings.save" class="m-btn m-btn-primary">Save</button>
+        </div>
+    </div>
+</div>
