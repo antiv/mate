@@ -95,6 +95,21 @@ class TestScopedHelpers(_TwoUsers):
         self.assertEqual([log["user_id"] for log in logs["logs"]], ["alice"])
         self.assertEqual(len(self.server._get_token_usage_logs(24, limit=100)["logs"]), 2)
 
+    def test_logs_carry_each_call_cost(self):
+        # The Raw Data view's Cost column reads cost_usd from these rows (#386)
+        session = self.Session()
+        session.add(TokenUsageLog(
+            request_id="r-unpriced", session_id="s-alice", user_id="alice",
+            agent_name="alice_agent", model_name="unpriced", prompt_tokens=1,
+            response_tokens=1, status="SUCCESS", cost_usd=None,
+            timestamp=_utcnow() - timedelta(minutes=10)))
+        session.commit()
+        session.close()
+        logs = self.server._get_token_usage_logs(24, limit=100, user_id="alice")["logs"]
+        costs = {log["request_id"]: log["cost_usd"] for log in logs}
+        self.assertAlmostEqual(costs["r-alice"], 0.01)
+        self.assertIsNone(costs["r-unpriced"])
+
 
 class TestUsagePage(_TwoUsers):
 
