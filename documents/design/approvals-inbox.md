@@ -1,8 +1,8 @@
 # Design: approvals inbox
 
 Status: being built for 2.1.0, tracking #376 (first proposed in #178, feature 3).
-Open questions 1 and 2 are settled. Phases 1, 2 and 3 are built; see
-[Phase 1, as built](#phase-1-as-built), [Phase 2, as built](#phase-2-as-built) and [Phase 3, as built](#phase-3-as-built).
+Open questions 1 and 2 are settled. Phases 1, 2 and 3 are built, and reviewed (phase 4); see
+[Phase 1, as built](#phase-1-as-built), [Phase 2, as built](#phase-2-as-built), [Phase 3, as built](#phase-3-as-built) and [Phase 4, as built](#phase-4-as-built-the-security-review).
 
 ## Problem
 
@@ -381,6 +381,23 @@ Builder. See `docs/dev/approvals.md`. Where 3a differs from the proposal above:
 - **The link** is absolute when `MATE_PUBLIC_URL` is set, else a path.
 - **Alerts and approvals share `notify.deliver`,** moved out of `AlertService._deliver`.
 - **3b, the editor,** is a dialog of its own (`static/js/approval-settings.js`), opened from the Visual Builder's agent panel, so the agent page of the dashboard redesign can open it too.
+
+### Phase 4, as built: the security review
+
+A code-review at `high` over `2dd6826..2c3e648` (phases 1 to 3b). Each finding was checked by hand, and each fix has a test that fails when the fix is reverted.
+
+**Fixed:**
+- **An answer could be read two ways.** ADK also accepts `{"response": "<json>"}` and reads `"false"` as no; the plugin read only `confirmed`, with Python's `bool`.
+  - A forged wrapper could therefore run a tool the inbox had rejected.
+  - Both runtimes now read answers as ADK does (`answer_confirmed`), and the ADK plugin passes on only a plain `{"confirmed": ...}`.
+- **The check failed open.** With no row, or no database, `gate_answer` passed the chat's answer on, and the plugin passed the message on when it raised. Both now fail closed.
+- **A resumed A2A or MCP run** recorded its next request as a chat's, which nobody could answer. A request now takes the A2A or MCP source of the session's earlier rows.
+- **A trigger could send its output twice** when two requests of one session finished resuming together. Delivery now waits for requests still being resumed, under a lock.
+- **Expiry resumed one run after another** inside the minute's job. Each now resumes in a thread.
+- **`notify.deliver` raised on a malformed `timeout`.**
+- **Missing type hints** in `approval_service` and `run_surface`.
+
+**Not taken:** "a dynamic sub-agent takes its root's settings". Such an agent runs in a `Runner` of its own, without the plugin, so its request never reaches a chat or the inbox, and the tool doesn't run.
 
 ## Phases
 

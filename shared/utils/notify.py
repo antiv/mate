@@ -112,7 +112,10 @@ def deliver(destination_type: str, config: Dict[str, Any], *, text: str, payload
         refusal = outbound_refusal(config.get('url', ''), workspace_id=workspace_id)
         if refusal:
             return False, f"refused: {refusal}"
-    timeout = float(config.get('timeout', DEFAULT_HTTP_TIMEOUT))
+    try:
+        timeout = float(config.get('timeout', DEFAULT_HTTP_TIMEOUT))
+    except (TypeError, ValueError):
+        timeout = DEFAULT_HTTP_TIMEOUT
     if destination_type == 'http':
         return post_json(config.get('url', ''), payload, headers=config.get('headers') or {},
                          timeout=timeout)

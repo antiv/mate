@@ -8,7 +8,7 @@ SURFACE_HEADER. The approval capture plugin reads it, so a request from such a r
 is recorded as a2a or mcp, answered in the inbox, rather than as a chat's.
 """
 
-from contextvars import ContextVar
+from contextvars import ContextVar, Token
 from typing import Optional
 
 # Sent by MATE's MCP bridge on its A2A calls; the auth server's proxy drops it from
@@ -23,10 +23,10 @@ def current() -> Optional[str]:
     return _surface.get()
 
 
-def set_surface(value: Optional[str]):
+def set_surface(value: Optional[str]) -> Token:
     """Set the surface for the current context; returns a token for reset()."""
     return _surface.set(value)
 
 
-def reset(token) -> None:
+def reset(token: Token) -> None:
     _surface.reset(token)

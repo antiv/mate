@@ -110,8 +110,9 @@ def extract_confirmation_responses(new_message: Dict[str, Any]) -> Dict[str, boo
     for part in (new_message or {}).get("parts") or []:
         response = part.get("function_response") or part.get("functionResponse")
         if response and response.get("name") == CONFIRMATION_RESPONSE_NAME and response.get("id"):
-            payload = response.get("response") or {}
-            decisions[response["id"]] = bool(payload.get("confirmed"))
+            # As ADK reads it, wrapper and string booleans included
+            from shared.utils.approval_service import answer_confirmed
+            decisions[response["id"]] = answer_confirmed(response.get("response") or {})
     return decisions
 
 
