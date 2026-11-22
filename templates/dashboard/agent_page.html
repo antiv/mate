@@ -15,7 +15,7 @@
 {% block title %}{{ agent.name if agent else 'New agent' }} - MATE{% endblock %}
 
 {% block extra_head %}
-<link rel="stylesheet" href="/static/css/agent-page.css?v=3">
+<link rel="stylesheet" href="/static/css/agent-page.css?v=4">
 <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.44.0/min/vs/loader.js"></script>
 {% endblock %}
 
@@ -47,8 +47,6 @@
             <a class="m-btn m-btn-secondary m-btn-sm" href="/dashboard/workroom?agent={{ agent.name | urlencode }}" title="Chat with this agent in the Work Room">
                 <i class="fas fa-comments" aria-hidden="true"></i> Test</a>
             {% endif %}
-            <button type="button" class="m-btn m-btn-secondary m-btn-sm" data-click="mateAgentPage.history">
-                <i class="fas fa-history" aria-hidden="true"></i> History</button>
             <details class="m-menu" id="agentMenu">
                 <summary class="m-btn m-btn-secondary m-btn-sm m-btn-icon" aria-label="More actions"><i class="fas fa-ellipsis-h" aria-hidden="true"></i></summary>
                 <div class="m-menu-list" role="menu">
@@ -66,6 +64,10 @@
 
     <div class="m-tabs" role="tablist" data-m-tabs aria-label="Agent">
         <button type="button" class="m-tab" role="tab" id="tab-settings" aria-controls="panel-settings" aria-selected="true">Settings</button>
+        {% if agent %}
+        <button type="button" class="m-tab" role="tab" id="tab-versions" aria-controls="panel-versions" aria-selected="false">Versions</button>
+        <button type="button" class="m-tab" role="tab" id="tab-sessions" aria-controls="panel-sessions" aria-selected="false">Sessions</button>
+        {% endif %}
     </div>
 
     <div id="panel-settings" role="tabpanel" aria-labelledby="tab-settings">
@@ -293,6 +295,35 @@
         </form>
     </div>
 
+    {% if agent %}
+    <div id="panel-versions" role="tabpanel" aria-labelledby="tab-versions" hidden>
+        <div class="m-card agent-versions">
+            {% include 'dashboard/partials/version_history_panes.html' %}
+        </div>
+    </div>
+
+    <div id="panel-sessions" role="tabpanel" aria-labelledby="tab-sessions" hidden>
+        <div class="m-stack">
+            {% if apps | length > 1 %}
+            <div class="m-row">
+                <label class="m-label" for="agentSessionsApp">App</label>
+                <select id="agentSessionsApp" class="m-input m-input-sm agent-sessions-app" data-change="mateAgentPage.reloadSessions">
+                    {% for app in apps %}<option value="{{ app }}">{{ app }}</option>{% endfor %}
+                </select>
+            </div>
+            {% endif %}
+            <p class="m-hint">
+                {% if apps == [agent.name] %}
+                Conversations with this agent, from every surface: the Work Room, the widget, the API, triggers and Slack.
+                {% else %}
+                A sub-agent has no conversations of its own: these are those of the root agent it works under{% if apps | length > 1 %} (one of {{ apps | length }}){% endif %}, {{ apps | join(', ') }}.
+                {% endif %}
+            </p>
+            <div id="agentSessionsTable"></div>
+        </div>
+    </div>
+    {% endif %}
+
     <div class="m-savebar" id="agentSaveBar" {% if mode == 'edit' %}hidden{% endif %} role="region" aria-label="Save">
         <span id="agentSaveState" class="m-muted">{% if mode == 'edit' %}Unsaved changes{% else %}Not created yet{% endif %}</span>
         <span class="m-spacer"></span>
@@ -305,7 +336,6 @@
 
 {% with id_prefix = p %}{% include 'dashboard/modals/file_search_modal.html' %}{% endwith %}
 {% include 'dashboard/modals/memory_blocks_modal.html' %}
-{% include 'dashboard/modals/version_history_modal.html' %}
 {% include 'dashboard/modals/approval_settings_modal.html' %}
 {% endblock %}
 
@@ -316,6 +346,7 @@
     "defaultProjectId": default_project_id,
     "roles": roles,
     "backToVisual": back_to_visual,
+    "apps": apps,
 } | tojson }}</script>
 <script src="/static/js/monaco-fields.js?v=2"></script>
 <script src="/static/js/agent-config.js?v=21"></script>
@@ -323,7 +354,7 @@
 <script src="/static/js/modals/file-search.js?v=25"></script>
 <script src="/static/js/agent-forms.js?v=23"></script>
 <script src="/static/js/modals/memory-blocks.js?v=24"></script>
-<script src="/static/js/modals/version-history.js?v=4"></script>
+<script src="/static/js/modals/version-history.js?v=5"></script>
 <script src="/static/js/approval-settings.js?v=1"></script>
-<script src="/static/js/agent-page.js?v=3"></script>
+<script src="/static/js/agent-page.js?v=4"></script>
 {% endblock %}

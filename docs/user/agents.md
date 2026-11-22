@@ -33,11 +33,22 @@ at the top then leads back to the canvas. **Add Agent** opens an empty one,
 The top of the page names the agent, its type, model and project, and holds:
 
 - **Test**, for a root agent: a chat with it in the Work Room;
-- **History**: earlier versions of the agent, see [below](#history-copies-and-moving-agents);
 - **⋯**: **Copy**, **Open in Visual Builder**, **Export** (a root agent and its tree,
   as a file) and **Delete**.
 
-The **Settings** tab is the agent's editor. More tabs follow in later releases.
+Under it are the tabs. The page's address names the tab open (`#versions`), so a
+reload or a link comes back to it.
+
+- **Settings**: the agent's editor, below.
+- **Versions**: earlier versions of the agent, see
+  [below](#history-copies-and-moving-agents).
+- **Sessions**: the conversations with the agent, from every surface, newest first,
+  with a search box. **Open** shows one in the Session Inspector of
+  [Session Tracking](sessions-and-traces.md). A sub-agent has no conversations of
+  its own: the tab lists those of the root agent it works under, and with more than
+  one root, a list chooses which.
+
+A new agent has only **Settings** until it is created.
 
 ## Edit an agent
 
@@ -221,8 +232,10 @@ EU AI Act requires the notice unless it is already obvious to the person.
 
 ## History, copies and moving agents
 
-- **History**, at the top of the agent's page, lists earlier versions of the agent so you can
-  compare and restore them. Restoring is refused when the version would bring back
+- **Versions**, a tab of the agent's page, lists earlier versions of the agent. Click
+  one to see what it changed from the version before; **Rollback** restores it, and
+  the page reloads on it; **Run Evals** runs the agent's test cases on it; the tag
+  icon names a version. Restoring is refused when the version would bring back
   a name another agent has since taken, a parent agent outside the workspace, or a
   project of another workspace.
 - **Clone to Project** copies an agent and its whole sub-agent tree into another

@@ -252,6 +252,13 @@ runs it as `window.mateAgentPage`.
 - **The instruction** is a Monaco editor (`static/js/monaco-fields.js`, which the
   Visual Builder loads too); the textarea under it stays while Monaco loads, or if
   it doesn't.
+- **Tabs:** Versions and Sessions load when first opened, and the tab open is in
+  the address (`#versions`), so the reload after a rollback comes back to it.
+  Versions holds `dashboard/partials/version_history_panes.html`, the panes the
+  version history dialog shows too, filled by `loadVersionHistory()`
+  (`version-history.js`). Sessions is a `MateTable` on `GET /dashboard/api/sessions`
+  with `exact_app=true`, since `app_name` otherwise matches part of a name; its
+  apps are the agent's root agents, worked out by `_agent_page()`.
 - **File Search** reads the agent from `<prefix>Name` and `<prefix>Project` of the
   form that opened it, `agent` here and `vb` in the Visual Builder.
 

@@ -33,6 +33,9 @@ and admins of a workspace don't have the box, and the API refuses them the view 
 In that view a session of any workspace opens, and can be deleted. **Traces** has the
 same box.
 
+An agent's own conversations are also on its page, in the **Sessions** tab
+([Agents](agents.md#the-agents-page)).
+
 Filter by agent, by user, or search for words that appeared in the conversation or
 for a session id. Open a session to see the **Session Inspector**: each turn in
 order, with the prompt the model received, its reasoning where the model exposes
