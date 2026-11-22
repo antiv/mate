@@ -1,7 +1,7 @@
 # Design: approvals inbox
 
 Status: being built for 2.1.0, tracking #376 (first proposed in #178, feature 3).
-Open questions 1 and 2 are settled. Phase 1 is built, and phase 2 without its page; see
+Open questions 1 and 2 are settled. Phases 1 and 2 are built; see
 [Phase 1, as built](#phase-1-as-built) and [Phase 2, as built](#phase-2-as-built).
 
 ## Problem
@@ -339,8 +339,8 @@ history route (`docs/dev/approvals.md`). Where it differs from the proposal abov
 
 ### Phase 2, as built
 
-The inbox without its page (`docs/dev/approvals.md`): deciding, resuming, triggers
-end to end, expiry, and cancellation with the agent. Where it differs from the
+The inbox (`docs/dev/approvals.md`): deciding, resuming, triggers end to end, expiry,
+cancellation with the agent, and the Approvals page. Where it differs from the
 proposal above:
 
 - **Who decides:** admins of the request's workspace, through `POST /dashboard/api/approvals/{id}/decide`. The `approver` role is still open question 1.
@@ -359,6 +359,10 @@ proposal above:
   - The rows are cancelled in the deleting transaction, and audited once it commits.
   - A deleted session's pending request fails when resumed, with `resume_status` `error`.
 - **Resuming runs in a thread of the auth server.** A restart mid-resume leaves the row `resuming`.
+- **The page** (2b) lists in Waiting only the requests the inbox decides; a chat's waiting request is in History, marked "waiting in the chat".
+  - A row opens a dialog with the arguments, rather than showing them in the list.
+  - The session link opens Session Tracking's inspector, as the run's user may not be the admin.
+  - ADK's default hint, which is addressed to a client, is not shown.
 
 ## Phases
 

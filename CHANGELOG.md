@@ -24,8 +24,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Cancellation:** deleting the agent cancels its waiting requests.
   - **Audit:** each decision, expiry and cancellation has its audit entry.
   - **A2A and MCP:** runs are now recorded as `a2a` and `mcp`, not as a chat's.
-  - **What's missing:** a dashboard page for the waiting requests, which comes next
-- **Dashboard components** (dashboard redesign, step 2, #376) - `static/css/components.css` holds `m-` classes for cards, buttons, form fields, badges, switches, notices, dialogs and tables, on the design tokens only, so they are right in both themes without the Tailwind remap. `static/js/data-table.js` is a shared table with search, sorting, pagination and an empty state, for lists a page loads whole and for lists the API pages; `static/js/dialogs.js` opens and closes dialogs, with Escape, focus and Tab kept inside. See `docs/dev/dashboard-components.md`
+  - **The Approvals page** (Control Room → Governance & Access), with a count of the waiting requests beside it in the sidebar:
+    - **Waiting:** the requests the inbox decides. Each opens with its arguments, Approve, Reject and a note, and a link to its session.
+    - **History:** every request of the workspace, a chat's included, with its decision, who made it, and how the run went on. It can be filtered by decision and source, searched, and is paged.
+  - `GET /dashboard/api/approvals` takes `inbox=true` (leave out a chat's requests) and `q` (search agent, tool and user)
+  - **Session Tracking** opens a session given in its link (`?session_id=…&app_name=…&user_id=…`)
+- **Dashboard components** (dashboard redesign, step 2, #376) - `static/css/components.css` holds `m-` classes for cards, buttons, form fields, badges, switches, notices, dialogs and tables, on the design tokens only, so they are right in both themes without the Tailwind remap. `static/js/data-table.js` is a shared table with search, sorting, pagination and an empty state, for lists a page loads whole and for lists the API pages; `static/js/dialogs.js` opens and closes dialogs, with Escape, focus and Tab kept inside; `static/js/tabs.js` gives tabs their keyboard and ARIA states. See `docs/dev/dashboard-components.md`
 
 ### Security
 

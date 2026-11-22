@@ -455,6 +455,11 @@ mateActions.allow('sessionsApp.closeSessionInspector', 'sessionsApp.copySessionI
         if (document.getElementById('sessionTableBody')) {
             loadSessions(1);
         }
+        // A link to one session (from the Approvals page) opens it in the inspector
+        const linked = new URLSearchParams(window.location.search);
+        if (linked.get('session_id')) {
+            inspectSession('auto', linked.get('app_name') || '', linked.get('user_id') || '', linked.get('session_id'));
+        }
         // A click on the backdrop, outside the dialog, closes the inspector
         const modal = document.getElementById('sessionInspectorModal');
         if (modal) {

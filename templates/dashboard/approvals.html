@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+
+{% block title %}Approvals - MATE{% endblock %}
+
+{% block content %}
+<div class="m-stack">
+
+    <div class="m-page-head">
+        <div>
+            <h2 class="m-page-title">Approvals</h2>
+            <p class="m-page-subtitle">Tool calls that agents paused on, from runs nobody is chatting in: triggers, the API, A2A, MCP, Slack and evals</p>
+        </div>
+    </div>
+
+    <div class="m-tabs" role="tablist" data-m-tabs aria-label="Approvals">
+        <button type="button" class="m-tab" role="tab" id="tab-waiting" aria-controls="panel-waiting" aria-selected="true">
+            Waiting <span id="waitingCount" class="m-count" hidden></span>
+        </button>
+        <button type="button" class="m-tab" role="tab" id="tab-history" aria-controls="panel-history" aria-selected="false">
+            History
+        </button>
+    </div>
+
+    <div id="panel-waiting" role="tabpanel" aria-labelledby="tab-waiting">
+        <div id="waitingTable"></div>
+    </div>
+
+    <div id="panel-history" role="tabpanel" aria-labelledby="tab-history" hidden>
+        <!-- The filters go into the table's toolbar -->
+        <div id="historyFilters">
+            <select id="historyStatus" data-change="ApprovalsPage.reloadHistory" class="m-input m-input-sm" aria-label="Status">
+                <option value="">All statuses</option>
+                {% for status in statuses %}
+                <option value="{{ status }}">{{ status | capitalize }}</option>
+                {% endfor %}
+            </select>
+            <select id="historySource" data-change="ApprovalsPage.reloadHistory" class="m-input m-input-sm" aria-label="Source">
+                <option value="">All sources</option>
+                {% for source in sources %}
+                <option value="{{ source }}">{{ source }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div id="historyTable"></div>
+    </div>
+</div>
+
+<!-- One request: its details, and Approve / Reject while it waits -->
+<div id="approvalDialog" class="m-dialog-backdrop" hidden>
+    <div class="m-dialog m-dialog-lg" role="dialog" aria-modal="true" aria-labelledby="approvalDialogTitle">
+        <div class="m-dialog-head">
+            <h3 id="approvalDialogTitle" class="m-dialog-title">Approval request</h3>
+            <button type="button" aria-label="Close" data-click="ApprovalsPage.closeDialog" class="m-btn m-btn-ghost m-btn-icon">
+                <i class="fas fa-times" aria-hidden="true"></i>
+            </button>
+        </div>
+        <div class="m-dialog-body m-stack">
+            <dl id="approvalDetails" class="m-details"></dl>
+            <div id="approvalHint" class="m-notice" hidden>
+                <i class="fas fa-info-circle" aria-hidden="true"></i>
+                <p id="approvalHintText"></p>
+            </div>
+            <div class="m-field">
+                <span class="m-label" id="approvalArgsLabel">Arguments</span>
+                <pre id="approvalArgs" class="m-pre" aria-labelledby="approvalArgsLabel"></pre>
+            </div>
+            <div id="approvalResult" class="m-field" hidden>
+                <span class="m-label" id="approvalResultLabel">After the decision, the run</span>
+                <pre id="approvalResultText" class="m-pre" aria-labelledby="approvalResultLabel"></pre>
+            </div>
+            <div id="approvalNoteField" class="m-field">
+                <label for="approvalNote">Note (optional)</label>
+                <textarea id="approvalNote" rows="2" maxlength="2000" class="m-input"
+                    placeholder="Why you approve or reject: kept with the request and in the audit log"></textarea>
+            </div>
+        </div>
+        <div class="m-dialog-foot">
+            <a id="approvalSessionLink" class="m-btn m-btn-ghost" href="#" target="_blank" rel="noopener">
+                <i class="fas fa-comments" aria-hidden="true"></i>Open the session
+            </a>
+            <span class="m-spacer"></span>
+            <button type="button" id="approvalReject" data-click="ApprovalsPage.decide" data-args='["reject"]' class="m-btn m-btn-danger">
+                <i class="fas fa-times" aria-hidden="true"></i>Reject
+            </button>
+            <button type="button" id="approvalApprove" data-click="ApprovalsPage.decide" data-args='["approve"]' class="m-btn m-btn-primary">
+                <i class="fas fa-check" aria-hidden="true"></i>Approve
+            </button>
+        </div>
+    </div>
+</div>
+
+<script src="/static/js/approvals-page.js?v=3"></script>
+{% endblock %}

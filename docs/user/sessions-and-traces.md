@@ -51,6 +51,10 @@ What to look for:
 This page shows what people wrote to your agents. It is for administrators only,
 and what you read there deserves the same care as any other customer data.
 
+A link to `/dashboard/sessions?session_id=…&app_name=…&user_id=…` opens that
+session in the inspector straight away. The [Approvals](approvals.md) page links to a
+request's session this way.
+
 ## Traces
 
 A trace is the timeline of one request: every model call, tool call and hand-off

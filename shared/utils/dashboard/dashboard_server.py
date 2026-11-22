@@ -6788,11 +6788,19 @@ class DashboardServer:
             status: Optional[str] = None,
             agent_name: Optional[str] = None,
             source: Optional[str] = None,
+            inbox: bool = False,
+            q: Optional[str] = None,
             limit: int = 100,
             offset: int = 0,
             all_workspaces: bool = False,
         ):
-            """The tool calls agents paused on for approval, newest first, with their decision."""
+            """The tool calls agents paused on for approval, newest first, with their decision.
+
+            inbox=true leaves out the requests a chat answers. q matches the agent, the
+            tool and the user who started the run.
+            """
+            from sqlalchemy import or_
+            from shared.utils.approval_service import SOURCE_CHAT
             from shared.utils.models import ApprovalRequest
             view = self._view_workspace(ctx, all_workspaces)
             if not self.db_client:
@@ -6808,6 +6816,13 @@ class DashboardServer:
                     query = query.filter(ApprovalRequest.agent_name == agent_name)
                 if source:
                     query = query.filter(ApprovalRequest.source == source)
+                if inbox:
+                    query = query.filter(ApprovalRequest.source != SOURCE_CHAT)
+                for word in (q or "").split():
+                    like = f"%{word}%"
+                    query = query.filter(or_(ApprovalRequest.agent_name.ilike(like),
+                                             ApprovalRequest.tool_name.ilike(like),
+                                             ApprovalRequest.user_id.ilike(like)))
                 total = query.count()
                 rows = (query.order_by(ApprovalRequest.requested_at.desc(), ApprovalRequest.id.desc())
                         .offset(max(offset, 0)).limit(min(max(limit, 1), 500)).all())
@@ -8632,6 +8647,20 @@ class DashboardServer:
         # ------------------------------------------------------------------ #
         # Alert rules                                                         #
         # ------------------------------------------------------------------ #
+
+        @self.app.get("/dashboard/approvals", response_class=HTMLResponse, tags=["Dashboard - Pages"])
+        async def dashboard_approvals(request: Request, ctx: RequestContext = Depends(get_request_context)):
+            if not ctx.is_admin:
+                return RedirectResponse(url="/dashboard/workroom", status_code=302)
+            from shared.utils import approval_service
+            return self.templates.TemplateResponse(request, "dashboard/approvals.html", {
+                "request": request,
+                "page_title": "Approvals",
+                "username": ctx.user_id,
+                "statuses": list(approval_service.STATUSES),
+                "sources": list(approval_service.SOURCES),
+                "is_admin": True,
+            })
 
         @self.app.get("/dashboard/alerts", response_class=HTMLResponse, tags=["Dashboard - Pages"])
         async def dashboard_alerts(request: Request, ctx: RequestContext = Depends(get_request_context)):

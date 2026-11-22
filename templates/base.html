@@ -10,6 +10,7 @@
     <script src="/static/js/csp-actions.js?v=3"></script>
     <script src="/static/js/dialogs.js?v=1"></script>
     <script src="/static/js/data-table.js?v=1"></script>
+    <script src="/static/js/tabs.js?v=1"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script nonce="{{ request.state.csp_nonce }}">
         tailwind.config = {
@@ -38,7 +39,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="/static/css/redesign.css">
-    <link rel="stylesheet" href="/static/css/components.css?v=1">
+    <link rel="stylesheet" href="/static/css/components.css?v=4">
     <style>
         @keyframes mate-slide-in { from { transform: translateX(120%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
         @keyframes mate-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
@@ -270,6 +271,7 @@
             font-size: 13px;
             flex-shrink: 0;
         }
+        .mate-nav-item .mate-nav-count { margin-left: auto; }
         .sidebar-active {
             background: var(--accent-soft) !important;
             color: var(--accent) !important;
@@ -412,7 +414,7 @@
     <link rel="stylesheet" href="/static/css/dashboard-responsive.css">
     {% block extra_head %}{% endblock %}
     <script src="/static/js/server-control.js"></script>
-    <script src="/static/js/dashboard-nav.js"></script>
+    <script src="/static/js/dashboard-nav.js?v=2"></script>
 </head>
 {# The installation's own pages are for platform administrators only #}
 {% set platform_admin = is_platform_admin(request) if is_platform_admin is defined else true %}
@@ -663,6 +665,11 @@
                         <span class="sidebar-text">Workspaces</span>
                     </a>
                     {% endif %}
+                    <a href="/dashboard/approvals" class="mate-nav-item {% if request.url.path == '/dashboard/approvals' %}sidebar-active{% endif %}" title="Approvals">
+                        <i class="fas fa-user-check sidebar-icon"></i>
+                        <span class="sidebar-text">Approvals</span>
+                        <span id="approvalsNavCount" class="m-count sidebar-text mate-nav-count" hidden></span>
+                    </a>
                     <a href="/dashboard/members" class="mate-nav-item {% if request.url.path == '/dashboard/members' %}sidebar-active{% endif %}" title="Members">
                         <i class="fas fa-user-friends sidebar-icon"></i>
                         <span class="sidebar-text">Members</span>
