@@ -114,7 +114,7 @@ Latency is only meaningful for comparable traffic, so it has its own selector:
 ### Individual requests
 
 The **Raw Data** view lists every model call with its time, user, agent, model, token
-counts and status. Open a row for the details. This is where to look when one person
+counts, cost and status. Open a row for the details. This is where to look when one person
 reports a problem, or when a cost spike needs explaining.
 
 People without the admin role see **My Usage** in the Work Room: the same figures for
