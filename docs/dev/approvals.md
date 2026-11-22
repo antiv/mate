@@ -74,6 +74,9 @@ object (`shared/utils/approval_config.py`):
   - `summary` is the line the panel shows.
   - A notify destination keeps the fields the dialog doesn't show (`headers`, `timeout`, `subject`) while its type stays the same.
 - **The row keeps the settings of its time.** `record_request` copies `approver`, and sets `expires_at` from `expires_after_minutes`. It reads the agent that asked, else the run's root, as for the scope. A later change of the agent doesn't move requests already waiting.
+- **Agents the database doesn't know:**
+  - A hardcoded sub-agent takes its root's settings.
+  - A sub-agent built by `subagent_delegation` runs in a `Runner` of its own, without the plugin, and its events never reach the chat. A tool it may only run with approval is therefore never approved: the call ends with ADK's "requires confirmation" error.
 
 ## Where rows are written
 
@@ -89,7 +92,10 @@ the auth server's proxy, and the runtime sees them all.
 **On ADK:**
 - The plugin is registered on every App, whatever `MATE_PLUGINS_ENABLED` says, as `MetricsPlugin` is (`create_app_with_context_caching` in `shared/utils/utils.py`).
 - `on_event_callback` returns `None`, and changes the event in place: a call the chat may not answer gets `"mateApprover"` in its args (below), before the runner stores and streams it.
-- `on_user_message_callback` returns `None` when every answer passes as given. Otherwise it returns the message with each answer as the gate allows: its `confirmed` replaced, or the part taken out. A message left with no part gets a text part saying an answer was not passed on, so the run still has a message.
+- `on_user_message_callback` returns the message with each answer as the gate allows, and leaves a message with no answer in it alone.
+  - An answer that goes on is rewritten as a plain `{"confirmed": ...}`, so ADK reads exactly what the gate allowed.
+  - Any other answer is taken out. A message left with no part gets a text part saying an answer was not passed on, so the run still has a message.
+  - If the check itself fails, every answer is taken out.
 - The database writes run in a thread (`asyncio.to_thread`).
 
 **On both runtimes:** the calls go to `shared/utils/approval_service.py`, so a row is the same whichever runtime wrote it. Its functions log and return on failure; they never raise into a run.
@@ -103,7 +109,7 @@ the auth server's proxy, and the runtime sees them all.
 | `agent_name` | the event's author: the agent that asked, which may be a sub-agent |
 | `app_name`, `user_id`, `session_id`, `invocation_id` | the run |
 | `project_id`, `workspace_id` | the agent's, copied when the row is written (`log_projects.scope_of_agent`). An agent the database doesn't know, such as a hardcoded sub-agent, takes its root's |
-| `source` | `a2a` or `mcp` from `run_surface` (below); otherwise `response_metrics.resolve_origin`: `trigger` for user `trigger_runner`, `eval` for `eval_runner`, `api` for sessions starting `openai_sess_`, `slack` for `slack_`, else `chat` |
+| `source` | `a2a` or `mcp` from `run_surface` (below); else the source of an earlier `a2a` or `mcp` row in the same session, since the inbox resumes such a run over `/run_sse` where no surface is set; otherwise `response_metrics.resolve_origin`: `trigger` for user `trigger_runner`, `eval` for `eval_runner`, `api` for sessions starting `openai_sess_`, `slack` for `slack_`, else `chat` |
 | `trigger_id` | the session state key `mate_trigger_id`, which `TriggerRunner._invoke_agent` sets when it creates the session |
 | `status` | `pending`, then `approved`, `rejected`, `expired` or `cancelled` |
 | `approver` | the agent's `approver` when the row was written (V051); `NULL` in rows from before means `chat` |
@@ -143,11 +149,17 @@ ADK keeps the extra key in the args, and reads only `originalFunctionCall` and
 
 | The row | The run receives |
 |---|---|
-| none (the call was never recorded) | the answer as given |
+| none, or the database can't be read | nothing: without the row nobody can tell whether the chat may answer |
 | pending, and the chat may answer | the answer, which decides the row as `record_decision` does |
 | pending, and only the inbox may answer | nothing |
 | approved, rejected or expired, not yet answered | the decision, whatever the answer said. This is how the inbox's resume reaches the run |
 | answered already, or cancelled | nothing |
+
+**Reading the answer.** `answer_confirmed` reads an answer as ADK does
+(`ToolConfirmation.from_response_dict`): `{"confirmed": ...}`, or that wrapped as
+`{"response": <dict or JSON text>}`, with pydantic's reading of booleans, so
+`"false"` is no. An answer it can't read is a rejection. The ADK plugin and the
+LangGraph runtime (`hitl.extract_confirmation_responses`) both use it.
 
 **Marking it answered.** "Answered" is `answered_at`, set by a conditional update
 (`... WHERE answered_at IS NULL`), or with the decision itself for a chat's answer.
@@ -220,7 +232,10 @@ message is a function response named `adk_request_confirmation`, with the row's
 take the chat's answer.
 
 - **Reading the reply:** the run's reply is read with `trigger_runner.collect_reply` and stored in `resume_result`; a failure is stored as `error`.
-- **A trigger's run:** its reply goes through the trigger's output (`TriggerRunner.deliver_after_approval`), and becomes the trigger's last result with `"after_approval": true`. This happens only when no request in its session is still pending, so several requests in one run send one output. A run that asks again while resumed waits again.
+- **A trigger's run:** its reply goes through the trigger's output (`TriggerRunner.deliver_after_approval`), and becomes the trigger's last result with `"after_approval": true`. This happens only when no request in its session is pending or still being resumed (`waiting_in_session`), so several requests in one run send one output.
+  - Storing the outcome and that check happen under one lock (`_FINISH_LOCK`). Of two resumes of one session finishing together, only the last routes the output.
+  - Every resume runs in a thread of the auth server.
+  - A run that asks again while resumed waits again.
 - **Any other run:** its reply stays in its session.
 - **A restart mid-resume:** an auth server restarted while a run is being resumed leaves the row `resuming`.
 - **A renamed agent:** its pending requests still name the old agent, so resuming them fails with `error`.
@@ -240,7 +255,7 @@ The Triggers page shows such a firing with an hourglass.
 **Expiry.** `approval_resume.expire_and_resume` runs every minute on the trigger
 runner's scheduler (`approval_expiry`). An inbox request past `expires_at`:
 - becomes `expired`, by `system`, with an `approval.expired` entry;
-- has its run resumed with `{"confirmed": false}`, so the agent is told no and a trigger's output still goes out.
+- has its run resumed with `{"confirmed": false}`, in a thread of its own (`resume_in_background`), so the agent is told no and a trigger's output still goes out, and a slow agent doesn't hold up the next pass.
 
 A request only the chat answers doesn't expire: the person chatting may still answer it.
 

@@ -236,8 +236,9 @@ class TestAdkPlugin(_Database):
         message = types.Content(role="user", parts=[types.Part(function_response=types.FunctionResponse(
             id="adk-c1", name="adk_request_confirmation", response={"confirmed": False}))])
         self.ctx.user_id = "alice"
-        self.assertIsNone(asyncio.run(self.plugin.on_user_message_callback(
-            invocation_context=self.ctx, user_message=message)))
+        passed = asyncio.run(self.plugin.on_user_message_callback(
+            invocation_context=self.ctx, user_message=message))
+        self.assertEqual(passed.parts[0].function_response.response, {"confirmed": False})
         row, = self.rows()
         self.assertEqual((row.status, row.decided_by), ("rejected", "alice"))
 

@@ -10,8 +10,11 @@ and {confirmed}. Both runtimes take it as the chat's answer would be taken
 Resuming runs in a thread, so a slow agent doesn't hold up the click; the row says
 "resuming" until it finishes. Then:
 
-- a trigger's run, when nothing in its session is pending any more, has its reply
-  routed through the trigger's output (TriggerRunner.deliver_after_approval);
+- a trigger's run, when nothing in its session is pending or still being resumed,
+  has its reply routed through the trigger's output
+  (TriggerRunner.deliver_after_approval). Storing the outcome and that check happen
+  under one lock, so of two resumes of one session finishing together, only the
+  last routes the output;
 - any other run's reply stays in its session.
 """
 
@@ -22,6 +25,9 @@ from typing import Any, Dict, List
 from . import approval_service
 
 logger = logging.getLogger(__name__)
+
+# Resumes run in threads of this process (the decide route, the expiry job)
+_FINISH_LOCK = threading.Lock()
 
 
 def answer_message(confirmation_call_id: str, confirmed: bool) -> Dict[str, Any]:
@@ -54,10 +60,12 @@ def resume(request: Dict[str, Any], confirmed: bool) -> Dict[str, Any]:
         approval_service.finish_resume(request["id"], approval_service.RESUME_ERROR, str(e))
         return {"status": approval_service.RESUME_ERROR, "reply": None}
 
-    approval_service.finish_resume(request["id"], approval_service.RESUME_OK, reply)
-    if request.get("source") == "trigger" and request.get("trigger_id"):
-        if not approval_service.pending_in_session(request["session_id"]):
-            get_trigger_runner().deliver_after_approval(request["trigger_id"], reply)
+    with _FINISH_LOCK:
+        approval_service.finish_resume(request["id"], approval_service.RESUME_OK, reply)
+        deliver = (request.get("source") == "trigger" and bool(request.get("trigger_id"))
+                   and not approval_service.waiting_in_session(request["session_id"]))
+    if deliver:
+        get_trigger_runner().deliver_after_approval(request["trigger_id"], reply)
     return {"status": approval_service.RESUME_OK, "reply": reply}
 
 
@@ -70,8 +78,11 @@ def resume_in_background(request: Dict[str, Any], confirmed: bool) -> threading.
 
 
 def expire_and_resume() -> List[int]:
-    """The periodic job: expire what is due and resume each run with a rejection."""
+    """
+    The periodic job: expire what is due and resume each run with a rejection, each
+    in a thread of its own, so a slow agent doesn't hold up the next pass.
+    """
     expired = approval_service.expire_due()
     for request in expired:
-        resume(request, confirmed=False)
+        resume_in_background(request, confirmed=False)
     return [r["id"] for r in expired]

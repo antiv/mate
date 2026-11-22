@@ -93,11 +93,11 @@ class TestExpiry(_Database):
         self.record(**TRIGGER)
         self.assertEqual(approval_service.expire_due(), [])
 
-    def test_expiry_resumes_with_a_rejection(self):
+    def test_expiry_resumes_with_a_rejection_in_the_background(self):
         self.record(**TRIGGER)
         later = datetime.now(timezone.utc) + timedelta(days=2)
         with patch.object(approval_service, "_now", return_value=later), \
-                patch.object(approval_resume, "resume") as resume:
+                patch.object(approval_resume, "resume_in_background") as resume:
             approval_resume.expire_and_resume()
         resume.assert_called_once()
         self.assertEqual(resume.call_args.kwargs, {"confirmed": False})
@@ -183,6 +183,16 @@ class TestResume(_Database):
                 patch("shared.utils.trigger_runner.get_trigger_runner") as runner:
             approval_resume.resume(request, confirmed=True)
         runner.return_value.deliver_after_approval.assert_not_called()
+
+    def test_two_decisions_in_one_session_send_the_output_once(self):
+        first = self.claimed()
+        second = self.claimed(confirmation_call_id="adk-c2")   # decided, still being resumed
+        with patch("shared.utils.trigger_runner.collect_reply", side_effect=["one done", "both done"]), \
+                patch("shared.utils.trigger_runner.get_trigger_runner") as runner:
+            approval_resume.resume(first, confirmed=True)
+            runner.return_value.deliver_after_approval.assert_not_called()
+            approval_resume.resume(second, confirmed=True)
+        runner.return_value.deliver_after_approval.assert_called_once_with(7, "both done")
 
     def test_a_failed_resume_is_stored(self):
         request = self.claimed()

@@ -99,6 +99,20 @@ def parse_confirmation_call(call_id: Optional[str], args: Any) -> Optional[Dict[
     }
 
 
+def answer_confirmed(response: Any) -> bool:
+    """
+    Whether an answer to a confirmation call approves, read as ADK reads it
+    (ToolConfirmation.from_response_dict): {"confirmed": ...}, or that wrapped as
+    {"response": <dict or JSON text>}, with pydantic's reading of booleans, so
+    "false" is no. An answer it can't read is a rejection.
+    """
+    try:
+        from google.adk.tools.tool_confirmation import ToolConfirmation
+        return bool(ToolConfirmation.from_response_dict(response if isinstance(response, dict) else {}).confirmed)
+    except Exception:
+        return False
+
+
 def serialize_args(tool_args: Any) -> Optional[str]:
     """The arguments as stored: JSON, cut at MAX_ARGS_CHARS (then no longer valid JSON)."""
     if tool_args is None:
@@ -129,7 +143,7 @@ def inbox_decides(source: Optional[str], approver: Optional[str]) -> bool:
     return (source or SOURCE_CHAT) != SOURCE_CHAT or (approver or APPROVER_CHAT) != APPROVER_CHAT
 
 
-def inbox_clause():
+def inbox_clause() -> Any:
     """inbox_decides as a filter on ApprovalRequest."""
     return or_(ApprovalRequest.source != SOURCE_CHAT,
                ApprovalRequest.approver.in_([APPROVER_INBOX, APPROVER_EITHER]))
@@ -153,6 +167,19 @@ def _approval_config(session: Any, *names: str) -> ApprovalConfig:
     return ApprovalConfig()
 
 
+def _session_source(session: Any, session_id: str) -> Optional[str]:
+    """
+    The source of a session's earlier requests when it was A2A or MCP. The inbox
+    resumes such a run over /run_sse, which has no /a2a/ surface, and its user and
+    session ids say nothing of where it came from.
+    """
+    found = (session.query(ApprovalRequest.source)
+             .filter(ApprovalRequest.session_id == session_id,
+                     ApprovalRequest.source.in_(("a2a", "mcp")))
+             .order_by(ApprovalRequest.id.desc()).first())
+    return found[0] if found else None
+
+
 def expire_minutes() -> int:
     """How long a request answered in the inbox waits before it expires (APPROVALS_EXPIRE_MINUTES)."""
     try:
@@ -165,7 +192,7 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def _session():
+def _session() -> Optional[Any]:
     try:
         db = get_database_client()
         if not db or not db.is_connected():
@@ -220,7 +247,7 @@ def record_request(*, confirmation_call_id: Optional[str], args: Any, agent_name
             tool_name=parsed["tool_name"],
             tool_args=serialize_args(parsed["tool_args"]),
             hint=parsed["hint"],
-            source=source or resolve_origin(user_id, session_id),
+            source=source or _session_source(session, session_id) or resolve_origin(user_id, session_id),
             trigger_id=trigger,
             approver=config.approver,
             expires_at=_now() + timedelta(minutes=config.expires_after_minutes or expire_minutes()),
@@ -285,7 +312,8 @@ def gate_answer(*, session_id: str, confirmation_call_id: str, confirmed: bool,
     """
     The answer a run may receive for a confirmation call, or None when it may receive none.
 
-    - No row (the database didn't record the call): the answer as given.
+    - No row, or no database to read it from: None. Without the row nobody can
+      tell whether the chat may answer, so the check fails closed.
     - Pending, and the chat may answer (chat_may_answer): decided by this answer,
       as record_decision, and passed on.
     - Pending otherwise: the inbox answers it, so the chat's answer is dropped.
@@ -295,17 +323,19 @@ def gate_answer(*, session_id: str, confirmation_call_id: str, confirmed: bool,
     """
     session = _session()
     if not session:
-        return confirmed
+        logger.warning("Approval answer dropped: no database to check it against")
+        return None
     try:
         row = (session.query(ApprovalRequest)
                .filter_by(session_id=session_id, confirmation_call_id=confirmation_call_id).first())
         if not row:
-            return confirmed
+            logger.warning("Approval answer dropped: no request recorded for call %s", confirmation_call_id)
+            return None
         source, approver, status = row.source, row.approver, row.status
         request_id = row.id
     except Exception as e:
-        logger.warning("Approval answer not checked: %s", e)
-        return confirmed
+        logger.warning("Approval answer dropped: the request could not be read: %s", e)
+        return None
     finally:
         session.close()
 
@@ -563,6 +593,22 @@ def pending_in_session(session_id: str) -> List[int]:
             ApprovalRequest.session_id == session_id, ApprovalRequest.status == PENDING).all()]
     except Exception as e:
         logger.warning("Pending approval lookup failed: %s", e)
+        return []
+    finally:
+        session.close()
+
+
+def waiting_in_session(session_id: str) -> List[int]:
+    """Ids of a session's requests still pending, or decided and still being resumed."""
+    session = _session()
+    if not session or not session_id:
+        return []
+    try:
+        return [i for (i,) in session.query(ApprovalRequest.id).filter(
+            ApprovalRequest.session_id == session_id,
+            or_(ApprovalRequest.status == PENDING, ApprovalRequest.resume_status == RESUMING)).all()]
+    except Exception as e:
+        logger.warning("Waiting approval lookup failed: %s", e)
         return []
     finally:
         session.close()
