@@ -313,9 +313,9 @@ mateActions.allow('_vhRunEvals', '_vhSelectVersion', '_vhTagVersion',
         if (typeof filterAgents === 'function') {
             filterAgents();
         }
-        // Re-populate the edit form using the existing editAgent() helper
-        if (typeof editAgent === 'function') {
-            editAgent(freshConfig);
+        // The agent page reloads on the rolled-back version, which may have another name
+        if (window.mateAgentPage) {
+            window.mateAgentPage.reloadAs(freshConfig.name);
         }
     }
 

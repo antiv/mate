@@ -1,0 +1,34 @@
+/* The agent page (templates/dashboard/agent_page.html): three columns on a wide
+   screen; on a narrow one they stack, basics first. */
+.agent-page-back { font-size: 12.5px; }
+.agent-page-title .m-page-title { margin-top: 4px; }
+.agent-page-title .m-badge { margin-left: 6px; }
+
+.agent-editor {
+    display: grid;
+    grid-template-columns: minmax(240px, 300px) minmax(0, 1fr) minmax(260px, 340px);
+    gap: 14px;
+    align-items: start;
+}
+@media (max-width: 1180px) {
+    .agent-editor { grid-template-columns: minmax(240px, 300px) minmax(0, 1fr); }
+    .agent-editor-sections { grid-column: 1 / -1; }
+}
+@media (max-width: 760px) {
+    .agent-editor { grid-template-columns: minmax(0, 1fr); }
+}
+
+.agent-editor-switches { gap: 8px; }
+.agent-role-input { flex: 1; min-width: 0; width: auto; }
+
+.agent-instruction-body { display: flex; flex-direction: column; gap: 8px; height: 100%; }
+.agent-instruction-editor,
+.agent-instruction-fallback {
+    height: max(420px, calc(100vh - 330px));
+    border: 1px solid var(--border-strong);
+    border-radius: 10px;
+    overflow: hidden;
+}
+.agent-instruction-fallback { resize: vertical; font-family: var(--m-font-mono); font-size: 13px; }
+
+.agent-summary { max-height: 140px; }

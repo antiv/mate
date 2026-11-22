@@ -116,7 +116,7 @@ Only use general knowledge if file storage doesn't contain relevant information.
 ```
 
 You can add this to the agent's `instruction` field via:
-- Dashboard: Edit agent → **Instruction** field
+- Dashboard: the agent's page → **Instruction**
 - Database: Update `agents_config.instruction` column directly
 
 After updating system instructions, **reinitialize the agent** for changes to take effect.

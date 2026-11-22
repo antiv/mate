@@ -785,7 +785,34 @@ class DashboardServer:
             return []
         finally:
             session.close()
-    
+
+    def _agent_page(self, request: Request, ctx: RequestContext, configs: List[Dict[str, Any]],
+                    agent: Optional[Dict[str, Any]], source: Optional[Dict[str, Any]]) -> HTMLResponse:
+        """The agent page: editing `agent`, or a new agent (a copy of `source` when given)."""
+        from shared.utils.workspaces import roles_in_use
+        session = self.db_client.get_session() if self.db_client else None
+        try:
+            roles = roles_in_use(session, ctx.workspace_id) if session else []
+        finally:
+            if session:
+                session.close()
+        project_param = request.query_params.get("project_id", "")
+        name = agent["name"] if agent else None
+        return self.templates.TemplateResponse(request, "dashboard/agent_page.html", {
+            "request": request,
+            "page_title": name or "New agent",
+            "username": ctx.user_id,
+            "is_admin": True,
+            "agent": agent,
+            "source": source,
+            "projects": self._get_all_projects(ctx.workspace_id),
+            "default_project_id": int(project_param) if project_param.isdigit() else None,
+            # For the parent agents picker
+            "agent_names": sorted(c["name"] for c in configs if c["name"] != name),
+            "roles": roles,
+            "back_to_visual": request.query_params.get("back") == "visual",
+        })
+
     def _create_project(self, name: str, description: Optional[str], workspace_id: int) -> Dict[str, Any]:
         """Create a new project in the workspace."""
         if not self.db_client:
@@ -3989,6 +4016,33 @@ class DashboardServer:
                 "selected_project_id": selected_project_id,
                 "is_admin": True,
             })
+
+        # The agent page (documents/design/dashboard-2.1.md, "The agent page"). These two
+        # come after /dashboard/agents/visual, which they would otherwise take.
+        @self.app.get("/dashboard/agents/new", response_class=HTMLResponse, tags=["Dashboard - Pages"])
+        async def dashboard_agent_new(request: Request, ctx: RequestContext = Depends(get_request_context)):
+            """New agent: the agent editor, empty, or filled from ?from=<name> (Copy)."""
+            if not ctx.is_admin:
+                return RedirectResponse(url="/dashboard/workroom", status_code=302)
+            configs = self._get_all_agent_configs(None, ctx.workspace_id)
+            source = None
+            if request.query_params.get("from"):
+                source = next((c for c in configs if c["name"] == request.query_params["from"]), None)
+                if source is None:
+                    raise HTTPException(status_code=404, detail="Agent not found")
+            return self._agent_page(request, ctx, configs, agent=None, source=source)
+
+        @self.app.get("/dashboard/agents/{agent_name}", response_class=HTMLResponse, tags=["Dashboard - Pages"])
+        async def dashboard_agent_page(agent_name: str, request: Request,
+                                       ctx: RequestContext = Depends(get_request_context)):
+            """An agent's page: its settings in the agent editor."""
+            if not ctx.is_admin:
+                return RedirectResponse(url="/dashboard/workroom", status_code=302)
+            configs = self._get_all_agent_configs(None, ctx.workspace_id)
+            agent = next((c for c in configs if c["name"] == agent_name), None)
+            if agent is None:
+                raise HTTPException(status_code=404, detail="Agent not found")
+            return self._agent_page(request, ctx, configs, agent=agent, source=None)
 
         @self.app.get("/dashboard/templates", response_class=HTMLResponse, tags=["Dashboard - Pages"])
         async def dashboard_templates(request: Request, ctx: RequestContext = Depends(get_request_context)):

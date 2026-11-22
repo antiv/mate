@@ -50,18 +50,19 @@ their own memory blocks and triggers.
 
 ## Create your first agent
 
-1. On the Agents page, with a project selected, click **Add Agent**.
+1. On the Agents page, with a project selected, click **Add Agent**. The new agent's
+   page opens.
 2. Fill in the required fields:
    - **Name**: a short identifier, for example `helper`.
    - **Type**: **LLM**.
-   - **Model Name**: leave empty to use the installation's default model, or enter
+   - **Model**: leave empty to use the installation's default model, or enter
      one such as `gemini-2.5-flash` or `openai/gpt-4o`.
    - **Description**: one sentence about what the agent is for.
-   - **Instruction**: what the agent should do and how it should behave.
-3. In **Allowed Roles**, enter `["user", "admin"]`. An agent answers only people who
-   hold one of the roles listed here, and a new account starts with the `user` role.
-   Left empty, the agent answers only people who have been given the `admin` role.
-4. Save.
+   - **Instruction**, in the centre: what the agent should do and how it should behave.
+3. Under **Allowed roles**, type `user` and press Enter. An agent answers only people
+   who hold one of the roles listed here, and a new member starts with the `user`
+   role. With none, the agent answers only the workspace's owners and admins.
+4. Click **Create agent**.
 
 The [Agents guide](agents.md) explains every field.
 

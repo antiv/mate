@@ -1,0 +1,328 @@
+{% extends "base.html" %}
+{% from 'dashboard/modals/config_modals.html' import config_modals %}
+
+{# The agent page (documents/design/dashboard-2.1.md, "The agent page" and "The editor").
+   agent: the agent edited; None for a new one, then source is the agent copied, if any.
+   The form's fields have the prefix "agent", which the config dialogs and their
+   summaries (agent-forms.js, agent-tools.js, agent-config.js) take. #}
+{% set p = 'agent' %}
+{% set cfg = agent or source %}
+{% set mode = 'edit' if agent else ('copy' if source else 'new') %}
+{% set is_root = agent and not agent.parent_agents %}
+
+{% block title %}{{ agent.name if agent else 'New agent' }} - MATE{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="/static/css/agent-page.css?v=2">
+<script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.44.0/min/vs/loader.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="m-stack agent-page" id="agentPage" data-mode="{{ mode }}">
+
+    <div class="m-page-head">
+        <div class="agent-page-title">
+            {% if back_to_visual %}
+            <a class="m-link agent-page-back" id="agentBackLink" href="/dashboard/agents/visual{% if cfg and cfg.project_id %}?project_id={{ cfg.project_id }}{% endif %}">
+                <i class="fas fa-arrow-left" aria-hidden="true"></i> Visual Builder</a>
+            {% else %}
+            <a class="m-link agent-page-back" id="agentBackLink" href="/dashboard/agents{% if cfg and cfg.project_id %}?project_id={{ cfg.project_id }}{% endif %}">
+                <i class="fas fa-arrow-left" aria-hidden="true"></i> Agents</a>
+            {% endif %}
+            <h2 class="m-page-title">
+                {% if mode == 'edit' %}{{ agent.name }}{% elif mode == 'copy' %}Copy of {{ source.name }}{% else %}New agent{% endif %}
+            </h2>
+            {% if agent %}
+            <p class="m-page-subtitle">
+                {{ agent.type }}{% if agent.model_name %} · {{ agent.model_name }}{% endif %}{% if agent.project %} · Project: {{ agent.project.name }}{% endif %}
+                {% if agent.disabled %}<span class="m-badge m-badge-warning">Disabled</span>{% endif %}
+            </p>
+            {% endif %}
+        </div>
+        {% if agent %}
+        <div class="m-row">
+            {% if is_root %}
+            <a class="m-btn m-btn-secondary m-btn-sm" href="/dashboard/workroom?agent={{ agent.name | urlencode }}" title="Chat with this agent in the Work Room">
+                <i class="fas fa-comments" aria-hidden="true"></i> Test</a>
+            {% endif %}
+            <button type="button" class="m-btn m-btn-secondary m-btn-sm" data-click="mateAgentPage.history">
+                <i class="fas fa-history" aria-hidden="true"></i> History</button>
+            <details class="m-menu" id="agentMenu">
+                <summary class="m-btn m-btn-secondary m-btn-sm m-btn-icon" aria-label="More actions"><i class="fas fa-ellipsis-h" aria-hidden="true"></i></summary>
+                <div class="m-menu-list" role="menu">
+                    <a role="menuitem" href="/dashboard/agents/new?from={{ agent.name | urlencode }}"><i class="fas fa-copy" aria-hidden="true"></i> Copy</a>
+                    <a role="menuitem" href="/dashboard/agents/visual?project_id={{ agent.project_id }}"><i class="fas fa-sitemap" aria-hidden="true"></i> Open in Visual Builder</a>
+                    {% if is_root %}
+                    <button type="button" role="menuitem" data-click="mateAgentPage.exportAgent"><i class="fas fa-file-export" aria-hidden="true"></i> Export</button>
+                    {% endif %}
+                    <button type="button" role="menuitem" class="m-tone-danger" data-click="mateAgentPage.remove"><i class="fas fa-trash" aria-hidden="true"></i> Delete</button>
+                </div>
+            </details>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="m-tabs" role="tablist" data-m-tabs aria-label="Agent">
+        <button type="button" class="m-tab" role="tab" id="tab-settings" aria-controls="panel-settings" aria-selected="true">Settings</button>
+    </div>
+
+    <div id="panel-settings" role="tabpanel" aria-labelledby="tab-settings">
+        <form id="agentForm" class="agent-editor" novalidate data-submit="mateAgentPage.save" data-prevent>
+            <input type="hidden" id="{{ p }}Id" value="{{ agent.id if agent else '' }}">
+
+            {# ── Left: basics ─────────────────────────────── #}
+            <section class="m-card agent-editor-basics" aria-labelledby="basicsTitle">
+                <div class="m-card-body m-stack">
+                    <h3 class="m-section-title" id="basicsTitle">Basics</h3>
+                    <div class="m-field">
+                        <label for="{{ p }}Name">Name</label>
+                        <input type="text" id="{{ p }}Name" class="m-input" required autocomplete="off" spellcheck="false">
+                        <p class="m-hint">Unique across the installation: letters, digits and underscores.</p>
+                    </div>
+                    <div class="m-grid-2">
+                        <div class="m-field">
+                            <label for="{{ p }}Type">Type</label>
+                            <select id="{{ p }}Type" class="m-input">
+                                <option value="llm">LLM</option>
+                                <option value="graph">Graph</option>
+                                <option value="loop">Loop</option>
+                            </select>
+                        </div>
+                        <div class="m-field">
+                            <label for="{{ p }}Project">Project</label>
+                            <select id="{{ p }}Project" class="m-input" required>
+                                <option value="">Select project</option>
+                                {% for project in projects %}
+                                <option value="{{ project.id }}">{{ project.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                    <div class="m-field">
+                        <label for="{{ p }}Model">Model</label>
+                        <input type="text" id="{{ p }}Model" class="m-input" placeholder="gemini/gemini-2.5-flash" spellcheck="false">
+                    </div>
+                    <div class="m-field">
+                        <label for="{{ p }}FallbackModel">Fallback model <span class="m-muted">(optional)</span></label>
+                        <input type="text" id="{{ p }}FallbackModel" class="m-input" placeholder="openai/gpt-4o-mini" spellcheck="false">
+                        <p class="m-hint">Answers instead when the model fails. Uses the provider's server key.</p>
+                    </div>
+                    <div class="m-field">
+                        <label for="{{ p }}Description">Description</label>
+                        <textarea id="{{ p }}Description" class="m-input" rows="3" required></textarea>
+                    </div>
+
+                    <div class="m-field">
+                        <label for="agentParentAdd">Parent agents</label>
+                        <input type="hidden" id="{{ p }}Parents">
+                        <div class="m-chips" id="agentParentChips" aria-live="polite"></div>
+                        <select id="agentParentAdd" class="m-input m-input-sm" data-change="mateAgentPage.addParent" data-args='["$value"]'>
+                            <option value="">+ Add a parent agent</option>
+                            {% for name in agent_names %}
+                            <option value="{{ name }}">{{ name }}</option>
+                            {% endfor %}
+                        </select>
+                        <p class="m-hint" id="agentParentsHint"></p>
+                    </div>
+
+                    <div class="m-field">
+                        <label for="agentRoleAdd">Allowed roles</label>
+                        <input type="hidden" id="{{ p }}Roles">
+                        <div class="m-chips" id="agentRoleChips" aria-live="polite"></div>
+                        <div class="m-row">
+                            <input type="text" id="agentRoleAdd" class="m-input m-input-sm agent-role-input" list="agentRoleNames"
+                                   placeholder="Add a role" autocomplete="off" spellcheck="false"
+                                   data-keyup="mateAgentPage.roleKey" data-args='["$event"]'>
+                            <button type="button" class="m-btn m-btn-secondary m-btn-sm" data-click="mateAgentPage.addRoleFromInput">Add</button>
+                        </div>
+                        <datalist id="agentRoleNames">
+                            {% for role in roles %}
+                            <option value="{{ role.name }}">{{ role.members }} member{{ '' if role.members == 1 else 's' }}</option>
+                            {% endfor %}
+                            <option value="widget">Anonymous visitors of the agent's widget</option>
+                        </datalist>
+                        <p class="m-hint" id="agentRolesHint"></p>
+                        <p class="m-error" id="agentRolesError" hidden></p>
+                    </div>
+
+                    <div class="m-stack agent-editor-switches">
+                        <label class="m-check"><input type="checkbox" id="{{ p }}Disabled"> <span>Disabled</span></label>
+                        <label class="m-check"><input type="checkbox" id="{{ p }}ExposeAsModel">
+                            <span>Expose as model<span class="m-hint">Offer it on the OpenAI-compatible API.</span></span></label>
+                        <label class="m-check"><input type="checkbox" id="{{ p }}DebugMode">
+                            <span>Debug mode<span class="m-hint">Show detailed errors in the chat widget.</span></span></label>
+                    </div>
+                </div>
+            </section>
+
+            {# ── Centre: the instruction ───────────────────── #}
+            <section class="m-card agent-editor-instruction" aria-labelledby="instructionTitle">
+                <div class="m-card-body agent-instruction-body">
+                    <div class="m-row">
+                        <h3 class="m-section-title" id="instructionTitle">Instruction</h3>
+                        <span class="m-spacer"></span>
+                        <span class="m-hint">Markdown</span>
+                    </div>
+                    <textarea id="{{ p }}Instruction" class="m-input agent-instruction-fallback" aria-labelledby="instructionTitle" required></textarea>
+                    <div id="agentInstructionEditor" class="agent-instruction-editor" hidden></div>
+                    <p class="m-hint" id="agentInstructionInfo"></p>
+                </div>
+            </section>
+
+            {# ── Right: the rest, one collapsed section each ── #}
+            <div class="agent-editor-sections">
+                {% macro section(key, title, icon) -%}
+                <details class="m-section" data-section="{{ key }}">
+                    <summary><i class="fas {{ icon }}" aria-hidden="true"></i><span>{{ title }}</span><span class="m-section-state" id="agentState-{{ key }}">—</span></summary>
+                    <div class="m-section-body">{{ caller() }}</div>
+                </details>
+                {%- endmacro %}
+                {% macro json_actions(field, configure_label='Configure', clear_fn='clearJsonField') -%}
+                <div class="m-row">
+                    <button type="button" class="m-btn m-btn-secondary m-btn-sm" data-click="openConfigModal" data-args='["agent", "{{ field }}"]'>{{ configure_label }}</button>
+                    <button type="button" class="m-btn m-btn-sm m-btn-ghost" data-click="{{ clear_fn }}" data-args='{{ (["agent"] if clear_fn != "clearJsonField" else ["agent", field]) | tojson }}'>Clear</button>
+                </div>
+                {%- endmacro %}
+
+                {% call section('tools', 'Tools', 'fa-toolbox') %}
+                    <pre id="{{ p }}ToolConfigSummary" class="m-pre agent-summary" data-empty-text="No tools configured">No tools configured</pre>
+                    {{ json_actions('ToolConfig', clear_fn='resetToolConfig') }}
+                    {% if agent %}
+                    <div class="m-row">
+                        <button type="button" class="m-btn m-btn-sm m-btn-ghost" data-click="mateAgentPage.approvals">
+                            <i class="fas fa-user-check" aria-hidden="true"></i> Approval settings</button>
+                    </div>
+                    {% endif %}
+                {% endcall %}
+
+                {% call section('mcp', 'MCP servers', 'fa-terminal') %}
+                    <pre id="{{ p }}McpServersConfigSummary" class="m-pre agent-summary" data-empty-text="No MCP servers configured">No MCP servers configured</pre>
+                    {{ json_actions('McpServersConfig') }}
+                {% endcall %}
+
+                {% call section('filesearch', 'File Search', 'fa-file-alt') %}
+                    {% if agent %}
+                    <div id="{{ p }}FileSearchSummary" class="m-hint">Loading…</div>
+                    <div class="m-row">
+                        <button type="button" class="m-btn m-btn-secondary m-btn-sm" data-click="openFileSearchModal" data-args='["agent"]'>Manage</button>
+                    </div>
+                    {% else %}
+                    <p class="m-hint">Save the agent first, then give it file search stores here.</p>
+                    {% endif %}
+                {% endcall %}
+
+                {% call section('memory', 'Memory blocks', 'fa-database') %}
+                    <div id="{{ p }}MemoryBlocksSection" class="hidden">
+                        <div class="m-row">
+                            <button type="button" class="m-btn m-btn-secondary m-btn-sm" data-click="openMemoryBlocksFromEditModal" data-args='["agent"]'>Manage Blocks</button>
+                        </div>
+                    </div>
+                    <p class="m-hint" id="agentMemoryHint">Turn on the Memory Blocks tool under Tools to give this agent blocks.</p>
+                {% endcall %}
+
+                {% call section('guardrails', 'Guardrails', 'fa-shield-alt') %}
+                    <pre id="{{ p }}GuardrailConfigSummary" class="m-pre agent-summary" data-empty-text="No guardrails configured">No guardrails configured</pre>
+                    {{ json_actions('GuardrailConfig') }}
+                {% endcall %}
+
+                {% call section('planner', 'Planner', 'fa-cogs') %}
+                    <pre id="{{ p }}PlannerConfigSummary" class="m-pre agent-summary" data-empty-text="No planner configured">No planner configured</pre>
+                    {{ json_actions('PlannerConfig', clear_fn='resetPlannerConfig') }}
+                {% endcall %}
+
+                {% call section('generation', 'Generation', 'fa-sliders-h') %}
+                    <pre id="{{ p }}GenerateContentConfigSummary" class="m-pre agent-summary" data-empty-text="No content parameters configured">No content parameters configured</pre>
+                    {{ json_actions('GenerateContentConfig', clear_fn='resetContentConfig') }}
+                {% endcall %}
+
+                {% call section('io', 'Input/output', 'fa-exchange-alt') %}
+                    <p class="m-label">Input schema</p>
+                    <pre id="{{ p }}InputSchemaSummary" class="m-pre agent-summary" data-empty-text="No input schema defined">No input schema defined</pre>
+                    {{ json_actions('InputSchema', configure_label='Edit') }}
+                    <p class="m-label">Output schema</p>
+                    <pre id="{{ p }}OutputSchemaSummary" class="m-pre agent-summary" data-empty-text="No output schema defined">No output schema defined</pre>
+                    {{ json_actions('OutputSchema', configure_label='Edit') }}
+                    <div class="m-field">
+                        <label for="{{ p }}IncludeContents">Include contents</label>
+                        <select id="{{ p }}IncludeContents" class="m-input">
+                            <option value="">Not set</option>
+                            <option value="default">Default (with conversation history)</option>
+                            <option value="none">None (stateless, no prior contents)</option>
+                        </select>
+                    </div>
+                {% endcall %}
+
+                {% call section('endpoint', 'Model endpoint', 'fa-plug') %}
+                    <div class="m-field">
+                        <label for="{{ p }}ModelBaseUrl">Base URL</label>
+                        <input type="text" id="{{ p }}ModelBaseUrl" class="m-input" placeholder="https://agent.example.com/v1" spellcheck="false">
+                        <p class="m-hint">An OpenAI-compatible endpoint you already run. The model needs a provider prefix, such as <code>openai/my-agent</code>.</p>
+                    </div>
+                    <div class="m-field">
+                        <label for="{{ p }}ModelApiKey">API key</label>
+                        <input type="password" id="{{ p }}ModelApiKey" class="m-input" placeholder="${MY_AGENT_KEY}" autocomplete="off">
+                        <p class="m-hint">Write <code>${VAR}</code> to read it from the server environment. A key typed literally is stored in the database and in this agent's version history.</p>
+                    </div>
+                {% endcall %}
+
+                {% call section('disclosure', 'AI disclosure', 'fa-robot') %}
+                    <div class="m-field">
+                        <label for="{{ p }}AiDisclosure">Notice</label>
+                        <input type="text" id="{{ p }}AiDisclosure" class="m-input" placeholder="You are chatting with an AI assistant.">
+                        <p class="m-hint">Shown to everyone who chats with this agent through the widget. Empty: the default wording.</p>
+                    </div>
+                    <div class="m-field">
+                        <label for="{{ p }}AiDisclosureWaiver">Reason for not disclosing</label>
+                        <input type="text" id="{{ p }}AiDisclosureWaiver" class="m-input" placeholder="Leave empty to keep the notice on">
+                        <p class="m-hint">Filling this in <strong>hides</strong> the notice and records why. EU AI Act Art. 50 requires telling people they are interacting with an AI unless that is already obvious to them.</p>
+                    </div>
+                {% endcall %}
+
+                {% call section('advanced', 'Advanced', 'fa-wrench') %}
+                    <div class="m-field" id="{{ p }}MaxIterationsField">
+                        <label for="{{ p }}MaxIterations">Max iterations</label>
+                        <input type="number" id="{{ p }}MaxIterations" class="m-input" min="1" max="100" placeholder="5">
+                        <p class="m-hint">For a loop agent.</p>
+                    </div>
+                    <label class="m-check"><input type="checkbox" id="{{ p }}Hardcoded" {% if not is_platform_admin(request) %}disabled{% endif %}>
+                        <span>Hardcoded<span class="m-hint">Defined in code under agents/; no folder is made for it.{% if not is_platform_admin(request) %} Only a platform administrator can change this.{% endif %}</span></span></label>
+                {% endcall %}
+            </div>
+        </form>
+    </div>
+
+    <div class="m-savebar" id="agentSaveBar" {% if mode == 'edit' %}hidden{% endif %} role="region" aria-label="Save">
+        <span id="agentSaveState" class="m-muted">{% if mode == 'edit' %}Unsaved changes{% else %}Not created yet{% endif %}</span>
+        <span class="m-spacer"></span>
+        {% if mode == 'edit' %}
+        <button type="button" class="m-btn m-btn-secondary" data-click="mateAgentPage.discard">Discard</button>
+        {% endif %}
+        <button type="submit" form="agentForm" class="m-btn m-btn-primary" id="agentSaveBtn">{% if mode == 'edit' %}Save{% else %}Create agent{% endif %}</button>
+    </div>
+</div>
+
+{{ config_modals(p) }}
+{% with id_prefix = p %}{% include 'dashboard/modals/file_search_modal.html' %}{% endwith %}
+{% include 'dashboard/modals/memory_blocks_modal.html' %}
+{% include 'dashboard/modals/version_history_modal.html' %}
+{% include 'dashboard/modals/approval_settings_modal.html' %}
+{% endblock %}
+
+{% block scripts %}
+<script id="agent-page-data" type="application/json">{{ {
+    "mode": mode,
+    "config": cfg,
+    "defaultProjectId": default_project_id,
+    "roles": roles,
+    "backToVisual": back_to_visual,
+} | tojson }}</script>
+<script src="/static/js/monaco-fields.js?v=1"></script>
+<script src="/static/js/agent-config.js?v=21"></script>
+<script src="/static/js/agent-tools.js?v=25"></script>
+<script src="/static/js/modals/file-search.js?v=25"></script>
+<script src="/static/js/agent-forms.js?v=23"></script>
+<script src="/static/js/modals/memory-blocks.js?v=24"></script>
+<script src="/static/js/modals/version-history.js?v=4"></script>
+<script src="/static/js/approval-settings.js?v=1"></script>
+<script src="/static/js/agent-page.js?v=2"></script>
+{% endblock %}

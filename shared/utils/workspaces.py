@@ -268,6 +268,30 @@ def agent_roles_in(session: Session, workspace_id: Optional[int], user_id: str) 
     return parse_roles(raw) if raw else []
 
 
+def roles_in_use(session: Session, workspace_id: int) -> List[Dict[str, object]]:
+    """
+    The agent role names used in the workspace, with how many members hold each:
+    its members' agent roles and its agents' allowed_for_roles, without the
+    platform roles. The agent editor's roles picker offers them (dashboard-2.1.md).
+    """
+    held: Dict[str, int] = {}
+    for (raw,) in session.query(WorkspaceMember.agent_roles).filter(
+            WorkspaceMember.workspace_id == workspace_id):
+        for role in set(parse_roles(raw) if raw else []):
+            held[role] = held.get(role, 0) + 1
+    names = set(held)
+    for (raw,) in session.query(AgentConfig.allowed_for_roles).join(
+            Project, AgentConfig.project_id == Project.id).filter(Project.workspace_id == workspace_id):
+        try:
+            roles = json.loads(raw) if raw else []
+        except (json.JSONDecodeError, TypeError):
+            continue
+        if isinstance(roles, list):
+            names.update(r for r in roles if isinstance(r, str) and r)
+    return [{"name": name, "members": held.get(name, 0)}
+            for name in sorted(names) if name not in PLATFORM_ROLES]
+
+
 def workspace_of_project(session: Session, project_id: Optional[int]) -> Optional[int]:
     """The project's workspace, or None for no project or an unknown one."""
     if project_id is None:

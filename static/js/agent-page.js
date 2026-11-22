@@ -1,0 +1,540 @@
+/**
+ * The agent page (templates/dashboard/agent_page.html): an agent's settings in the
+ * agent editor, a new agent, or a copy of one (/dashboard/agents/new?from=<name>).
+ *
+ * The form's fields have the prefix "agent". Its configuration dialogs, their
+ * summaries and the tool, planner and content listeners are the shared ones
+ * (agent-forms.js, agent-tools.js, agent-config.js), which take that prefix.
+ *
+ * Saving makes a version, as before: POST /dashboard/api/agents for a new agent,
+ * PUT /dashboard/api/agents/<id> for this one. The save bar shows while something
+ * changed; leaving the page then asks first.
+ */
+mateActions.allow('mateAgentPage.save', 'mateAgentPage.discard', 'mateAgentPage.history',
+                  'mateAgentPage.remove', 'mateAgentPage.exportAgent', 'mateAgentPage.approvals',
+                  'mateAgentPage.addParent', 'mateAgentPage.removeParent',
+                  'mateAgentPage.roleKey', 'mateAgentPage.addRoleFromInput', 'mateAgentPage.removeRole');
+
+(function () {
+    'use strict';
+
+    const P = 'agent';
+    // Roles nobody holds as a member: what each chip says instead of a member count
+    const SPECIAL_ROLES = { widget: 'widget visitors', admin: 'platform administrators' };
+    // The rule the Members page checks (server/member_routes.py, AGENT_ROLE)
+    const ROLE_NAME = /^[A-Za-z0-9_.-]{1,64}$/;
+    const FLASH_KEY = 'mateAgentPageFlash';
+
+    const data = JSON.parse(document.getElementById('agent-page-data').textContent || '{}');
+    const mode = data.mode;                 // edit | new | copy
+    const config = data.config || null;     // the agent edited, or the one copied
+    const roleCounts = new Map((data.roles || []).map((r) => [r.name, r.members]));
+
+    let parents = [];
+    let roles = [];
+    let baseline = null;
+    let saving = false;
+    let instructionEditor = null;
+
+    const el = (id) => document.getElementById(id);
+    const field = (suffix) => el(P + suffix);
+
+    function notify(message, type) {
+        if (typeof showNotification === 'function') showNotification(message, type || 'success');
+    }
+
+    // ── Values ────────────────────────────────────────────────────────────
+
+    // A config value as its form field holds it: JSON pretty-printed, empty for {} and []
+    function asField(value) {
+        if (value === null || value === undefined || value === '') return '';
+        let parsed = value;
+        if (typeof value === 'string') {
+            try { parsed = JSON.parse(value); } catch (e) { return value; }
+        }
+        if (parsed && typeof parsed === 'object') {
+            if (Array.isArray(parsed) ? parsed.length === 0 : Object.keys(parsed).length === 0) return '';
+            return JSON.stringify(parsed, null, 2);
+        }
+        return String(value);
+    }
+
+    function asList(value) {
+        if (Array.isArray(value)) return value.filter((v) => typeof v === 'string' && v);
+        if (typeof value === 'string' && value.trim()) {
+            try { return asList(JSON.parse(value)); } catch (e) { return []; }
+        }
+        return [];
+    }
+
+    const truthy = (value) => value === true || value === 'true' || value === 1 || value === '1';
+
+    // A JSON field: its Monaco editor's text while the JSON view is open
+    function jsonValue(suffix) {
+        const editor = (typeof monacoEditors !== 'undefined') && monacoEditors[P + suffix + 'Editor'];
+        return editor ? getJsonFromEditor(editor) : (field(suffix) ? field(suffix).value : '');
+    }
+
+    function instructionValue() {
+        return instructionEditor ? instructionEditor.getValue() : field('Instruction').value;
+    }
+
+    /** The form as the agents API takes it. */
+    function collect() {
+        const form = new FormData();
+        const value = (suffix) => (field(suffix) ? field(suffix).value : '');
+        form.append('name', value('Name').trim());
+        form.append('project_id', value('Project'));
+        form.append('type', value('Type'));
+        form.append('model_name', value('Model'));
+        form.append('model_base_url', value('ModelBaseUrl'));
+        form.append('fallback_model', value('FallbackModel'));
+        form.append('ai_disclosure', value('AiDisclosure'));
+        form.append('ai_disclosure_waiver', value('AiDisclosureWaiver'));
+        form.append('model_api_key', value('ModelApiKey'));
+        form.append('description', value('Description').trim());
+        form.append('instruction', instructionValue().trim());
+        form.append('parent_agents', parents.length ? JSON.stringify(parents) : '');
+        form.append('allowed_for_roles', roles.length ? JSON.stringify(roles) : '');
+        form.append('tool_config', jsonValue('ToolConfig'));
+        form.append('mcp_servers_config', jsonValue('McpServersConfig'));
+        form.append('planner_config', jsonValue('PlannerConfig'));
+        form.append('generate_content_config', jsonValue('GenerateContentConfig'));
+        form.append('input_schema', jsonValue('InputSchema'));
+        form.append('output_schema', jsonValue('OutputSchema'));
+        form.append('include_contents', value('IncludeContents'));
+        form.append('guardrail_config', jsonValue('GuardrailConfig'));
+        form.append('max_iterations', value('MaxIterations'));
+        form.append('disabled', field('Disabled').checked);
+        form.append('hardcoded', field('Hardcoded').checked);
+        form.append('expose_as_model', field('ExposeAsModel').checked);
+        form.append('debug_mode', field('DebugMode').checked);
+        return form;
+    }
+
+    const snapshot = () => JSON.stringify(Array.from(collect().entries()));
+
+    // ── Filling the form ──────────────────────────────────────────────────
+
+    function fill() {
+        const c = config || {};
+        const set = (suffix, value) => { if (field(suffix)) field(suffix).value = value == null ? '' : value; };
+        set('Name', mode === 'copy' ? `${c.name}_copy` : (c.name || ''));
+        set('Type', c.type || 'llm');
+        const projectId = c.project_id != null ? c.project_id : data.defaultProjectId;
+        set('Project', projectId != null ? String(projectId) : '');
+        set('Model', c.model_name);
+        set('FallbackModel', c.fallback_model);
+        set('Description', c.description);
+        set('Instruction', c.instruction);
+        set('ModelBaseUrl', c.model_base_url);
+        // A copy never saw the original key: an empty field, not the stored sentinel
+        set('ModelApiKey', mode === 'copy' && c.model_api_key === '__stored__' ? '' : c.model_api_key);
+        set('AiDisclosure', c.ai_disclosure);
+        set('AiDisclosureWaiver', c.ai_disclosure_waiver);
+        set('IncludeContents', c.include_contents);
+        set('MaxIterations', c.max_iterations);
+        set('ToolConfig', asField(c.tool_config));
+        set('McpServersConfig', asField(c.mcp_servers_config));
+        set('PlannerConfig', asField(c.planner_config));
+        set('GenerateContentConfig', asField(c.generate_content_config));
+        set('InputSchema', asField(c.input_schema));
+        set('OutputSchema', asField(c.output_schema));
+        set('GuardrailConfig', asField(c.guardrail_config));
+        field('Disabled').checked = truthy(c.disabled);
+        field('Hardcoded').checked = truthy(c.hardcoded);
+        field('ExposeAsModel').checked = truthy(c.expose_as_model);
+        field('DebugMode').checked = truthy(c.debug_mode);
+        parents = asList(c.parent_agents);
+        roles = asList(c.allowed_for_roles);
+
+        // The dialogs' presets from the JSON, and the summaries from both
+        syncJsonToToolConfig(P);
+        syncJsonToPlannerConfig(P);
+        syncJsonToContentConfig(P);
+        syncJsonToGuardrailConfig(P);
+        setupToolListeners(P);
+        setupPlannerListeners(P);
+        setupContentGenerationListeners(P);
+        initializeConfigSummaryHandling([P]);
+        renderParents();
+        renderRoles();
+        showMaxIterations();
+        updateInstructionInfo();
+    }
+
+    // ── Section states ────────────────────────────────────────────────────
+
+    function parsed(suffix) {
+        try { return JSON.parse(jsonValue(suffix) || 'null'); } catch (e) { return null; }
+    }
+
+    function setState(key, text) {
+        const state = el('agentState-' + key);
+        if (!state) return;
+        state.textContent = text || '—';
+        state.classList.toggle('is-set', !!text);
+    }
+
+    function updateStates() {
+        const tools = parsed('ToolConfig') || {};
+        const on = Object.keys(tools).filter((k) => tools[k] && k !== 'require_confirmation').length;
+        setState('tools', on ? `${on} on` : '');
+        const mcp = parsed('McpServersConfig') || {};
+        const servers = Object.keys(mcp.mcpServers || mcp || {}).length;
+        setState('mcp', servers ? String(servers) : '');
+        const memory = tools.memory_blocks && tools.memory_blocks.enabled !== false;
+        setState('memory', memory ? 'on' : '');
+        if (el('agentMemoryHint')) el('agentMemoryHint').hidden = !!memory;
+        if (typeof updateMemoryBlocksSectionVisibility === 'function') updateMemoryBlocksSectionVisibility(P, tools);
+        setState('guardrails', parsed('GuardrailConfig') ? 'on' : '');
+        const planner = parsed('PlannerConfig');
+        setState('planner', planner && planner.type ? String(planner.type).replace(/Planner$/, '') : '');
+        setState('generation', parsed('GenerateContentConfig') ? 'set' : '');
+        const io = [parsed('InputSchema') && 'in', parsed('OutputSchema') && 'out',
+                    field('IncludeContents').value && 'contents'].filter(Boolean);
+        setState('io', io.join(' · '));
+        setState('endpoint', field('ModelBaseUrl').value.trim() ? 'set' : '');
+        setState('disclosure', field('AiDisclosureWaiver').value.trim() ? 'hidden' : 'on');
+        const advanced = [field('Type').value === 'loop' && field('MaxIterations').value && `${field('MaxIterations').value} iterations`,
+                          field('Hardcoded').checked && 'hardcoded'].filter(Boolean);
+        setState('advanced', advanced.join(' · '));
+    }
+
+    function showMaxIterations() {
+        field('MaxIterationsField').hidden = field('Type').value !== 'loop';
+    }
+
+    function updateInstructionInfo() {
+        const info = el('agentInstructionInfo');
+        if (!info) return;
+        const count = instructionValue().length;
+        let text = `${count.toLocaleString()} character${count === 1 ? '' : 's'}`;
+        if (mode === 'edit' && config && config.updated_at) {
+            const when = new Date(config.updated_at);
+            if (!isNaN(when)) text += ` · last saved ${when.toLocaleString()}`;
+        }
+        info.textContent = text;
+    }
+
+    // ── Pickers ───────────────────────────────────────────────────────────
+
+    function chip(label, extra, onRemoveAction, value) {
+        const span = document.createElement('span');
+        span.className = 'm-chip';
+        span.textContent = label;
+        if (extra) {
+            const small = document.createElement('small');
+            small.textContent = extra;
+            span.appendChild(small);
+        }
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.setAttribute('aria-label', `Remove ${label}`);
+        remove.dataset.click = onRemoveAction;
+        remove.dataset.args = JSON.stringify([value]);
+        remove.innerHTML = '<i class="fas fa-times" aria-hidden="true"></i>';
+        span.appendChild(remove);
+        return span;
+    }
+
+    function renderParents() {
+        const box = el('agentParentChips');
+        box.replaceChildren(...parents.map((name) => chip(name, '', 'mateAgentPage.removeParent', name)));
+        field('Parents').value = parents.length ? JSON.stringify(parents) : '';
+        Array.from(el('agentParentAdd').options).forEach((o) => { o.hidden = !!o.value && parents.includes(o.value); });
+        el('agentParentAdd').value = '';
+        el('agentParentsHint').textContent = parents.length
+            ? 'A sub-agent: its parents hand it work.'
+            : 'None: a root agent, with an app of its own.';
+    }
+
+    function renderRoles() {
+        const box = el('agentRoleChips');
+        box.replaceChildren(...roles.map((name) => {
+            const held = roleCounts.get(name) || 0;
+            const who = SPECIAL_ROLES[name] || `${held} member${held === 1 ? '' : 's'}`;
+            return chip(name, who, 'mateAgentPage.removeRole', name);
+        }));
+        field('Roles').value = roles.length ? JSON.stringify(roles) : '';
+        el('agentRolesHint').textContent = roles.length
+            ? 'Members who hold one of these roles can run the agent, besides the workspace\'s owners and admins.'
+            : 'No role: only the workspace\'s owners and admins, and platform administrators, can run this agent.';
+    }
+
+    function addParent(name) {
+        if (name && !parents.includes(name)) parents.push(name);
+        renderParents();
+        changed();
+    }
+
+    function removeParent(name) {
+        parents = parents.filter((p) => p !== name);
+        renderParents();
+        changed();
+    }
+
+    function addRole(name) {
+        const error = el('agentRolesError');
+        name = (name || '').trim();
+        error.hidden = true;
+        if (!name) return;
+        if (!ROLE_NAME.test(name)) {
+            error.textContent = 'A role is letters, digits, "_", "." and "-", at most 64 characters.';
+            error.hidden = false;
+            return;
+        }
+        if (!roles.includes(name)) roles.push(name);
+        el('agentRoleAdd').value = '';
+        renderRoles();
+        changed();
+    }
+
+    function removeRole(name) {
+        roles = roles.filter((r) => r !== name);
+        renderRoles();
+        changed();
+    }
+
+    // ── Dirty state ───────────────────────────────────────────────────────
+
+    function isDirty() {
+        return baseline !== null && snapshot() !== baseline;
+    }
+
+    function changed() {
+        updateStates();
+        updateInstructionInfo();
+        if (mode !== 'edit') return;
+        const dirty = isDirty();
+        el('agentSaveBar').hidden = !dirty;
+    }
+
+    function markClean() {
+        baseline = snapshot();
+        changed();
+    }
+
+    // ── The instruction editor ────────────────────────────────────────────
+
+    function startInstructionEditor() {
+        if (typeof initMonacoEditor !== 'function' || typeof require === 'undefined') return;
+        const container = el('agentInstructionEditor');
+        container.hidden = false;
+        initMonacoEditor('agentInstructionEditor', field('Instruction').value, 'markdown').then((editor) => {
+            instructionEditor = editor;
+            field('Instruction').hidden = true;
+            editor.onDidChangeModelContent(() => {
+                field('Instruction').value = editor.getValue();
+                changed();
+            });
+        }).catch(() => { container.hidden = true; });
+    }
+
+    // ── Saving ────────────────────────────────────────────────────────────
+
+    function flash(message) {
+        try { sessionStorage.setItem(FLASH_KEY, message); } catch (e) { /* shown on no page then */ }
+    }
+
+    function pageUrl(name) {
+        const url = '/dashboard/agents/' + encodeURIComponent(name);
+        return data.backToVisual ? `${url}?back=visual` : url;
+    }
+
+    function leave(url) {
+        baseline = null;   // nothing to ask about
+        window.location.href = url;
+    }
+
+    function invalid(message, suffix) {
+        notify(message, 'error');
+        if (suffix && field(suffix)) field(suffix).focus();
+        return true;
+    }
+
+    function check(form) {
+        if (!form.get('name')) return invalid('A name is required.', 'Name');
+        if (!form.get('project_id')) return invalid('Select a project for this agent.', 'Project');
+        if (!form.get('description')) return invalid('A description is required.', 'Description');
+        if (!form.get('instruction')) return invalid('An instruction is required.');
+        return false;
+    }
+
+    async function folderStep(form) {
+        // A root agent that is not hardcoded runs from a folder under agents/
+        const name = form.get('name');
+        const hardcoded = form.get('hardcoded') === 'true';
+        const wasHardcoded = !!(config && mode === 'edit' && truthy(config.hardcoded));
+        if (parents.length) return null;
+        if (mode !== 'edit' && !hardcoded) {
+            const yes = await showConfirm(`This is a root agent. Create a folder for it under agents/${name}/, from the template agent?`,
+                'Create agent folder', 'Create folder', 'Skip', 'info');
+            return yes ? 'create' : null;
+        }
+        if (mode === 'edit' && wasHardcoded && !hardcoded) {
+            const yes = await showConfirm(`This agent is no longer hardcoded. Create a folder for it under agents/${name}/?`,
+                'Create agent folder', 'Create folder', 'Skip', 'info');
+            return yes ? 'create' : null;
+        }
+        if (mode === 'edit' && !wasHardcoded && hardcoded) {
+            const yes = await showConfirm(`This agent is now hardcoded. Delete its folder agents/${name}/ if there is one?`,
+                'Delete agent folder', 'Delete', 'Keep', 'warning');
+            return yes ? 'delete' : null;
+        }
+        return null;
+    }
+
+    async function folderAction(action, name) {
+        if (!action) return '';
+        try {
+            const response = await fetch(`/dashboard/api/agents/${encodeURIComponent(name)}/${action}-folder`, {
+                method: action === 'create' ? 'POST' : 'DELETE', credentials: 'same-origin' });
+            const result = await response.json();
+            if (!result.success) return ` The folder was not ${action}d: ${result.message || response.status}.`;
+            if (action === 'create') return result.skipped ? ' Its folder was there already.' : ` Folder created at agents/${name}/.`;
+            return result.folder_deleted ? ' Its folder was deleted.' : '';
+        } catch (e) {
+            return ` The folder was not ${action}d.`;
+        }
+    }
+
+    async function save() {
+        if (saving) return;
+        const form = collect();
+        if (check(form)) return;
+        const folder = await folderStep(form);
+        const button = el('agentSaveBtn');
+        saving = true;
+        button.disabled = true;
+        try {
+            const editing = mode === 'edit';
+            const response = await fetch(editing ? `/dashboard/api/agents/${config.id}` : '/dashboard/api/agents', {
+                method: editing ? 'PUT' : 'POST', credentials: 'same-origin', body: form });
+            let result = {};
+            try { result = await response.json(); } catch (e) { result = {}; }
+            if (!response.ok || !result.success) {
+                notify(result.message || result.detail || `Not saved (${response.status})`, 'error');
+                return;
+            }
+            const name = form.get('name');
+            const folderNote = await folderAction(folder, name);
+            if (editing) {
+                // The agent server builds it again from the saved configuration
+                fetch(`/dashboard/api/agents/${encodeURIComponent(name)}/reinitialize`,
+                      { method: 'POST', credentials: 'same-origin' }).catch(() => {});
+            }
+            flash((editing ? 'Saved.' : 'Agent created.') + folderNote);
+            leave(pageUrl(name));
+        } catch (e) {
+            notify(`Not saved: ${e.message}`, 'error');
+        } finally {
+            saving = false;
+            button.disabled = false;
+        }
+    }
+
+    async function discard() {
+        if (!isDirty()) return;
+        const yes = await showConfirm('Discard the changes made since the last save?',
+            'Discard changes', 'Discard', 'Keep editing', 'danger');
+        if (yes) leave(window.location.href);
+    }
+
+    // ── The header's actions ──────────────────────────────────────────────
+
+    function closeMenu() {
+        const menu = el('agentMenu');
+        if (menu) menu.open = false;
+    }
+
+    function history() {
+        if (config && mode === 'edit') showVersionHistoryModal(config.id, config.name);
+    }
+
+    async function remove() {
+        closeMenu();
+        const back = el('agentBackLink').getAttribute('href');
+        deleteAgent(config.id, config.name, truthy(config.hardcoded), () => leave(back));
+    }
+
+    async function exportAgent() {
+        closeMenu();
+        try {
+            const params = new URLSearchParams({ root_agent: config.name, project_id: config.project_id });
+            const response = await fetch(`/dashboard/api/agents/export?${params}`, { credentials: 'same-origin' });
+            if (!response.ok) throw new Error(String(response.status));
+            const exported = await response.json();
+            const url = URL.createObjectURL(new Blob([JSON.stringify(exported, null, 2)], { type: 'application/json' }));
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${config.name}-${new Date().toISOString().split('T')[0]}.json`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
+        } catch (e) {
+            notify(`Export failed: ${e.message}`, 'error');
+        }
+    }
+
+    function approvals() {
+        // The dialog's settings go into the Tools field; Save stores them with the rest
+        window.mateApprovalSettings.open({ name: field('Name').value, tool_config: jsonValue('ToolConfig') || '{}' },
+            async (toolConfig) => {
+                field('ToolConfig').value = asField(toolConfig);
+                syncJsonToToolConfig(P);
+                updateToolConfigSummary(P);
+                changed();
+                return true;
+            });
+    }
+
+    function roleKey(event) {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            addRole(el('agentRoleAdd').value);
+        }
+    }
+
+    // ── Start ─────────────────────────────────────────────────────────────
+
+    function start() {
+        fill();
+        field('Type').addEventListener('change', showMaxIterations);
+        // Enter in the role field adds the role rather than submitting the form
+        el('agentRoleAdd').addEventListener('keydown', (event) => { if (event.key === 'Enter') event.preventDefault(); });
+        el('agentForm').addEventListener('input', changed);
+        el('agentForm').addEventListener('change', changed);
+        // The configuration dialogs write their fields outside the form
+        document.addEventListener('click', () => setTimeout(changed, 0));
+        startInstructionEditor();
+        if (mode === 'edit' && typeof loadFileSearchData === 'function') loadFileSearchData(P);
+        markClean();
+
+        window.addEventListener('beforeunload', (event) => {
+            if (isDirty()) {
+                event.preventDefault();
+                event.returnValue = '';
+            }
+        });
+        try {
+            const message = sessionStorage.getItem(FLASH_KEY);
+            if (message) {
+                sessionStorage.removeItem(FLASH_KEY);
+                notify(message);
+            }
+        } catch (e) { /* no flash */ }
+    }
+
+    window.mateAgentPage = {
+        save, discard, history, remove, exportAgent, approvals,
+        addParent, removeParent, removeRole, roleKey,
+        addRoleFromInput: () => addRole(el('agentRoleAdd').value),
+        reloadAs: (name) => leave(pageUrl(name)),
+        isDirty,
+    };
+
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
+    else start();
+})();
