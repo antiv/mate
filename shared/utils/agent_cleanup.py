@@ -20,7 +20,9 @@ dashboard's update and rollback call it when the name changes.
 Every path that deletes agents calls delete_agent_rows() in the same transaction:
 the dashboard's agent and project delete, the create_agent tool and the wizard's
 trial cleanup. Logs (token usage, guardrails, responses, feedback, audit) stay:
-they record what happened and are not read by the agent.
+they record what happened and are not read by the agent. Approval requests stay
+too, as history; the ones still waiting are cancelled, with an approval.cancelled
+audit entry once the deletion commits.
 """
 
 import json
@@ -99,6 +101,12 @@ def delete_agent_rows(session: Session, agent_names: Iterable[str]) -> Dict[str,
         delete("lg_events", session.query(LangGraphEvent).filter(LangGraphEvent.session_id.in_(threads)))
         delete("lg_sessions", session.query(LangGraphSession).filter(LangGraphSession.id.in_(threads)))
     removed["langgraph_threads"] = threads
+
+    # Its approval requests still waiting: cancelled, kept as history
+    from .approval_service import cancel_in_transaction
+    cancelled = cancel_in_transaction(session, names)
+    if cancelled:
+        removed["approval_requests_cancelled"] = len(cancelled)
 
     inspector = inspect(session.connection())
     existing = set(inspector.get_table_names())

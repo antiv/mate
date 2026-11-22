@@ -300,6 +300,8 @@ const TriggerPage = (function () {
                 _showNotification(`Fired OK${preview ? ': "' + preview + (result.agent_response.length > 120 ? '…"' : '"') : ''}`, 'success', 8000);
             } else if (result.status === 'skipped') {
                 _showNotification('Trigger type not yet implemented: ' + result.message, 'warning', 5000);
+            } else if (result.status === 'awaiting_approval') {
+                _showNotification('Waiting for approval: the agent asked before running a tool. The answer is sent once the request is decided.', 'info', 8000);
             } else {
                 _showNotification('Fire returned error: ' + result.message, 'error');
             }
@@ -512,8 +514,9 @@ const TriggerPage = (function () {
     function _lastStatus(t) {
         const r = t.last_result;
         if (!r) return '';
-        const cls = r.status === 'ok' ? 'text-green-500' : r.status === 'skipped' ? 'text-yellow-500' : 'text-red-500';
-        const icon = r.status === 'ok' ? 'fa-check-circle' : r.status === 'skipped' ? 'fa-minus-circle' : 'fa-exclamation-circle';
+        const waiting = r.status === 'awaiting_approval';
+        const cls = r.status === 'ok' ? 'text-green-500' : r.status === 'skipped' ? 'text-yellow-500' : waiting ? 'text-blue-500' : 'text-red-500';
+        const icon = r.status === 'ok' ? 'fa-check-circle' : r.status === 'skipped' ? 'fa-minus-circle' : waiting ? 'fa-hourglass-half' : 'fa-exclamation-circle';
         return `<i class="fas ${icon} ${cls} ml-1" title="${_esc(r.message || r.status)}"></i>`;
     }
 

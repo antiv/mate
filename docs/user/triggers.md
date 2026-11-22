@@ -128,6 +128,14 @@ A destination that is missing what it needs, such as an HTTP callback without a 
 or an email on a server without outgoing mail, is refused when you save. If a
 delivery fails anyway, **Last Run** shows the run as failed with the reason.
 
+**An agent that must ask before a tool.** Some agents ask for approval before they
+run a tool (`require_confirmation`, see [Tools and MCP servers](tools-and-mcp.md)).
+The run then waits for an administrator to decide:
+- **Last Run** shows an hourglass, and **Test fire** says the run is waiting;
+- nothing is sent until the request is decided or expires;
+- then the answer the agent gives goes to the destination, and **Last Run** shows how
+  that went.
+
 A memory block destination is how one agent hands work to another: a trigger writes
 the block overnight, and an agent with memory blocks enabled reads it the next day.
 

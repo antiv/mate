@@ -503,8 +503,9 @@ async def proxy_adk(request: Request, path: str, username: str = Depends(get_aut
             logger.error("Error preprocessing run_sse payload: %s", e, exc_info=True)
 
     from shared.utils.a2a_routes import A2A_USER_HEADER
+    from shared.utils.run_surface import SURFACE_HEADER
     headers = {key: value for key, value in request.headers.items()
-               if key.lower() not in ("host", "content-length", A2A_USER_HEADER)}
+               if key.lower() not in ("host", "content-length", A2A_USER_HEADER, SURFACE_HEADER)}
     if not admin and _A2A_PATH.match(path):
         # A2A runs the agent as A2A_USER_<context id> otherwise, an id the client picks:
         # it would continue anyone's session that has it (shared/utils/a2a_routes.py)

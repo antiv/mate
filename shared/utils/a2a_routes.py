@@ -81,13 +81,24 @@ class CallerAsA2AUser:
         self.app = app
 
     async def __call__(self, scope: Dict[str, Any], receive: Any, send: Any) -> None:
-        if scope.get("type") == "http" and scope.get("path", "").startswith("/a2a/"):
-            for name, value in scope.get("headers", []):
-                if name.decode("latin-1").lower() == A2A_USER_HEADER:
-                    from starlette.authentication import SimpleUser
-                    scope = {**scope, "user": SimpleUser(value.decode("utf-8", "replace"))}
-                    break
-        await self.app(scope, receive, send)
+        if scope.get("type") != "http" or not scope.get("path", "").startswith("/a2a/"):
+            await self.app(scope, receive, send)
+            return
+        from . import run_surface
+        surface = "a2a"
+        for name, value in scope.get("headers", []):
+            header = name.decode("latin-1").lower()
+            if header == A2A_USER_HEADER:
+                from starlette.authentication import SimpleUser
+                scope = {**scope, "user": SimpleUser(value.decode("utf-8", "replace"))}
+            elif header == run_surface.SURFACE_HEADER and value.decode("latin-1").lower() == "mcp":
+                surface = "mcp"
+        # The run started by this request, and the tasks it creates, see the surface
+        token = run_surface.set_surface(surface)
+        try:
+            await self.app(scope, receive, send)
+        finally:
+            run_surface.reset(token)
 
 
 def register_a2a_routes(app: Any, app_names: Iterable[str],

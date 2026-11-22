@@ -9,16 +9,19 @@ looks the same whichever runtime wrote it (documents/design/approvals-inbox.md):
   auth server.
 - LangGraph: the executor (shared/utils/langgraph/executor.py).
 
-Phase 1 only records. A row is decided when the answer comes back in the same
-session, which today means a chat; nothing here changes how a run goes. Every
-function returns quietly on failure, because it runs beside a live response.
+A row is decided by the answer coming back in the same session (a chat), or in
+the inbox (claim_decision), which then resumes the run (approval_resume.py). A
+run with nobody in a chat (source other than chat) can only be answered in the
+inbox, and expires after APPROVALS_EXPIRE_MINUTES. The functions that run beside
+a live response return quietly on failure.
 """
 
 import hashlib
 import json
 import logging
-from datetime import datetime, timezone
-from typing import Any, Dict, Iterable, Optional
+import os
+from datetime import datetime, timedelta, timezone
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from sqlalchemy import update
 from sqlalchemy.exc import IntegrityError
@@ -37,7 +40,22 @@ MAX_ARGS_CHARS = 16_000
 PENDING = "pending"
 APPROVED = "approved"
 REJECTED = "rejected"
-STATUSES = (PENDING, APPROVED, REJECTED, "expired", "cancelled")
+EXPIRED = "expired"
+CANCELLED = "cancelled"
+STATUSES = (PENDING, APPROVED, REJECTED, EXPIRED, CANCELLED)
+
+# Where the run came from. Only a chat has someone to answer in it; every other
+# source is answered in the inbox.
+SOURCE_CHAT = "chat"
+SOURCES = (SOURCE_CHAT, "api", "trigger", "slack", "eval", "a2a", "mcp")
+
+# resume_status while the run is being resumed, and after
+RESUMING = "resuming"
+RESUME_OK = "ok"
+RESUME_ERROR = "error"
+MAX_RESULT_CHARS = 4_000
+
+DEFAULT_EXPIRE_MINUTES = 24 * 60
 
 RESOURCE_TYPE = "approval_request"
 
@@ -93,6 +111,18 @@ def args_digest(stored_args: Optional[str]) -> Optional[str]:
     return hashlib.sha256(stored_args.encode("utf-8")).hexdigest()
 
 
+def expire_minutes() -> int:
+    """How long a request answered in the inbox waits before it expires (APPROVALS_EXPIRE_MINUTES)."""
+    try:
+        return max(1, int(os.getenv("APPROVALS_EXPIRE_MINUTES", str(DEFAULT_EXPIRE_MINUTES))))
+    except ValueError:
+        return DEFAULT_EXPIRE_MINUTES
+
+
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
 def _session():
     try:
         db = get_database_client()
@@ -107,12 +137,13 @@ def _session():
 def record_request(*, confirmation_call_id: Optional[str], args: Any, agent_name: Optional[str],
                    app_name: str, user_id: str, session_id: str,
                    invocation_id: Optional[str] = None,
-                   trigger_id: Any = None) -> Optional[int]:
+                   trigger_id: Any = None, source: Optional[str] = None) -> Optional[int]:
     """
     Write a pending row for a confirmation call; returns its id.
 
     Writing the same call twice (same session and confirmation id) leaves the first
-    row and returns its id.
+    row and returns its id. source overrides what the user and session ids say
+    (A2A and MCP runs, which carry no marker of their own in either).
     """
     parsed = parse_confirmation_call(confirmation_call_id, args)
     if not parsed:
@@ -146,8 +177,9 @@ def record_request(*, confirmation_call_id: Optional[str], args: Any, agent_name
             tool_name=parsed["tool_name"],
             tool_args=serialize_args(parsed["tool_args"]),
             hint=parsed["hint"],
-            source=resolve_origin(user_id, session_id),
+            source=source or resolve_origin(user_id, session_id),
             trigger_id=trigger,
+            expires_at=_now() + timedelta(minutes=expire_minutes()),
         )
         session.add(row)
         try:
@@ -197,22 +229,7 @@ def record_decision(*, session_id: str, confirmation_call_id: str, confirmed: bo
         row = (session.query(ApprovalRequest)
                .filter_by(session_id=session_id, confirmation_call_id=confirmation_call_id)
                .one())
-        from . import audit_service
-        audit_service.log(
-            actor=row.decided_by,
-            action=f"approval.{status}",
-            resource_type=RESOURCE_TYPE,
-            resource_id=str(row.id),
-            details={
-                "agent": row.agent_name,
-                "tool": row.tool_name,
-                "source": row.source,
-                "decided_via": via,
-                "args_sha256": args_digest(row.tool_args),
-            },
-            project_id=row.project_id,
-            workspace_id=row.workspace_id,
-        )
+        _audit(row, status, via)
         return True
     except Exception as e:
         logger.warning("Approval decision not recorded: %s", e)
@@ -221,6 +238,205 @@ def record_decision(*, session_id: str, confirmation_call_id: str, confirmed: bo
         except Exception:
             pass
         return False
+    finally:
+        session.close()
+
+
+def _audit(row: ApprovalRequest, status: str, via: str, **extra: Any) -> None:
+    from . import audit_service
+    details = {
+        "agent": row.agent_name,
+        "tool": row.tool_name,
+        "source": row.source,
+        "decided_via": via,
+        "args_sha256": args_digest(row.tool_args),
+    }
+    details.update({k: v for k, v in extra.items() if v is not None})
+    audit_service.log(
+        actor=row.decided_by or "system",
+        action=f"approval.{status}",
+        resource_type=RESOURCE_TYPE,
+        resource_id=str(row.id),
+        details=details,
+        project_id=row.project_id,
+        workspace_id=row.workspace_id,
+    )
+
+
+def snapshot(row: ApprovalRequest) -> Dict[str, Any]:
+    """What resuming needs, read before the database session closes."""
+    return {"id": row.id, "app_name": row.app_name, "user_id": row.user_id,
+            "session_id": row.session_id, "confirmation_call_id": row.confirmation_call_id,
+            "source": row.source, "trigger_id": row.trigger_id, "status": row.status}
+
+
+DECISIONS = {"approve": True, "reject": False}
+
+
+def claim_decision(request_id: int, *, decision: Any, decided_by: str, note: Any,
+                   row_filters: Tuple = ()) -> Tuple[int, Any]:
+    """
+    Decide a pending request in the inbox: (200, snapshot), or an HTTP status and a message.
+
+    - 404 when no row has that id among row_filters (another workspace's), whatever
+      the decision says;
+    - 400 for a decision other than "approve" or "reject", or a note that isn't text;
+    - 409 when the request is answered in the chat, or no longer pending: the
+      update only takes a pending row, so of two clicks one wins.
+
+    On 200 the row is decided and audited, and resume_status is "resuming"; the
+    caller resumes the run (approval_resume.resume_in_background).
+    """
+    session = _session()
+    if not session:
+        return 503, "Database unavailable"
+    try:
+        row = session.query(ApprovalRequest).filter(
+            ApprovalRequest.id == request_id, *row_filters).first()
+        if not row:
+            return 404, "Approval request not found"
+        if decision not in DECISIONS:
+            return 400, 'decision must be "approve" or "reject"'
+        if note is not None and not isinstance(note, str):
+            return 400, "note must be text"
+        if row.source == SOURCE_CHAT:
+            return 409, "This request is answered in the chat it came from."
+        status = APPROVED if DECISIONS[decision] else REJECTED
+        note = (note or "").strip()[:2000] or None
+        result = session.execute(
+            update(ApprovalRequest)
+            .where(ApprovalRequest.id == request_id, ApprovalRequest.status == PENDING)
+            .values(status=status, decided_by=decided_by, decided_via="inbox",
+                    decided_at=_now(), note=note, resume_status=RESUMING))
+        session.commit()
+        if result.rowcount != 1:
+            return 409, "This request has already been decided."
+        session.refresh(row)
+        _audit(row, status, "inbox", note=note)
+        return 200, {**snapshot(row), "confirmed": DECISIONS[decision]}
+    except Exception as e:
+        logger.error("Approval decision failed: %s", e)
+        try:
+            session.rollback()
+        except Exception:
+            pass
+        return 500, "The decision could not be saved."
+    finally:
+        session.close()
+
+
+def expire_due(now: Optional[datetime] = None) -> List[Dict[str, Any]]:
+    """
+    Expire the inbox's pending requests whose time is up; returns their snapshots.
+
+    Each becomes "expired" with an approval.expired audit entry by "system", and is
+    left "resuming": the caller resumes its run with a rejection. A chat's request
+    doesn't expire: the person chatting may still answer it.
+    """
+    session = _session()
+    if not session:
+        return []
+    expired: List[Dict[str, Any]] = []
+    try:
+        cutoff = now or _now()
+        due = (session.query(ApprovalRequest.id)
+               .filter(ApprovalRequest.status == PENDING, ApprovalRequest.source != SOURCE_CHAT,
+                       ApprovalRequest.expires_at.isnot(None), ApprovalRequest.expires_at <= cutoff)
+               .all())
+        for (request_id,) in due:
+            result = session.execute(
+                update(ApprovalRequest)
+                .where(ApprovalRequest.id == request_id, ApprovalRequest.status == PENDING)
+                .values(status=EXPIRED, decided_by="system", decided_via="system",
+                        decided_at=_now(), resume_status=RESUMING))
+            session.commit()
+            if result.rowcount != 1:
+                continue
+            row = session.get(ApprovalRequest, request_id)
+            _audit(row, EXPIRED, "system")
+            expired.append(snapshot(row))
+        return expired
+    except Exception as e:
+        logger.warning("Approval expiry skipped: %s", e)
+        try:
+            session.rollback()
+        except Exception:
+            pass
+        return expired
+    finally:
+        session.close()
+
+
+def cancel_in_transaction(session: Any, agent_names: Iterable[str],
+                          actor: Optional[str] = None) -> List[int]:
+    """
+    Cancel the pending requests of agents being deleted, in the caller's transaction.
+
+    A request goes with the agent that asked or the root of its run. Nothing is
+    resumed: the run has nowhere to go. The approval.cancelled entries are written
+    once the caller commits, so a rolled-back deletion leaves none. Returns the ids.
+    """
+    from sqlalchemy import event, or_
+    names = sorted({n for n in agent_names if n})
+    if not names:
+        return []
+    ids = [i for (i,) in session.query(ApprovalRequest.id).filter(
+        ApprovalRequest.status == PENDING,
+        or_(ApprovalRequest.agent_name.in_(names), ApprovalRequest.app_name.in_(names))).all()]
+    if not ids:
+        return []
+    session.query(ApprovalRequest).filter(
+        ApprovalRequest.id.in_(ids), ApprovalRequest.status == PENDING,
+    ).update({ApprovalRequest.status: CANCELLED, ApprovalRequest.decided_by: actor or "system",
+              ApprovalRequest.decided_via: "system", ApprovalRequest.decided_at: _now()},
+             synchronize_session=False)
+
+    def audit_after_commit(_committed: Any) -> None:
+        audit_session = _session()
+        if not audit_session:
+            return
+        try:
+            for row in audit_session.query(ApprovalRequest).filter(ApprovalRequest.id.in_(ids)):
+                _audit(row, CANCELLED, "system", reason="agent deleted")
+        except Exception as e:
+            logger.warning("approval.cancelled entries not written: %s", e)
+        finally:
+            audit_session.close()
+
+    event.listen(session, "after_commit", audit_after_commit, once=True)
+    return ids
+
+
+def pending_in_session(session_id: str) -> List[int]:
+    """Ids of the requests still pending in a session."""
+    session = _session()
+    if not session or not session_id:
+        return []
+    try:
+        return [i for (i,) in session.query(ApprovalRequest.id).filter(
+            ApprovalRequest.session_id == session_id, ApprovalRequest.status == PENDING).all()]
+    except Exception as e:
+        logger.warning("Pending approval lookup failed: %s", e)
+        return []
+    finally:
+        session.close()
+
+
+def finish_resume(request_id: int, status: str, result: Optional[str]) -> None:
+    """Store what happened when the run was resumed."""
+    session = _session()
+    if not session:
+        return
+    try:
+        session.execute(update(ApprovalRequest).where(ApprovalRequest.id == request_id).values(
+            resume_status=status, resume_result=(result or "")[:MAX_RESULT_CHARS] or None))
+        session.commit()
+    except Exception as e:
+        logger.warning("Resume outcome not stored for request %s: %s", request_id, e)
+        try:
+            session.rollback()
+        except Exception:
+            pass
     finally:
         session.close()
 

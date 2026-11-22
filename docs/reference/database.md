@@ -420,7 +420,7 @@ Model `ApprovalRequest`. A tool call an agent paused on for approval (require_co
 | `tool_name` | `String(255)` | not null | — | — |
 | `tool_args` | `Text` | — | — | JSON, capped (approval_service.MAX_ARGS_CHARS) |
 | `hint` | `Text` | — | — | — |
-| `source` | `String(20)` | not null | `'chat'` | chat \| api \| trigger \| slack \| eval (response_metrics.resolve_origin) |
+| `source` | `String(20)` | not null | `'chat'` | chat \| api \| trigger \| slack \| eval (response_metrics.resolve_origin) \| a2a \| mcp (run_surface) |
 | `trigger_id` | `Integer` | — | — | — |
 | `requested_at` | `DateTime` | not null | `(computed)` | — |
 | `expires_at` | `DateTime` | — | — | — |

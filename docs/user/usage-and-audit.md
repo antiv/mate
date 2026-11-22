@@ -136,8 +136,10 @@ What is recorded:
 - users and projects created, changed and deleted
 - sign-ins and sign-outs
 - **every refusal of a person by an agent's role check**
-- each approval given or refused in a chat, for a tool that asks first
-  (`approval.approved`, `approval.rejected`; see [Tools and MCP servers](tools-and-mcp.md))
+- each approval given or refused for a tool that asks first, in a chat or by an
+  administrator, and each one that expired or was cancelled with its agent
+  (`approval.approved`, `approval.rejected`, `approval.expired`,
+  `approval.cancelled`; see [Tools and MCP servers](tools-and-mcp.md))
 - widget keys and rate limits created, changed and deleted
 - templates imported, created, synced and deleted
 - database migrations, and the agent server being started, stopped or restarted

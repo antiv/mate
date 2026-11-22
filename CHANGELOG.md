@@ -17,6 +17,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Coverage:** both runtimes, and every surface, A2A and MCP included. Nothing about how a run goes changes.
   - **The history:** admins can list the requests at `GET /dashboard/api/approvals`, scoped to their workspace. The dashboard page comes with the inbox
   - **Triggers:** the session a trigger opens now carries the trigger's id in its state (`mate_trigger_id`)
+- **Approval for runs nobody is chatting in** (approvals inbox, phase 2) - a trigger, an A2A or MCP call, the OpenAI-compatible API, Slack or an eval that reaches a tool which asks first now waits for an administrator, instead of stopping for good:
+  - **Deciding:** `POST /dashboard/api/approvals/<id>/decide` with `approve` or `reject` and an optional note. The run then continues in the background from where it stopped. Two decisions on one request: the first wins, the second gets 409. A chat's request is still answered in the chat.
+  - **Triggers:** a trigger whose run waits shows an hourglass on **Last Run**, and sends nothing until every request of the run is decided; then the agent's answer goes to the trigger's destination.
+  - **Expiry:** a request nobody decides expires after `APPROVALS_EXPIRE_MINUTES` (default a day), and the run continues as if it had been rejected.
+  - **Cancellation:** deleting the agent cancels its waiting requests.
+  - **Audit:** each decision, expiry and cancellation has its audit entry.
+  - **A2A and MCP:** runs are now recorded as `a2a` and `mcp`, not as a chat's.
+  - **What's missing:** a dashboard page for the waiting requests, which comes next
 
 ### Security
 

@@ -1,7 +1,8 @@
 # Design: approvals inbox
 
 Status: being built for 2.1.0, tracking #376 (first proposed in #178, feature 3).
-Open questions 1 and 2 are settled. Phase 1 is built; see [Phase 1, as built](#phase-1-as-built).
+Open questions 1 and 2 are settled. Phase 1 is built, and phase 2 without its page; see
+[Phase 1, as built](#phase-1-as-built) and [Phase 2, as built](#phase-2-as-built).
 
 ## Problem
 
@@ -335,6 +336,29 @@ history route (`docs/dev/approvals.md`). Where it differs from the proposal abov
 - **The page moved to phase 2.** Phase 1 has the route `GET /dashboard/api/approvals`.
   - The Approvals page, with Waiting and History, is built in phase 2.
   - It uses the components of the dashboard redesign (`documents/design/dashboard-2.1.md`), whose step 2 comes before it.
+
+### Phase 2, as built
+
+The inbox without its page (`docs/dev/approvals.md`): deciding, resuming, triggers
+end to end, expiry, and cancellation with the agent. Where it differs from the
+proposal above:
+
+- **Who decides:** admins of the request's workspace, through `POST /dashboard/api/approvals/{id}/decide`. The `approver` role is still open question 1.
+- **A chat's request is answered in the chat; the inbox answers 409.**
+  - This holds until the `approver` setting of phase 3 lets the inbox take a chat's request.
+  - Taking one before then could run the tool twice: once from the inbox, and again from a late answer on the card.
+- **A2A and MCP runs are told apart now.**
+  - The agent server's `/a2a/` middleware sets a context variable that the capture plugin reads: `a2a`, or `mcp` when MATE's MCP bridge sends `x-mate-surface: mcp`.
+  - The proxy drops that header from what clients send.
+- **A trigger waits for its whole session.**
+  - Its output goes out when no request in the firing's session is pending, not per invocation.
+  - A resumed run that asks again starts a new invocation in the same session, and the output still waits for it.
+  - The firing records `awaiting_approval` until then. The final result carries `"after_approval": true`.
+- **Expiry covers the inbox's requests only.** A chat's request has someone who may still answer it. The wait is `APPROVALS_EXPIRE_MINUTES` (default 1440); the per-agent `expires_after_minutes` is phase 3's.
+- **Cancellation covers deleting an agent, not a session.**
+  - The rows are cancelled in the deleting transaction, and audited once it commits.
+  - A deleted session's pending request fails when resumed, with `resume_status` `error`.
+- **Resuming runs in a thread of the auth server.** A restart mid-resume leaves the row `resuming`.
 
 ## Phases
 

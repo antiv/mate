@@ -79,16 +79,37 @@ only that call:
   there the agent replies after the first answer, treating the calls not yet
   answered as still waiting, and answering them later still runs or skips them.
 
-Approval only comes from a chat. A run that nobody is chatting in, such as a
-trigger, an A2A or MCP call or the OpenAI-compatible API, stops at the tool and
-nothing can answer it, so don't require approval for tools those runs use.
+### When nobody is chatting
 
-MATE keeps a record of each request: the agent, the tool and its arguments, where
-the run came from (a chat, a trigger, the API, Slack or an eval), and how it was
-answered. Each answer given in a chat goes into the audit log as
-`approval.approved` or `approval.rejected`, with who answered (see
-[Usage and audit logs](usage-and-audit.md)). The audit entry doesn't hold the
-arguments. The dashboard has no page for these requests yet.
+A run that nobody is chatting in has no card to click. Examples are a trigger, an
+A2A or MCP call, the OpenAI-compatible API, Slack and an eval. Such a run stops at
+the tool and its request waits for an administrator of the workspace.
+
+- **Approving** runs the tool, and the agent carries on.
+- **Rejecting** tells the agent it may not.
+- **Either way,** the run continues from where it stopped, and a trigger then sends
+  its answer to its destination (see [Triggers](triggers.md)).
+- **Nobody decides:** after a day the request expires, as if it had been rejected.
+  Your administrator can change the wait (`APPROVALS_EXPIRE_MINUTES`, in minutes).
+- **The agent is deleted first:** its waiting requests are cancelled.
+
+The dashboard has no page for waiting requests yet. Until it does, an
+administrator decides one through the dashboard API:
+`POST /dashboard/api/approvals/<id>/decide`, with `{"decision": "approve"}` or
+`{"decision": "reject"}` and an optional `"note"`. `GET /dashboard/api/approvals`
+lists them.
+
+### The record
+
+MATE keeps a record of each request:
+- the agent, the tool and its arguments;
+- where the run came from;
+- who answered, and how.
+
+Each decision goes into the audit log (see [Usage and audit logs](usage-and-audit.md)):
+`approval.approved`, `approval.rejected`, `approval.expired` or `approval.cancelled`,
+with who decided and an administrator's note. The audit entry doesn't hold the
+arguments.
 
 ## Connect an MCP server
 

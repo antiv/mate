@@ -57,17 +57,18 @@ outcome:
 1. `POST /apps/{agent}/users/trigger_runner/sessions` creates a fresh session. Its
    state names the trigger, `{"mate_trigger_id": <id>}`, so an approval request the
    run makes is recorded with the trigger ([Approval requests](approvals.md)).
-2. `POST /run_sse` streams the run. The runner keeps the last text produced by the
-   last author, discarding text that preceded a tool call.
+2. `POST /run_sse` streams the run. `collect_reply` keeps the last text produced by
+   the last author, discarding text that preceded a tool call. It returns an
+   `AgentReply`: the text, with the session's id as `session_id`.
 
 Consequences:
 
 - The user id is always `trigger_runner`. Usage is attributed to the `trigger`
   origin (`shared/utils/response_metrics.py`).
 - Every firing is a new session, so there is no conversation state between runs.
-- **A run that reaches a `require_confirmation` tool stops there.**
-  - The reply is the text before the pause, often empty, and the firing is recorded as `ok`.
-  - The request is in `approval_requests` as `pending`, with `source` `trigger`, and nothing answers it yet.
+- **A run that reaches a `require_confirmation` tool stops there.** Its request waits in the inbox, as `pending` with `source` `trigger` ([Approval requests](approvals.md)).
+  - The firing returns `{"status": "awaiting_approval", "session_id", "approval_requests"}` and routes nothing.
+  - Once no request in its session is pending, the resumed run's reply is routed by `deliver_after_approval`, which stores it as the last result with `"after_approval": true`.
 - It uses synchronous `httpx` because it runs on APScheduler worker threads. A
   webhook or test-fire request therefore blocks until the agent finishes.
 - Timeouts are 30 s for session creation and 120 s without data on the stream.
@@ -101,13 +102,14 @@ job store, then calls `sync_cron_jobs()`.
 > workers starts a scheduler in each, and every cron trigger fires once per worker.
 > Run a single worker when cron triggers are in use.
 
-`start()` also registers three system jobs on the same scheduler:
+`start()` also registers four system jobs on the same scheduler:
 
 | Job id | Schedule | Enabled by |
 |---|---|---|
 | `alert_rule_evaluation` | every `ALERTS_INTERVAL_SECONDS` (default 60, minimum 10) | `ALERTS_ENABLED` |
 | `wizard_trial_cleanup` | daily 03:00 UTC | `WIZARD_CLEANUP_ENABLED` (default on) |
 | `user_cleanup` | daily 03:30 UTC | `CLEANUP_USER_ENABLED` (default on) |
+| `approval_expiry` | every 60 s | always: expires the inbox's approval requests past `expires_at` and resumes their runs with a rejection |
 
 The `/dashboard/api/system-jobs` routes pause and reschedule them in memory only.
 
