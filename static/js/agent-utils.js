@@ -1,267 +1,13 @@
 /**
  * Agent Utilities Module
- * Monaco editor integration, hierarchy management, filtering, and modal controls
+ * The Agents list: hierarchy, filtering, clone, import, and the instruction editor
+ * dialog. The agent editor itself is the agent page (agent-page.js).
  */
 
-// ============================================================================
-// Monaco Editor Integration
-// ============================================================================
-
-// Monaco Editor instances
 // Handlers this file's markup calls through data-click and friends (csp-actions.js)
-mateActions.allow('filterAgents', 'hideCloneAgentModal', 'hideCopyAgentModal',
-                  'hideCreateAgentModal', 'hideEditAgentModal', 'hideImportModal',
-                  'openInstructionModal', 'showCreateAgentModal', 'showImportModal',
-                  'submitCloneAgent', 'toggleJsonEditor', 'updateClonePreview',
-                  'updateCloneSuffix');
-
-let monacoEditors = {};
-
-/**
- * Initialize Monaco Editor
- */
-function initMonacoEditor(containerId, initialValue = '', language = 'json') {
-    return new Promise((resolve) => {
-        require.config({ paths: { 'vs': 'https://cdn.jsdelivr.net/npm/monaco-editor@0.44.0/min/vs' } });
-        require(['vs/editor/editor.main'], function () {
-            const editor = monaco.editor.create(document.getElementById(containerId), {
-                value: initialValue,
-                language: language,
-                theme: document.documentElement.classList.contains('dark') ? 'vs-dark' : 'vs',
-                automaticLayout: true,
-                minimap: { enabled: false },
-                scrollBeyondLastLine: false,
-                wordWrap: 'on',
-                formatOnPaste: true,
-                formatOnType: true,
-                suggestOnTriggerCharacters: true,
-                acceptSuggestionOnEnter: 'on',
-                tabCompletion: 'on',
-                wordBasedSuggestions: 'off',
-                folding: true,
-                lineNumbers: 'on',
-                renderLineHighlight: 'line',
-                selectOnLineNumbers: true,
-                roundedSelection: false,
-                readOnly: false,
-                cursorStyle: 'line',
-                fontSize: 14,
-                lineHeight: 20
-            });
-
-            // Add JSON validation only for JSON language
-            if (language === 'json') {
-                monaco.languages.json.jsonDefaults.setDiagnosticsOptions({
-                    validate: true,
-                    allowComments: false,
-                    schemas: []
-                });
-            }
-
-            resolve(editor);
-        });
-    });
-}
-
-/**
- * Get JSON from Monaco editor
- */
-function getJsonFromEditor(editor) {
-    if (!editor) return '';
-    return editor.getValue();
-}
-
-/**
- * Set JSON in Monaco editor
- */
-function setJsonInEditor(editor, value) {
-    if (!editor) return;
-    editor.setValue(value);
-}
-
-/**
- * Toggle between textarea and Monaco editor
- */
-function toggleJsonEditor(textareaId, editorId, language = 'json') {
-    const textarea = document.getElementById(textareaId);
-    const editorContainer = document.getElementById(editorId);
-
-    if (editorContainer.style.display === 'none') {
-        // Show Monaco editor
-        textarea.style.display = 'none';
-        editorContainer.style.display = 'block';
-
-        if (!monacoEditors[editorId]) {
-            initMonacoEditor(editorId, textarea.value, language).then(editor => {
-                monacoEditors[editorId] = editor;
-            });
-        }
-    } else {
-        // Show textarea
-        editorContainer.style.display = 'none';
-        textarea.style.display = 'block';
-
-        if (monacoEditors[editorId]) {
-            textarea.value = getJsonFromEditor(monacoEditors[editorId]);
-            textarea.dispatchEvent(new Event('input', { bubbles: true }));
-        }
-    }
-}
-
-// ============================================================================
-// Modal Controls
-// ============================================================================
-
-function showCreateAgentModal() {
-    if (typeof window.selectedProjectId === 'undefined' || window.selectedProjectId === null) {
-        showNotification('Select a project before creating agents.', 'warning');
-        return;
-    }
-
-    const projectSelect = document.getElementById('agentProject');
-    if (projectSelect) {
-        projectSelect.value = String(window.selectedProjectId);
-    }
-
-    document.getElementById('createAgentModal').classList.remove('hidden');
-    rememberAgentPanel('createAgentModal');
-}
-
-function hideCreateAgentModal() {
-    document.getElementById('createAgentModal').classList.add('hidden');
-    document.getElementById('createAgentForm').reset();
-    if (typeof updateConfigSummaries === 'function') {
-        updateConfigSummaries('agent');
-    }
-}
-
-function showEditAgentModal() {
-    document.getElementById('editAgentModal').classList.remove('hidden');
-    rememberAgentPanel('editAgentModal');
-}
-
-function hideEditAgentModal() {
-    document.getElementById('editAgentModal').classList.add('hidden');
-    document.getElementById('editAgentForm').reset();
-    if (typeof updateConfigSummaries === 'function') {
-        updateConfigSummaries('editAgent');
-    }
-}
-
-
-function showCopyAgentModal() {
-    document.getElementById('copyAgentModal').classList.remove('hidden');
-    rememberAgentPanel('copyAgentModal');
-}
-
-function hideCopyAgentModal() {
-    document.getElementById('copyAgentModal').classList.add('hidden');
-    document.getElementById('copyAgentForm').reset();
-    if (typeof updateConfigSummaries === 'function') {
-        updateConfigSummaries('copyAgent');
-    }
-}
-
-// --- Closing the agent panels (#312) ------------------------------------
-// The Create, Edit and Copy panels (agent_modal_macro.html) close on a click
-// outside them and on Escape, asking first when the form has unsaved changes.
-// Their backdrop names its hide function in data-cancel-fn.
-
-const agentPanelSnapshots = {};
-let agentPanelAsking = false;
-
-function agentPanelValues(modal) {
-    const form = modal.querySelector('form');
-    return JSON.stringify(Array.from(form ? form.elements : [])
-        .filter((el) => el.id || el.name)
-        .map((el) => [el.id || el.name,
-            el.type === 'checkbox' || el.type === 'radio' ? el.checked
-                : el.multiple ? Array.from(el.selectedOptions, (o) => o.value) : el.value]));
-}
-
-// Called once the panel is filled and shown
-function rememberAgentPanel(modalId) {
-    const modal = document.getElementById(modalId);
-    if (modal) agentPanelSnapshots[modalId] = agentPanelValues(modal);
-}
-
-function agentPanelChanged(modal) {
-    if (agentPanelValues(modal) !== agentPanelSnapshots[modal.id]) return true;
-    // A Monaco editor writes back to its field (the id without "Editor") only
-    // when it is toggled off
-    return Object.entries(monacoEditors).some(([editorId, editor]) => {
-        const container = document.getElementById(editorId);
-        const field = document.getElementById(editorId.replace(/Editor$/, ''));
-        return editor && container && field && modal.contains(container)
-            && container.style.display !== 'none' && editor.getValue() !== field.value;
-    });
-}
-
-function openAgentPanel() {
-    return document.querySelector('[data-cancel-fn]:not(.hidden)');
-}
-
-async function requestCloseAgentPanel(modal) {
-    if (agentPanelAsking) return;
-    if (agentPanelChanged(modal)) {
-        agentPanelAsking = true;
-        try {
-            const discard = await showConfirm('This agent has changes that are not saved. Close it and discard them?',
-                'Unsaved changes', 'Discard', 'Keep editing', 'danger');
-            if (!discard) return;
-        } finally {
-            agentPanelAsking = false;
-        }
-    }
-    if (!modal.classList.contains('hidden')) mateActions.run(modal.dataset.cancelFn);
-}
-
-// The dialogs open over the panel (tool and MCP config, parent agents, the
-// instruction editor, version history...): fixed overlays above its z-index
-function dialogOverAgentPanel(modal) {
-    const base = parseInt(getComputedStyle(modal).zIndex, 10) || 0;
-    let top = null;
-    let topZ = base;
-    document.querySelectorAll('.fixed.inset-0:not(.hidden)').forEach((el) => {
-        if (el === modal || modal.contains(el) || !el.getClientRects().length) return;
-        const z = parseInt(getComputedStyle(el).zIndex, 10) || 0;
-        // The highest; of equals, the one later in the page
-        if (z > base && z >= topZ) { top = el; topZ = z; }
-    });
-    return top;
-}
-
-function initAgentPanelClosing() {
-    // Where the press started: a drag that selects text in the panel and ends
-    // outside it is not a click outside
-    let pressedOutside = false;
-    const outside = (modal, target) => target === modal || target === modal.firstElementChild;
-
-    document.addEventListener('mousedown', (event) => {
-        const modal = openAgentPanel();
-        pressedOutside = !!modal && outside(modal, event.target);
-    });
-    document.addEventListener('click', (event) => {
-        const modal = openAgentPanel();
-        if (modal && pressedOutside && outside(modal, event.target)) requestCloseAgentPanel(modal);
-        pressedOutside = false;
-    });
-    document.addEventListener('keydown', (event) => {
-        if (event.key !== 'Escape' || event.defaultPrevented) return;
-        const modal = openAgentPanel();
-        // The shared confirm dialog closes itself on Escape
-        if (!modal || document.getElementById('customConfirmModal')) return;
-        const dialog = dialogOverAgentPanel(modal);
-        if (dialog) {
-            const close = dialog.querySelector('[aria-label="Close"]');
-            if (close) close.click();
-            return;
-        }
-        requestCloseAgentPanel(modal);
-    });
-}
-
-initAgentPanelClosing();
+mateActions.allow('filterAgents', 'hideCloneAgentModal', 'hideImportModal',
+                  'openInstructionModal', 'showImportModal',
+                  'submitCloneAgent', 'updateClonePreview', 'updateCloneSuffix');
 
 // --- Clone agent tree to another project (#19) -------------------------
 
@@ -341,26 +87,6 @@ async function submitCloneAgent() {
 // ============================================================================
 
 let instructionModalTargetId = '';
-
-function initializeInstructionFieldModal() {
-    initializeInstructionModalHandlers();
-
-    const fieldIds = ['agentInstruction', 'editAgentInstruction', 'copyAgentInstruction'];
-    fieldIds.forEach(id => {
-        const field = document.getElementById(id);
-        if (field && !field.dataset.instructionModalAttached) {
-            field.readOnly = true;
-            field.style.cursor = 'pointer';
-            field.title = 'Click to edit instruction';
-            field.addEventListener('click', (event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                openInstructionModal(id);
-            });
-            field.dataset.instructionModalAttached = 'true';
-        }
-    });
-}
 
 function initializeInstructionModalHandlers() {
     const modal = document.getElementById('editInstructionModal');
@@ -616,20 +342,6 @@ function getParentList(config) {
     return [];
 }
 
-function toDatasetJSON(value, fallback = '{}') {
-    if (value === null || value === undefined) {
-        return fallback;
-    }
-    if (typeof value === 'string') {
-        return value;
-    }
-    try {
-        return JSON.stringify(value);
-    } catch (error) {
-        return fallback;
-    }
-}
-
 function buildParentMap(configs) {
     const map = new Map();
     configs.forEach(config => {
@@ -779,51 +491,18 @@ function createActionButton({ title, icon, className, onClick }) {
     return button;
 }
 
+// The agent page: where an agent of the list is edited
+function agentPageUrl(name) {
+    return '/dashboard/agents/' + encodeURIComponent(name);
+}
+
 function createAgentRow(config, depth, parentName, hasChildren, isHighlighted, rowKey, parentKey) {
     const row = document.createElement('tr');
     row.className = 'agent-row cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700';
-    row.dataset.rowKey = rowKey;
-    row.dataset.parentKey = parentKey || '';
-    row.dataset.name = config.name || '';
-    row.dataset.type = config.type || '';
-    row.dataset.model = config.model_name || '';
-    row.dataset.description = config.description || '';
-    row.dataset.instruction = config.instruction || '';
-    row.dataset.roles = toDatasetJSON(config.allowed_for_roles, '[]');
-    row.dataset.maxIterations = config.max_iterations || '';
-    row.dataset.toolConfig = toDatasetJSON(config.tool_config);
-    row.dataset.mcpServersConfig = toDatasetJSON(config.mcp_servers_config);
-    row.dataset.plannerConfig = toDatasetJSON(config.planner_config);
-    row.dataset.generateContentConfig = toDatasetJSON(config.generate_content_config);
-    row.dataset.inputSchema = toDatasetJSON(config.input_schema);
-    row.dataset.outputSchema = toDatasetJSON(config.output_schema);
-    row.dataset.includeContents = config.include_contents || '';
-    row.dataset.disabled = config.disabled ? 'true' : 'false';
-    row.dataset.hardcoded = config.hardcoded ? 'true' : 'false';
-    row.dataset.exposeAsModel = config.expose_as_model ? 'true' : 'false';
-    row.dataset.debugMode = config.debug_mode ? 'true' : 'false';
-    row.dataset.projectId = config.project_id !== undefined && config.project_id !== null ? String(config.project_id) : '';
-    row.dataset.projectName = (config.project && config.project.name) || '';
     const parents = getParentList(config);
     const isRootAgent = parents.length === 0;
-    row.dataset.parents = JSON.stringify(parents);
 
-    row.addEventListener('click', () => {
-        // Ensure openEditAgentModal is available (defined in agents.html inline script)
-        if (typeof window.openEditAgentModal === 'function') {
-            window.openEditAgentModal(row);
-        } else if (typeof openEditAgentModal === 'function') {
-            openEditAgentModal(row);
-        } else {
-            console.error('openEditAgentModal not available');
-            // Fallback: try to use editAgentById if available
-            if (typeof window.editAgentById === 'function' && config.id) {
-                window.editAgentById(config.id);
-            } else {
-                showNotification('Error: Cannot open edit modal. Please refresh the page.', 'error');
-            }
-        }
-    });
+    row.addEventListener('click', () => { window.location.href = agentPageUrl(config.name); });
 
     const nameCell = document.createElement('td');
     nameCell.setAttribute('data-label', 'Name');
@@ -901,7 +580,7 @@ function createAgentRow(config, depth, parentName, hasChildren, isHighlighted, r
         className: 'text-blue-600 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300',
         onClick: (event) => {
             event.stopPropagation();
-            editAgentById(config.id);
+            window.location.href = agentPageUrl(config.name);
         }
     }));
 
@@ -911,7 +590,7 @@ function createAgentRow(config, depth, parentName, hasChildren, isHighlighted, r
         className: 'text-purple-600 dark:text-purple-400 hover:text-purple-900 dark:hover:text-purple-300',
         onClick: (event) => {
             event.stopPropagation();
-            copyAgentById(config.id);
+            window.location.href = '/dashboard/agents/new?from=' + encodeURIComponent(config.name);
         }
     }));
 
@@ -1303,10 +982,6 @@ function initializeSearchAndFilter(configs) {
         });
         widgetKeysButton.dataset.listenerAttached = 'true';
     }
-
-    // A click outside the agent panels and Escape close them: initAgentPanelClosing()
-
-    initializeInstructionFieldModal();
 
     if (!filterSelect || filterSelect.disabled) {
         if (searchInput) {

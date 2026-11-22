@@ -5,8 +5,9 @@ audience: user
 order: 20
 covers:
   - templates/dashboard/agents.html
-  - templates/dashboard/modals/agent_modal_macro.html
+  - templates/dashboard/agent_page.html
   - templates/dashboard/modals/config_modals.html
+  - static/js/agent-page.js
   - static/js/agent-forms.js
   - static/js/agent-utils.js
   - static/js/agent-management.js
@@ -22,28 +23,55 @@ An agent is a model plus the instruction, tools and limits you give it. Agents a
 managed in **Studio → Agents**. Choose a project first; the page then lists that
 project's agents as a tree.
 
-## Create or edit an agent
+## The agent's page
 
-Click **Add Agent**, or the pencil in an agent's row. Saving an agent reloads it, so
-the next message already uses the new configuration.
+Each agent has a page of its own, `/dashboard/agents/<name>`. Open it by clicking the
+agent's row on the Agents page, or **Advanced Setup** in the Visual Builder; its link
+at the top then leads back to the canvas. **Add Agent** opens an empty one,
+`/dashboard/agents/new`. An agent of another workspace is not found.
 
-The form opens in a panel on the right. A click on the dimmed area beside it, or
-Escape, closes it; if you changed something and did not save, you are asked first
-whether to discard it. With a dialog open over the panel, such as a tool's
-configuration or the instruction editor, Escape closes only that dialog. The ×
-closes the panel without asking.
+The top of the page names the agent, its type, model and project, and holds:
+
+- **Test**, for a root agent: a chat with it in the Work Room;
+- **History**: earlier versions of the agent, see [below](#history-copies-and-moving-agents);
+- **⋯**: **Copy**, **Open in Visual Builder**, **Export** (a root agent and its tree,
+  as a file) and **Delete**.
+
+The **Settings** tab is the agent's editor. More tabs follow in later releases.
+
+## Edit an agent
+
+The editor has three columns. On a narrow screen they stack in this order.
+
+- **Left, the basics:** name, type, project, model, description, parent agents,
+  allowed roles and three switches.
+- **Centre, the instruction,** in a Markdown editor.
+- **Right, everything else,** one section each. A section is closed until you click
+  it, and says on its line whether it is set: `3 on` for three tools, `—` for
+  nothing.
+
+When you change something, a bar appears at the bottom: **Save** stores the change,
+**Discard** puts back what was saved. Leaving the page with changes not saved asks
+first. Each save makes a version of the agent and reloads it, so the next message
+already uses the new configuration.
+
+**Add Agent** shows the same editor with **Create agent**. **Copy** fills it from the
+agent copied, with `_copy` after the name and an empty **API key**, since the page
+never shows a stored key. Creating a root agent asks whether to make a folder for it
+under the server's `agents/` folder.
 
 ### The basics
 
 | Field | What to enter |
 |---|---|
 | **Name** | A unique identifier on the whole installation. Other agents and triggers refer to the agent by this name. It starts with a letter or an underscore and holds only letters, digits and underscores, for example `support_root`; another name is refused. A name already in use, in any workspace, is refused with "This name is taken". |
-| **Type** | **LLM** for an ordinary agent. **Loop** repeats its sub-agents up to **Max Iterations** times. **Graph** runs its sub-agents as a workflow with routing. |
+| **Type** | **LLM** for an ordinary agent. **Loop** repeats its sub-agents up to **Max iterations** times, under **Advanced**. **Graph** runs its sub-agents as a workflow with routing. |
 | **Project** | The project the agent belongs to. |
-| **Model Name** | Which model answers. See [Choosing a model](#choosing-a-model). |
+| **Model** | Which model answers. See [Choosing a model](#choosing-a-model). |
 | **Description** | What the agent is for, in a sentence. A parent agent decides which sub-agent to hand work to by reading these, so a missing or vague description means the agent is not picked. |
-| **Instruction** | The agent's standing orders. Click the field to write them in a Markdown editor. |
-| **Allowed Roles** | Who may use the agent, as a JSON list such as `["user", "admin"]`. See [Who can use an agent](#who-can-use-an-agent). |
+| **Parent agents** | The agents this one works under. See [Connect agents into a tree](#connect-agents-into-a-tree). |
+| **Allowed roles** | Who may use the agent. See [Who can use an agent](#who-can-use-an-agent). |
+| **Instruction** | The agent's standing orders, in the centre column. |
 
 ### Choosing a model
 
@@ -65,11 +93,12 @@ that may not use the server's keys calls a model only with a key of its own, and
 otherwise fails with "This workspace has no key for" and the provider; see
 [Workspaces](workspaces.md).
 
-Three optional fields change where the model comes from:
+Three optional fields change where the model comes from. The first two are in the
+**Model endpoint** section, the third under **Model**:
 
-- **Model Base URL** points the agent at an OpenAI-compatible endpoint you already
+- **Base URL** points the agent at an OpenAI-compatible endpoint you already
   run. The model name then needs a provider prefix, for example `openai/my-agent`.
-- **Model API Key** is the key for that endpoint. Write `${MY_KEY}` to read it from
+- **API key** is the key for that endpoint. Write `${MY_KEY}` to read it from
   the server environment. A key typed literally is stored in the database and in
   the agent's version history, encrypted when the server has `MATE_SECRET_KEY`.
 - **Fallback Model** answers when the main model fails, so a provider outage does
@@ -78,9 +107,9 @@ Three optional fields change where the model comes from:
 
 ## Connect agents into a tree
 
-**Parent Agents** lists the agents this one works under, as a JSON list of names.
-Click the field to pick them. An agent with no parents is a root; an agent can have
-more than one parent. Parents must be agents of the same workspace.
+**Parent agents** lists the agents this one works under. Pick one from the list
+below it to add it; the × on a name removes it. The list offers the workspace's other
+agents. An agent with no parents is a root; an agent can have more than one parent.
 
 A parent hands a request to the sub-agent whose description fits it best. Build a
 tree by giving the root a broad instruction ("route each request to the right
@@ -90,19 +119,23 @@ specialist") and each sub-agent a narrow one with a precise description.
 
 ## Give an agent abilities
 
-Each of these opens its own dialog from the agent form:
+The sections of the right-hand column. Most show a summary of what is set, with
+**Configure** to open its dialog and **Clear** to empty it; the change is stored with
+the next **Save**.
 
 | Section | What it does |
 |---|---|
-| **Memory Blocks** | Named notes the agent can read and update, shared within the project. |
-| **Tool Configuration** | Switch on built-in tools, with checkboxes or as JSON: web search, Google Drive and Calendar, browser, image generation, code executor, shop, creating other agents, delegating to runtime sub-agents. The [tool reference](../reference/tools.md) lists every key. |
-| **File Search (RAG)** | Upload documents the agent can search when answering. |
-| **MCP Servers Configuration** | Connect external MCP servers as a JSON mapping. A server with a `url` is reached over HTTP; one with `command` and `args` runs on the server as a subprocess. Write secrets as `${AUTH_TOKEN}` to read them from the server environment. |
-| **Planner Config** | Let the model plan before acting, and set its thinking mode. For Graph agents this is also where the workflow's edges are defined. |
+| **Tools** | Switch on built-in tools, with checkboxes or as JSON: web search, Google Drive and Calendar, browser, image generation, code executor, shop, creating other agents, delegating to runtime sub-agents. The [tool reference](../reference/tools.md) lists every key. **Approval settings** sets which tools wait for a person's approval; see [Approvals](approvals.md). |
+| **MCP servers** | Connect external MCP servers as a JSON mapping. A server with a `url` is reached over HTTP; one with `command` and `args` runs on the server as a subprocess. Write secrets as `${AUTH_TOKEN}` to read them from the server environment. |
+| **File Search** | Upload documents the agent can search when answering. Once the agent is saved. |
+| **Memory blocks** | Named notes the agent can read and update, shared within the project. **Manage Blocks** shows once the Memory Blocks tool is on. |
 | **Guardrails** | Checks on what goes in and what comes out: personal data, prompt injection, content policy. |
-| **Generate Content Config** | Temperature, token limits and sampling. |
-| **Input Schema**, **Output Schema** | JSON schemas that validate what the agent receives and shape what it returns. |
-| **Include Contents** | Whether the agent sees the earlier conversation (**Default**) or only the current request (**None**). |
+| **Planner** | Let the model plan before acting, and set its thinking mode. For Graph agents this is also where the workflow's edges are defined. |
+| **Generation** | Temperature, token limits and sampling. |
+| **Input/output** | JSON schemas that validate what the agent receives and shape what it returns, and **Include contents**: whether the agent sees the earlier conversation (**Default**) or only the current request (**None**). |
+| **Model endpoint** | **Base URL** and **API key**; see [Choosing a model](#choosing-a-model). |
+| **AI disclosure** | See [AI disclosure](#ai-disclosure). |
+| **Advanced** | **Max iterations** of a Loop agent, and **Hardcoded**. |
 
 The code executor runs commands on the server and is not a sandbox. MATE refuses to
 load it on an agent that has a widget key, because anonymous visitors could then run
@@ -116,7 +149,7 @@ built-in account, and anyone with the `admin` role):
 
 - the **code executor** tool;
 - an MCP server with `command` and `args`, started on the server;
-- `${NAME}` in **Model API Key**, **Model Base URL** or the MCP servers configuration;
+- `${NAME}` in **API key**, **Base URL** or the MCP servers configuration;
 - **Hardcoded**, and a name that already has a folder in the server's `agents/`
   folder;
 - the **Google Drive**, **CV Tools**, **Google Calendar** and **Supabase Storage**
@@ -128,9 +161,9 @@ An owner or admin of a workspace who is not a platform administrator can't add t
 to an agent, or change them on one: saving is refused with "Only a platform
 administrator can give an agent ...". What a platform administrator set up keeps
 working, and the rest of the agent can still be edited. While doing so, leave these
-fields as they are, and **Model Base URL** too when the key is a `${NAME}`.
+fields as they are, and **Base URL** too when the key is a `${NAME}`.
 
-To give an agent with a stored **Model API Key** a new **Model Base URL**, type the
+To give an agent with a stored **API key** a new **Base URL**, type the
 key again: otherwise the stored key would be sent to the new address, and saving is
 refused.
 
@@ -138,7 +171,7 @@ In a workspace other than Default, the code executor and MCP servers with a comm
 run only if a platform administrator has enabled code for that workspace, and those
 four tools only if they have enabled the server's credentials. Otherwise the agent
 answers without them. Outside the Default workspace, a
-**Model Base URL** or MCP server URL on the server's own network (such as
+**Base URL** or MCP server URL on the server's own network (such as
 `localhost` or `10.x.x.x`) is refused too, and a model endpoint that redirects
 elsewhere fails the answer instead of being followed.
 
@@ -150,39 +183,44 @@ above, for example an MCP server whose command names the agent, is refused.
 
 ## Who can use an agent
 
-**Allowed Roles** is compared with the roles on the user record of the person
-chatting. People with the `admin` role pass it, whatever the list:
+**Allowed roles** is compared with the agent roles the person chatting holds in the
+workspace. The workspace's owners and admins, and platform administrators, pass it
+whatever the list:
 
-- With a list, the person needs at least one of the listed roles. `["user"]` admits
-  everyone with the `user` role.
-- **Left empty, the agent admits only people with the `admin` role.**
+- With roles, the person needs at least one of them. `user` admits every member who
+  has the `user` role.
+- **With none, the agent admits only the workspace's owners and admins and platform
+  administrators.** The editor says so under the field.
+
+Type a role and press Enter, or pick one the workspace already uses: the list offers
+the roles of the workspace's members and agents, and each role on the agent says how
+many members hold it, so a role nobody has stands out. A role is letters, digits,
+`_`, `.` and `-`. Add `widget` for an agent that answers on a website: the widget's
+anonymous visitors get that role ([Widget](widget.md)).
 
 A person who is refused gets a message naming the roles required and the roles they
-have, and the refusal is recorded in the audit log. Roles are assigned on the
-**Users** page; see [Users and roles](users-and-roles.md).
+have, and the refusal is recorded in the audit log. Members' roles are set on the
+**Members** page; see [Users and roles](users-and-roles.md).
 
-The built-in account always has the `admin` role, so an agent with an empty list
-admits it.
+## Switches
 
-## Switches at the bottom of the form
-
-| Switch | Effect |
-|---|---|
-| **Disabled** | Takes the agent out of service without deleting it. |
-| **Hardcoded** | Marks an agent whose code lives in the repository rather than in the database. Only a platform administrator can set it. |
-| **Expose as Model** | Makes the agent callable as a model through the OpenAI-compatible API. |
-| **Debug Mode** | Shows detailed error messages in the chat instead of a generic one. |
+| Switch | Where | Effect |
+|---|---|---|
+| **Disabled** | Basics | Takes the agent out of service without deleting it. |
+| **Expose as model** | Basics | Makes the agent callable as a model through the OpenAI-compatible API. |
+| **Debug mode** | Basics | Shows detailed error messages in the chat instead of a generic one. |
+| **Hardcoded** | Advanced | Marks an agent whose code lives in the repository rather than in the database. Only a platform administrator can set it; for others it is greyed out. |
 
 ## AI disclosure
 
 People who chat with an agent through the embedded widget are told they are talking
-to an AI. **AI Disclosure** replaces the default wording, for example to translate
+to an AI. In the **AI disclosure** section, **Notice** replaces the default wording, for example to translate
 it. Filling in **Reason for not disclosing** hides the notice and records why; the
 EU AI Act requires the notice unless it is already obvious to the person.
 
 ## History, copies and moving agents
 
-- **History**, in the agent form, lists earlier versions of the agent so you can
+- **History**, at the top of the agent's page, lists earlier versions of the agent so you can
   compare and restore them. Restoring is refused when the version would bring back
   a name another agent has since taken, a parent agent outside the workspace, or a
   project of another workspace.

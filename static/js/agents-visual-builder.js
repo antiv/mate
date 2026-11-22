@@ -6,7 +6,7 @@
 /* global window, document, fetch */
 
 // Handlers this file's markup calls through data-click and friends (csp-actions.js)
-mateActions.allow('applyConfigModal', 'closeConfigModal', 'hideEditAgentModal',
+mateActions.allow('applyConfigModal', 'closeConfigModal',
                   'openFileSearchModal', 'resetToolConfig', 'toggleJsonEditor');
 
 (function () {
@@ -1741,113 +1741,6 @@ mateActions.allow('applyConfigModal', 'closeConfigModal', 'hideEditAgentModal',
             });
         }, [agentsByName, handleSaveAgent]);
 
-        // Intercept editAgentForm submission to prevent page reload
-        useEffect(() => {
-            const form = document.getElementById('editAgentForm');
-            if (!form) return;
-
-            const handleEditSubmit = async (e) => {
-                e.preventDefault();
-
-                const submitBtn = document.getElementById('editAgentSubmitBtn');
-                const loader = document.getElementById('editAgentLoader');
-                const btnText = document.getElementById('editAgentBtnText');
-
-                if (submitBtn) submitBtn.disabled = true;
-                if (loader) loader.classList.remove('hidden');
-                if (btnText) btnText.textContent = 'Updating...';
-
-                const configIdRaw = document.getElementById('editAgentId').value;
-                const agentName = document.getElementById('editAgentName').value;
-                const projectId = document.getElementById('editAgentProject').value;
-
-                const configId = parseInt(configIdRaw, 10);
-                if (isNaN(configId)) {
-                    if (typeof window.showNotification === 'function') window.showNotification('Invalid agent ID', 'error');
-                    if (submitBtn) submitBtn.disabled = false;
-                    if (loader) loader.classList.add('hidden');
-                    if (btnText) btnText.textContent = 'Update Agent';
-                    return;
-                }
-
-                const description = (document.getElementById('editAgentDescription').value || '').trim();
-                const instruction = (document.getElementById('editAgentInstruction').value || '').trim();
-
-                if (!description) {
-                    if (typeof window.showNotification === 'function') window.showNotification('Description is required.', 'error');
-                    if (submitBtn) submitBtn.disabled = false;
-                    if (loader) loader.classList.add('hidden');
-                    if (btnText) btnText.textContent = 'Update Agent';
-                    return;
-                }
-                if (!instruction) {
-                    if (typeof window.showNotification === 'function') window.showNotification('Instruction is required.', 'error');
-                    if (submitBtn) submitBtn.disabled = false;
-                    if (loader) loader.classList.add('hidden');
-                    if (btnText) btnText.textContent = 'Update Agent';
-                    return;
-                }
-
-                const formData = new FormData();
-                formData.append('name', agentName);
-                if (projectId) formData.append('project_id', projectId);
-                formData.append('type', document.getElementById('editAgentType').value);
-                formData.append('model_name', document.getElementById('editAgentModel').value || '');
-                formData.append('model_base_url', document.getElementById('editAgentModelBaseUrl').value || '');
-                formData.append('fallback_model', document.getElementById('editAgentFallbackModel').value || '');
-                formData.append('model_api_key', document.getElementById('editAgentModelApiKey').value || '');
-                formData.append('description', description);
-                formData.append('instruction', instruction);
-
-                const getJson = (id, fallbackId) =>
-                    (typeof monacoEditors !== 'undefined' && monacoEditors[id]) ? getJsonFromEditor(monacoEditors[id]) : (document.getElementById(fallbackId) ? document.getElementById(fallbackId).value : '') || '';
-
-                formData.append('parent_agents', getJson('editAgentParentsEditor', 'editAgentParents'));
-                formData.append('allowed_for_roles', getJson('editAgentRolesEditor', 'editAgentRoles'));
-                formData.append('tool_config', getJson('editAgentToolConfigEditor', 'editAgentToolConfig'));
-                formData.append('mcp_servers_config', getJson('editAgentMcpServersConfigEditor', 'editAgentMcpServersConfig'));
-                formData.append('planner_config', getJson('editAgentPlannerConfigEditor', 'editAgentPlannerConfig'));
-                formData.append('generate_content_config', getJson('editAgentGenerateContentConfigEditor', 'editAgentGenerateContentConfig'));
-                formData.append('input_schema', getJson('editAgentInputSchemaEditor', 'editAgentInputSchema'));
-                formData.append('output_schema', getJson('editAgentOutputSchemaEditor', 'editAgentOutputSchema'));
-                formData.append('include_contents', document.getElementById('editAgentIncludeContents') ? document.getElementById('editAgentIncludeContents').value : '');
-                formData.append('guardrail_config', getJson('editAgentGuardrailConfigEditor', 'editAgentGuardrailConfig'));
-                formData.append('max_iterations', document.getElementById('editAgentMaxIterations') ? document.getElementById('editAgentMaxIterations').value : '');
-                formData.append('disabled', document.getElementById('editAgentDisabled') ? document.getElementById('editAgentDisabled').checked : false);
-                formData.append('hardcoded', document.getElementById('editAgentHardcoded') ? document.getElementById('editAgentHardcoded').checked : false);
-                formData.append('expose_as_model', document.getElementById('editAgentExposeAsModel') ? document.getElementById('editAgentExposeAsModel').checked : false);
-                formData.append('debug_mode', document.getElementById('editAgentDebugMode') ? document.getElementById('editAgentDebugMode').checked : false);
-
-                try {
-                    const response = await fetch(`/dashboard/api/agents/${configId}`, {
-                        method: 'PUT',
-                        body: formData
-                    });
-                    const result = await response.json();
-
-                    if (result.success) {
-                        if (typeof window.showNotification === 'function') window.showNotification('Agent updated successfully');
-                        if (typeof hideEditAgentModal === 'function') hideEditAgentModal();
-                        else if (typeof window.hideEditAgentModal === 'function') window.hideEditAgentModal();
-
-                        await syncFromDb();
-                    } else {
-                        if (typeof window.showNotification === 'function') window.showNotification(result.message || 'Failed to update', 'error');
-                    }
-                } catch (err) {
-                    console.error('Update error', err);
-                    if (typeof window.showNotification === 'function') window.showNotification('Error updating agent', 'error');
-                } finally {
-                    if (submitBtn) submitBtn.disabled = false;
-                    if (loader) loader.classList.add('hidden');
-                    if (btnText) btnText.textContent = 'Update Agent';
-                }
-            };
-
-            form.addEventListener('submit', handleEditSubmit);
-            return () => form.removeEventListener('submit', handleEditSubmit);
-        }, [syncFromDb]);
-
         // Bridge to HTML configuration modal for tools
         useEffect(() => {
             if (toolPickerModal) {
@@ -2667,12 +2560,9 @@ mateActions.allow('applyConfigModal', 'closeConfigModal', 'hideEditAgentModal',
                     saving: saving,
                     projectId: props.projectId,
                     onAdvancedSetup: function () {
+                        // The agent page, whose back link returns to the canvas
                         if (draftAgent && draftAgent.id) {
-                            if (typeof window.editAgent === 'function') {
-                                window.editAgent(draftAgent);
-                            } else {
-                                console.error('editAgent function not found');
-                            }
+                            window.location.href = '/dashboard/agents/' + encodeURIComponent(draftAgent.name) + '?back=visual';
                         }
                     },
                     onOpenToolPicker: function (agentName) { setToolPickerModal({ agentName: agentName }); },
@@ -2685,12 +2575,12 @@ mateActions.allow('applyConfigModal', 'closeConfigModal', 'hideEditAgentModal',
                     onAddMcpServer: function (agentName) { setMcpAddModal({ agentName: agentName }); },
                     onOpenFileSearch: function () {
                         if (!draftAgent) return;
-                        var nameInput = document.getElementById('editAgentName');
-                        var projectInput = document.getElementById('editAgentProject');
+                        var nameInput = document.getElementById('vbName');
+                        var projectInput = document.getElementById('vbProject');
                         if (nameInput) nameInput.value = draftAgent.name;
                         if (projectInput) projectInput.value = String(draftAgent.project_id || '');
                         if (typeof window.openFileSearchModal === 'function') {
-                            window.openFileSearchModal('editAgent');
+                            window.openFileSearchModal('vb');
                         }
                     },
                 }),

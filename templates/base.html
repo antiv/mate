@@ -39,7 +39,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="/static/css/redesign.css">
-    <link rel="stylesheet" href="/static/css/components.css?v=4">
+    <link rel="stylesheet" href="/static/css/components.css?v=5">
     <style>
         @keyframes mate-slide-in { from { transform: translateX(120%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
         @keyframes mate-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
@@ -558,7 +558,7 @@
                 <!-- ── Studio ────────────────────────── -->
                 <p class="sidebar-section-header">Build</p>
                 <div class="space-y-0.5">
-                    <a href="/dashboard/agents" class="mate-nav-item {% if request.url.path == '/dashboard/agents' %}sidebar-active{% endif %}" title="Agents">
+                    <a href="/dashboard/agents" class="mate-nav-item {% if request.url.path == '/dashboard/agents' or (request.url.path.startswith('/dashboard/agents/') and request.url.path != '/dashboard/agents/visual') %}sidebar-active{% endif %}" title="Agents">
                         <i class="fas fa-robot sidebar-icon"></i>
                         <span class="sidebar-text">Agents</span>
                     </a>

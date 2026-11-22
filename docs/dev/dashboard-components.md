@@ -10,6 +10,10 @@ covers:
   - static/js/tabs.js
   - templates/dashboard/triggers.html
   - templates/dashboard/modals/trigger_modal.html
+  - templates/dashboard/agent_page.html
+  - static/js/agent-page.js
+  - static/css/agent-page.css
+  - static/js/monaco-fields.js
 ---
 
 # Dashboard components
@@ -33,6 +37,8 @@ Two pages are built on them alone; copy from them:
   `static/js/triggers-page.js`).
 - **Approvals:** tabs, a client-side table and one the API pages, and a dialog of
   details (`templates/dashboard/approvals.html`, `static/js/approvals-page.js`).
+- **The agent page:** a form in three columns, collapsible sections, pickers, a menu
+  and a save bar ([below](#the-agent-page)).
 
 ## The classes
 
@@ -53,6 +59,10 @@ Two pages are built on them alone; copy from them:
 | `m-pre` | A block of code or JSON, scrolled when long |
 | `m-spacer` | Takes the free space in a row, such as between a link and the buttons of a dialog's foot |
 | `m-tabs`, `m-tab` | Tabs; see below |
+| `m-section` | A collapsible part of a form: `<details class="m-section">` with a `<summary>` holding an icon, the title and an `m-section-state` (a word such as `3 on`; `is-set` colours it), then an `m-section-body` |
+| `m-chips`, `m-chip` | The values of a picker, each with a remove button; an empty `m-chips` takes no space |
+| `m-menu`, `m-menu-list` | A menu of links and buttons: `<details class="m-menu">` whose `<summary>` is the button |
+| `m-savebar` | A bar pinned to the bottom of the page with **Discard** and **Save**, clear of the Help button |
 | `m-switch` | An on/off switch: `<button class="m-switch" role="switch" aria-checked="true" aria-label="…">` |
 | `m-notice`, `m-notice-warning`, `m-notice-floating` | An icon and a message on a tinted background; floating puts it at the bottom of the screen |
 | `m-code`, `m-mono`, `m-muted`, `m-tone-*` | Inline code, monospace text, quieter text, text in a token's colour |
@@ -205,6 +215,39 @@ single button.
   the selection changes. The Approvals page reloads a tab's list then.
 - **`mateTabs.select('tab-history')`** selects one from code.
 
+## The agent page
+
+`/dashboard/agents/<name>` edits an agent; `/dashboard/agents/new` makes one, and
+`?from=<name>` fills it from another (Copy). Both routes come after
+`/dashboard/agents/visual` in `dashboard_server.py`, which they would otherwise take,
+and answer 404 for an agent of another workspace. `_agent_page()` renders
+`templates/dashboard/agent_page.html` with:
+
+- the agent, from `_get_all_agent_configs`, so its stored model key is
+  `__stored__`, as on every page;
+- the workspace's other agents, for the parent picker;
+- `workspaces.roles_in_use()`: the agent role names its members and agents use,
+  with how many members hold each, without the platform roles.
+
+The page's state is a JSON `<script id="agent-page-data">`; `static/js/agent-page.js`
+runs it as `window.mateAgentPage`.
+
+- **The fields have the prefix `agent`** (`agentName`, `agentToolConfig`, ...),
+  which the configuration dialogs of `config_modals.html` and their helpers in
+  `agent-forms.js`, `agent-tools.js` and `agent-config.js` take. Those dialogs hold
+  the JSON fields, outside the `<form>`.
+- **Saving** posts the same form fields the agents API always took: `POST
+  /dashboard/api/agents`, or `PUT /dashboard/api/agents/<id>`. The page then
+  reloads at the agent's address, which a rename changes, and shows "Saved." from
+  `sessionStorage`.
+- **The save bar and the question on leaving** compare the form, as the API would
+  receive it, with what it held after loading.
+- **The instruction** is a Monaco editor (`static/js/monaco-fields.js`, which the
+  Visual Builder loads too); the textarea under it stays while Monaco loads, or if
+  it doesn't.
+- **File Search** reads the agent from `<prefix>Name` and `<prefix>Project` of the
+  form that opened it, `agent` here and `vb` in the Visual Builder.
+
 ## Tests
 
 - `shared/test/js/data_table.test.js` covers searching, sorting, paging and
@@ -212,5 +255,7 @@ single button.
   `node --test shared/test/js/data_table.test.js`.
 - `shared/test/test_static_js_units.py` runs it with the other tests, and is
   skipped where node is not installed.
-- `shared/test/test_csp.py` checks that the component scripts and the Triggers and
-  Approvals templates have no inline handlers.
+- `shared/test/test_csp.py` checks that the component scripts and the Triggers,
+  Approvals and agent page templates have no inline handlers.
+- `shared/test/test_agent_page.py` covers the agent page's routes across two
+  workspaces, the parent picker, the stored key and `roles_in_use`.

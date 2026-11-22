@@ -8,7 +8,12 @@ mateActions.allow('closeFileSearchModal', 'deleteFileFromStore', 'deleteFileSear
                   'handleStoreSelectChange', 'openFileSearchModal', 'showAllStoreFiles',
                   'toggleStoreFiles', 'unassignFileSearchStore', 'uploadFileToStoreById');
 
+// The prefix of the agent form whose File Search is open: its <prefix>Name and
+// <prefix>Project fields name the agent and its project
+let fsPrefix = 'agent';
+
 function openFileSearchModal(prefix) {
+    fsPrefix = prefix;
     const modal = document.getElementById(`${prefix}FileSearchModal`);
     if (!modal) {
         console.error(`File Search modal not found: ${prefix}FileSearchModal`);
@@ -30,11 +35,11 @@ function closeFileSearchModal(prefix) {
 
 async function loadFileSearchData(prefix) {
     // Get agent name and project ID from the edit form
-    const agentNameInput = document.getElementById('editAgentName');
-    const projectIdInput = document.getElementById('editAgentProject');
+    const agentNameInput = document.getElementById(fsPrefix + 'Name');
+    const projectIdInput = document.getElementById(fsPrefix + 'Project');
     
     if (!agentNameInput) {
-        console.error('Could not find editAgentName input');
+        console.error('Could not find the agent name input');
         return;
     }
     
@@ -540,7 +545,7 @@ async function unassignFileSearchStore(prefix, agentName, storeName) {
             await loadFileSearchData(prefix);
             // Show message about reinitialization if needed
             if (result.needs_reload) {
-                const agentNameInput = document.getElementById('editAgentName');
+                const agentNameInput = document.getElementById(fsPrefix + 'Name');
                 const agentName = agentNameInput ? agentNameInput.value : agentName;
                 showAlert(`Store unassigned successfully!\n\nNote: Agent "${agentName}" should be reinitialized to apply changes. You can use the "Reinitialize" button in the agent list.`, 'success');
             }
@@ -554,11 +559,11 @@ async function unassignFileSearchStore(prefix, agentName, storeName) {
 }
 
 async function createFileSearchStore(prefix) {
-    const agentNameInput = document.getElementById('editAgentName');
-    const projectIdInput = document.getElementById('editAgentProject');
+    const agentNameInput = document.getElementById(fsPrefix + 'Name');
+    const projectIdInput = document.getElementById(fsPrefix + 'Project');
     
     if (!agentNameInput) {
-        console.error('Could not find editAgentName input');
+        console.error('Could not find the agent name input');
         return;
     }
     
@@ -622,9 +627,9 @@ async function createFileSearchStore(prefix) {
 }
 
 async function uploadFileToStoreById(storeId, prefix, storeName) {
-    const agentNameInput = document.getElementById('editAgentName');
+    const agentNameInput = document.getElementById(fsPrefix + 'Name');
     if (!agentNameInput) {
-        console.error('Could not find editAgentName input');
+        console.error('Could not find the agent name input');
         return;
     }
     
@@ -692,9 +697,9 @@ async function uploadFileToStoreById(storeId, prefix, storeName) {
 }
 
 async function uploadFileToStore(prefix) {
-    const agentNameInput = document.getElementById('editAgentName');
+    const agentNameInput = document.getElementById(fsPrefix + 'Name');
     if (!agentNameInput) {
-        console.error('Could not find editAgentName input');
+        console.error('Could not find the agent name input');
         return;
     }
     
@@ -750,7 +755,7 @@ async function uploadFileToStore(prefix) {
             fileInput.value = '';
             // Reload data
             await loadFileSearchData(prefix);
-            const agentNameInput = document.getElementById('editAgentName');
+            const agentNameInput = document.getElementById(fsPrefix + 'Name');
             const agentName = agentNameInput ? agentNameInput.value : '';
             showAlert(`File uploaded successfully!\n\nNote: Agent "${agentName}" should be reinitialized to use the new file.`, 'success');
         } else {
@@ -956,11 +961,11 @@ async function handleAssignOrCreateStore(prefix) {
 }
 
 async function assignExistingStore(prefix) {
-    const agentNameInput = document.getElementById('editAgentName');
+    const agentNameInput = document.getElementById(fsPrefix + 'Name');
     const assignStoreSelect = document.getElementById(`${prefix}AssignStoreSelect`);
     
     if (!agentNameInput) {
-        console.error('Could not find editAgentName input');
+        console.error('Could not find the agent name input');
         return;
     }
     

@@ -41,40 +41,7 @@ async function showConfirmDialog(message, title = 'Confirm', confirmText = 'Conf
 }
 
 // ============================================================================
-// Helper Functions for ID-based Operations
-// ============================================================================
-
-/**
- * Find config by ID from the global configs array
- */
-function findConfigById(id) {
-    if (typeof configs === 'undefined') {
-        console.error('configs array not available');
-        return null;
-    }
-    // Use loose comparison to handle string/number type mismatches
-    const config = configs.find(config => config.id == id);
-    if (!config) {
-        console.warn('Config not found for ID:', id, 'Type:', typeof id, 'Available configs:', configs.map(c => ({ id: c.id, name: c.name, idType: typeof c.id })));
-    }
-    return config;
-}
-
-/**
- * Normalize various truthy/falsy representations to a strict boolean
- */
-function normalizeBoolean(value) {
-    if (typeof value === 'boolean') return value;
-    if (typeof value === 'number') return value === 1;
-    if (typeof value === 'string') {
-        const v = value.trim().toLowerCase();
-        return v === '1' || v === 'true' || v === 'yes' || v === 'on';
-    }
-    return false;
-}
-
-// ============================================================================
-// Config Summary & Modal Helpers
+// Summaries of the configuration fields
 // ============================================================================
 
 function safeJsonParse(value) {
@@ -185,10 +152,10 @@ function updateMemoryBlocksSectionVisibility(prefix, toolConfig) {
 }
 
 /**
- * Open memory blocks modal from edit agent modal
+ * Open the memory blocks dialog of the agent a form edits
  */
 function openMemoryBlocksFromEditModal(prefix) {
-    // Get agent name from the edit form
+    // Get agent name from the form
     const agentNameEl = document.getElementById(prefix + 'Name');
     if (!agentNameEl || !agentNameEl.value) {
         showNotification('Please enter an agent name first', 'error');
@@ -196,10 +163,7 @@ function openMemoryBlocksFromEditModal(prefix) {
     }
     
     const agentName = agentNameEl.value;
-    
-    // Close edit modal if open (optional, can keep it open)
-    // hideEditAgentModal();
-    
+
     // Open memory blocks modal
     if (typeof showMemoryBlocksModal === 'function') {
         showMemoryBlocksModal(agentName);
@@ -615,326 +579,9 @@ function initializeConfigSummaryHandling(prefixes) {
 
 
 /**
- * Edit agent by ID
+ * Delete agent with confirmation; then onDeleted(), or a reload of the page
  */
-function editAgentById(id) {
-    const config = findConfigById(id);
-    if (config) {
-        editAgent(config);
-    } else {
-        const availableIds = typeof configs !== 'undefined' 
-            ? configs.map(c => `${c.id}(${typeof c.id})`).join(', ')
-            : 'configs array not available';
-        const errorMsg = `Agent config not found for ID: ${id} (type: ${typeof id}). Available IDs: ${availableIds}`;
-        console.error(errorMsg);
-        showAlert(errorMsg, 'error');
-    }
-}
-
-/**
- * Copy agent by ID
- */
-function copyAgentById(id) {
-    const config = findConfigById(id);
-    if (config) {
-        copyAgent(config);
-    } else {
-        console.error('Agent config not found for ID:', id);
-    }
-}
-
-// ============================================================================
-// Form Population Functions
-// ============================================================================
-
-/**
- * Populate edit agent form with config data
- */
-function editAgent(config) {
-    // Helper to safely stringify objects/arrays for form fields
-    const safeStringify = (value) => {
-        if (value === null || value === undefined || value === '') {
-            return '';
-        }
-        if (typeof value === 'object') {
-            // Check if it's an empty object {} or empty array []
-            if (Array.isArray(value) && value.length === 0) {
-                return '';
-            }
-            if (!Array.isArray(value) && Object.keys(value).length === 0) {
-                return '';
-            }
-            return JSON.stringify(value, null, 2);
-        }
-        if (typeof value === 'string') {
-            // If it's already a string, check if it's valid JSON
-            try {
-                const parsed = JSON.parse(value);
-                // Check if parsed result is empty object or array
-                if (Array.isArray(parsed) && parsed.length === 0) {
-                    return '';
-                }
-                if (typeof parsed === 'object' && !Array.isArray(parsed) && Object.keys(parsed).length === 0) {
-                    return '';
-                }
-                // If it parses and not empty, re-stringify it with formatting
-                return JSON.stringify(parsed, null, 2);
-            } catch (e) {
-                // If it doesn't parse, return as-is
-                return value;
-            }
-        }
-        return String(value);
-    };
-    
-    // Store original hardcoded state for comparison during submit
-    window.editAgentOriginalHardcoded = normalizeBoolean(config.hardcoded);
-    
-    // Validate that config.id exists and is a valid number
-    // Check if id is undefined/null or if it's not a valid number when parsed
-    const rawId = config.id;
-    const parsedId = parseInt(rawId, 10);
-    const isInvalid = rawId === undefined || rawId === null || rawId === '' || isNaN(parsedId);
-    
-    if (isInvalid) {
-        console.error('Invalid agent ID in config:', {
-            rawId: rawId,
-            rawIdType: typeof rawId,
-            parsedId: parsedId,
-            isNaN: isNaN(parsedId),
-            fullConfig: config
-        });
-        const errorMsg = `Error: Agent configuration has invalid ID. ID: "${rawId}" (type: ${typeof rawId}). Agent: "${config.name || 'unknown'}". Please refresh the page and try again.`;
-        showAlert(errorMsg, 'error');
-        return;
-    }
-    
-    // Populate basic fields - use parsed ID to ensure it's normalized
-    document.getElementById('editAgentId').value = parsedId;
-    document.getElementById('editAgentName').value = config.name;
-    document.getElementById('editAgentType').value = config.type;
-    document.getElementById('editAgentModel').value = config.model_name || '';
-    document.getElementById('editAgentModelBaseUrl').value = config.model_base_url || '';
-    document.getElementById('editAgentFallbackModel').value = config.fallback_model || '';
-    document.getElementById('editAgentAiDisclosure').value = config.ai_disclosure || '';
-    document.getElementById('editAgentAiDisclosureWaiver').value = config.ai_disclosure_waiver || '';
-    document.getElementById('editAgentModelApiKey').value = config.model_api_key || '';
-    document.getElementById('editAgentParents').value = safeStringify(config.parent_agents);
-    document.getElementById('editAgentDescription').value = config.description || '';
-    document.getElementById('editAgentInstruction').value = config.instruction || '';
-    document.getElementById('editAgentRoles').value = safeStringify(config.allowed_for_roles);
-    document.getElementById('editAgentToolConfig').value = safeStringify(config.tool_config);
-    
-    // Sync tool config to form controls
-    syncJsonToToolConfig('editAgent');
-    
-    // Populate MCP servers configuration
-    document.getElementById('editAgentMcpServersConfig').value = safeStringify(config.mcp_servers_config);
-    
-    // Populate planner configuration
-    document.getElementById('editAgentPlannerConfig').value = safeStringify(config.planner_config);
-    
-    // Sync planner config to form controls
-    syncJsonToPlannerConfig('editAgent');
-    
-    // Populate ADK configuration fields
-    document.getElementById('editAgentGenerateContentConfig').value = safeStringify(config.generate_content_config);
-    document.getElementById('editAgentInputSchema').value = safeStringify(config.input_schema);
-    document.getElementById('editAgentOutputSchema').value = safeStringify(config.output_schema);
-    document.getElementById('editAgentIncludeContents').value = config.include_contents || '';
-
-    // Populate guardrail configuration
-    const guardrailEl = document.getElementById('editAgentGuardrailConfig');
-    if (guardrailEl) {
-        guardrailEl.value = safeStringify(config.guardrail_config);
-        syncJsonToGuardrailConfig('editAgent');
-    }
-    document.getElementById('editAgentMaxIterations').value = config.max_iterations || '';
-    document.getElementById('editAgentDisabled').checked = normalizeBoolean(config.disabled);
-    document.getElementById('editAgentHardcoded').checked = normalizeBoolean(config.hardcoded);
-    document.getElementById('editAgentExposeAsModel').checked = normalizeBoolean(config.expose_as_model);
-    document.getElementById('editAgentDebugMode').checked = normalizeBoolean(config.debug_mode);
-    const editProjectSelect = document.getElementById('editAgentProject');
-    if (editProjectSelect) {
-        const projectIdValue = (config.project_id !== undefined && config.project_id !== null)
-            ? config.project_id
-            : (config.project && config.project.id !== undefined ? config.project.id : '');
-        editProjectSelect.value = projectIdValue !== '' ? String(projectIdValue) : '';
-    }
-    
-    // Sync content generation config to form controls
-    syncJsonToContentConfig('editAgent');
-    updateConfigSummaries('editAgent');
-    
-    // Update memory blocks section visibility when editing
-    const toolConfig = config.tool_config;
-    let toolConfigObj = {};
-    if (toolConfig) {
-        try {
-            toolConfigObj = typeof toolConfig === 'string' ? JSON.parse(toolConfig) : toolConfig;
-        } catch (e) {
-            toolConfigObj = {};
-        }
-    }
-    if (typeof updateMemoryBlocksSectionVisibility === 'function') {
-        updateMemoryBlocksSectionVisibility('editAgent', toolConfigObj);
-    }
-    
-    // Show modal
-    showEditAgentModal();
-    
-    // Re-setup tool listeners after modal is shown
-    setTimeout(() => {
-        setupToolListeners('editAgent');
-    }, 50);
-    
-    // Populate Monaco editors if they exist
-    setTimeout(() => {
-        if (monacoEditors['editAgentParentsEditor']) {
-            setJsonInEditor(monacoEditors['editAgentParentsEditor'], document.getElementById('editAgentParents').value);
-        }
-        if (monacoEditors['editAgentRolesEditor']) {
-            setJsonInEditor(monacoEditors['editAgentRolesEditor'], document.getElementById('editAgentRoles').value);
-        }
-        if (monacoEditors['editAgentToolConfigEditor']) {
-            setJsonInEditor(monacoEditors['editAgentToolConfigEditor'], document.getElementById('editAgentToolConfig').value);
-        }
-        if (monacoEditors['editAgentMcpServersConfigEditor']) {
-            setJsonInEditor(monacoEditors['editAgentMcpServersConfigEditor'], document.getElementById('editAgentMcpServersConfig').value);
-        }
-        if (monacoEditors['editAgentPlannerConfigEditor']) {
-            setJsonInEditor(monacoEditors['editAgentPlannerConfigEditor'], document.getElementById('editAgentPlannerConfig').value);
-        }
-        if (monacoEditors['editAgentGenerateContentConfigEditor']) {
-            setJsonInEditor(monacoEditors['editAgentGenerateContentConfigEditor'], document.getElementById('editAgentGenerateContentConfig').value);
-        }
-        if (monacoEditors['editAgentInputSchemaEditor']) {
-            setJsonInEditor(monacoEditors['editAgentInputSchemaEditor'], document.getElementById('editAgentInputSchema').value);
-        }
-        if (monacoEditors['editAgentOutputSchemaEditor']) {
-            setJsonInEditor(monacoEditors['editAgentOutputSchemaEditor'], document.getElementById('editAgentOutputSchema').value);
-        }
-        if (monacoEditors['editAgentIncludeContentsEditor']) {
-            setJsonInEditor(monacoEditors['editAgentIncludeContentsEditor'], document.getElementById('editAgentIncludeContents').value);
-        }
-        // Re-assert boolean checkboxes in case any other scripts toggled them
-        const disabledEl = document.getElementById('editAgentDisabled');
-        const hardcodedEl = document.getElementById('editAgentHardcoded');
-        const exposeAsModelEl = document.getElementById('editAgentExposeAsModel');
-        const debugModeEl = document.getElementById('editAgentDebugMode');
-        if (disabledEl) disabledEl.checked = normalizeBoolean(config.disabled);
-        if (hardcodedEl) hardcodedEl.checked = normalizeBoolean(config.hardcoded);
-        if (exposeAsModelEl) exposeAsModelEl.checked = normalizeBoolean(config.expose_as_model);
-        if (debugModeEl) debugModeEl.checked = normalizeBoolean(config.debug_mode);
-    }, 100);
-}
-
-/**
- * Populate copy agent form with config data
- */
-function copyAgent(config) {
-    // Populate basic fields (excluding ID, name will be copied with suffix)
-    document.getElementById('copyAgentName').value = config.name + '_copy';
-    document.getElementById('copyAgentType').value = config.type;
-    document.getElementById('copyAgentModel').value = config.model_name || '';
-    document.getElementById('copyAgentModelBaseUrl').value = config.model_base_url || '';
-    document.getElementById('copyAgentFallbackModel').value = config.fallback_model || '';
-    document.getElementById('copyAgentAiDisclosure').value = config.ai_disclosure || '';
-    document.getElementById('copyAgentAiDisclosureWaiver').value = config.ai_disclosure_waiver || '';
-    // The browser never saw the original key, so leave the copy's field empty
-    // rather than showing the sentinel and silently creating a keyless agent.
-    document.getElementById('copyAgentModelApiKey').value =
-        (config.model_api_key === '__stored__' ? '' : (config.model_api_key || ''));
-    document.getElementById('copyAgentParents').value = config.parent_agents ? JSON.stringify(config.parent_agents) : '';
-    document.getElementById('copyAgentDescription').value = config.description || '';
-    document.getElementById('copyAgentInstruction').value = config.instruction || '';
-    document.getElementById('copyAgentRoles').value = config.allowed_for_roles || '';
-    document.getElementById('copyAgentToolConfig').value = config.tool_config || '';
-    
-    // Sync tool config to form controls
-    syncJsonToToolConfig('copyAgent');
-    
-    document.getElementById('copyAgentMcpServersConfig').value = config.mcp_servers_config || '';
-    document.getElementById('copyAgentPlannerConfig').value = config.planner_config || '';
-    
-    // Sync planner config to form controls
-    syncJsonToPlannerConfig('copyAgent');
-    
-    // Populate ADK configuration fields
-    document.getElementById('copyAgentGenerateContentConfig').value = config.generate_content_config || '';
-    document.getElementById('copyAgentInputSchema').value = config.input_schema || '';
-    document.getElementById('copyAgentOutputSchema').value = config.output_schema || '';
-    document.getElementById('copyAgentIncludeContents').value = config.include_contents || '';
-    const copyGuardrailEl = document.getElementById('copyAgentGuardrailConfig');
-    if (copyGuardrailEl) {
-        copyGuardrailEl.value = config.guardrail_config || '';
-        syncJsonToGuardrailConfig('copyAgent');
-    }
-    document.getElementById('copyAgentMaxIterations').value = config.max_iterations || '';
-    document.getElementById('copyAgentDisabled').checked = normalizeBoolean(config.disabled);
-    document.getElementById('copyAgentHardcoded').checked = normalizeBoolean(config.hardcoded);
-    document.getElementById('copyAgentExposeAsModel').checked = normalizeBoolean(config.expose_as_model);
-    document.getElementById('copyAgentDebugMode').checked = normalizeBoolean(config.debug_mode);
-    const copyProjectSelect = document.getElementById('copyAgentProject');
-    if (copyProjectSelect) {
-        const projectIdValue = (config.project_id !== undefined && config.project_id !== null)
-            ? config.project_id
-            : (config.project && config.project.id !== undefined ? config.project.id : '');
-        copyProjectSelect.value = projectIdValue !== '' ? String(projectIdValue) : '';
-    }
-    
-    // Sync content generation config to form controls
-    syncJsonToContentConfig('copyAgent');
-    updateConfigSummaries('copyAgent');
-    
-    // Show modal
-    showCopyAgentModal();
-    
-    // Re-setup tool listeners after modal is shown
-    setTimeout(() => {
-        setupToolListeners('copyAgent');
-    }, 50);
-    
-    // Populate Monaco editors if they exist
-    setTimeout(() => {
-        if (monacoEditors['copyAgentParentsEditor']) {
-            setJsonInEditor(monacoEditors['copyAgentParentsEditor'], document.getElementById('copyAgentParents').value);
-        }
-        if (monacoEditors['copyAgentRolesEditor']) {
-            setJsonInEditor(monacoEditors['copyAgentRolesEditor'], document.getElementById('copyAgentRoles').value);
-        }
-        if (monacoEditors['copyAgentToolConfigEditor']) {
-            setJsonInEditor(monacoEditors['copyAgentToolConfigEditor'], document.getElementById('copyAgentToolConfig').value);
-        }
-        if (monacoEditors['copyAgentMcpServersConfigEditor']) {
-            setJsonInEditor(monacoEditors['copyAgentMcpServersConfigEditor'], document.getElementById('copyAgentMcpServersConfig').value);
-        }
-        if (monacoEditors['copyAgentPlannerConfigEditor']) {
-            setJsonInEditor(monacoEditors['copyAgentPlannerConfigEditor'], document.getElementById('copyAgentPlannerConfig').value);
-        }
-        if (monacoEditors['copyAgentGenerateContentConfigEditor']) {
-            setJsonInEditor(monacoEditors['copyAgentGenerateContentConfigEditor'], document.getElementById('copyAgentGenerateContentConfig').value);
-        }
-        if (monacoEditors['copyAgentInputSchemaEditor']) {
-            setJsonInEditor(monacoEditors['copyAgentInputSchemaEditor'], document.getElementById('copyAgentInputSchema').value);
-        }
-        if (monacoEditors['copyAgentOutputSchemaEditor']) {
-            setJsonInEditor(monacoEditors['copyAgentOutputSchemaEditor'], document.getElementById('copyAgentOutputSchema').value);
-        }
-        if (monacoEditors['copyAgentIncludeContentsEditor']) {
-            setJsonInEditor(monacoEditors['copyAgentIncludeContentsEditor'], document.getElementById('copyAgentIncludeContents').value);
-        }
-        if (monacoEditors['copyAgentGuardrailConfigEditor']) {
-            setJsonInEditor(monacoEditors['copyAgentGuardrailConfigEditor'], document.getElementById('copyAgentGuardrailConfig').value);
-        }
-    }, 100);
-}
-
-
-/**
- * Delete agent with confirmation
- */
-async function deleteAgent(id, name, isHardcoded) {
+async function deleteAgent(id, name, isHardcoded, onDeleted) {
     let deleteFolder = false;
     const basePrompt = `Are you sure you want to delete agent "${name}"?`;
     if (!isHardcoded) {
@@ -972,7 +619,7 @@ async function deleteAgent(id, name, isHardcoded) {
                 } else {
                     showNotification('Agent deleted successfully', 'success');
                 }
-                setTimeout(() => location.reload(), 600);
+                setTimeout(() => (onDeleted ? onDeleted() : location.reload()), 600);
             } else {
                 showNotification(data.message || 'Failed to delete agent', 'error');
             }
@@ -1073,9 +720,6 @@ function saveInstructionFromEditor(prefix) {
 }
 
 // Make functions available globally for graph editor
-window.editAgent = editAgent;
-window.editAgentById = editAgentById;
-window.copyAgent = copyAgent;
 window.openConfigModal = openConfigModal;
 window.closeConfigModal = closeConfigModal;
 window.applyConfigModal = applyConfigModal;

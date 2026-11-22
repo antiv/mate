@@ -16,8 +16,8 @@ covers:
 # Tools and MCP servers
 
 A tool is something an agent can do besides writing text: search the web, read a
-file, call another system. Tools are set per agent, in the agent form on
-**Studio → Agents**.
+file, call another system. Tools are set per agent, in the **Tools** section of
+the agent's page (**Studio → Agents**, then the agent).
 
 There are two kinds. **Built-in tools** ship with MATE and are switched on in
 **Tool Configuration**. **MCP servers** are external tool providers that you connect
@@ -87,7 +87,9 @@ decided, is not passed on to the agent.
 ### Who approves, and who is told
 
 The easiest way to set this is the **Visual Builder**: select the agent and click
-**Configure** under **Approvals**. The dialog has:
+**Configure** under **Approvals**. On the agent's page, **Approval settings** in the
+**Tools** section opens the same dialog; there the settings are stored with the
+agent's next **Save**. The dialog has:
 - the tools that ask first;
 - who decides a request from a chat;
 - where to send a message when a request waits;
