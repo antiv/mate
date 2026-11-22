@@ -1,8 +1,8 @@
 # Design: approvals inbox
 
 Status: being built for 2.1.0, tracking #376 (first proposed in #178, feature 3).
-Open questions 1 and 2 are settled. Phases 1 and 2 are built; see
-[Phase 1, as built](#phase-1-as-built) and [Phase 2, as built](#phase-2-as-built).
+Open questions 1 and 2 are settled. Phases 1 and 2 are built, and phase 3 apart from its editor; see
+[Phase 1, as built](#phase-1-as-built), [Phase 2, as built](#phase-2-as-built) and [Phase 3, as built](#phase-3-as-built).
 
 ## Problem
 
@@ -250,7 +250,7 @@ LangGraph 1.2.12), with an agent that had `require_confirmation` on
 off, and on LangGraph. See [Settled: questions 1 and 2](#settled-questions-1-and-2).
 
 1. **The `approver` role.** Should it be per project, or is admin-only enough for
-   the first version?
+   the first version? *Decided 2026-11-22: admins only for 2.1; a role can come later.*
 2. **Showing a chat the inbox's decision live.** Polling the session, or a small
    event stream? This can wait for the first version.
 
@@ -363,6 +363,23 @@ proposal above:
   - A row opens a dialog with the arguments, rather than showing them in the list.
   - The session link opens Session Tracking's inspector, as the run's user may not be the admin.
   - ADK's default hint, which is addressed to a client, is not shown.
+
+### Phase 3, as built
+
+In two parts. 3a is the settings and what they do; 3b is their editor in the Visual
+Builder. See `docs/dev/approvals.md`. Where 3a differs from the proposal above:
+
+- **Who decides in the inbox:** admins of the workspace, as in phase 2 (open question 1).
+- **Answering once.** Every answer on its way to a run passes `approval_service.gate_answer` on both runtimes:
+  - it is passed on only if whoever sent it may answer;
+  - only once (`answered_at`, V051);
+  - and, after an inbox decision, as decided.
+  - This is what lets the inbox take a chat's request without running the tool twice. It also stops an API or A2A caller answering its own request.
+- **What the chat shows** comes from the server: the confirmation call's args get `"mateApprover": "inbox"` or `"either"`, and the chat clients read it.
+- **The default destination** (`APPROVALS_NOTIFY_*`) is the Default workspace's only, so another workspace's requests never reach the platform's channel.
+- **Notifications carry the arguments' names, not their values.**
+- **The link** is absolute when `MATE_PUBLIC_URL` is set, else a path.
+- **Alerts and approvals share `notify.deliver`,** moved out of `AlertService._deliver`.
 
 ## Phases
 

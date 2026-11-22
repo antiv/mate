@@ -1100,6 +1100,14 @@ class DashboardServer:
             raise HTTPException(status_code=400,
                                 detail=f"Not an agent of this workspace: {', '.join(outside)}")
 
+    @staticmethod
+    def _refuse_bad_approval_config(config: Dict[str, Any]) -> None:
+        """400 when the tool_config's require_confirmation doesn't validate (approval_config.py)."""
+        from shared.utils.approval_config import validate
+        errors = validate(config.get("tool_config"))
+        if errors:
+            raise HTTPException(status_code=400, detail="; ".join(errors))
+
     def _refuse_platform_only(self, ctx: RequestContext, config: Dict[str, Any],
                               before: Optional[Dict[str, Any]] = None) -> None:
         """403 when a caller who is no platform administrator gives an agent a feature
@@ -5463,6 +5471,7 @@ class DashboardServer:
                 template = self.template_service.get_template(template_id)
                 for agent in (template or {}).get("agents") or []:
                     self._refuse_platform_only(ctx, agent)
+                    self._refuse_bad_approval_config(agent)
                 result = self._import_template(template_id, project_name=project_name, changed_by=ctx.user_id,
                                                workspace_id=ctx.workspace_id,
                                                platform_admin=ctx.is_platform_admin)
@@ -5751,6 +5760,7 @@ class DashboardServer:
             self._require_in_workspace(ctx, project_id=config_data["project_id"] or 1)
             self._check_agent_names(ctx, name, parent_agents_list)
             self._refuse_platform_only(ctx, config_data)
+            self._refuse_bad_approval_config(config_data)
             success = self._create_agent_config(config_data, changed_by=ctx.user_id)
             if success:
                 audit_service.log(ctx.user_id, audit_service.ACTION_AGENT_CREATE, audit_service.RESOURCE_AGENT, resource_id=name, details={"project_id": config_data.get("project_id")}, request=request)
@@ -5840,6 +5850,7 @@ class DashboardServer:
                 self._require_in_workspace(ctx, project_id=config_data["project_id"])
             self._check_agent_names(ctx, name, parent_agents_list, config_id)
             self._refuse_platform_only(ctx, config_data, self._agent_config_dict(config_id))
+            self._refuse_bad_approval_config(config_data)
             # Read before writing: switching the Art. 50 notice off, or back on, is
             # a compliance decision and gets its own entry rather than hiding
             # inside a generic agent.update.
@@ -6790,17 +6801,18 @@ class DashboardServer:
             source: Optional[str] = None,
             inbox: bool = False,
             q: Optional[str] = None,
+            id: Optional[int] = None,
             limit: int = 100,
             offset: int = 0,
             all_workspaces: bool = False,
         ):
             """The tool calls agents paused on for approval, newest first, with their decision.
 
-            inbox=true leaves out the requests a chat answers. q matches the agent, the
-            tool and the user who started the run.
+            inbox=true keeps the requests the inbox answers (approval_service.inbox_decides).
+            q matches the agent, the tool and the user who started the run; id picks one.
             """
             from sqlalchemy import or_
-            from shared.utils.approval_service import SOURCE_CHAT
+            from shared.utils.approval_service import inbox_clause
             from shared.utils.models import ApprovalRequest
             view = self._view_workspace(ctx, all_workspaces)
             if not self.db_client:
@@ -6817,7 +6829,9 @@ class DashboardServer:
                 if source:
                     query = query.filter(ApprovalRequest.source == source)
                 if inbox:
-                    query = query.filter(ApprovalRequest.source != SOURCE_CHAT)
+                    query = query.filter(inbox_clause())
+                if id is not None:
+                    query = query.filter(ApprovalRequest.id == id)
                 for word in (q or "").split():
                     like = f"%{word}%"
                     query = query.filter(or_(ApprovalRequest.agent_name.ilike(like),

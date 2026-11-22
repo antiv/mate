@@ -13,14 +13,16 @@ covers:
 
 An agent can be set to ask before it uses a tool: see
 [Ask before a tool runs](tools-and-mcp.md#ask-before-a-tool-runs). In a chat, the
-person chatting answers. A run that nobody is chatting in has nobody to ask:
+person chatting answers. Requests wait on the **Approvals** page instead when:
 
-- a trigger;
-- a call through the API, A2A or MCP;
-- Slack;
-- an eval.
+- nobody is chatting: a trigger, a call through the API, A2A or MCP, Slack, an eval;
+- the agent's `approver` is `inbox`: an administrator decides, not the person
+  chatting, whose card says it is waiting;
+- the agent's `approver` is `either`: an administrator or the person chatting,
+  whoever answers first.
 
-Such a run stops at the tool and waits on the **Approvals** page.
+The agent's `notify` setting, or your administrator's default, sends a message when
+a request starts waiting. The message has a link that opens the request on this page.
 
 **Approvals** is in the Control Room, under **Governance & Access**. It is for admins
 of the workspace. The number beside it counts the requests waiting.
@@ -33,7 +35,7 @@ The **Waiting** tab lists the requests that wait for you, the longest-waiting fi
 |---|---|
 | **Waiting** | How long the run has been stopped |
 | **Agent**, **Tool** | The agent and the tool it wants to run |
-| **Source** | Where the run came from: `trigger`, `api`, `a2a`, `mcp`, `slack` or `eval` |
+| **Source** | Where the run came from: `chat`, `trigger`, `api`, `a2a`, `mcp`, `slack` or `eval` |
 | **Started by** | The user the run belongs to, such as `trigger_runner` for a trigger |
 | **Expires** | When the request is rejected if nobody decides |
 
@@ -84,10 +86,14 @@ requests at a time.
 
 A request **waiting in the chat** is answered by the person chatting, not here.
 
+A decision reaches the agent once. If the person chatting clicks the card after you
+decided, or clicks it twice, the agent gets only the first answer.
+
 ## When nobody decides
 
 A request expires after a day, and the run continues as if it had been rejected.
-Your administrator can change the wait with `APPROVALS_EXPIRE_MINUTES`, in minutes.
+The agent's `expires_after_minutes` sets its own wait. Your administrator can change
+the default with `APPROVALS_EXPIRE_MINUTES`, in minutes.
 
 Deleting an agent cancels its waiting requests.
 

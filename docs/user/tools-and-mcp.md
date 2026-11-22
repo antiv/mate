@@ -79,6 +79,42 @@ only that call:
   there the agent replies after the first answer, treating the calls not yet
   answered as still waiting, and answering them later still runs or skips them.
 
+Each card is answered once: a second click, or an answer after an administrator
+decided, is not passed on to the agent.
+
+### Who approves, and who is told
+
+Instead of the list, `require_confirmation` can be an object with more settings:
+
+```json
+{
+  "require_confirmation": {
+    "tools": ["issue_refund"],
+    "approver": "inbox",
+    "notify": {"type": "slack", "url": "https://hooks.slack.com/services/..."},
+    "expires_after_minutes": 120
+  }
+}
+```
+
+| Setting | What it does |
+|---|---|
+| `tools` | The tools that ask first, as in the list |
+| `approver` | Who decides a request from a chat. `chat` (the default): the person chatting. `inbox`: only an administrator, on the [Approvals](approvals.md) page; the chat's card has no buttons and says it waits for an administrator. `either`: both, and the first answer counts |
+| `notify` | Where to say that a request waits for an administrator. `type` is `http`, `email`, `slack` or `discord`, with `url`, or `to` for email, as for an [alert rule](alerts.md) |
+| `expires_after_minutes` | How long a request waits for an administrator before it is rejected. Without it, a day |
+
+- **A run nobody is chatting in** always waits for an administrator, whatever
+  `approver` says (below).
+- **The message** names the agent, the tool, where the run came from and the
+  arguments' names, not their values, with a link to the request.
+- **Without `notify`:** an agent of the Default workspace uses the destination your
+  administrator set (`APPROVALS_NOTIFY_TYPE`, `APPROVALS_NOTIFY_URL`,
+  `APPROVALS_NOTIFY_TO`). Agents of other workspaces get no message.
+- **The link** is a full address when `MATE_PUBLIC_URL` is set.
+- **Saving checks the settings.** An unknown `approver`, a `notify` without its
+  address, or an expiry that isn't a whole number of minutes is refused.
+
 ### When nobody is chatting
 
 A run that nobody is chatting in has no card to click. Examples are a trigger, an
@@ -90,7 +126,8 @@ the tool and its request waits for an administrator of the workspace.
 - **Either way,** the run continues from where it stopped, and a trigger then sends
   its answer to its destination (see [Triggers](triggers.md)).
 - **Nobody decides:** after a day the request expires, as if it had been rejected.
-  Your administrator can change the wait (`APPROVALS_EXPIRE_MINUTES`, in minutes).
+  The agent's `expires_after_minutes` changes the wait; so does your administrator,
+  for every agent without one (`APPROVALS_EXPIRE_MINUTES`, in minutes).
 - **The agent is deleted first:** its waiting requests are cancelled.
 
 An administrator decides on the **Approvals** page: see [Approvals](approvals.md).

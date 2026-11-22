@@ -23,7 +23,7 @@ This page covers how they work and where the code is.
 | `AgentTrigger` | `shared/utils/models.py` | One row per trigger. Columns are listed in the [database reference](../reference/database.md). |
 | `TriggerRunner` | `shared/utils/trigger_runner.py` | Process singleton (`get_trigger_runner()`). Owns the APScheduler instance, executes triggers, routes output, mints and verifies secrets. |
 | Routes | `DashboardServer` in `shared/utils/dashboard/dashboard_server.py` | CRUD under `/dashboard/api/triggers`, plus the public `POST /triggers/{id}/fire`. Listed in the [API reference](../reference/api.md). The CRUD routes keep to the request's workspace: they list its projects' triggers, answer 404 for another's (`_workspace_trigger`), and take an agent and a project of the workspace only. |
-| `post_json`, `send_email` | `shared/utils/notify.py` | Outbound delivery, shared with alert rules. |
+| `post_json`, `send_email` | `shared/utils/notify.py` | Outbound delivery, shared with alert rules and approval notifications. `deliver` sends to an alert rule's kind of destination (http, email, Slack, Discord), for both of those. |
 
 The runner starts in the **auth server** process (`initialize_trigger_runner()` in
 `auth_server.py`) and in `standalone_server.py`. It does not run inside the agent

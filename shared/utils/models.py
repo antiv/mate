@@ -864,6 +864,9 @@ class ApprovalRequest(Base):
     note = Column(Text, nullable=True)
     resume_status = Column(String(20), nullable=True)
     resume_result = Column(Text, nullable=True)
+    # V051: who may answer (chat, inbox, either; NULL is chat), and when the answer reached the run
+    approver = Column(String(10), nullable=True)
+    answered_at = Column(DateTime, nullable=True)
 
     def get_tool_args(self) -> Any:
         if not self.tool_args:
@@ -896,6 +899,7 @@ class ApprovalRequest(Base):
             'note': self.note,
             'resume_status': self.resume_status,
             'resume_result': self.resume_result,
+            'approver': self.approver or 'chat',
         }
 
 

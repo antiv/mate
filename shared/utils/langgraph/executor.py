@@ -227,31 +227,43 @@ def _repeats_what_was_sent(event: Dict[str, Any], already_sent: set) -> bool:
 
 async def _record_requests(event: Dict[str, Any], app_name: str, user_id: str, session_id: str,
                            invocation_id: str, state: Any) -> None:
-    """A pending approval row for each adk_request_confirmation call in event."""
+    """
+    A pending approval row for each adk_request_confirmation call in event. A call
+    the chat may not answer gets "mateApprover" in its args, as on ADK
+    (shared/callbacks/approval_plugin.py), so call this before the event is stored.
+    """
     import asyncio
 
     from shared.utils import approval_service
-    calls = list(approval_service.confirmation_calls(
-        (event.get("content") or {}).get("parts") or []))
+    parts = (event.get("content") or {}).get("parts") or []
+    calls = list(approval_service.confirmation_calls(parts))
     if not calls:
         return
     trigger_id = state.get(approval_service.TRIGGER_STATE_KEY) if hasattr(state, "get") else None
     for call in calls:
-        await asyncio.to_thread(
+        request_id = await asyncio.to_thread(
             approval_service.record_request, confirmation_call_id=call["id"], args=call["args"],
             agent_name=event.get("author"), app_name=app_name, user_id=user_id,
             session_id=session_id, invocation_id=invocation_id, trigger_id=trigger_id)
+        answered_in = await asyncio.to_thread(approval_service.answering, request_id)
+        if answered_in != "chat" and isinstance(call["args"], dict):
+            call["args"]["mateApprover"] = answered_in
 
 
-async def _record_decisions(decisions: Dict[str, bool], session_id: str, user_id: str) -> None:
-    """Mark the answered approval rows decided in the chat."""
+async def _gate_decisions(decisions: Dict[str, bool], session_id: str,
+                          user_id: str) -> Dict[str, bool]:
+    """The answers the run may receive (approval_service.gate_answer): decided, or left out."""
     import asyncio
 
     from shared.utils import approval_service
+    allowed: Dict[str, bool] = {}
     for call_id, confirmed in decisions.items():
-        await asyncio.to_thread(
-            approval_service.record_decision, session_id=session_id,
-            confirmation_call_id=call_id, confirmed=confirmed, decided_by=user_id, via="chat")
+        answer = await asyncio.to_thread(
+            approval_service.gate_answer, session_id=session_id,
+            confirmation_call_id=call_id, confirmed=confirmed, answered_by=user_id)
+        if answer is not None:
+            allowed[call_id] = answer
+    return allowed
 
 
 async def _resumed_agent(built: Any, config: Dict[str, Any]) -> str:
@@ -337,18 +349,25 @@ async def execute_run(app_name: str, user_id: str, session_id: str,
         # so the answered call ids have to be matched back to it.
         from langgraph.types import Command
         answers.update({r["id"]: r["result"] for r in tool_responses if r.get("id")})
+        answered_approval = bool(decisions)
         if decisions:
             already_sent = await _already_sent_ids(built.graph, config)
+            # Only the answers to what the graph is paused on, and only as gate_answer
+            # allows: once, and by whoever may give them
+            asked = {cid: ok for cid, ok in decisions.items() if cid in already_sent}
+            decisions = await _gate_decisions(asked, session_id, user_id)
+            if asked and not decisions and not tool_responses:
+                yield _notice_event(app_name, invocation_id,
+                                    "This approval is decided in the approvals inbox, "
+                                    "or was answered already.")
+                return
         resume_map = await _resume_map(built.graph, config, answers, decisions)
         if not resume_map:
             yield _notice_event(app_name, invocation_id,
-                                "This conversation is not waiting on that approval." if decisions
+                                "This conversation is not waiting on that approval." if answered_approval
                                 else "This conversation is not waiting on a tool result.")
             return
         graph_input = Command(resume=resume_map)
-        # The answers to what the graph is paused on, recorded as decided in the chat
-        await _record_decisions({cid: ok for cid, ok in decisions.items() if cid in already_sent},
-                                session_id, user_id)
     else:
         user_text = _text_of_new_message(new_message)
         root_engine = built.guardrail_engines.get(app_name)
@@ -388,11 +407,11 @@ async def execute_run(app_name: str, user_id: str, session_id: str,
                     state_delta = run_context.pop_state_delta()
                     if state_delta:
                         store.update_state(session_id, state_delta)
+                    await _record_requests(event, app_name, user_id, session_id, invocation_id,
+                                           run_context.state)
                     store.append_event(session_id, event)
                     _log_token_usage(event, app_name, user_id, session_id, built.model_names,
                                      built.fallback_models)
-                    await _record_requests(event, app_name, user_id, session_id, invocation_id,
-                                           run_context.state)
                 yield event
 
             # A tool node surfaces one pause at a time, so a turn with several

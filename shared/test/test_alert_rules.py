@@ -104,7 +104,7 @@ class TestCooldown(_AlertTestCase):
     def test_fires_when_threshold_crossed(self):
         self.token_service.get_error_count_since.return_value = 5
         rule_id = self._rule()
-        with patch("shared.utils.alert_service.post_json", return_value=(True, "HTTP 200")) as post:
+        with patch("shared.utils.notify.post_json", return_value=(True, "HTTP 200")) as post:
             fired = self.service.evaluate_all()
         self.assertEqual([f["rule_id"] for f in fired], [rule_id])
         self.assertEqual(post.call_count, 1)
@@ -112,14 +112,14 @@ class TestCooldown(_AlertTestCase):
     def test_does_not_fire_below_threshold(self):
         self.token_service.get_error_count_since.return_value = 2
         self._rule()
-        with patch("shared.utils.alert_service.post_json", return_value=(True, "ok")) as post:
+        with patch("shared.utils.notify.post_json", return_value=(True, "ok")) as post:
             self.assertEqual(self.service.evaluate_all(), [])
         post.assert_not_called()
 
     def test_cooldown_suppresses_the_second_pass(self):
         self.token_service.get_error_count_since.return_value = 5
         self._rule()
-        with patch("shared.utils.alert_service.post_json", return_value=(True, "ok")) as post:
+        with patch("shared.utils.notify.post_json", return_value=(True, "ok")) as post:
             self.service.evaluate_all()
             self.service.evaluate_all()
         self.assertEqual(post.call_count, 1)
@@ -128,7 +128,7 @@ class TestCooldown(_AlertTestCase):
         # A fresh service stands in for a restarted process: the suppression must hold
         self.token_service.get_error_count_since.return_value = 5
         rule_id = self._rule()
-        with patch("shared.utils.alert_service.post_json", return_value=(True, "ok")) as post:
+        with patch("shared.utils.notify.post_json", return_value=(True, "ok")) as post:
             self.service.evaluate_all()
             restarted = AlertService()
             restarted._get_session = lambda: self.Session()
@@ -141,7 +141,7 @@ class TestCooldown(_AlertTestCase):
     def test_fires_again_once_the_cooldown_expires(self):
         self.token_service.get_error_count_since.return_value = 5
         rule_id = self._rule(cooldown_seconds=60)
-        with patch("shared.utils.alert_service.post_json", return_value=(True, "ok")) as post:
+        with patch("shared.utils.notify.post_json", return_value=(True, "ok")) as post:
             self.service.evaluate_all()
             session = self.Session()
             rule = session.get(AlertRule, rule_id)
@@ -157,7 +157,7 @@ class TestCooldown(_AlertTestCase):
         rule_id = self._rule()
         other = AlertService()
         other._get_session = lambda: self.Session()
-        with patch("shared.utils.alert_service.post_json", return_value=(True, "ok")) as post:
+        with patch("shared.utils.notify.post_json", return_value=(True, "ok")) as post:
             self.service.evaluate_all()
             other.evaluate_all()
         self.assertEqual(post.call_count, 1)
@@ -168,7 +168,7 @@ class TestCooldown(_AlertTestCase):
     def test_disabled_rules_are_skipped(self):
         self.token_service.get_error_count_since.return_value = 99
         self._rule(is_enabled=False)
-        with patch("shared.utils.alert_service.post_json", return_value=(True, "ok")) as post:
+        with patch("shared.utils.notify.post_json", return_value=(True, "ok")) as post:
             self.assertEqual(self.service.evaluate_all(), [])
         post.assert_not_called()
 
@@ -179,7 +179,7 @@ class TestConditions(_AlertTestCase):
         self.guardrail_service.count_triggers_since.return_value = 12
         self._rule(condition_type="guardrail_count",
                    condition_config={"threshold": 10, "window_minutes": 60})
-        with patch("shared.utils.alert_service.post_json", return_value=(True, "ok")) as post:
+        with patch("shared.utils.notify.post_json", return_value=(True, "ok")) as post:
             fired = self.service.evaluate_all()
         self.assertEqual(len(fired), 1)
         self.assertEqual(post.call_args.args[1]["event"], "guardrail_alert")
@@ -205,7 +205,7 @@ class TestConditions(_AlertTestCase):
         self.token_service.get_agent_tokens_since.return_value = 950
         self._rule(condition_type="budget_threshold",
                    condition_config={"threshold_pct": 90, "period": "day"})
-        with patch("shared.utils.alert_service.post_json", return_value=(True, "ok")) as post:
+        with patch("shared.utils.notify.post_json", return_value=(True, "ok")) as post:
             fired = self.service.evaluate_all()
         self.assertEqual(len(fired), 1)
         payload = post.call_args.args[1]
@@ -218,7 +218,7 @@ class TestConditions(_AlertTestCase):
         self.token_service.get_agent_tokens_since.return_value = 5000
         self._rule(condition_type="budget_threshold",
                    condition_config={"threshold_pct": 50, "period": "day"})
-        with patch("shared.utils.alert_service.post_json", return_value=(True, "ok")) as post:
+        with patch("shared.utils.notify.post_json", return_value=(True, "ok")) as post:
             self.assertEqual(self.service.evaluate_all(), [])
         post.assert_not_called()
 
@@ -227,7 +227,7 @@ class TestConditions(_AlertTestCase):
         rule_id = self._rule(cooldown_seconds=0, condition_type="budget_threshold",
                              condition_config={"threshold_pct": 90, "period": "day",
                                                "token_limit": 1000})
-        with patch("shared.utils.alert_service.post_json", return_value=(True, "ok")) as post:
+        with patch("shared.utils.notify.post_json", return_value=(True, "ok")) as post:
             self.service.evaluate_all()
             self.service.evaluate_all()
         self.assertEqual(post.call_count, 1)
@@ -241,7 +241,7 @@ class TestConditions(_AlertTestCase):
         rule_id = self._rule(cooldown_seconds=0, condition_type="budget_threshold",
                              condition_config={"threshold_pct": 90, "period": "day",
                                                "token_limit": 1000})
-        with patch("shared.utils.alert_service.post_json", return_value=(True, "ok")) as post:
+        with patch("shared.utils.notify.post_json", return_value=(True, "ok")) as post:
             self.service.evaluate_all()
             session = self.Session()
             rule = session.get(AlertRule, rule_id)
@@ -267,7 +267,7 @@ class TestConditions(_AlertTestCase):
         self._fallback(action="agent.update")               # not a fallback
         self._rule(condition_type="model_fallback_count",
                    condition_config={"threshold": 3, "window_minutes": 15})
-        with patch("shared.utils.alert_service.post_json", return_value=(True, "ok")) as post:
+        with patch("shared.utils.notify.post_json", return_value=(True, "ok")) as post:
             fired = self.service.evaluate_all()
         self.assertEqual(len(fired), 1)
         payload = post.call_args.args[1]
@@ -278,7 +278,7 @@ class TestConditions(_AlertTestCase):
         self._fallback()
         self._rule(condition_type="model_fallback_count",
                    condition_config={"threshold": 2, "window_minutes": 15})
-        with patch("shared.utils.alert_service.post_json", return_value=(True, "ok")) as post:
+        with patch("shared.utils.notify.post_json", return_value=(True, "ok")) as post:
             self.assertEqual(self.service.evaluate_all(), [])
         post.assert_not_called()
 
@@ -332,7 +332,7 @@ class TestDelivery(_AlertTestCase):
     def test_email_destination_uses_the_email_sender(self):
         self.token_service.get_error_count_since.return_value = 5
         self._rule(destination_type="email", destination_config={"to": "ops@example.com"})
-        with patch("shared.utils.alert_service.send_email", return_value=(True, "sent")) as send:
+        with patch("shared.utils.notify.send_email", return_value=(True, "sent")) as send:
             self.service.evaluate_all()
         self.assertEqual(send.call_args.args[0], "ops@example.com")
 
@@ -340,7 +340,7 @@ class TestDelivery(_AlertTestCase):
         self.token_service.get_error_count_since.return_value = 5
         self._rule(name="<!channel> bot", destination_type="slack",
                    destination_config={"url": "https://hooks.slack.com/services/T/B/x"})
-        with patch("shared.utils.alert_service.post_json", return_value=(True, "ok")) as post:
+        with patch("shared.utils.notify.post_json", return_value=(True, "ok")) as post:
             self.service.evaluate_all()
         url, body = post.call_args.args[0], post.call_args.args[1]
         self.assertEqual(url, "https://hooks.slack.com/services/T/B/x")
@@ -352,7 +352,7 @@ class TestDelivery(_AlertTestCase):
         self.token_service.get_error_count_since.return_value = 5
         self._rule(name="@everyone bot", destination_type="discord",
                    destination_config={"url": "https://discord.com/api/webhooks/1/x"})
-        with patch("shared.utils.alert_service.post_json", return_value=(True, "ok")) as post:
+        with patch("shared.utils.notify.post_json", return_value=(True, "ok")) as post:
             self.service.evaluate_all()
         body = post.call_args.args[1]
         self.assertIn("@everyone bot", body["content"])
@@ -362,14 +362,14 @@ class TestDelivery(_AlertTestCase):
         self.token_service.get_error_count_since.return_value = 0
         rule_id = self._rule(destination_type="slack",
                              destination_config={"url": "https://hooks.slack.com/services/T/B/x"})
-        with patch("shared.utils.alert_service.post_json", return_value=(True, "ok")) as post:
+        with patch("shared.utils.notify.post_json", return_value=(True, "ok")) as post:
             self.service.evaluate_rule(rule_id, force=True)
         self.assertTrue(post.call_args.args[1]["text"].startswith("[MATE alert test] "))
 
     def test_delivery_failure_is_recorded_on_the_rule(self):
         self.token_service.get_error_count_since.return_value = 5
         rule_id = self._rule()
-        with patch("shared.utils.alert_service.post_json", return_value=(False, "ConnectError: refused")):
+        with patch("shared.utils.notify.post_json", return_value=(False, "ConnectError: refused")):
             self.assertEqual(self.service.evaluate_all(), [])
         session = self.Session()
         rule = session.get(AlertRule, rule_id)
@@ -390,7 +390,7 @@ class TestDelivery(_AlertTestCase):
             return original(session, rule)
 
         self.service._measure = flaky
-        with patch("shared.utils.alert_service.post_json", return_value=(True, "ok")):
+        with patch("shared.utils.notify.post_json", return_value=(True, "ok")):
             fired = self.service.evaluate_all()
         self.assertEqual([f["rule_id"] for f in fired], [good_id])
 
@@ -401,7 +401,7 @@ class TestDelivery(_AlertTestCase):
     def test_test_fire_does_not_consume_the_cooldown(self):
         self.token_service.get_error_count_since.return_value = 5
         rule_id = self._rule()
-        with patch("shared.utils.alert_service.post_json", return_value=(True, "ok")):
+        with patch("shared.utils.notify.post_json", return_value=(True, "ok")):
             result = self.service.evaluate_rule(rule_id, force=True)
         self.assertTrue(result["would_fire"])
         session = self.Session()

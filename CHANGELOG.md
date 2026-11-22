@@ -29,9 +29,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - **History:** every request of the workspace, a chat's included, with its decision, who made it, and how the run went on. It can be filtered by decision and source, searched, and is paged.
   - `GET /dashboard/api/approvals` takes `inbox=true` (leave out a chat's requests) and `q` (search agent, tool and user)
   - **Session Tracking** opens a session given in its link (`?session_id=…&app_name=…&user_id=…`)
+- **Who approves, who is told, and how long a request waits** (approvals inbox, phase 3, #376) - `require_confirmation` can be an object as well as a list of tools:
+  - `approver`: `chat` (the default, as before), `inbox` (only an administrator decides, on the Approvals page; the chat's card has no buttons and says it is waiting) or `either` (whoever answers first);
+  - `notify`: an http, email, Slack or Discord destination that is told when a request starts waiting for an administrator. The message names the agent, the tool, the source and the arguments' names, never their values, and links to `/dashboard/approvals?id=…` (under `MATE_PUBLIC_URL` when set). Agents of the Default workspace without one use `APPROVALS_NOTIFY_TYPE` with `APPROVALS_NOTIFY_URL` or `APPROVALS_NOTIFY_TO`;
+  - `expires_after_minutes`: the agent's own wait, instead of `APPROVALS_EXPIRE_MINUTES`.
+  - Saving an agent checks these settings and refuses what doesn't validate.
+  - Migration V051 adds `approver` and `answered_at` to `approval_requests`.
 - **Dashboard components** (dashboard redesign, step 2, #376) - `static/css/components.css` holds `m-` classes for cards, buttons, form fields, badges, switches, notices, dialogs and tables, on the design tokens only, so they are right in both themes without the Tailwind remap. `static/js/data-table.js` is a shared table with search, sorting, pagination and an empty state, for lists a page loads whole and for lists the API pages; `static/js/dialogs.js` opens and closes dialogs, with Escape, focus and Tab kept inside; `static/js/tabs.js` gives tabs their keyboard and ARIA states. See `docs/dev/dashboard-components.md`
 
 ### Security
+
+- **An approval reaches the agent once, and only from whoever may give it** (approvals inbox, phase 3) - on both runtimes, an answer to a confirmation is passed on only if the request is the chat's to answer, and only the first time. A second click on the card, a late click after an administrator decided, or an API or A2A caller answering its own request no longer runs the tool, and once an administrator decides, the run receives that decision whatever the message said
 
 - **litellm is held below 1.106, and moved by hand** - LiteLLM's 1.107.0 release on PyPI carried a credential stealer, and LiteLLM has not ruled out further access to its release accounts, so the monthly dependency upgrade no longer takes new litellm releases on its own. No release of MATE installed it: the lock had 1.103.2, and the 1 November upgrade run resolved 1.103.9. From 1.106.0, litellm's completion path also imports types that only mcp 2 has, which fails every model call while mcp is below 2
 

@@ -22,20 +22,16 @@ from sqlalchemy import func
 
 from .database_client import get_database_client
 from .models import DEFAULT_WORKSPACE_ID, AgentConfig, AlertRule, AuditLog, RateLimitConfig
-from .notify import post_json, send_email
+from .notify import DESTINATION_TYPES, deliver
 from .workspaces import rows_of
 
 logger = logging.getLogger(__name__)
 
 CONDITION_TYPES = ('agent_error_count', 'budget_threshold', 'guardrail_count',
                    'model_fallback_count')
-DESTINATION_TYPES = ('http', 'email', 'slack', 'discord')
 # 'global' is the whole workspace of the rule ("Whole workspace" on the Alerts page)
 SCOPES = ('user', 'agent', 'project', 'global')
 
-# Chat incoming webhooks take a fixed body, not MATE's payload: Slack rejects a
-# post without `text` and Discord one without `content`.
-_CHAT_MESSAGE_KEYS = {'slack': 'text', 'discord': 'content'}
 
 # What update_rule may set; the workspace and the bookkeeping stay as they are
 _RULE_FIELDS = {'name', 'description', 'scope', 'scope_id', 'condition_type',
@@ -59,21 +55,6 @@ _PERIOD_KEY_FORMATS = {
 
 def alerts_enabled() -> bool:
     return os.getenv("ALERTS_ENABLED", "false").lower() == "true"
-
-
-def _may_email(workspace_id: Optional[int]) -> bool:
-    """True if the workspace may send email through the server's SMTP account
-    (platform_only.FEATURE_EMAIL). A rule with no workspace is the default one's."""
-    from .database_client import get_database_client
-    from .platform_only import FEATURE_EMAIL
-    from .workspaces import workspace_has_feature
-    session = get_database_client().get_session()
-    if not session:
-        return False
-    try:
-        return workspace_has_feature(session, workspace_id or DEFAULT_WORKSPACE_ID, FEATURE_EMAIL)
-    finally:
-        session.close()
 
 
 class AlertService:
@@ -493,35 +474,11 @@ class AlertService:
         }
 
     def _deliver(self, rule: AlertRule, payload: Dict[str, Any]) -> tuple:
-        config = rule.get_destination_config()
-        if rule.destination_type == 'http' or rule.destination_type in _CHAT_MESSAGE_KEYS:
-            from .outbound import outbound_refusal
-            refusal = outbound_refusal(config.get('url', ''), workspace_id=rule.workspace_id)
-            if refusal:
-                return False, f"refused: {refusal}"
-        if rule.destination_type == 'http':
-            return post_json(config.get('url', ''), payload,
-                             headers=config.get('headers') or {},
-                             timeout=float(config.get('timeout', 30)))
-        if rule.destination_type == 'email':
-            if not _may_email(rule.workspace_id):
-                return False, ("refused: a platform administrator hasn't enabled email for "
-                               "the rule's workspace")
-            subject = config.get('subject') or f"[MATE alert] {rule.name}"
-            body = payload['message'] + "\n\n" + "\n".join(
-                f"{k}: {v}" for k, v in payload.items() if k != 'message')
-            return send_email(config.get('to', ''), subject, body)
-        if rule.destination_type in _CHAT_MESSAGE_KEYS:
-            label = "MATE alert test" if payload.get('test') else "MATE alert"
-            text = f"[{label}] {rule.name}: {payload['message']}"
-            if rule.destination_type == 'slack':
-                # Slack reads <...> as links and mentions (<!channel>); these three are its escapes
-                text = text.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-            body: Dict[str, Any] = {_CHAT_MESSAGE_KEYS[rule.destination_type]: text}
-            if rule.destination_type == 'discord':
-                body['allowed_mentions'] = {'parse': []}  # no @everyone from a rule or agent name
-            return post_json(config.get('url', ''), body, timeout=float(config.get('timeout', 30)))
-        return False, f"unknown destination_type '{rule.destination_type}'"
+        label = "MATE alert test" if payload.get('test') else "MATE alert"
+        return deliver(rule.destination_type, rule.get_destination_config(),
+                       text=f"[{label}] {rule.name}: {payload['message']}",
+                       payload=payload, subject=f"[MATE alert] {rule.name}",
+                       workspace_id=rule.workspace_id)
 
     def evaluate_rule(self, rule_id: int, force: bool = False,
                       workspace_id: Optional[int] = None) -> Dict[str, Any]:
