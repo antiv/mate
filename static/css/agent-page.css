@@ -6,7 +6,7 @@
 
 .agent-editor {
     display: grid;
-    grid-template-columns: minmax(240px, 300px) minmax(0, 1fr) minmax(260px, 340px);
+    grid-template-columns: minmax(240px, 300px) minmax(0, 1fr) minmax(280px, 380px);
     gap: 14px;
     align-items: start;
 }
@@ -31,4 +31,9 @@
 }
 .agent-instruction-fallback { resize: vertical; font-family: var(--m-font-mono); font-size: 13px; }
 
-.agent-summary { max-height: 140px; }
+/* The fields of the configuration dialogs (config_modals.html) in a section: their
+   side-by-side columns follow the screen, not the section, so they are one column here */
+.agent-section-fields .md\:grid-cols-3 { grid-template-columns: minmax(0, 1fr); }
+.agent-section-fields .md\:col-span-1,
+.agent-section-fields .md\:col-span-2 { grid-column: auto; }
+.agent-section-fields textarea { max-width: 100%; }

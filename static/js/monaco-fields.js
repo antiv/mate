@@ -101,3 +101,10 @@ function toggleJsonEditor(textareaId, editorId, language = 'json') {
         }
     }
 }
+
+// The editors follow the theme switch in the header (the "dark" class on <html>)
+new MutationObserver(() => {
+    if (window.monaco && monaco.editor) {
+        monaco.editor.setTheme(document.documentElement.classList.contains('dark') ? 'vs-dark' : 'vs');
+    }
+}).observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });

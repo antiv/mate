@@ -1,10 +1,12 @@
 {% extends "base.html" %}
-{% from 'dashboard/modals/config_modals.html' import config_modals %}
+{% from 'dashboard/modals/config_modals.html' import tool_config_fields, mcp_servers_fields, planner_fields,
+    generate_content_fields, input_schema_fields, guardrail_fields, output_schema_fields %}
 
 {# The agent page (documents/design/dashboard-2.1.md, "The agent page" and "The editor").
    agent: the agent edited; None for a new one, then source is the agent copied, if any.
-   The form's fields have the prefix "agent", which the config dialogs and their
-   summaries (agent-forms.js, agent-tools.js, agent-config.js) take. #}
+   The form's fields have the prefix "agent". The right-hand sections hold the fields
+   of the configuration dialogs (config_modals.html), which agent-forms.js,
+   agent-tools.js and agent-config.js keep in step with their JSON. #}
 {% set p = 'agent' %}
 {% set cfg = agent or source %}
 {% set mode = 'edit' if agent else ('copy' if source else 'new') %}
@@ -13,7 +15,7 @@
 {% block title %}{{ agent.name if agent else 'New agent' }} - MATE{% endblock %}
 
 {% block extra_head %}
-<link rel="stylesheet" href="/static/css/agent-page.css?v=2">
+<link rel="stylesheet" href="/static/css/agent-page.css?v=3">
 <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.44.0/min/vs/loader.js"></script>
 {% endblock %}
 
@@ -177,16 +179,16 @@
                     <div class="m-section-body">{{ caller() }}</div>
                 </details>
                 {%- endmacro %}
-                {% macro json_actions(field, configure_label='Configure', clear_fn='clearJsonField') -%}
+                {% macro clear(fn, field=None) -%}
                 <div class="m-row">
-                    <button type="button" class="m-btn m-btn-secondary m-btn-sm" data-click="openConfigModal" data-args='["agent", "{{ field }}"]'>{{ configure_label }}</button>
-                    <button type="button" class="m-btn m-btn-sm m-btn-ghost" data-click="{{ clear_fn }}" data-args='{{ (["agent"] if clear_fn != "clearJsonField" else ["agent", field]) | tojson }}'>Clear</button>
+                    <span class="m-spacer"></span>
+                    <button type="button" class="m-btn m-btn-ghost m-btn-sm" data-click="{{ fn }}" data-args='{{ (["agent", field] if field else ["agent"]) | tojson }}'>Clear</button>
                 </div>
                 {%- endmacro %}
 
                 {% call section('tools', 'Tools', 'fa-toolbox') %}
-                    <pre id="{{ p }}ToolConfigSummary" class="m-pre agent-summary" data-empty-text="No tools configured">No tools configured</pre>
-                    {{ json_actions('ToolConfig', clear_fn='resetToolConfig') }}
+                    <div class="agent-section-fields">{{ tool_config_fields(p) }}</div>
+                    {{ clear('resetToolConfig') }}
                     {% if agent %}
                     <div class="m-row">
                         <button type="button" class="m-btn m-btn-sm m-btn-ghost" data-click="mateAgentPage.approvals">
@@ -196,8 +198,8 @@
                 {% endcall %}
 
                 {% call section('mcp', 'MCP servers', 'fa-terminal') %}
-                    <pre id="{{ p }}McpServersConfigSummary" class="m-pre agent-summary" data-empty-text="No MCP servers configured">No MCP servers configured</pre>
-                    {{ json_actions('McpServersConfig') }}
+                    <div class="agent-section-fields">{{ mcp_servers_fields(p) }}</div>
+                    {{ clear('clearJsonField', 'McpServersConfig') }}
                 {% endcall %}
 
                 {% call section('filesearch', 'File Search', 'fa-file-alt') %}
@@ -221,27 +223,27 @@
                 {% endcall %}
 
                 {% call section('guardrails', 'Guardrails', 'fa-shield-alt') %}
-                    <pre id="{{ p }}GuardrailConfigSummary" class="m-pre agent-summary" data-empty-text="No guardrails configured">No guardrails configured</pre>
-                    {{ json_actions('GuardrailConfig') }}
+                    <div class="agent-section-fields" id="agentGuardrailFields">{{ guardrail_fields(p) }}</div>
+                    {{ clear('mateAgentPage.clearGuardrails') }}
                 {% endcall %}
 
                 {% call section('planner', 'Planner', 'fa-cogs') %}
-                    <pre id="{{ p }}PlannerConfigSummary" class="m-pre agent-summary" data-empty-text="No planner configured">No planner configured</pre>
-                    {{ json_actions('PlannerConfig', clear_fn='resetPlannerConfig') }}
+                    <div class="agent-section-fields">{{ planner_fields(p) }}</div>
+                    {{ clear('resetPlannerConfig') }}
                 {% endcall %}
 
                 {% call section('generation', 'Generation', 'fa-sliders-h') %}
-                    <pre id="{{ p }}GenerateContentConfigSummary" class="m-pre agent-summary" data-empty-text="No content parameters configured">No content parameters configured</pre>
-                    {{ json_actions('GenerateContentConfig', clear_fn='resetContentConfig') }}
+                    <div class="agent-section-fields">{{ generate_content_fields(p) }}</div>
+                    {{ clear('resetContentConfig') }}
                 {% endcall %}
 
                 {% call section('io', 'Input/output', 'fa-exchange-alt') %}
                     <p class="m-label">Input schema</p>
-                    <pre id="{{ p }}InputSchemaSummary" class="m-pre agent-summary" data-empty-text="No input schema defined">No input schema defined</pre>
-                    {{ json_actions('InputSchema', configure_label='Edit') }}
+                    <div class="agent-section-fields">{{ input_schema_fields(p) }}</div>
+                    {{ clear('clearJsonField', 'InputSchema') }}
                     <p class="m-label">Output schema</p>
-                    <pre id="{{ p }}OutputSchemaSummary" class="m-pre agent-summary" data-empty-text="No output schema defined">No output schema defined</pre>
-                    {{ json_actions('OutputSchema', configure_label='Edit') }}
+                    <div class="agent-section-fields">{{ output_schema_fields(p) }}</div>
+                    {{ clear('clearJsonField', 'OutputSchema') }}
                     <div class="m-field">
                         <label for="{{ p }}IncludeContents">Include contents</label>
                         <select id="{{ p }}IncludeContents" class="m-input">
@@ -301,7 +303,6 @@
     </div>
 </div>
 
-{{ config_modals(p) }}
 {% with id_prefix = p %}{% include 'dashboard/modals/file_search_modal.html' %}{% endwith %}
 {% include 'dashboard/modals/memory_blocks_modal.html' %}
 {% include 'dashboard/modals/version_history_modal.html' %}
@@ -316,7 +317,7 @@
     "roles": roles,
     "backToVisual": back_to_visual,
 } | tojson }}</script>
-<script src="/static/js/monaco-fields.js?v=1"></script>
+<script src="/static/js/monaco-fields.js?v=2"></script>
 <script src="/static/js/agent-config.js?v=21"></script>
 <script src="/static/js/agent-tools.js?v=25"></script>
 <script src="/static/js/modals/file-search.js?v=25"></script>
@@ -324,5 +325,5 @@
 <script src="/static/js/modals/memory-blocks.js?v=24"></script>
 <script src="/static/js/modals/version-history.js?v=4"></script>
 <script src="/static/js/approval-settings.js?v=1"></script>
-<script src="/static/js/agent-page.js?v=2"></script>
+<script src="/static/js/agent-page.js?v=3"></script>
 {% endblock %}

@@ -21,8 +21,8 @@ last night's scheduled run.
 
 ## Give an agent access
 
-Open the agent's page from **Studio → Agents**. In the **Tools** section, click
-**Configure**, tick **Memory Blocks**, then **Save** the agent. The **Memory blocks**
+Open the agent's page from **Studio → Agents**. In the **Tools** section, tick
+**Memory Blocks**, then **Save** the agent. The **Memory blocks**
 section shows **Manage Blocks** only once the tool is ticked.
 
 ## Create and edit blocks

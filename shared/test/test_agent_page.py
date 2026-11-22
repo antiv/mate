@@ -41,6 +41,23 @@ class TestAgentPage(_TwoWorkspaces):
         for marker in B_MARKERS:
             self.assertNotIn(marker, page)
 
+    def test_the_sections_hold_the_configuration_fields(self):
+        html = self._get(f"/dashboard/agents/{A_ROOT}").text
+        form = html[html.index('<form id="agentForm"'):html.index("</form>")]
+        for field in ("agentToolConfig", "agentGoogleDrive", "agentMcpServersConfig", "agentPlannerType",
+                      "agentTemperature", "agentInputSchema", "agentOutputSchema", "agentGrPii",
+                      "agentGuardrailConfig"):
+            self.assertEqual(html.count(f'id="{field}"'), 1, field)
+            self.assertIn(f'id="{field}"', form)
+        # No dialog holds them a second time
+        self.assertNotIn("agentToolConfigModal", html)
+
+    def test_the_visual_builder_keeps_its_dialogs(self):
+        html = self._get(f"/dashboard/agents/visual?project_id={self.ids['project_a']}").text
+        for dialog in ("vbToolConfigModal", "vbGuardrailConfigModal", "vbPlannerConfigModal"):
+            self.assertIn(f'id="{dialog}"', html)
+        self.assertEqual(html.count('id="vbGrPii"'), 1)
+
     def test_another_workspace_s_agent_is_a_404(self):
         self.assertEqual(self._get(f"/dashboard/agents/{B_ROOT}").status_code, 404)
         self.assertEqual(self._get(f"/dashboard/agents/new?from={B_ROOT}").status_code, 404)

@@ -110,8 +110,8 @@ order: tracing, the thread offload, and the approval wrapper for names listed un
 ## 3. The dashboard switch
 
 The JSON key works as soon as the tool is registered. To give it a checkbox in the
-**Tool Configuration** dialog, add it to
-`templates/dashboard/modals/config_modals.html` and to the code that reads and
+**Tools** section of the agent page and the Visual Builder's tool dialog, add it to
+`tool_config_fields` in `templates/dashboard/modals/config_modals.html` and to the code that reads and
 writes the checkboxes in `static/js/agent-tools.js`. Add the key to the
 "Available keys" hint in the same template either way.
 

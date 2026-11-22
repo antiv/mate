@@ -243,7 +243,7 @@ Drawn with the tokens of `static/css/redesign.css` and its font. The data in the
 4. **The agent page:** the header and tabs, filled one tab at a time.
    - Settings first: the editor replaces the side panel on Agents and in the Visual Builder in the same PR.
    - Then Versions, Sessions, Evals, Usage, Traces, Channels and Test.
-   - As built (4a): the page, its header and the Settings tab. Test and History are buttons in the header for now, opening the Work Room and the version history dialog. Each right-hand section shows its summary with **Configure** and **Clear**, which open the dialogs of `config_modals.html`; putting those forms in the sections themselves is the next step. The roles picker accepts `widget`, which a widget agent needs, but offers it apart from the members' roles.
+   - As built (4a): the page, its header and the Settings tab. Test and History are buttons in the header for now, opening the Work Room and the version history dialog. In 4a each right-hand section opened the dialog of `config_modals.html`; since 4b it holds the dialog's fields itself (one macro per dialog, which the Visual Builder's dialogs call too), with no Configure step. The roles picker accepts `widget`, which a widget agent needs, but offers it apart from the members' roles.
 5. **Search in the Work Room.**
 6. **The command palette,** if there is time.
 

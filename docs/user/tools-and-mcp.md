@@ -25,9 +25,9 @@ in **MCP Servers Configuration**.
 
 ## Switch on built-in tools
 
-Open the agent, click **Configure** under **Tool Configuration**, tick what the agent
-needs and save. The same settings are shown as JSON on the right; some tools can
-only be adjusted there.
+Open the agent's page and its **Tools** section, tick what the agent needs and
+**Save**. The same settings are shown as JSON below the checkboxes; some tools can
+only be adjusted there. In the Visual Builder they are in a dialog.
 
 | Tool | What the agent can do | Needs |
 |---|---|---|
@@ -164,8 +164,8 @@ MCP (Model Context Protocol) is a standard way for a program to offer tools to
 agents. Many products publish an MCP server; connecting one gives the agent all of
 its tools.
 
-Open the agent, click **Configure** under **MCP Servers Configuration** and enter a
-JSON mapping with one entry per server:
+Open the agent's page and its **MCP servers** section, and enter a JSON mapping with
+one entry per server:
 
 ```json
 {

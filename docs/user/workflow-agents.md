@@ -13,8 +13,8 @@ covers:
 # Workflow Agents (ADK 2.x Graph Runtime)
 
 MATE `graph` agents compile to the ADK 2.x Workflow graph engine. The graph is
-configured in the agent's `planner_config`: in the agent form, **Configure** under
-**Planner** opens **Planner Configuration**, where the JSON goes.
+configured in the agent's `planner_config`: on the agent's page, in the **Planner**
+section, where the JSON goes.
 
 Graph agents run on the ADK runtime only. With `AGENT_FRAMEWORK=langgraph`, building
 one fails with "has type 'graph' which is not supported by the langgraph runtime".
