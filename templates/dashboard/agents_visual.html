@@ -134,6 +134,7 @@ projects_list=projects
 {% include 'dashboard/modals/edit_instruction_modal.html' %}
 {# The agent form's History button opens it #}
 {% include 'dashboard/modals/version_history_modal.html' %}
+{% include 'dashboard/modals/approval_settings_modal.html' %}
 <textarea id="vbInstruction" class="hidden"></textarea>
 {% endblock %}
 
@@ -165,7 +166,8 @@ projects_list=projects
 <script src="/static/js/modals/template-sync.js?v=21"></script>
 <script src="/static/js/modals/version-history.js?v=3"></script>
 <script src="/static/js/trace-replay.js?v=2"></script>
-<script src="/static/js/agents-visual-builder.js?v=24"></script>
+<script src="/static/js/approval-settings.js?v=1"></script>
+<script src="/static/js/agents-visual-builder.js?v=25"></script>
 
 <script src="/static/js/agent-management.js?v=22"></script>
 <script nonce="{{ request.state.csp_nonce }}">

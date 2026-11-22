@@ -454,7 +454,10 @@ mateActions.allow('applyConfigModal', 'closeConfigModal', 'hideEditAgentModal',
             credentials: 'same-origin',
             body: formData,
         });
-        return resp.json();
+        const data = await resp.json().catch(function () { return {}; });
+        // A refused save (400 for settings that don't validate, 403, 404) is an error, not "Saved"
+        if (!resp.ok) throw new Error(data.detail || ('Server returned ' + resp.status));
+        return data;
     }
 
     async function apiDeleteAgent(agentId) {
@@ -1355,6 +1358,29 @@ mateActions.allow('applyConfigModal', 'closeConfigModal', 'hideEditAgentModal',
                     ),
                 ),
 
+                /* ── Approvals: require_confirmation (static/js/approval-settings.js) ── */
+                React.createElement(
+                    'div',
+                    { className: 'border-t border-gray-200 dark:border-gray-700 pt-2' },
+                    React.createElement(
+                        'div',
+                        { className: 'flex items-center justify-between mb-1' },
+                        React.createElement('span', { className: 'text-[11px] font-semibold text-gray-700 dark:text-gray-300' }, 'Approvals'),
+                        React.createElement('button', {
+                            type: 'button',
+                            className: 'text-[11px] px-2 py-0.5 bg-teal-600 hover:bg-teal-500 text-white rounded flex items-center gap-1 disabled:opacity-50',
+                            onClick: function () { if (props.onOpenApprovals) props.onOpenApprovals(agent.name); },
+                            disabled: !!agent.hardcoded,
+                            title: agent.hardcoded ? 'Hardcoded agents cannot be modified' : 'Which tools ask first, and who decides',
+                        },
+                            React.createElement('i', { className: 'fas fa-user-check' }),
+                            ' Configure',
+                        ),
+                    ),
+                    React.createElement('p', { className: 'text-[10px] text-gray-500 dark:text-gray-400 mt-1' },
+                        window.mateApprovalSettings ? window.mateApprovalSettings.summary(toolConfig) : ''),
+                ),
+
                 /* ── MCP Servers ── */
                 React.createElement(
                     'div',
@@ -1697,12 +1723,23 @@ mateActions.allow('applyConfigModal', 'closeConfigModal', 'hideEditAgentModal',
                 await apiUpdateAgent(updatedAgent);
                 await syncFromDb();
                 if (typeof window.showNotification === 'function') window.showNotification('Saved');
+                return true;
             } catch (error) {
-                if (typeof window.showNotification === 'function') window.showNotification('Failed to save', 'error');
+                if (typeof window.showNotification === 'function') window.showNotification('Failed to save: ' + error.message, 'error');
+                return false;
             } finally {
                 setSaving(false);
             }
         }, [syncFromDb]);
+
+        // The approval settings dialog (static/js/approval-settings.js) saves through handleSaveAgent
+        const openApprovals = useCallback(function (agentName) {
+            const agent = agentsByName.get(agentName);
+            if (!agent || !window.mateApprovalSettings) return;
+            window.mateApprovalSettings.open(agent, function (toolConfig) {
+                return handleSaveAgent(Object.assign({}, agent, { tool_config: toolConfig }));
+            });
+        }, [agentsByName, handleSaveAgent]);
 
         // Intercept editAgentForm submission to prevent page reload
         useEffect(() => {
@@ -2639,6 +2676,7 @@ mateActions.allow('applyConfigModal', 'closeConfigModal', 'hideEditAgentModal',
                         }
                     },
                     onOpenToolPicker: function (agentName) { setToolPickerModal({ agentName: agentName }); },
+                    onOpenApprovals: openApprovals,
                     onSelectMcpServer: function (serverName) {
                         if (!draftAgent) return;
                         setSelectedAttachment({ nodeId: '__mcp__' + draftAgent.name + '__' + serverName, type: 'mcp', agentName: draftAgent.name, label: serverName });

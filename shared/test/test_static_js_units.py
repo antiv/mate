@@ -3,7 +3,8 @@
 The dashboard scripts' unit tests, in shared/test/js/, run with node's test runner.
 
 They cover the parts of a script that need no page: the shared table's searching,
-sorting and paging (static/js/data-table.js).
+sorting and paging (static/js/data-table.js), and how the approval settings editor
+reads and writes require_confirmation (static/js/approval-settings.js).
 """
 
 import shutil

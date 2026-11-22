@@ -34,6 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `notify`: an http, email, Slack or Discord destination that is told when a request starts waiting for an administrator. The message names the agent, the tool, the source and the arguments' names, never their values, and links to `/dashboard/approvals?id=…` (under `MATE_PUBLIC_URL` when set). Agents of the Default workspace without one use `APPROVALS_NOTIFY_TYPE` with `APPROVALS_NOTIFY_URL` or `APPROVALS_NOTIFY_TO`;
   - `expires_after_minutes`: the agent's own wait, instead of `APPROVALS_EXPIRE_MINUTES`.
   - Saving an agent checks these settings and refuses what doesn't validate.
+  - **In the Visual Builder,** the agent panel has an **Approvals** section with a summary and a dialog for all four settings.
   - Migration V051 adds `approver` and `answered_at` to `approval_requests`.
 - **Dashboard components** (dashboard redesign, step 2, #376) - `static/css/components.css` holds `m-` classes for cards, buttons, form fields, badges, switches, notices, dialogs and tables, on the design tokens only, so they are right in both themes without the Tailwind remap. `static/js/data-table.js` is a shared table with search, sorting, pagination and an empty state, for lists a page loads whole and for lists the API pages; `static/js/dialogs.js` opens and closes dialogs, with Escape, focus and Tab kept inside; `static/js/tabs.js` gives tabs their keyboard and ARIA states. See `docs/dev/dashboard-components.md`
 
@@ -42,6 +43,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **An approval reaches the agent once, and only from whoever may give it** (approvals inbox, phase 3) - on both runtimes, an answer to a confirmation is passed on only if the request is the chat's to answer, and only the first time. A second click on the card, a late click after an administrator decided, or an API or A2A caller answering its own request no longer runs the tool, and once an administrator decides, the run receives that decision whatever the message said
 
 - **litellm is held below 1.106, and moved by hand** - LiteLLM's 1.107.0 release on PyPI carried a credential stealer, and LiteLLM has not ruled out further access to its release accounts, so the monthly dependency upgrade no longer takes new litellm releases on its own. No release of MATE installed it: the lock had 1.103.2, and the 1 November upgrade run resolved 1.103.9. From 1.106.0, litellm's completion path also imports types that only mcp 2 has, which fails every model call while mcp is below 2
+
+### Fixed
+
+- **The Visual Builder said "Saved" when the server refused a save** - it read the answer without its status, so an agent the server refused (an approval setting that doesn't validate, for example) looked saved until the page was reloaded. It now says "Failed to save" with the server's reason
 
 ### Changed
 
