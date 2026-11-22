@@ -3,28 +3,27 @@
 {% block title %}Triggers - MATE{% endblock %}
 
 {% block content %}
-<div class="space-y-4">
+<div class="m-stack">
 
-    <!-- Header -->
-    <div class="flex flex-col gap-4 md:flex-row md:justify-between md:items-center">
+    <div class="m-page-head">
         <div>
-            <h2 class="text-xl font-bold text-gray-900 dark:text-white">Triggers</h2>
-            <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">Activate agents autonomously via cron schedules, webhooks, or external events</p>
+            <h2 class="m-page-title">Triggers</h2>
+            <p class="m-page-subtitle">Activate agents autonomously via cron schedules, webhooks, or external events</p>
         </div>
-        <button data-click="TriggerPage.openCreateModal" class="px-3 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center space-x-1">
-            <i class="fas fa-plus mr-1"></i>New Trigger
+        <button type="button" data-click="TriggerPage.openCreateModal" class="m-btn m-btn-primary">
+            <i class="fas fa-plus" aria-hidden="true"></i>New Trigger
         </button>
     </div>
 
-    <!-- Filters -->
-    <div class="flex flex-wrap gap-2 items-center">
-        <select id="filterProject" data-change="TriggerPage.loadTriggers" class="text-xs border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500">
+    <!-- The filters go into the table's toolbar -->
+    <div id="triggerFilters">
+        <select id="filterProject" data-change="TriggerPage.loadTriggers" class="m-input m-input-sm" aria-label="Project">
             <option value="">All Projects</option>
             {% for project in projects %}
             <option value="{{ project.id }}">{{ project.name }}</option>
             {% endfor %}
         </select>
-        <select id="filterType" data-change="TriggerPage.loadTriggers" class="text-xs border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500">
+        <select id="filterType" data-change="TriggerPage.applyTypeFilter" class="m-input m-input-sm" aria-label="Type">
             <option value="">All Types</option>
             <option value="cron">Cron</option>
             <option value="webhook">Webhook</option>
@@ -32,101 +31,52 @@
             <option value="event_bus">Event Bus</option>
         </select>
     </div>
-
-    <!-- Trigger table -->
-    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-x-auto">
-        <table class="w-full text-xs">
-            <thead>
-                <tr class="text-left text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
-                    <th class="px-4 py-2 font-medium">Name</th>
-                    <th class="px-4 py-2 font-medium">Type</th>
-                    <th class="px-4 py-2 font-medium">Agent</th>
-                    <th class="px-4 py-2 font-medium">Schedule / Path</th>
-                    <th class="px-4 py-2 font-medium">Output</th>
-                    <th class="px-4 py-2 font-medium text-center">Enabled</th>
-                    <th class="px-4 py-2 font-medium">Last Run</th>
-                    <th class="px-4 py-2 font-medium text-right">Actions</th>
-                </tr>
-            </thead>
-            <tbody id="triggerTableBody">
-                <tr>
-                    <td colspan="8" class="px-4 py-6 text-center text-gray-400 dark:text-gray-500">
-                        <i class="fas fa-spinner fa-spin mr-1"></i>Loading…
-                    </td>
-                </tr>
-            </tbody>
-        </table>
-    </div>
+    <div id="triggerTable"></div>
 
     <!-- System Background Tasks, the installation's: platform administrators only -->
     {% if is_platform_admin(request) %}
-    <div class="mt-8 pt-4 border-t border-gray-200 dark:border-gray-700">
-        <div class="flex flex-col md:flex-row md:justify-between md:items-start gap-4">
+    <hr class="m-divider">
+    <div class="m-stack">
+        <div class="m-page-head">
             <div>
-                <h3 class="text-sm font-bold text-gray-900 dark:text-white">System Background Tasks</h3>
-                <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Internal maintenance processes registered programmatically on startup</p>
+                <h3 class="m-section-title">System Background Tasks</h3>
+                <p class="m-section-subtitle">Internal maintenance processes registered programmatically on startup</p>
             </div>
-            <!-- Uptime-Only Persistence Warning -->
-            <div class="bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 rounded px-3 py-1.5 text-xs max-w-md">
-                <i class="fas fa-info-circle mr-1 text-blue-500"></i>
-                Changes to system tasks last until the server restarts. For a permanent change, update the <code>.env</code> configuration.
+            <div class="m-notice">
+                <i class="fas fa-info-circle" aria-hidden="true"></i>
+                <p>Changes to system tasks last until the server restarts. For a permanent change, update the <code class="m-code">.env</code> configuration.</p>
             </div>
         </div>
-        
-        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-x-auto mt-3">
-            <table class="w-full text-xs">
-                <thead>
-                    <tr class="text-left text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
-                        <th class="px-4 py-2 font-medium w-[20%]">Job ID</th>
-                        <th class="px-4 py-2 font-medium w-[20%]">Job Name</th>
-                        <th class="px-4 py-2 font-medium w-[25%]">Schedule (Trigger)</th>
-                        <th class="px-4 py-2 font-medium text-center w-[10%]">Enabled</th>
-                        <th class="px-4 py-2 font-medium w-[15%]">Next Run Time</th>
-                        <th class="px-4 py-2 font-medium text-right w-[10%]">Actions</th>
-                    </tr>
-                </thead>
-                <tbody id="systemJobsTableBody">
-                    <tr>
-                        <td colspan="6" class="px-4 py-6 text-center text-gray-400 dark:text-gray-500">
-                            <i class="fas fa-spinner fa-spin mr-1"></i>Loading system tasks…
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
+        <div id="systemJobsTable"></div>
     </div>
     {% endif %}
 
 </div>
 
 <!-- Secrets Banner (shown once after creating or rotating a webhook trigger's secrets) -->
-<div id="fireKeyBanner" class="hidden fixed bottom-4 left-1/2 -translate-x-1/2 z-[100] w-full max-w-lg">
-    <div class="bg-yellow-50 dark:bg-yellow-900 border border-yellow-300 dark:border-yellow-600 rounded-lg px-4 py-3 shadow-lg">
-        <div class="flex items-start gap-3">
-            <i class="fas fa-key text-yellow-600 dark:text-yellow-300 mt-0.5"></i>
-            <div class="flex-1">
-                <div id="fireKeyRow">
-                    <p class="text-xs font-semibold text-yellow-800 dark:text-yellow-200">Save your trigger fire key — it won't be shown again</p>
-                    <code id="fireKeyValue" class="text-xs font-mono text-yellow-900 dark:text-yellow-100 break-all block mt-1"></code>
-                    <p class="text-xs text-yellow-700 dark:text-yellow-300 mt-1">Use this key with the <code>X-MATE-Trigger-Key</code> header to fire the webhook.</p>
-                </div>
-                <div id="signingSecretRow" class="hidden mt-2 pt-2 border-t border-yellow-200 dark:border-yellow-700">
-                    <p class="text-xs font-semibold text-yellow-800 dark:text-yellow-200">Signing secret — also shown only once</p>
-                    <code id="signingSecretValue" class="text-xs font-mono text-yellow-900 dark:text-yellow-100 break-all block mt-1"></code>
-                    <p class="text-xs text-yellow-700 dark:text-yellow-300 mt-1">Paste into your sender's webhook secret field. Used only when <em>Require signed requests</em> is on.</p>
-                </div>
-            </div>
-            <button data-click="TriggerPage.hideSecretsBanner" class="text-yellow-600 dark:text-yellow-300 hover:text-yellow-900">
-                <i class="fas fa-times"></i>
-            </button>
+<div id="fireKeyBanner" class="m-notice m-notice-warning m-notice-floating" role="status" hidden>
+    <i class="fas fa-key" aria-hidden="true"></i>
+    <div class="m-stack">
+        <div id="fireKeyRow">
+            <p><strong>Save your trigger fire key — it won't be shown again</strong></p>
+            <code id="fireKeyValue" class="m-code"></code>
+            <p class="m-hint">Use this key with the <code class="m-code">X-MATE-Trigger-Key</code> header to fire the webhook.</p>
+        </div>
+        <div id="signingSecretRow" hidden>
+            <p><strong>Signing secret — also shown only once</strong></p>
+            <code id="signingSecretValue" class="m-code"></code>
+            <p class="m-hint">Paste into your sender's webhook secret field. Used only when <em>Require signed requests</em> is on.</p>
         </div>
     </div>
+    <button type="button" aria-label="Close" data-click="TriggerPage.hideSecretsBanner" class="m-btn m-btn-ghost m-btn-icon">
+        <i class="fas fa-times" aria-hidden="true"></i>
+    </button>
 </div>
 
 <!-- Trigger Modal -->
 {% include "dashboard/modals/trigger_modal.html" %}
 
-<script src="/static/js/triggers-page.js?v=3"></script>
+<script src="/static/js/triggers-page.js?v=4"></script>
 <script nonce="{{ request.state.csp_nonce }}">
     // Handlers this page's markup calls through data-click (csp-actions.js)
     mateActions.allow('rescheduleSystemJob', 'toggleSystemJob');
@@ -135,52 +85,59 @@
         agents: {{ agents | tojson }},
     };
 
+    let systemJobsTable = null;
+
+    function systemJobsTableFor(container) {
+        const esc = MateTable.esc;
+        return new MateTable(container, {
+            noun: ['task', 'tasks'],
+            label: 'System background tasks',
+            empty: 'No active system background tasks found.',
+            search: false,
+            pageSize: 50,
+            columns: [
+                { key: 'id', label: 'Job ID', className: 'm-cell-strong m-mono' },
+                { key: 'name', label: 'Job Name' },
+                { key: 'trigger', label: 'Schedule (Trigger)', className: 'm-mono' },
+                {
+                    key: 'next_run_time', label: 'Enabled', align: 'center',
+                    value: (j) => j.next_run_time !== null,
+                    render: (j) => {
+                        const on = j.next_run_time !== null;
+                        return `<button type="button" class="m-switch" role="switch" aria-checked="${on}"
+                            aria-label="${on ? 'Pause' : 'Resume'} ${esc(j.id)}"
+                            data-click="toggleSystemJob" data-args="${mateActions.attr([j.id])}"></button>`;
+                    },
+                },
+                {
+                    key: 'next_run', label: 'Next Run Time', className: 'm-mono',
+                    value: (j) => j.next_run_time || '',
+                    render: (j) => j.next_run_time
+                        ? esc(new Date(j.next_run_time).toLocaleString())
+                        : '<span class="m-muted">Paused / Static</span>',
+                },
+                {
+                    label: 'Actions', align: 'right',
+                    render: (j) => `<button type="button" class="m-btn m-btn-ghost m-btn-icon" title="Edit Schedule (Cron)"
+                        aria-label="Edit the schedule of ${esc(j.id)}"
+                        data-click="rescheduleSystemJob" data-args="${mateActions.attr([j.id])}">
+                        <i class="fas fa-edit" aria-hidden="true"></i></button>`,
+                },
+            ],
+        });
+    }
+
     async function loadSystemJobs() {
-        const tbody = document.getElementById('systemJobsTableBody');
-        if (!tbody) return;
+        const container = document.getElementById('systemJobsTable');
+        if (!container) return;
+        if (!systemJobsTable) systemJobsTable = systemJobsTableFor(container);
         try {
             const resp = await fetch('/dashboard/api/system-jobs', { credentials: 'same-origin' });
             if (!resp.ok) throw new Error('Failed to load system jobs');
             const data = await resp.json();
-            const jobs = data.jobs || [];
-
-            if (!jobs.length) {
-                tbody.innerHTML = `<tr><td colspan="6" class="px-4 py-4 text-center text-gray-400 dark:text-gray-500">No active system background tasks found.</td></tr>`;
-                return;
-            }
-
-            tbody.innerHTML = jobs.map(j => {
-                let nextRun = '<span class="text-gray-400 font-mono">Paused / Static</span>';
-                if (j.next_run_time) {
-                    const d = new Date(j.next_run_time);
-                    nextRun = d.toLocaleString();
-                }
-
-                const isEnabled = j.next_run_time !== null;
-                const enabledToggle = `
-                    <button data-click="toggleSystemJob" data-args="${mateActions.attr([j.id])}" title="${isEnabled ? 'Pause Task' : 'Resume Task'}"
-                        class="relative inline-flex items-center h-4 rounded-full w-7 transition-colors focus:outline-none ${isEnabled ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-600'}">
-                        <span class="inline-block w-3 h-3 transform bg-white rounded-full transition-transform shadow ${isEnabled ? 'translate-x-3.5' : 'translate-x-0.5'}"></span>
-                    </button>`;
-
-                const actions = `
-                    <div class="flex items-center justify-end gap-2">
-                        <button data-click="rescheduleSystemJob" data-args="${mateActions.attr([j.id])}" title="Edit Schedule (Cron)" class="text-blue-600 dark:text-blue-400 hover:text-blue-800">
-                            <i class="fas fa-edit text-xs"></i>
-                        </button>
-                    </div>`;
-
-                return `<tr class="border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                    <td class="px-4 py-2 font-medium text-gray-900 dark:text-white font-mono">${j.id}</td>
-                    <td class="px-4 py-2 text-gray-700 dark:text-gray-300">${j.name}</td>
-                    <td class="px-4 py-2 text-gray-600 dark:text-gray-400 font-mono text-xs">${j.trigger}</td>
-                    <td class="px-4 py-2 text-center">${enabledToggle}</td>
-                    <td class="px-4 py-2 text-gray-500 dark:text-gray-400 font-mono">${nextRun}</td>
-                    <td class="px-4 py-2 text-right">${actions}</td>
-                </tr>`;
-            }).join('');
+            systemJobsTable.setRows(data.jobs || []);
         } catch (err) {
-            tbody.innerHTML = `<tr><td colspan="6" class="px-4 py-4 text-center text-red-500">Error loading system tasks: ${err.message}</td></tr>`;
+            systemJobsTable.setError(err.message);
         }
     }
 

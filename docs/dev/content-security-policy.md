@@ -109,7 +109,8 @@ input, keyup and submits for the whole page through event delegation:
   (`el.addEventListener('click', …)`) is simpler than `data-click`. The same
   goes for a modal that closes on a click on its backdrop
   (`onclick="if (event.target === this) …"`): add a listener that checks
-  `event.target`.
+  `event.target`. A dialog written with the `m-dialog` classes gets this, and
+  Escape, from `mateDialog` ([Dashboard components](dashboard-components.md)).
 - Names are looked up on `window`. A page object declared with a top-level
   `const` (`const AlertPage = …`) is not on `window`, so assign it there
   (`window.AlertPage = AlertPage`) before its methods can be actions.

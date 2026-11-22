@@ -682,6 +682,8 @@ class TestConvertedTemplates(unittest.TestCase):
         "sessions.js",
         "traces.js",
         "triggers-page.js",
+        "data-table.js",
+        "dialogs.js",
         "template-gallery.js",
         "standalone/chat.js",
         "widget/admin.js",

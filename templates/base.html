@@ -8,6 +8,8 @@
     <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
     <link rel="manifest" href="/static/manifest.json">
     <script src="/static/js/csp-actions.js?v=3"></script>
+    <script src="/static/js/dialogs.js?v=1"></script>
+    <script src="/static/js/data-table.js?v=1"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script nonce="{{ request.state.csp_nonce }}">
         tailwind.config = {
@@ -36,6 +38,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="/static/css/redesign.css">
+    <link rel="stylesheet" href="/static/css/components.css?v=1">
     <style>
         @keyframes mate-slide-in { from { transform: translateX(120%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
         @keyframes mate-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
@@ -1021,99 +1024,6 @@
                     setTimeout(() => notification.remove(), 300);
                 }
             }, duration);
-        }
-
-        // Custom confirm dialog
-        function showConfirm(message, title = 'Confirm', confirmText = 'Confirm', cancelText = 'Cancel', type = 'warning') {
-            return new Promise((resolve) => {
-                const modal = document.createElement('div');
-                modal.className = 'fixed inset-0 z-[10000] flex items-center justify-center p-4';
-                modal.style.background = 'rgba(20,15,10,0.5)';
-                modal.id = 'customConfirmModal';
-
-                // Icon chip colors based on type
-                let iconClass, chipFg, chipBg, okBg;
-                switch(type) {
-                    case 'danger':
-                        iconClass = 'fa-exclamation-triangle';
-                        chipFg = 'var(--danger)'; chipBg = 'var(--danger-soft)'; okBg = 'var(--danger)';
-                        break;
-                    case 'warning':
-                        iconClass = 'fa-exclamation-triangle';
-                        chipFg = 'var(--warning)'; chipBg = 'var(--warning-soft)'; okBg = 'var(--warning)';
-                        break;
-                    case 'info':
-                        iconClass = 'fa-info-circle';
-                        chipFg = 'var(--accent)'; chipBg = 'var(--accent-soft)'; okBg = 'var(--accent)';
-                        break;
-                    default:
-                        iconClass = 'fa-question-circle';
-                        chipFg = 'var(--text-secondary)'; chipBg = 'var(--bg-surface-2)'; okBg = 'var(--accent)';
-                }
-
-                modal.innerHTML = `
-                    <div style="background: var(--bg-surface); border-radius: 18px; max-width: 400px; width: 100%; box-shadow: var(--shadow-card); border: 1px solid var(--border); padding: 22px; display: flex; flex-direction: column; gap: 14px;">
-                        <div style="display: flex; align-items: center; gap: 10px;">
-                            <div style="width: 38px; height: 38px; border-radius: 11px; background: ${chipBg}; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
-                                <i class="fas ${iconClass}" style="color: ${chipFg}; font-size: 15px;"></i>
-                            </div>
-                            <h3 style="margin: 0; font-size: 15px; font-weight: 800; color: var(--text-primary);" id="confirmTitle"></h3>
-                        </div>
-                        <div style="margin: 0; font-size: 13px; color: var(--text-secondary); line-height: 1.5; white-space: pre-line;" id="confirmMessage"></div>
-                        <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px;">
-                            <button id="confirmCancelBtn" style="padding: 9px 16px; border-radius: 10px; border: 1px solid var(--border); background: transparent; color: var(--text-secondary); font-size: 12.5px; font-weight: 600; cursor: pointer;"></button>
-                            <button id="confirmOkBtn" style="padding: 9px 16px; border-radius: 10px; border: none; background: ${okBg}; color: white; font-size: 12.5px; font-weight: 700; cursor: pointer;"></button>
-                        </div>
-                    </div>
-                `;
-
-                // Callers put names into the message (a token, a template, a
-                // rate-limit scope), so all four strings go in as text, not markup
-                modal.querySelector('#confirmTitle').textContent = title;
-                modal.querySelector('#confirmMessage').textContent = message;
-                const cancelBtn = modal.querySelector('#confirmCancelBtn');
-                const okBtn = modal.querySelector('#confirmOkBtn');
-                okBtn.textContent = confirmText;
-                // A message to read, not a question: one button (cancelText null)
-                if (cancelText === null) cancelBtn.remove();
-                else cancelBtn.textContent = cancelText;
-
-                document.body.appendChild(modal);
-
-                const cleanup = () => {
-                    modal.style.opacity = '0';
-                    modal.style.transition = 'opacity 0.2s';
-                    setTimeout(() => modal.remove(), 200);
-                };
-
-                cancelBtn.onclick = () => {
-                    cleanup();
-                    resolve(false);
-                };
-
-                okBtn.onclick = () => {
-                    cleanup();
-                    resolve(true);
-                };
-
-                // Close on backdrop click
-                modal.onclick = (e) => {
-                    if (e.target === modal) {
-                        cleanup();
-                        resolve(false);
-                    }
-                };
-
-                // Close on Escape key
-                const escapeHandler = (e) => {
-                    if (e.key === 'Escape') {
-                        cleanup();
-                        resolve(false);
-                        document.removeEventListener('keydown', escapeHandler);
-                    }
-                };
-                document.addEventListener('keydown', escapeHandler);
-            });
         }
 
         // Earlier versions kept the dashboard password here; remove it where it lingers

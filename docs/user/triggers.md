@@ -139,6 +139,18 @@ The run then waits for an administrator to decide:
 A memory block destination is how one agent hands work to another: a trigger writes
 the block overnight, and an agent with memory blocks enabled reads it the next day.
 
+## Find a trigger
+
+Above the list:
+
+- **All Projects** shows the triggers of one project.
+- **All Types** shows only cron or only webhook triggers.
+- **Search triggers** finds triggers by name, description, agent, type, schedule or
+  output. Each word you type must match. Press Escape to clear the search.
+
+Click a column's header to sort by it, and again to reverse the order. The list
+shows 25 triggers at a time; the arrows under it move between pages.
+
 ## Test, pause, change, delete
 
 Each row in the list has:
