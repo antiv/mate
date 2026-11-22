@@ -11,11 +11,11 @@
  * PUT /dashboard/api/agents/<id> for this one. The save bar shows while something
  * changed; leaving the page then asks first.
  */
-mateActions.allow('mateAgentPage.save', 'mateAgentPage.discard', 'mateAgentPage.history',
+mateActions.allow('mateAgentPage.save', 'mateAgentPage.discard',
                   'mateAgentPage.remove', 'mateAgentPage.exportAgent', 'mateAgentPage.approvals',
                   'mateAgentPage.addParent', 'mateAgentPage.removeParent',
                   'mateAgentPage.roleKey', 'mateAgentPage.addRoleFromInput', 'mateAgentPage.removeRole',
-                  'mateAgentPage.clearGuardrails');
+                  'mateAgentPage.clearGuardrails', 'mateAgentPage.reloadSessions');
 
 (function () {
     'use strict';
@@ -340,9 +340,9 @@ mateActions.allow('mateAgentPage.save', 'mateAgentPage.discard', 'mateAgentPage.
         try { sessionStorage.setItem(FLASH_KEY, message); } catch (e) { /* shown on no page then */ }
     }
 
-    function pageUrl(name) {
-        const url = '/dashboard/agents/' + encodeURIComponent(name);
-        return data.backToVisual ? `${url}?back=visual` : url;
+    function pageUrl(name, hash) {
+        const url = '/dashboard/agents/' + encodeURIComponent(name) + (data.backToVisual ? '?back=visual' : '');
+        return hash ? url + hash : url;
     }
 
     function leave(url) {
@@ -451,8 +451,69 @@ mateActions.allow('mateAgentPage.save', 'mateAgentPage.discard', 'mateAgentPage.
         if (menu) menu.open = false;
     }
 
-    function history() {
-        if (config && mode === 'edit') showVersionHistoryModal(config.id, config.name);
+    // ── Tabs: Versions and Sessions, loaded when first opened ─────────────
+
+    const loaded = {};
+    let sessionsTable = null;
+
+    function sessionsApp() {
+        const select = el('agentSessionsApp');
+        return select ? select.value : (data.apps || [])[0];
+    }
+
+    function sessionLink(s) {
+        const params = new URLSearchParams({ session_id: s.id, app_name: s.app_name, user_id: s.user_id });
+        return `<a class="m-link" href="/dashboard/sessions?${params}">Open</a>`;
+    }
+
+    function startSessions() {
+        const esc = MateTable.esc;
+        sessionsTable = new MateTable(el('agentSessionsTable'), {
+            noun: ['session', 'sessions'],
+            label: 'Sessions',
+            empty: 'No conversations yet.',
+            columns: [
+                { key: 'id', label: 'Session', sortable: false, className: 'm-mono',
+                  render: (s) => `<span title="${esc(s.id)}">${esc(s.id.length > 20 ? s.id.slice(0, 18) + '…' : s.id)}</span>` },
+                { key: 'user_id', label: 'User', sortable: false },
+                { key: 'runtime', label: 'Runtime', sortable: false,
+                  render: (s) => (s.runtime === 'langgraph' ? 'LangGraph' : 'ADK') },
+                { key: 'event_count', label: 'Events', sortable: false, align: 'right' },
+                { key: 'updated_at', label: 'Updated', sortable: false,
+                  render: (s) => esc(typeof formatDateTime === 'function' ? formatDateTime(s.updated_at) : s.updated_at) },
+                { label: 'Inspect', align: 'right', render: sessionLink },
+            ],
+            fetch: async ({ offset, limit, q }) => {
+                const params = new URLSearchParams({ app_name: sessionsApp(), exact_app: 'true',
+                                                     page: String(Math.floor(offset / limit) + 1), limit: String(limit) });
+                if (q) params.set('search', q);
+                const response = await fetch(`/dashboard/api/sessions?${params}`, { credentials: 'same-origin' });
+                if (!response.ok) throw new Error(`The sessions did not load (${response.status})`);
+                const result = await response.json();
+                return { rows: result.sessions || [], total: result.total || 0 };
+            },
+        });
+    }
+
+    function reloadSessions() {
+        if (sessionsTable) sessionsTable.reload({ firstPage: true });
+    }
+
+    function openTab(id) {
+        const name = id.replace(/^tab-/, '');
+        if (name === 'versions' && !loaded.versions) loadVersionHistory(config.id, config.name);
+        if (name === 'sessions' && !loaded.sessions) startSessions();
+        loaded[name] = true;
+        // The tab is in the address, so a reload (after a rollback, say) comes back to it
+        try { history.replaceState(null, '', name === 'settings' ? window.location.pathname + window.location.search : `#${name}`); } catch (e) { /* no address change */ }
+    }
+
+    function startTabs() {
+        const list = document.querySelector('#agentPage [data-m-tabs]');
+        if (!list || mode !== 'edit') return;
+        list.addEventListener('m-tab-change', (event) => openTab(event.detail.id));
+        const wanted = window.location.hash.replace('#', '');
+        if (wanted && el(`tab-${wanted}`)) mateTabs.select(`tab-${wanted}`);
     }
 
     async function remove() {
@@ -539,6 +600,7 @@ mateActions.allow('mateAgentPage.save', 'mateAgentPage.discard', 'mateAgentPage.
         // Clear, the dialogs (file search, memory blocks, approvals) and the pickers' chips
         document.addEventListener('click', () => setTimeout(changed, 0));
         startInstructionEditor();
+        startTabs();
         if (mode === 'edit' && typeof loadFileSearchData === 'function') loadFileSearchData(P);
         markClean();
 
@@ -558,10 +620,12 @@ mateActions.allow('mateAgentPage.save', 'mateAgentPage.discard', 'mateAgentPage.
     }
 
     window.mateAgentPage = {
-        save, discard, history, remove, exportAgent, approvals,
+        save, discard, remove, exportAgent, approvals,
         addParent, removeParent, removeRole, roleKey, clearGuardrails,
         addRoleFromInput: () => addRole(el('agentRoleAdd').value),
-        reloadAs: (name) => leave(pageUrl(name)),
+        // After a rollback: the page of the version's name, on the tab shown
+        reloadAs: (name) => leave(pageUrl(name, window.location.hash)),
+        reloadSessions,
         isDirty,
     };
 

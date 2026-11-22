@@ -37,3 +37,18 @@
 .agent-section-fields .md\:col-span-1,
 .agent-section-fields .md\:col-span-2 { grid-column: auto; }
 .agent-section-fields textarea { max-width: 100%; }
+
+/* The Versions tab: the version list and the diff of dashboard/partials/version_history_panes.html */
+.agent-versions {
+    display: flex;
+    flex-direction: column;
+    height: max(460px, calc(100vh - 250px));
+    overflow: hidden;
+}
+@media (max-width: 760px) {
+    .agent-versions > .flex { flex-direction: column; }
+    .agent-versions > .flex > div:first-child { width: 100%; max-height: 220px; }
+    .agent-versions > .flex > div:last-child { min-height: 360px; }
+}
+
+.agent-sessions-app { width: auto; }

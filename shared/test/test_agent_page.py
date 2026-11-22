@@ -11,7 +11,7 @@ import unittest
 from shared.test.test_cross_workspace import (
     A, A_ROOT, B, B_MARKERS, B_ROOT, BOB, _platform_admin, _signed_in, _TwoWorkspaces,
 )
-from shared.utils.models import AgentConfig, WorkspaceMember
+from shared.utils.models import AgentConfig, LangGraphSession, WorkspaceMember
 from shared.utils.workspaces import roles_in_use
 
 import auth_server
@@ -57,6 +57,39 @@ class TestAgentPage(_TwoWorkspaces):
         for dialog in ("vbToolConfigModal", "vbGuardrailConfigModal", "vbPlannerConfigModal"):
             self.assertIn(f'id="{dialog}"', html)
         self.assertEqual(html.count('id="vbGrPii"'), 1)
+
+    def test_an_agent_has_versions_and_sessions_tabs(self):
+        html = self._get(f"/dashboard/agents/{A_ROOT}").text
+        for tab in ("tab-settings", "tab-versions", "tab-sessions"):
+            self.assertIn(f'id="{tab}"', html)
+        self.assertIn('id="vhVersionList"', html)
+        self.assertEqual(_page_data(html)["apps"], [A_ROOT])
+        # A new agent has nothing to show in them yet
+        html = self._get(f"/dashboard/agents/new?project_id={self.ids['project_a']}").text
+        self.assertNotIn('id="tab-versions"', html)
+        self.assertNotIn('id="tab-sessions"', html)
+
+    def test_a_sub_agent_s_sessions_are_its_root_s(self):
+        html = self._get("/dashboard/agents/ws_a_sub").text
+        self.assertEqual(_page_data(html)["apps"], [A_ROOT])
+        self.assertIn(f"those of the root agent it works under, {A_ROOT}", html)
+
+    def test_the_sessions_tab_asks_for_the_app_exactly(self):
+        session = self.Session()
+        session.add(AgentConfig(name=f"{A_ROOT}_x", type="llm", project_id=self.ids["project_a"]))
+        session.add_all([LangGraphSession(id="s-root", app_name=A_ROOT, user_id="u"),
+                         LangGraphSession(id="s-root-x", app_name=f"{A_ROOT}_x", user_id="u")])
+        session.commit()
+        session.close()
+        ids = lambda **params: {s["id"] for s in self._get_json("/dashboard/api/sessions", app_name=A_ROOT,
+                                                                 runtime="langgraph", **params)["sessions"]}
+        self.assertEqual(ids(), {"s-root", "s-root-x"})
+        self.assertEqual(ids(exact_app="true"), {"s-root"})
+
+    def _get_json(self, path: str, **params):
+        response = self.client.get(path, headers=_platform_admin(A), params=params)
+        self.assertEqual(response.status_code, 200, response.text)
+        return response.json()
 
     def test_another_workspace_s_agent_is_a_404(self):
         self.assertEqual(self._get(f"/dashboard/agents/{B_ROOT}").status_code, 404)

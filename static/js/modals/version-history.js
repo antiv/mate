@@ -30,16 +30,22 @@ mateActions.allow('_vhRunEvals', '_vhSelectVersion', '_vhTagVersion',
     // versionId, when given, is selected once the list loads (Trace Replay opens
     // the version an agent ran on)
     window.showVersionHistoryModal = function (configId, agentName, versionId) {
+        document.getElementById('vhAgentName').textContent = '— ' + agentName;
+        window.loadVersionHistory(configId, agentName, versionId);
+        document.getElementById('versionHistoryModal').classList.remove('hidden');
+    };
+
+    // Fills the panes (dashboard/partials/version_history_panes.html) wherever they
+    // are: in the dialog above, or in the agent page's Versions tab
+    window.loadVersionHistory = function (configId, agentName, versionId) {
         _agentConfigId = configId;
         _agentName = agentName;
         _selectedVersionId = null;
         _openVersionId = versionId || null;
-        document.getElementById('vhAgentName').textContent = '— ' + agentName;
         document.getElementById('vhVersionList').innerHTML = '<div class="p-3 text-xs text-gray-400 text-center"><i class="fas fa-spinner fa-spin mr-1"></i>Loading…</div>';
         document.getElementById('vhDiffTitle').textContent = 'Select a version to view changes';
         document.getElementById('vhDiffActions').classList.add('hidden');
         _clearDiff();
-        document.getElementById('versionHistoryModal').classList.remove('hidden');
         _fetchVersions();
     };
 

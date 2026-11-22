@@ -798,6 +798,20 @@ class DashboardServer:
                 session.close()
         project_param = request.query_params.get("project_id", "")
         name = agent["name"] if agent else None
+        # The apps the agent runs in: its root agents (an app is a root agent), for
+        # the Sessions tab
+        parents_of = {c["name"]: c.get("parent_agents") or [] for c in configs}
+        apps, seen, stack = set(), set(), [name] if name else []
+        while stack:
+            current = stack.pop()
+            if current in seen:
+                continue
+            seen.add(current)
+            above = [p for p in parents_of.get(current, []) if p in parents_of]
+            if above:
+                stack.extend(above)
+            else:
+                apps.add(current)
         return self.templates.TemplateResponse(request, "dashboard/agent_page.html", {
             "request": request,
             "page_title": name or "New agent",
@@ -811,6 +825,7 @@ class DashboardServer:
             "agent_names": sorted(c["name"] for c in configs if c["name"] != name),
             "roles": roles,
             "back_to_visual": request.query_params.get("back") == "visual",
+            "apps": sorted(apps),
         })
 
     def _create_project(self, name: str, description: Optional[str], workspace_id: int) -> Dict[str, Any]:
@@ -3506,8 +3521,11 @@ class DashboardServer:
                       user_id: Optional[str] = None, search: Optional[str] = None,
                       page: int = 1, limit: int = 50,
                       workspace_id: Optional[int] = None,
-                      is_platform_admin: bool = False) -> Dict[str, Any]:
+                      is_platform_admin: bool = False, exact_app: bool = False) -> Dict[str, Any]:
         """Fetch and aggregate active and historical sessions from LangGraph and ADK stores with optimized pagination.
+
+        app_name matches part of the name, or, with exact_app, the whole of it (an
+        agent page's Sessions tab).
 
         With `workspace_id`, only the sessions of the workspace's agents (app_name is the
         root agent); a session of an agent with no config is the default workspace's,
@@ -3531,7 +3549,8 @@ class DashboardServer:
                         LangGraphSession.updated_at
                     )
                     if app_name:
-                        q = q.filter(LangGraphSession.app_name.ilike(f"%{app_name}%"))
+                        q = q.filter(LangGraphSession.app_name == app_name if exact_app
+                                     else LangGraphSession.app_name.ilike(f"%{app_name}%"))
                     if user_id:
                         q = q.filter(LangGraphSession.user_id.ilike(f"%{user_id}%"))
                     if search:
@@ -3584,8 +3603,8 @@ class DashboardServer:
                     params = {}
                     conditions = []
                     if app_name:
-                        conditions.append("app_name LIKE :app_name")
-                        params["app_name"] = f"%{app_name}%"
+                        conditions.append("app_name = :app_name" if exact_app else "app_name LIKE :app_name")
+                        params["app_name"] = app_name if exact_app else f"%{app_name}%"
                     if user_id:
                         conditions.append("user_id LIKE :user_id")
                         params["user_id"] = f"%{user_id}%"
@@ -4188,11 +4207,14 @@ class DashboardServer:
             page: int = Query(1, ge=1),
             limit: int = Query(50, ge=1, le=200),
             all_workspaces: bool = False,
+            exact_app: bool = False,
         ):
-            """Get paginated session list across ADK and LangGraph runtimes."""
+            """Get paginated session list across ADK and LangGraph runtimes. app_name
+            matches part of the name, or the whole of it with exact_app."""
             return self._get_sessions(
                 runtime=runtime,
                 app_name=app_name,
+                exact_app=exact_app,
                 user_id=user_id,
                 search=search,
                 page=page,
