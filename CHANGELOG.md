@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **google-adk 2.11.0 → 2.15.0, LangGraph 1.2.12 → 1.2.22, and the rest of the lock** - the lock takes releases at least a week old, apart from google-adk. litellm goes to 1.105.7, and mcp stays below 2: langchain-mcp-adapters 0.3.2 requires it, and moving MATE's MCP server and client to mcp 2 is its own change
+- **google-adk 2.11.0 → 2.15.0, LangGraph 1.2.12 → 1.2.22, and the rest of the lock** - the lock takes releases at least a week old, apart from google-adk. litellm goes to 1.105.7, and mcp stays below 2: langchain-mcp-adapters 0.3.2, the LangGraph runtime's MCP client, requires it, and no release of it works on mcp 2 yet. Moving to mcp 2 and lifting the litellm bound is #389
   - **Among ADK's fixes:** OAuth2 secrets no longer leak over `/run`, `/run_sse` and the session endpoints (2.12); a confirmed tool runs once per approval (2.12); writes to a SQLite session database are serialized (2.14); an MCP tool call is retried once after the server drops the session (2.15)
   - **Traces:** ADK 2.13 moved to the OpenTelemetry GenAI v2 conventions, which drop the `call_llm` and `invocation` spans. The trace replay reads the model calls from `generate_content` and MATE's own `gen_ai.inference` spans, so it shows the same turn as before. In the trace list, a new trace's top span is now `POST /run_sse`
   - **ADK's dev UI** no longer has a Visual Agent Builder (2.15). MATE's own Visual Builder is not affected
