@@ -10,7 +10,7 @@ generated: true
 
 # Database reference
 
-**39** tables defined in `shared/utils/models.py`; migrations are at **V049**. Migrations apply automatically on startup and are the source of truth for the schema: the models describe it, the migrations create it.
+**40** tables defined in `shared/utils/models.py`; migrations are at **V050**. Migrations apply automatically on startup and are the source of truth for the schema: the models describe it, the migrations create it.
 
 ## Migrations
 
@@ -67,6 +67,7 @@ A ✗ means that dialect has no file for that version. All dialects are in step.
 | V047 | channel team unique | ✓ | ✓ | ✓ |
 | V048 | workspace management | ✓ | ✓ | ✓ |
 | V049 | workspace provider keys | ✓ | ✓ | ✓ |
+| V050 | approval requests | ✓ | ✓ | ✓ |
 
 ## `users`
 
@@ -398,6 +399,37 @@ Model `AuditLog`. Append-only audit log.
 | `ip_address` | `String(45)` | — | — | — |
 | `project_id` | `Integer` | — | — | The project the entry is about: the agent's, or the project itself; NULL for installation-wide entries (V044, shared/utils/log_projects.py) |
 | `workspace_id` | `Integer` | — | — | That project's workspace (V046); NULL for installation-wide entries too |
+
+## `approval_requests`
+
+Model `ApprovalRequest`. A tool call an agent paused on for approval (require_confirmation), V050.
+
+| Column | Type | Constraints | Default | Notes |
+|---|---|---|---|---|
+| `id` | `Integer` | PK | — | — |
+| `status` | `String(20)` | not null | `'pending'` | pending \| approved \| rejected \| expired \| cancelled |
+| `agent_name` | `String(255)` | not null | — | — |
+| `project_id` | `Integer` | — | — | — |
+| `workspace_id` | `Integer` | — | — | — |
+| `app_name` | `String(255)` | not null | — | Where the paused run lives |
+| `user_id` | `String(255)` | not null | — | — |
+| `session_id` | `String(255)` | not null | — | — |
+| `invocation_id` | `String(255)` | — | — | — |
+| `confirmation_call_id` | `String(255)` | not null | — | The answer carries confirmation_call_id; tool_call_id is the model's own call |
+| `tool_call_id` | `String(255)` | — | — | — |
+| `tool_name` | `String(255)` | not null | — | — |
+| `tool_args` | `Text` | — | — | JSON, capped (approval_service.MAX_ARGS_CHARS) |
+| `hint` | `Text` | — | — | — |
+| `source` | `String(20)` | not null | `'chat'` | chat \| api \| trigger \| slack \| eval (response_metrics.resolve_origin) |
+| `trigger_id` | `Integer` | — | — | — |
+| `requested_at` | `DateTime` | not null | `(computed)` | — |
+| `expires_at` | `DateTime` | — | — | — |
+| `decided_by` | `String(255)` | — | — | — |
+| `decided_via` | `String(20)` | — | — | chat \| inbox \| system |
+| `decided_at` | `DateTime` | — | — | — |
+| `note` | `Text` | — | — | — |
+| `resume_status` | `String(20)` | — | — | — |
+| `resume_result` | `Text` | — | — | — |
 
 ## `system_settings`
 

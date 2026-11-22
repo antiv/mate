@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **A record of every approval request** (approvals inbox, phase 1, #376) - each time an agent pauses before a tool it must ask about (`require_confirmation`), the agent runtime writes a row to the new `approval_requests` table (migration V050):
+  - the agent, the tool and its arguments (at most 16,000 characters);
+  - where the run came from (`chat`, `api`, `trigger`, `slack` or `eval`), and the trigger that started it;
+  - the agent's workspace.
+  - **Decisions:** when the person chatting approves or rejects, the row says so, with who and when, and the audit log gets `approval.approved` or `approval.rejected` with a hash of the arguments rather than the arguments.
+  - **Coverage:** both runtimes, and every surface, A2A and MCP included. Nothing about how a run goes changes.
+  - **The history:** admins can list the requests at `GET /dashboard/api/approvals`, scoped to their workspace. The dashboard page comes with the inbox
+  - **Triggers:** the session a trigger opens now carries the trigger's id in its state (`mate_trigger_id`)
+
 ### Security
 
 - **litellm is held below 1.106, and moved by hand** - LiteLLM's 1.107.0 release on PyPI carried a credential stealer, and LiteLLM has not ruled out further access to its release accounts, so the monthly dependency upgrade no longer takes new litellm releases on its own. No release of MATE installed it: the lock had 1.103.2, and the 1 November upgrade run resolved 1.103.9. From 1.106.0, litellm's completion path also imports types that only mcp 2 has, which fails every model call while mcp is below 2

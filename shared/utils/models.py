@@ -2,7 +2,7 @@
 SQLAlchemy models for the application.
 """
 
-from sqlalchemy import Column, Integer, String, DateTime, create_engine, UUID, Text, ForeignKey, Boolean, Date, JSON, Float, UniqueConstraint, event, text, Table
+from sqlalchemy import Column, Integer, String, DateTime, create_engine, UUID, Text, ForeignKey, Boolean, Date, JSON, Float, Index, UniqueConstraint, event, text, Table
 from sqlalchemy.engine import Connection
 from sqlalchemy.orm import sessionmaker, relationship, declarative_base
 from datetime import datetime, timezone
@@ -817,6 +817,84 @@ class AuditLog(Base):
             'resource_id': self.resource_id,
             'details': self.get_details(),
             'ip_address': self.ip_address,
+        }
+
+
+class ApprovalRequest(Base):
+    """A tool call an agent paused on for approval (require_confirmation), V050.
+
+    Written by the agent runtime when it emits the adk_request_confirmation call
+    (shared/utils/approval_service.py). project_id, workspace_id and trigger_id
+    are copied, not foreign keys, so the history stays when those are deleted.
+    """
+
+    __tablename__ = 'approval_requests'
+    __table_args__ = (
+        UniqueConstraint('session_id', 'confirmation_call_id', name='uq_approval_requests_call'),
+        Index('idx_approval_requests_status', 'status'),
+        Index('idx_approval_requests_workspace_time', 'workspace_id', 'requested_at'),
+        Index('idx_approval_requests_invocation', 'invocation_id'),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    # pending | approved | rejected | expired | cancelled
+    status = Column(String(20), nullable=False, default='pending')
+    agent_name = Column(String(255), nullable=False)
+    project_id = Column(Integer, nullable=True)
+    workspace_id = Column(Integer, nullable=True)
+    # Where the paused run lives
+    app_name = Column(String(255), nullable=False)
+    user_id = Column(String(255), nullable=False)
+    session_id = Column(String(255), nullable=False)
+    invocation_id = Column(String(255), nullable=True)
+    # The answer carries confirmation_call_id; tool_call_id is the model's own call
+    confirmation_call_id = Column(String(255), nullable=False)
+    tool_call_id = Column(String(255), nullable=True)
+    tool_name = Column(String(255), nullable=False)
+    tool_args = Column(Text, nullable=True)  # JSON, capped (approval_service.MAX_ARGS_CHARS)
+    hint = Column(Text, nullable=True)
+    # chat | api | trigger | slack | eval (response_metrics.resolve_origin)
+    source = Column(String(20), nullable=False, default='chat')
+    trigger_id = Column(Integer, nullable=True)
+    requested_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    expires_at = Column(DateTime, nullable=True)
+    decided_by = Column(String(255), nullable=True)
+    decided_via = Column(String(20), nullable=True)  # chat | inbox | system
+    decided_at = Column(DateTime, nullable=True)
+    note = Column(Text, nullable=True)
+    resume_status = Column(String(20), nullable=True)
+    resume_result = Column(Text, nullable=True)
+
+    def get_tool_args(self) -> Any:
+        if not self.tool_args:
+            return None
+        try:
+            return json.loads(self.tool_args)
+        except json.JSONDecodeError:
+            return self.tool_args
+
+    def to_dict(self) -> dict:
+        def iso(value):
+            return value.isoformat() if value else None
+        return {
+            'id': self.id,
+            'status': self.status,
+            'agent_name': self.agent_name,
+            'app_name': self.app_name,
+            'user_id': self.user_id,
+            'session_id': self.session_id,
+            'tool_name': self.tool_name,
+            'tool_args': self.get_tool_args(),
+            'hint': self.hint,
+            'source': self.source,
+            'trigger_id': self.trigger_id,
+            'requested_at': iso(self.requested_at),
+            'expires_at': iso(self.expires_at),
+            'decided_by': self.decided_by,
+            'decided_via': self.decided_via,
+            'decided_at': iso(self.decided_at),
+            'note': self.note,
+            'resume_status': self.resume_status,
         }
 
 

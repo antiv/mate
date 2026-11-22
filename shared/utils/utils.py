@@ -671,6 +671,14 @@ def create_app_with_context_caching(
     except Exception as e:
         logger.error(f"Failed to register metrics plugin: {e}. Response latency will not be recorded.")
 
+    # Approval capture, for the same reason: it records every require_confirmation
+    # pause and the chat's answer, from every surface, and changes nothing.
+    try:
+        from shared.callbacks.approval_plugin import ApprovalCapturePlugin
+        plugins.append(ApprovalCapturePlugin())
+    except Exception as e:
+        logger.error(f"Failed to register approval capture plugin: {e}. Approval requests will not be recorded.")
+
     if os.getenv("MATE_PLUGINS_ENABLED", "false").lower() == "true":
         try:
             from shared.callbacks.mate_plugin import MatePlugin

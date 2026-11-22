@@ -428,7 +428,7 @@ class TriggerRunner:
 
         try:
             prompt = render_prompt(trigger.prompt, payload)
-            agent_response = self._invoke_agent(trigger.agent_name, prompt)
+            agent_response = self._invoke_agent(trigger.agent_name, prompt, trigger_id=trigger.id)
         except Exception as exc:
             return {"status": "error", "message": f"Agent invocation failed: {exc}"}
 
@@ -447,11 +447,14 @@ class TriggerRunner:
     # Agent invocation                                                     #
     # ------------------------------------------------------------------ #
 
-    def _invoke_agent(self, agent_name: str, prompt: str) -> str:
+    def _invoke_agent(self, agent_name: str, prompt: str, trigger_id: Optional[int] = None) -> str:
         """
         Invoke an ADK agent synchronously via HTTP.
         Creates a session then streams /run_sse, collecting the last text response.
         Uses synchronous httpx because this runs in APScheduler background threads.
+
+        The session's state names the trigger, so an approval request the run makes
+        is recorded with it (approval_service.TRIGGER_STATE_KEY).
         """
         from shared.utils.utils import get_adk_config
         cfg = get_adk_config()
@@ -461,7 +464,9 @@ class TriggerRunner:
 
         session_url = f"http://{host}:{port}/apps/{agent_name}/users/{user_id}/sessions"
         with httpx.Client(timeout=30.0) as client:
-            resp = client.post(session_url, json={})
+            from shared.utils.approval_service import TRIGGER_STATE_KEY
+            state = {TRIGGER_STATE_KEY: trigger_id} if trigger_id is not None else {}
+            resp = client.post(session_url, json={"state": state} if state else {})
             if resp.status_code != 200:
                 raise RuntimeError(f"Session creation failed: HTTP {resp.status_code}")
             session_id = resp.json().get("id", "")

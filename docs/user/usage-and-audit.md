@@ -10,6 +10,7 @@ covers:
   - shared/utils/audit_service.py
   - shared/utils/token_usage_service.py
   - shared/utils/response_metrics.py
+  - shared/utils/approval_service.py
   - shared/utils/model_pricing.py
   - shared/utils/dashboard/dashboard_server.py::*usage*
   - shared/utils/dashboard/dashboard_server.py::*audit*
@@ -135,6 +136,8 @@ What is recorded:
 - users and projects created, changed and deleted
 - sign-ins and sign-outs
 - **every refusal of a person by an agent's role check**
+- each approval given or refused in a chat, for a tool that asks first
+  (`approval.approved`, `approval.rejected`; see [Tools and MCP servers](tools-and-mcp.md))
 - widget keys and rate limits created, changed and deleted
 - templates imported, created, synced and deleted
 - database migrations, and the agent server being started, stopped or restarted

@@ -10,7 +10,7 @@ generated: true
 
 # HTTP API reference
 
-Every HTTP route declared in the code: **291** routes. 36 have no docstring and so no summary here.
+Every HTTP route declared in the code: **292** routes. 36 have no docstring and so no summary here.
 
 This page lists what exists and where it is implemented. For request and response schemas, and to try a call, use the live Swagger UI under **Documentation → API** in the dashboard.
 
@@ -18,7 +18,7 @@ Requests to `/dashboard/api/*` require an admin, apart from the short allowlist 
 
 ## Auth server and dashboard
 
-Port 8000. Everything a browser or an external client talks to. 271 routes.
+Port 8000. Everything a browser or an external client talks to. 272 routes.
 
 ### Authentication
 
@@ -78,6 +78,12 @@ Agent configuration and management API endpoints.
 | `DELETE` | `/dashboard/api/alert-rules/{rule_id}` | Delete an alert rule | shared/utils/dashboard/dashboard_server.py · delete_alert_rule |
 | `PUT` | `/dashboard/api/alert-rules/{rule_id}` | Update an alert rule | shared/utils/dashboard/dashboard_server.py · update_alert_rule |
 | `POST` | `/dashboard/api/alert-rules/{rule_id}/test` | Measure the rule now and send a test notification | shared/utils/dashboard/dashboard_server.py · test_alert_rule |
+
+### Dashboard - Approvals
+
+| Method | Path | Summary | Implemented in |
+|---|---|---|---|
+| `GET` | `/dashboard/api/approvals` | The tool calls agents paused on for approval, newest first, with their decision | shared/utils/dashboard/dashboard_server.py · get_approvals |
 
 ### Dashboard - Audit
 

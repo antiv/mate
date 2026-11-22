@@ -60,7 +60,7 @@ from shared.utils import (
 )
 from shared.utils.mcp.mcp_auth import agent_allowed
 from shared.utils.models import (
-    AgentConfig, AgentConfigVersion, AgentResponse, AgentTrigger, AlertRule, AuditLog, Base,
+    AgentConfig, AgentConfigVersion, AgentResponse, AgentTrigger, AlertRule, ApprovalRequest, AuditLog, Base,
     ChannelIntegration, EvalResult, FileSearchStore, GuardrailLog, LangGraphSession, MemoryBlock,
     PersonalAccessToken, Project, RateLimitConfig, ResponseFeedback, TestCase, TokenUsageLog, User,
     WidgetApiKey, Workspace, WorkspaceInvitation, WorkspaceMember, WorkspaceProviderKey, WorkspaceSetting,
@@ -344,6 +344,10 @@ class _TwoWorkspaces(unittest.TestCase):
             AgentResponse(invocation_id=f"{B_MARKER}-invocation", agent_name=B_ROOT, user_id=BOB,
                           started_at=datetime.now(timezone.utc).replace(tzinfo=None), workspace_id=B),
             LangGraphSession(id=f"{B_MARKER}-lg-session", app_name=B_ROOT, user_id=BOB),
+            ApprovalRequest(agent_name=B_ROOT, app_name=B_ROOT, user_id=BOB,
+                            session_id=f"{B_MARKER}-session", confirmation_call_id=f"{B_MARKER}-call",
+                            tool_name=B_MARKER, tool_args=json.dumps({"order": B_MARKER}),
+                            project_id=self.ids["project_b"], workspace_id=B),
         ])
         b_ops = {
             "trigger_id": AgentTrigger(name=f"{B_MARKER}-trigger", agent_name=B_ROOT,
@@ -476,7 +480,7 @@ class TestLogsAndOperations(_TwoWorkspaces):
 
     def test_each_workspace_sees_its_own_rows(self):
         for path in ("/dashboard/api/usage/logs", "/dashboard/api/guardrail-logs",
-                     "/dashboard/api/audit-logs", "/dashboard/api/sessions",
+                     "/dashboard/api/audit-logs", "/dashboard/api/sessions", "/dashboard/api/approvals",
                      "/dashboard/api/rate-limits", "/dashboard/api/alert-rules",
                      "/dashboard/api/triggers", "/dashboard/api/widget-keys",
                      "/dashboard/api/channel-integrations"):
@@ -3648,7 +3652,8 @@ class TestAllWorkspaces(_TwoWorkspaces):
 
     VIEWS = ("/dashboard/api/stats", "/dashboard/api/usage/logs", "/dashboard/api/audit-logs",
              "/dashboard/api/audit-logs/export", "/dashboard/api/guardrail-logs",
-             "/dashboard/api/traces", "/dashboard/api/sessions", "/dashboard/usage")
+             "/dashboard/api/traces", "/dashboard/api/sessions", "/dashboard/api/approvals",
+             "/dashboard/usage")
     ALL = {"all_workspaces": "true"}
 
     def test_a_platform_administrator_sees_every_workspace(self):
