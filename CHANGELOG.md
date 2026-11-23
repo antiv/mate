@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-11-23
+
+**Before upgrading,** back up the database, and afterwards reinstall the dependencies (`pip install -r requirements.lock`) or pull the image. The first start adds V050–V052, which change no existing data.
+
+- **With `MATE_SECRET_KEY` set,** the first start encrypts the keys already stored in MCP servers, tools, triggers and alert rules. After that, going back to 2.0 takes the backup, or entering those values again.
+- **An approval card waiting from before the upgrade** takes no answer: ask the agent again.
+- **API clients of alert rules** get `headers` as an object with `__stored__` values, rather than `"***"`.
+
 ### Added
 
 - **A command palette** (dashboard redesign, step 6, #376) - Ctrl+K (⌘K on a Mac), or **Search** in the header, jumps to an agent, one of your recent conversations or a page you may open. Every word typed has to match, with or without accents; arrow keys and Enter choose, Ctrl+Enter opens a new tab. An administrator goes to an agent's page, a member to a chat with it (`GET /dashboard/api/palette`). Inside a code editor Ctrl+K stays the editor's
@@ -38,6 +46,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Saving an agent checks these settings and refuses what doesn't validate.
   - **In the Visual Builder,** the agent panel has an **Approvals** section with a summary and a dialog for all four settings.
   - Migration V051 adds `approver` and `answered_at` to `approval_requests`.
+- **Input and output schemas and `include_contents` on LangGraph** (#374) - an agent's `output_schema`, `input_schema` and `include_contents` were ignored on the LangGraph runtime and now work as on ADK. Thanks to @tharunsridhar
+- **The cost of each call in Usage → Raw Data** (#386) - in the table and in a call's details; a call whose model has no price shows —. Thanks to @KhHuyy
 - **Dashboard components** (dashboard redesign, step 2, #376) - `static/css/components.css` holds `m-` classes for cards, buttons, form fields, badges, switches, notices, dialogs and tables, on the design tokens only, so they are right in both themes without the Tailwind remap. `static/js/data-table.js` is a shared table with search, sorting, pagination and an empty state, for lists a page loads whole and for lists the API pages; `static/js/dialogs.js` opens and closes dialogs, with Escape, focus and Tab kept inside; `static/js/tabs.js` gives tabs their keyboard and ARIA states. See `docs/dev/dashboard-components.md`
 
 - **Each agent has a page** (dashboard redesign, step 4, #376) - `/dashboard/agents/<name>`, opened from the agent's row on Agents and from **Advanced Setup** in the Visual Builder. Its header holds Copy, Open in Visual Builder, Export and Delete, and it has tabs; the tab open is in the address (`#versions`):
@@ -58,9 +68,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Keys of MCP servers, tools and webhooks are encrypted in the database** - with `MATE_SECRET_KEY` set, the keys in an agent's MCP servers and tools, and the address and headers a trigger or an alert rule sends to, are stored encrypted, in the agent's versions too. Only those values are; the rest of each configuration stays readable. Those stored before are encrypted at the next start. **Going back to 2.0** after that: those values have to be entered again, or the database restored from a backup
 - **The addresses triggers and alert rules send to are hidden** - they are shown only as far as the host (`https://hooks.slack.com/__stored__`), and header values as `__stored__`; saving them unchanged keeps them. The API's alert rules gave all headers as `***`. The approval settings' address is shown the same way. A failed delivery's message gives the status, not the address
-- **Editing an alert rule keeps its headers** - saving it in the dashboard dropped the headers, timeout and subject the form doesn't show
 - **Keys in an agent's MCP servers and tools are hidden** - the values of `env` and `headers`, arguments and addresses that carry a key, values named like one, and the address approval notifications go to are shown as `__stored__` in the dashboard, in versions, exports and templates, and to an agent with Create Agent. Saving it unchanged keeps the key, unless the address, command or arguments it goes with changed: then it has to be entered again. A `${VAR}` stays as written. See `docs/user/tools-and-mcp.md`. **When upgrading:** a template or an export made by an earlier version may still hold keys; replace them, and make the file again. Copying an agent in the editor, and importing one as new, now ask for its keys
-- **Importing an agent over itself keeps its model key** - the export's `__stored__` was saved as the key
 - **Scripts and styles from a CDN are of one version and checked** - each has its exact version and an `integrity` hash, so the browser refuses a file that changed. Tailwind's has the version only, as its CDN doesn't allow the check
 - **An attached PDF can no longer stop the server** - PDFs are read with `pypdf` instead of PyPDF2, which is no longer maintained (CVE-2023-36464). Each is read in a process of its own, off the event loop, for at most 15 seconds, and at most 4 at once. A PDF may have 10 MB (50 MB from Google Drive), and a message 5 PDFs. **When upgrading:** reinstall the dependencies (`pip install -r requirements.lock`); nothing needs configuring
 - **An approval is answered only in the run that asked** - an answer must come from the same agent, user and session as the request; the session id and the call id were enough before. On the LangGraph runtime, two calls that the model gave the same id are two requests: the second was shown with the first one's arguments. A tool call id longer than 255 characters no longer keeps a request from being recorded on PostgreSQL and MySQL
@@ -78,7 +86,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **Searching the messages in the Work Room was refused for members** (from the search above) - the route was open to admins only, and the page showed the refusal as "No session holds those words". A member searches their own conversations with the agents they may use, and a search that fails says so
+- **Editing an alert rule keeps its headers** - saving it in the dashboard dropped the headers, timeout and subject the form doesn't show
+- **Importing an agent over itself keeps its model key** - the export's `__stored__` was saved as the key
+- **Two approvals in one turn on LangGraph** (#387) - an answer raised an error when the agent waited on several, and the session stayed stuck. Each answer now resumes the call it names
+- **The Help button covered the pagination of tables** (#380) - pages leave room for it at the bottom, and it stays behind dialogs. Thanks to @eshanshahk
 - **MATE's MCP servers with a real MCP client** (#376, from #389) - an agent's server, Image Generation and Google Drive, checked with the MCP SDK's client:
   - **A failed run was a success:** when the agent's model call failed, the client got the error text as the agent's answer. The result now has `isError: true`
   - **`session_id` works:** calls of one caller to an agent's tool with the same `session_id` continue one conversation, as the tool says; it was sent where A2A doesn't read it, so every call started a new one. Another caller's `session_id` of the same name is another conversation
@@ -95,7 +106,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **The agent side panel is gone** (dashboard redesign, step 4) - creating, editing and copying an agent happen on its page, on Agents and in the Visual Builder alike. Agents is a list again: a row, its pencil, **Add Agent** and its Copy open the page
 - **Triggers page** - built on the new components. The list has a search box, sorting by any column and pages of 25; the trigger dialog keeps focus inside it, closes on Escape and takes the whole screen on a phone
 - **The confirm dialog** (`showConfirm`) moved from `base.html` to `static/js/dialogs.js`, on the dialog component. A question about deleting something starts with focus on Cancel
-- **google-adk 2.11.0 → 2.15.0, LangGraph 1.2.12 → 1.2.22, and the rest of the lock** - the lock takes releases at least a week old, apart from google-adk. litellm goes to 1.105.7, and mcp stays below 2: langchain-mcp-adapters 0.3.2 requires it, and moving MATE's MCP server and client to mcp 2 is its own change
+- **google-adk 2.11.0 → 2.15.0, LangGraph 1.2.12 → 1.2.22, and the rest of the lock** - the lock takes releases at least a week old, apart from google-adk. litellm goes to 1.103.10, and mcp stays below 2: langchain-mcp-adapters 0.3.2 requires it, and moving MATE's MCP server and client to mcp 2 is its own change
   - **Among ADK's fixes:** OAuth2 secrets no longer leak over `/run`, `/run_sse` and the session endpoints (2.12); a confirmed tool runs once per approval (2.12); writes to a SQLite session database are serialized (2.14); an MCP tool call is retried once after the server drops the session (2.15)
   - **Traces:** ADK 2.13 moved to the OpenTelemetry GenAI v2 conventions, which drop the `call_llm` and `invocation` spans. The trace replay reads the model calls from `generate_content` and MATE's own `gen_ai.inference` spans, so it shows the same turn as before. In the trace list, a new trace's top span is now `POST /run_sse`
   - **ADK's dev UI** no longer has a Visual Agent Builder (2.15). MATE's own Visual Builder is not affected
