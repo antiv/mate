@@ -96,8 +96,8 @@ class _Agent(_Database):
         return super().record(**overrides)
 
     def gate(self, confirmed=True, **overrides):
-        kwargs = dict(session_id="s1", confirmation_call_id="adk-c1", confirmed=confirmed,
-                      answered_by="alice")
+        kwargs = dict(app_name="refunds", user_id="u1", session_id="s1",
+                      confirmation_call_id="adk-c1", confirmed=confirmed)
         kwargs.update(overrides)
         return approval_service.gate_answer(**kwargs)
 
@@ -163,8 +163,25 @@ class TestGate(_Agent):
 
     def test_nor_a_run_nobody_chats_in(self):
         self.record(user_id="trigger_runner")
-        self.assertIsNone(self.gate())
+        self.assertIsNone(self.gate(user_id="trigger_runner"))
         self.assertEqual(self.rows()[0].status, "pending")
+
+    def test_only_the_run_that_asked_may_be_answered(self):
+        self.record()
+        for other in ({"user_id": "bob"}, {"app_name": "another_agent"}, {"session_id": "s2"}):
+            with self.subTest(other=other):
+                self.assertIsNone(self.gate(**other))
+                self.assertEqual((self.rows()[0].status, self.rows()[0].answered_at), ("pending", None))
+        self.assertIs(self.gate(), True)
+        self.assertEqual(self.rows()[0].decided_by, "u1")
+
+    def test_nor_is_a_decision_handed_to_another_run(self):
+        self.configure(approver="inbox")
+        row_id = self.record()
+        approval_service.claim_decision(row_id, decision="approve", decided_by="admin", note=None)
+        self.assertIsNone(self.gate(user_id="bob"))
+        self.assertIsNone(self.rows()[0].answered_at)
+        self.assertIs(self.gate(confirmed=False), True)
 
     def test_either_lets_the_chat_answer(self):
         self.configure(approver="either")

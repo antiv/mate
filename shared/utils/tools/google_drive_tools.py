@@ -9,34 +9,23 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
 import base64
 import mimetypes
-import PyPDF2
+from ..pdf_text import pdf_text
 
 # Service Account scopes for Google Drive API
 SCOPES = ['https://www.googleapis.com/auth/drive.readonly']
 
+# A file of the configured Drive folder may be larger than a chat attachment
+MAX_PDF_BYTES = 50 * 1024 * 1024
+
+
 def extract_text_from_pdf(pdf_content: bytes) -> str:
     """Extract text content from PDF bytes."""
     try:
-        # Create a BytesIO object from the PDF content
-        pdf_file = io.BytesIO(pdf_content)
-        
-        # Create PDF reader object
-        pdf_reader = PyPDF2.PdfReader(pdf_file)
-        
-        # Extract text from all pages
-        text_content = []
-        for page_num in range(len(pdf_reader.pages)):
-            page = pdf_reader.pages[page_num]
-            text_content.append(page.extract_text())
-        
-        # Join all text content
-        full_text = '\n'.join(text_content)
-        
         # Clean up the text (remove excessive whitespace)
-        cleaned_text = ' '.join(full_text.split())
-        
+        cleaned_text = ' '.join(pdf_text(pdf_content, max_bytes=MAX_PDF_BYTES).split())
+
         return cleaned_text if cleaned_text else "[No text content found in PDF]"
-        
+
     except Exception as e:
         return f"[Error extracting PDF text: {str(e)}]"
 

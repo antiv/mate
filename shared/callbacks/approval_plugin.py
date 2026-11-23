@@ -83,11 +83,11 @@ class ApprovalCapturePlugin(BasePlugin):
         allowed: Dict[str, Optional[bool]] = {}
         try:
             session_id = invocation_context.session.id
-            user_id = invocation_context.user_id
             for call_id, confirmed in _decisions(user_message).items():
                 allowed[call_id] = await asyncio.to_thread(
-                    approval_service.gate_answer, session_id=session_id,
-                    confirmation_call_id=call_id, confirmed=confirmed, answered_by=user_id)
+                    approval_service.gate_answer, app_name=invocation_context.app_name,
+                    user_id=invocation_context.user_id, session_id=session_id,
+                    confirmation_call_id=call_id, confirmed=confirmed)
         except Exception as e:
             # Fail closed: an answer that couldn't be checked doesn't reach the agent
             logger.warning("Approval answer check failed; the answers are dropped: %s", e)

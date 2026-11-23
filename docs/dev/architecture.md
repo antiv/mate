@@ -8,6 +8,7 @@ covers:
   - adk_main.py
   - langgraph_main.py
   - server/proxy_routes.py
+  - shared/utils/pdf_text.py
   - shared/utils/server_control_service.py
   - shared/template_agent/**
 ---
@@ -110,6 +111,29 @@ code live in the same `agents/` folder with their own `agent.py`.
 Widgets, Slack, triggers, evals and the OpenAI-compatible API all end in the same
 `/run_sse` call on the agent server; they differ in how the caller is authenticated
 and which `user_id` is used. See [Agent runtime](agent-runtime.md) for steps 5 to 7.
+
+### Attached files
+
+Before a message goes on, the proxy (`/run_sse`) and the widget's chat turn its
+attachments into what the model can take (`server/widget_routes.py::prepare_attachments`):
+an image stays, a text file becomes text, and a PDF becomes text unless the model's name
+has `gemini` in it. Another kind of file gets 400, as does a message with more than 5 PDFs.
+
+A PDF comes from anyone who can open a page with the widget, so it is read apart from the
+server (`shared/utils/pdf_text.py`, which Google Drive's tools use too):
+
+- in a process of its own, with none of the server's environment, killed after 15
+  seconds; on Linux it is limited to 1 GB of memory;
+- at most 4 at once. A further one is refused at once, so waiting PDFs never fill the
+  threads other requests need;
+- up to 10 MB, or 50 MB from Google Drive, and up to a million characters of text;
+- `prepare_attachments` runs in a thread, so the event loop answers other requests
+  meanwhile.
+
+A PDF that can't be read becomes a line saying why, which the model sees.
+
+In a packaged standalone agent the Drive tools read the PDF in the agent's own process,
+since there is no Python to start.
 
 ## Where state lives
 

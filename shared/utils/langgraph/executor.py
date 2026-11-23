@@ -250,8 +250,8 @@ async def _record_requests(event: Dict[str, Any], app_name: str, user_id: str, s
             call["args"]["mateApprover"] = answered_in
 
 
-async def _gate_decisions(decisions: Dict[str, bool], session_id: str,
-                          user_id: str) -> Dict[str, bool]:
+async def _gate_decisions(decisions: Dict[str, bool], app_name: str, user_id: str,
+                          session_id: str) -> Dict[str, bool]:
     """The answers the run may receive (approval_service.gate_answer): decided, or left out."""
     import asyncio
 
@@ -259,8 +259,8 @@ async def _gate_decisions(decisions: Dict[str, bool], session_id: str,
     allowed: Dict[str, bool] = {}
     for call_id, confirmed in decisions.items():
         answer = await asyncio.to_thread(
-            approval_service.gate_answer, session_id=session_id,
-            confirmation_call_id=call_id, confirmed=confirmed, answered_by=user_id)
+            approval_service.gate_answer, app_name=app_name, user_id=user_id, session_id=session_id,
+            confirmation_call_id=call_id, confirmed=confirmed)
         if answer is not None:
             allowed[call_id] = answer
     return allowed
@@ -355,7 +355,7 @@ async def execute_run(app_name: str, user_id: str, session_id: str,
             # Only the answers to what the graph is paused on, and only as gate_answer
             # allows: once, and by whoever may give them
             asked = {cid: ok for cid, ok in decisions.items() if cid in already_sent}
-            decisions = await _gate_decisions(asked, session_id, user_id)
+            decisions = await _gate_decisions(asked, app_name, user_id, session_id)
             if asked and not decisions and not tool_responses:
                 yield _notice_event(app_name, invocation_id,
                                     "This approval is decided in the approvals inbox, "

@@ -104,8 +104,8 @@ the auth server's proxy, and the runtime sees them all.
 
 | Column | From |
 |---|---|
-| `confirmation_call_id` | the id of the `adk_request_confirmation` call, which the answer carries. ADK makes it `adk-<uuid>`; the LangGraph runtime makes it `adk-confirm-<tool call id>` |
-| `tool_call_id`, `tool_name`, `tool_args`, `hint` | the call's `originalFunctionCall` and `toolConfirmation` (snake_case is read too) |
+| `confirmation_call_id` | the id of the `adk_request_confirmation` call, which the answer carries. ADK makes it `adk-<uuid>`; the LangGraph runtime makes it `adk-confirm-<hash>` of the tool call id, the tool and its arguments, so two calls the model gave one id are two requests |
+| `tool_call_id` (at most 255 characters), `tool_name`, `tool_args`, `hint` | the call's `originalFunctionCall` and `toolConfirmation` (snake_case is read too) |
 | `agent_name` | the event's author: the agent that asked, which may be a sub-agent |
 | `app_name`, `user_id`, `session_id`, `invocation_id` | the run |
 | `project_id`, `workspace_id` | the agent's, copied when the row is written (`log_projects.scope_of_agent`). An agent the database doesn't know, such as a hardcoded sub-agent, takes its root's |
@@ -145,7 +145,8 @@ ADK keeps the extra key in the args, and reads only `originalFunctionCall` and
 `toolConfirmation` when the answer comes.
 
 **The gate.** Every answer on its way to a run passes
-`gate_answer(session_id, confirmation_call_id, confirmed, answered_by)`:
+`gate_answer(app_name, user_id, session_id, confirmation_call_id, confirmed)`. A row is
+found only for the run that made it: the same app, user and session.
 
 | The row | The run receives |
 |---|---|

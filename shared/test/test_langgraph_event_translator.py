@@ -105,13 +105,16 @@ class TestToolMessageToEvent(unittest.TestCase):
 class TestInterruptToEvent(unittest.TestCase):
 
     def test_confirmation_call_shape(self):
-        value = {"originalFunctionCall": {"id": "call_9", "name": "delete_all", "args": {}},
+        value = {"confirmationId": "adk-confirm-9",
+                 "originalFunctionCall": {"id": "call_9", "name": "delete_all", "args": {}},
                  "toolConfirmation": {"hint": "Confirm?"}}
         event = interrupt_to_event(value, "my_agent", "e-inv1")
         fc = event["content"]["parts"][0]["functionCall"]
         self.assertEqual(fc["name"], "adk_request_confirmation")
         # Distinct from the tool call's id, as on ADK, and the same each time it pauses
-        self.assertEqual(fc["id"], "adk-confirm-call_9")
+        self.assertEqual(fc["id"], "adk-confirm-9")
+        # The args are what ADK sends
+        self.assertEqual(set(fc["args"]), {"originalFunctionCall", "toolConfirmation"})
         self.assertEqual(fc["args"]["originalFunctionCall"]["id"], "call_9")
         self.assertEqual(fc["args"]["originalFunctionCall"]["name"], "delete_all")
 
