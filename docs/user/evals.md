@@ -21,7 +21,9 @@ suite. Running the suite before and after you change an agent tells you whether 
 change helped, and whether it broke something that used to work.
 
 Evals are in **Studio → Evals**. The page lists the suites, test cases and scores
-of the workspace you are working in.
+of the workspace you are working in. An agent's own cases and scores are also in the
+**Evals** tab of its page, whose **Open in Evals** opens this page on the agent's suite
+(`/dashboard/evals?agent=<name>`).
 
 ## Add a test case
 

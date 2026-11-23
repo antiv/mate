@@ -52,3 +52,16 @@
 }
 
 .agent-sessions-app { width: auto; }
+
+.agent-period { width: auto; }
+
+/* The Usage tab: one card per model */
+.agent-usage-models {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 12px;
+}
+.agent-usage-models:empty { display: none; }
+.agent-usage-model { display: flex; flex-direction: column; gap: 6px; }
+.agent-usage-model .m-details { font-size: 12px; }
+.agent-usage-model .m-section-title { font-size: 12.5px; overflow-wrap: anywhere; }

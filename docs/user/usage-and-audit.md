@@ -49,6 +49,9 @@ the agent server, the database, authentication and the rate limiter are up.
 
 ## Usage Analytics
 
+One agent's model calls, with their tokens and cost per model, are also in the
+**Usage** tab of its page.
+
 Choose a period at the top. The **Analytics** view shows:
 
 | Figure | Meaning |

@@ -329,7 +329,7 @@ Template library and one-click import API endpoints.
 
 | Method | Path | Summary | Implemented in |
 |---|---|---|---|
-| `GET` | `/dashboard/api/traces` | Get traces from trace_spans table for dashboard viewer | shared/utils/dashboard/dashboard_server.py · get_traces_api |
+| `GET` | `/dashboard/api/traces` | Get traces from trace_spans table for dashboard viewer; with agent_name, the traces that ran that agent | shared/utils/dashboard/dashboard_server.py · get_traces_api |
 | `GET` | `/dashboard/api/traces/replay` | One session's traced turns as replay timelines: agents, model calls, tools, fallbacks | shared/utils/dashboard/dashboard_server.py · get_session_replay_api |
 | `GET` | `/dashboard/api/traces/sessions` | Sessions with traced turns, for the Visual Builder's replay picker; a project's only with project_id | shared/utils/dashboard/dashboard_server.py · get_replay_sessions_api |
 

@@ -1291,9 +1291,12 @@ class DashboardServer:
     
     def _get_token_usage_logs(self, hours: int = 24, limit: int = 100, page: int = 1,
                               user_id: Optional[str] = None,
-                              workspace_id: Optional[int] = None) -> Dict[str, Any]:
-        """Get paginated token usage logs, only `user_id`'s and `workspace_id`'s when
-        they are given."""
+                              workspace_id: Optional[int] = None,
+                              agent_name: Optional[str] = None) -> Dict[str, Any]:
+        """Get paginated token usage logs, only `user_id`'s, `workspace_id`'s and
+        `agent_name`'s when they are given. With `agent_name`, also `by_model`: the
+        calls, tokens and cost of the whole period per model (the agent page's Usage
+        tab)."""
         if not self.db_client:
             return {"error": "Database connection failed"}
         
@@ -1311,6 +1314,8 @@ class DashboardServer:
             in_window = [self.TokenUsageLog.timestamp >= time_threshold]
             if user_id is not None:
                 in_window.append(self.TokenUsageLog.user_id == user_id)
+            if agent_name is not None:
+                in_window.append(self.TokenUsageLog.agent_name == agent_name)
             in_window.extend(rows_of(self.TokenUsageLog, workspace_id))
 
             # Get total count
@@ -1329,7 +1334,23 @@ class DashboardServer:
                 self.TokenUsageLog.timestamp.desc()
             ).offset(offset).limit(limit).all()
             
-            return {
+            by_model = None
+            if agent_name is not None:
+                usage = self.TokenUsageLog
+                by_model = [{
+                    "model_name": row.model_name,
+                    "calls": row.calls,
+                    "prompt_tokens": int(row.prompt_tokens or 0),
+                    "response_tokens": int(row.response_tokens or 0),
+                    "cost_usd": float(row.cost_usd) if row.cost_usd is not None else None,
+                } for row in session.query(
+                    usage.model_name, func.count(usage.id).label("calls"),
+                    func.sum(usage.prompt_tokens).label("prompt_tokens"),
+                    func.sum(usage.response_tokens).label("response_tokens"),
+                    func.sum(usage.cost_usd).label("cost_usd"),
+                ).filter(*in_window).group_by(usage.model_name).order_by(func.count(usage.id).desc()).all()]
+
+            result = {
                 "logs": [{
                     'id': log.id,
                     'request_id': log.request_id,
@@ -1352,6 +1373,9 @@ class DashboardServer:
                 "total_pages": total_pages,
                 "page_size": limit
             }
+            if by_model is not None:
+                result["by_model"] = by_model
+            return result
         except Exception as e:
             print(f"Error getting usage logs: {e}")
             return {"error": str(e)}
@@ -1392,9 +1416,11 @@ class DashboardServer:
 
     def _get_traces(self, hours: int = 24, limit: int = 50, trace_id: Optional[str] = None,
                     workspace_id: Optional[int] = None,
-                    is_platform_admin: bool = False) -> Dict[str, Any]:
+                    is_platform_admin: bool = False,
+                    agent_name: Optional[str] = None) -> Dict[str, Any]:
         """Get traces from trace_spans table. Returns list of traces with span trees,
-        only `workspace_id`'s when it is given."""
+        only `workspace_id`'s when it is given, and only those with a span of
+        `agent_name` when that is (the agent page's Traces tab)."""
         if not self.db_client:
             return {"traces": [], "error": "Database connection failed"}
 
@@ -1448,6 +1474,11 @@ class DashboardServer:
                     {"threshold": time_threshold},
                 ).fetchall()
                 rows = _in_workspace(rows)
+                if agent_name:
+                    from shared.utils.tracing.replay import AGENT_ATTRS
+                    named = {r[0] for r in rows
+                             if any(_parse_attrs(r[8]).get(key) == agent_name for key in AGENT_ATTRS)}
+                    rows = [r for r in rows if r[0] in named]
                 # Build trace_id -> max(start_time) to sort traces, keep top N
                 trace_max_time = {}
                 for r in rows:
@@ -4635,13 +4666,17 @@ class DashboardServer:
             limit: int = Query(100, ge=1, le=1000),
             page: int = Query(1, ge=1),
             all_workspaces: bool = False,
+            agent_name: Optional[str] = None,
         ):
             """Get paginated token usage logs: a member's own in the current workspace
-            (My Usage), the workspace's for its admins."""
+            (My Usage), the workspace's for its admins. With agent_name, one agent's,
+            and their totals per model (by_model)."""
             view = self._view_workspace(ctx, all_workspaces)
+            if agent_name:
+                self._require_in_workspace(ctx, agent_name=agent_name)
             result = self._get_token_usage_logs(hours, limit, page,
                                                 user_id=None if ctx.is_admin else ctx.user_id,
-                                                workspace_id=view)
+                                                workspace_id=view, agent_name=agent_name or None)
             if "logs" in result:
                 self._with_workspaces(result["logs"], [log["workspace_id"] for log in result["logs"]], view)
             return result
@@ -4778,11 +4813,16 @@ class DashboardServer:
             limit: int = 50,
             trace_id: Optional[str] = None,
             all_workspaces: bool = False,
+            agent_name: Optional[str] = None,
         ):
-            """Get traces from trace_spans table for dashboard viewer."""
+            """Get traces from trace_spans table for dashboard viewer; with agent_name,
+            the traces that ran that agent."""
+            if agent_name:
+                self._require_in_workspace(ctx, agent_name=agent_name)
             return self._get_traces(hours, limit, trace_id,
                                     workspace_id=self._view_workspace(ctx, all_workspaces),
-                                    is_platform_admin=ctx.is_platform_admin)
+                                    is_platform_admin=ctx.is_platform_admin,
+                                    agent_name=agent_name or None)
 
         @self.app.get("/dashboard/api/traces/sessions", tags=["Dashboard - Traces"])
         async def get_replay_sessions_api(
