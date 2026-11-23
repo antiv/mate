@@ -91,6 +91,12 @@ class TestWorkRoomSearch(_TwoWorkspaces):
         chat = self.client.get(f"/dashboard/workroom?agent={A_ROOT}", headers=_platform_admin(A)).text
         self.assertIn('id="workroomSessionSearch"', chat)
 
+    def test_only_an_earlier_conversation_waits_at_the_bottom(self):
+        # A new one has its greeting and message field in the middle
+        for query, waits in (("", False), ("&session=s1", True)):
+            page = self.client.get(f"/dashboard/workroom?agent={A_ROOT}{query}", headers=_platform_admin(A)).text
+            self.assertEqual('class="wr-chat-root wr-restoring"' in page, waits)
+
 
 if __name__ == "__main__":
     unittest.main()

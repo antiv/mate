@@ -77,11 +77,11 @@ The [Agents guide](agents.md) explains every field.
 
 On the Agents page, choose the root agent in the agent filter (**All Agents**) and
 click the speech-bubbles icon (**Open agent chat**) next to it, or switch to the **Work Room** and
-select the agent. Type a message and press **Send**.
+select the agent. Type a message and press Enter.
 
 In the Work Room you can also:
 
-- attach an image to a message with the paperclip
+- attach an image, a PDF or a text file to a message with **+**
 - start over with **New Conversation**, or return to an earlier one under
   **Recent Sessions** in the sidebar
 - open the **Coding panel**, where code the agent writes can be copied, downloaded
