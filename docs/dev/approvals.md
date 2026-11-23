@@ -61,7 +61,7 @@ object (`shared/utils/approval_config.py`):
 |---|---|
 | `tools` | the tools that ask first; the list form is this alone |
 | `approver` | `chat` (default), `inbox` or `either`: who answers a chat's request |
-| `notify` | `{"type": "http" \| "email" \| "slack" \| "discord", "url" or "to", ...}`, as an alert rule's destination |
+| `notify` | `{"type": "http" \| "email" \| "slack" \| "discord", "url" or "to", ...}`, as an alert rule's destination; shown masked, as that is |
 | `expires_after_minutes` | 1 to 129,600; else `APPROVALS_EXPIRE_MINUTES` |
 
 - **Both runtimes read `tools` through `approval_config.parse`:** `ToolFactory._apply_confirmation_wrapping` on ADK, and `AgentBuilder._build_tools` on LangGraph. A value that doesn't validate is read with defaults, so an older agent still loads.

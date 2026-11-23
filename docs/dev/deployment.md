@@ -141,9 +141,10 @@ requests: a webhook trigger answers only when its agent has finished.
 
 MATE stores some secrets it has to read back: a Slack integration's bot token and
 signing secret, a webhook trigger's signing secret, an agent's **Model API Key**
-when it is typed literally rather than as `${VAR}`, and a workspace's provider keys
-(**Models and keys**). With `MATE_SECRET_KEY` set, they
-are encrypted in the database with Fernet (AES-128-CBC with an HMAC), the key in an
+when it is typed literally rather than as `${VAR}`, a workspace's provider keys
+(**Models and keys**), the keys in an agent's MCP servers and tools, and the address and
+headers a trigger or an alert rule sends to. With `MATE_SECRET_KEY` set, they
+are encrypted in the database with Fernet (AES-128-CBC with an HMAC), those in an
 agent's version history included. Generate a key with:
 
 ```bash
@@ -167,7 +168,10 @@ python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().d
 A stored value is either plain text or `enc:v1:` followed by the Fernet token, so
 `shared/utils/secret_box.py` reads both. The columns use its `EncryptedText` type,
 which encrypts on write and decrypts on read, so the code that uses them sees plain
-text.
+text. The JSON columns (`mcp_servers_config`, `tool_config`, `output_config`,
+`destination_config`) use `EncryptedSecrets`, which encrypts only the texts
+`config_secrets.mask` would hide and leaves the rest of the JSON readable. With the wrong
+key, or an earlier version of MATE, such a config is missing its secrets rather than lost.
 
 ### First sign-in
 

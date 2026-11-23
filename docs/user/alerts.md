@@ -84,7 +84,9 @@ answers.
      settings, **Integrations → Webhooks → New Webhook**, then **Copy Webhook URL**.
 
    A Slack or Discord webhook URL lets anyone who has it post in the channel, so the
-   rule list shows "Slack webhook" or "Discord webhook" instead of the URL.
+   rule list shows "Slack webhook" or "Discord webhook" instead of the URL. Once saved,
+   any URL is shown only as far as its host, as in `https://hooks.slack.com/__stored__`.
+   Leave it so to keep the stored one, or paste a new one over it.
    Outside the Default workspace, a URL on the server's own network (such as
    `localhost` or `192.168.x.x`) is not sent to: the delivery reports `refused`.
 5. Set the **Cooldown**, then **Save**.

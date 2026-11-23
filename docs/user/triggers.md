@@ -124,6 +124,11 @@ and they sign each request themselves. For your own callers, see the
 | **HTTP Callback** | The answer is sent as JSON to a URL; outside the Default workspace, not to one on the server's own network. | The URL, and optional headers as JSON. |
 | **Email** | The answer is emailed as plain text. In the Default workspace, and in another one only if a platform administrator has enabled email for it: otherwise the run fails, as the mail goes out from the server's own account. | The recipient and an optional subject. Your administrator must have configured outgoing mail on the server. |
 
+Once saved, a callback's URL is shown only as far as its host, and its headers' values as
+`__stored__`. Leave them so to keep the stored ones; with another URL, enter the headers'
+values again. An export has them hidden too, and importing it lists the triggers whose
+values to enter.
+
 A destination that is missing what it needs, such as an HTTP callback without a URL
 or an email on a server without outgoing mail, is refused when you save. If a
 delivery fails anyway, **Last Run** shows the run as failed with the reason.

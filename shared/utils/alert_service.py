@@ -20,6 +20,7 @@ from typing import Any, Dict, List, Optional
 
 from sqlalchemy import func
 
+from .config_secrets import HiddenValue, require_config
 from .database_client import get_database_client
 from .models import DEFAULT_WORKSPACE_ID, AgentConfig, AlertRule, AuditLog, RateLimitConfig
 from .notify import DESTINATION_TYPES, deliver
@@ -145,6 +146,8 @@ class AlertService:
             rule = self._rule(session, rule_id, workspace_id)
             if not rule:
                 return None
+            # A masked destination keeps what it hides
+            require_config(kwargs, {'destination_config': rule.get_destination_config()})
             condition_config = kwargs.pop('condition_config', None)
             destination_config = kwargs.pop('destination_config', None)
             for key, value in kwargs.items():
@@ -157,6 +160,9 @@ class AlertService:
             session.commit()
             session.refresh(rule)
             return rule.to_dict()
+        except HiddenValue:
+            session.rollback()
+            raise
         except Exception as e:
             session.rollback()
             logger.error("Failed to update alert rule %s: %s", rule_id, e)

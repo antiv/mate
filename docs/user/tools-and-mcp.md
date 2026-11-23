@@ -205,7 +205,7 @@ one entry per server:
 A key written into the settings is hidden once saved: in its place the dashboard, an
 export and an agent that reads the configuration see `__stored__`. This covers the values
 of `env` and `headers`, arguments and addresses that carry a key, and, in the tool
-settings, the address that approval notifications go to. A `${VAR}` reference stays as
+settings, the address that approval notifications go to, after its host. A `${VAR}` reference stays as
 written, since it holds no key.
 
 - **Leave `__stored__` as it is** and saving keeps the key. Type over it to change it.
@@ -215,8 +215,9 @@ written, since it holds no key.
   enter them; an import says which are missing. **Clone to Project** and **Download
   Binary** do take them.
 
-The keys are still stored with the agent and in its versions, readable by whoever can read
-the database. A `${VAR}` keeps them out of it.
+The keys are stored with the agent and in its versions, encrypted when the server has
+`MATE_SECRET_KEY`. Without it, whoever can read the database can read them; a `${VAR}`
+keeps them out of it.
 
 It also works the other way round: an administrator can expose chosen agents as MCP
 servers, at `/agents/<agent name>/mcp`, so that other MCP clients can call them.

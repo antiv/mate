@@ -1,6 +1,7 @@
 """
-The secrets inside an agent's mcp_servers_config and tool_config, kept from whoever
-reads the config: the dashboard, an export, read_agent's model.
+The secrets inside an agent's mcp_servers_config and tool_config, a trigger's
+output_config and an alert rule's destination_config, kept from whoever reads the
+config (the dashboard, an export, read_agent's model) and from the database.
 
 mask() replaces each with STORED_SECRET_SENTINEL, as mask_api_key does for the model's
 key; a ${VAR} reference is no secret and stays. What counts:
@@ -11,19 +12,31 @@ key; a ${VAR} reference is no secret and stays. What counts:
 - an address's user and password, and a token-like part of its path (some MCP servers
   take their key there);
 - a --header's value, and an argument that looks like a token;
-- the address of an agent's approval notifications, since a Slack or Discord webhook's
-  address is all it takes to post.
+- the address approval notifications, a trigger's output and an alert go to, after its
+  host: a Slack or Discord webhook's address is all it takes to post.
 
 restore() puts the stored values back when a masked config is saved: a text is stored
 again when it is exactly the stored one's masked form, in the same place. A hidden value
 goes only where it went: with its server's or destination's address, command or args
 changed, it is refused, and has to be entered again.
+
+encrypt_secrets() and decrypt_secrets() are how the columns store them
+(secret_box.EncryptedSecrets): each text that mask() would change is encrypted whole, and
+the rest of the config stays as it is. Without the key a config is then missing its
+secrets, not lost.
 """
 
 import json
 import re
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 from urllib.parse import urlsplit
+
+# Stands for a stored secret in what a client gets, and keeps it when it comes back
+STORED_SECRET_SENTINEL = "__stored__"
+
+# Secrets belong in the environment, not in database config rows, so string values
+# in agent and MCP configuration may reference it as ${VAR}.
+ENV_PLACEHOLDER = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
 
 # Where the hidden values beside them go
 _DESTINATION = ("url", "command", "args", "host", "endpoint", "base_url")
@@ -45,14 +58,8 @@ class HiddenValue(ValueError):
     """A hidden value can't be put back; says which, for whoever is saving."""
 
 
-def _sentinel() -> str:
-    from .utils import STORED_SECRET_SENTINEL
-    return STORED_SECRET_SENTINEL
-
-
 def _open_part(value: str) -> str:
     """What is left of a value without its ${VAR} references."""
-    from .utils import ENV_PLACEHOLDER
     return ENV_PLACEHOLDER.sub("", value)
 
 
@@ -62,7 +69,7 @@ def _mask_value(value: str) -> str:
     prefix = scheme.group(0) if scheme else ""
     if not _open_part(value[len(prefix):]).strip():
         return value
-    return prefix + _sentinel()
+    return prefix + STORED_SECRET_SENTINEL
 
 
 def _mask_url(value: str, path_tokens: bool = True) -> str:
@@ -91,6 +98,17 @@ def _mask_url(value: str, path_tokens: bool = True) -> str:
             text = _mask_value(text)
         masked.append(name + equals + text)
     return f"{base}?{'&'.join(masked)}"
+
+
+def mask_webhook(value: str) -> str:
+    """An address that is a credential itself: its scheme and host only."""
+    scheme, separator, rest = value.partition("://")
+    if not separator or not _open_part(value).strip():
+        return _mask_value(value)
+    host = re.split(r"[/?#]", rest, maxsplit=1)[0]
+    if "@" not in host and not rest[len(host):].strip("/"):
+        return value
+    return f"{scheme}://{host.rpartition('@')[2]}/{STORED_SECRET_SENTINEL}"
 
 
 def _mask_header(value: str) -> str:
@@ -157,7 +175,7 @@ def _masked_tools(node: Any, key: str = "", secret_map: bool = False) -> Any:
     if isinstance(node, dict):
         masked = {k: _masked_tools(v, str(k), secret_map or key in ("env", "headers")) for k, v in node.items()}
         if key == "notify" and isinstance(node.get("url"), str):
-            masked["url"] = _mask_value(node["url"]) if node["url"] else ""
+            masked["url"] = mask_webhook(node["url"]) if node["url"] else ""
         return masked
     if isinstance(node, list):
         return [_masked_tools(v, key, secret_map) for v in node]
@@ -170,8 +188,16 @@ def _masked_tools(node: Any, key: str = "", secret_map: bool = False) -> Any:
     return _mask_url(node, path_tokens=False) if "://" in node else node
 
 
+def _masked_destination(node: Any) -> Any:
+    """A copy of where a trigger or an alert rule sends, as an approval's notify."""
+    return _masked_tools(node, "notify")
+
+
 # The columns that hold secrets, and how each is masked
-FIELDS = {"mcp_servers_config": _masked, "tool_config": _masked_tools}
+FIELDS: Dict[str, Callable[[Any], Any]] = {
+    "mcp_servers_config": _masked, "tool_config": _masked_tools,
+    "output_config": _masked_destination, "destination_config": _masked_destination,
+}
 
 
 def _parsed(value: Any) -> Any:
@@ -198,7 +224,6 @@ def mask(field: str, value: Any) -> Any:
 def _restored(new: Any, old: Any, masked: Any, path: str, left: List[str]) -> Tuple[Any, bool]:
     """(new with the stored values put back, whether any was). left collects the paths of
     the hidden values that can't be, whose text becomes ""."""
-    sentinel = _sentinel()
     if isinstance(new, dict):
         olds = old if isinstance(old, dict) else {}
         maskeds = masked if isinstance(masked, dict) else {}
@@ -218,7 +243,7 @@ def _restored(new: Any, old: Any, masked: Any, path: str, left: List[str]) -> Tu
         maskeds = masked if isinstance(masked, list) and len(masked) == len(new) else [None] * len(new)
         pairs = [_restored(v, o, m, f"{path}[{i}]", left) for i, (v, o, m) in enumerate(zip(new, olds, maskeds))]
         return [v for v, _ in pairs], any(back for _, back in pairs)
-    if not isinstance(new, str) or sentinel not in new or new == old:
+    if not isinstance(new, str) or STORED_SECRET_SENTINEL not in new or new == old:
         return new, False
     if new == masked and isinstance(old, str):
         return old, True
@@ -229,7 +254,7 @@ def _restored(new: Any, old: Any, masked: Any, path: str, left: List[str]) -> Tu
 def restore(field: str, value: Any, stored: Any) -> Tuple[Any, List[str]]:
     """The value with what mask() hid put back from the stored one, and where that wasn't
     possible: there the value is empty."""
-    if _sentinel() not in (value if isinstance(value, str) else json.dumps(value, default=str)):
+    if STORED_SECRET_SENTINEL not in (value if isinstance(value, str) else json.dumps(value, default=str)):
         return value, []
     new = _parsed(value)
     if not isinstance(new, (dict, list)):
@@ -258,3 +283,58 @@ def require_config(config: Dict[str, Any], stored: Optional[Dict[str, Any]]) -> 
     if left:
         raise HiddenValue(f"Enter the hidden value again ({', '.join(left)}): it is kept only "
                           "while the address, command and arguments it is sent with stay the same.")
+
+
+def _changed_texts(node: Any, masked: Any, change: Callable[[str], Any]) -> Any:
+    """node with change() applied to each text that differs in masked."""
+    if isinstance(node, dict):
+        return {k: _changed_texts(v, masked[k], change) for k, v in node.items()}
+    if isinstance(node, list):
+        return [_changed_texts(v, m, change) for v, m in zip(node, masked)]
+    return change(node) if isinstance(node, str) and node != masked else node
+
+
+def encrypt_secrets(field: str, text: Optional[str]) -> Optional[str]:
+    """A column's text as stored: its secrets encrypted, unchanged without one or a key."""
+    from .secret_box import encrypt
+    parsed = _parsed(text)
+    if not isinstance(parsed, (dict, list)):
+        return text
+    stored = _changed_texts(parsed, FIELDS[field](parsed), encrypt)
+    return text if stored == parsed else json.dumps(stored)
+
+
+def has_secret_in_the_clear(field: str, stored: Any) -> bool:
+    """Whether a stored text holds a secret that isn't encrypted."""
+    from .secret_box import is_encrypted
+    parsed = _parsed(stored) if isinstance(stored, str) else None
+    if not isinstance(parsed, (dict, list)):
+        return False
+    clear: List[str] = []
+
+    def see(text: str) -> str:
+        if not is_encrypted(text):
+            clear.append(text)
+        return text
+
+    _changed_texts(parsed, FIELDS[field](parsed), see)
+    return bool(clear)
+
+
+def decrypt_secrets(text: Optional[str]) -> Optional[str]:
+    """The text behind a stored one; a secret that can't be decrypted is empty."""
+    from .secret_box import PREFIX, decrypt, is_encrypted
+    if not text or PREFIX not in text:
+        return text
+    parsed = _parsed(text)
+    if not isinstance(parsed, (dict, list)):
+        return text
+
+    def read(node: Any) -> Any:
+        if isinstance(node, dict):
+            return {k: read(v) for k, v in node.items()}
+        if isinstance(node, list):
+            return [read(v) for v in node]
+        return decrypt(node) or "" if is_encrypted(node) else node
+
+    return json.dumps(read(parsed))

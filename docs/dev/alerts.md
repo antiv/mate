@@ -87,6 +87,11 @@ sets only the fields in `_RULE_FIELDS`, never the workspace.
 
 ## Destinations
 
+`to_dict()` masks a destination's address after its host and its headers' values
+(`config_secrets.mask`). An update puts back what it hides (`require_config` in
+`AlertService.update_rule`), and is refused with 400 when the address changed and a hidden
+header came with it. `last_error` holds a failed delivery's status, never the address.
+
 - `http` — `{"url": "...", "headers": {...}, "timeout": 30}`, POSTs the alert payload as JSON.
 - `email` — `{"to": "ops@example.com", "subject": "..."}`, requires `SMTP_HOST` and friends.
   A rule of a workspace other than the default one is not sent (`refused: ...`): the

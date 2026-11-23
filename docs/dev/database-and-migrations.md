@@ -39,7 +39,9 @@ Conventions in the models:
   `set_*` helpers on the model (`get_roles`, `set_output_config`, and so on).
 - Secrets that must be verified are stored as a hash; ones that must be reused use
   the `EncryptedText` column type, encrypted with `MATE_SECRET_KEY` when it is set
-  ([Deployment](deployment.md#secrets-at-rest)), and are left out of `to_dict()`.
+  ([Deployment](deployment.md#secrets-at-rest)), and are left out of `to_dict()`. JSON that
+  holds secrets among other settings uses `EncryptedSecrets(<field>)`, whose field is one
+  of `config_secrets.FIELDS`, and is masked where it leaves the server.
 - A trailing comment on a column line becomes its note in the generated reference.
 
 ## How migrations run
