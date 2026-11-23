@@ -294,7 +294,11 @@
         }
         #sidebar.sidebar-minimized #sidebarToggleIcon { transform: rotate(180deg); }
         #sidebar.sidebar-minimized #workroomSessionList,
+        #sidebar.sidebar-minimized .wr-session-search,
         #sidebar.sidebar-minimized .wr-recent-label { display: none !important; }
+        .wr-session-search { padding: 0 10px 6px; }
+        .wr-session-search .m-input { width: 100%; }
+        .wr-session-search .m-hint { margin-top: 3px; font-size: 10.5px; }
 
         .mate-sidebar-foot {
             display: flex;
@@ -615,6 +619,12 @@
                 </div>
                 {% if _wr_agent %}
                 <p class="sidebar-section-header wr-recent-label">Recent Sessions</p>
+                {# Filters the titles as you type; Enter also searches the messages (workroom.html) #}
+                <div class="wr-session-search">
+                    <input type="search" id="workroomSessionSearch" class="m-input m-input-sm" placeholder="Search sessions"
+                           aria-label="Search sessions" aria-describedby="workroomSessionSearchHint" autocomplete="off">
+                    <p id="workroomSessionSearchHint" class="m-hint">Enter searches the messages too.</p>
+                </div>
                 <div id="workroomSessionList" class="px-2 space-y-0.5 overflow-hidden">
                     <div class="px-3 py-1.5 text-xs text-gray-400 dark:text-gray-500">Loading…</div>
                 </div>
@@ -689,6 +699,12 @@
                 </div>
                 {% if _wr_agent %}
                 <p class="sidebar-section-header wr-recent-label">Recent Sessions</p>
+                {# Filters the titles as you type; Enter also searches the messages (workroom.html) #}
+                <div class="wr-session-search">
+                    <input type="search" id="workroomSessionSearch" class="m-input m-input-sm" placeholder="Search sessions"
+                           aria-label="Search sessions" aria-describedby="workroomSessionSearchHint" autocomplete="off">
+                    <p id="workroomSessionSearchHint" class="m-hint">Enter searches the messages too.</p>
+                </div>
                 <div id="workroomSessionList" class="px-2 space-y-0.5 overflow-hidden">
                     <div class="px-3 py-1.5 text-xs text-gray-400 dark:text-gray-500">Loading…</div>
                 </div>
