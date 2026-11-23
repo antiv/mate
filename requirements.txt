@@ -1,8 +1,10 @@
 google-adk==2.15.0
-# Below 1.106: from 1.106.0 the completion path imports mcp 2 types, and mcp stays
-# below 2 (see below). LiteLLM's 1.107.0 release on PyPI carried a credential
-# stealer, so newer releases are taken by hand, not by the monthly upgrade.
-litellm>=1.103,<1.106
+# Below 1.104: from 1.104.0 it requires filelock below 4, which has known
+# vulnerabilities (fixed in 4.2.1). From 1.106.0 its completion path also imports
+# mcp 2 types, and mcp stays below 2 (see below). LiteLLM's 1.107.0 release on PyPI
+# carried a credential stealer, so newer releases are taken by hand, not by the
+# monthly upgrade.
+litellm>=1.103,<1.104
 orjson  # Required by litellm 1.81+ completion path (imports proxy utils)
 python-dotenv
 requests

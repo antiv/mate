@@ -71,7 +71,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Expired requests are resumed in parallel.
 - **An approval reaches the agent once, and only from whoever may give it** (approvals inbox, phase 3) - on both runtimes, an answer to a confirmation is passed on only if the request is the chat's to answer, and only the first time. A second click on the card, a late click after an administrator decided, or an API or A2A caller answering its own request no longer runs the tool, and once an administrator decides, the run receives that decision whatever the message said
 
-- **litellm is held below 1.106, and moved by hand** - LiteLLM's 1.107.0 release on PyPI carried a credential stealer, and LiteLLM has not ruled out further access to its release accounts, so the monthly dependency upgrade no longer takes new litellm releases on its own. No release of MATE installed it: the lock had 1.103.2, and the 1 November upgrade run resolved 1.103.9. From 1.106.0, litellm's completion path also imports types that only mcp 2 has, which fails every model call while mcp is below 2
+- **litellm is held below 1.104, and moved by hand** - LiteLLM's 1.107.0 release on PyPI carried a credential stealer, and LiteLLM has not ruled out further access to its release accounts, so the monthly dependency upgrade no longer takes new litellm releases on its own. No release of MATE installed it: the lock had 1.103.2, and the 1 November upgrade run resolved 1.103.9. From 1.106.0, litellm's completion path also imports types that only mcp 2 has, which fails every model call while mcp is below 2. From 1.104 it requires a filelock below 4, whose known vulnerabilities are fixed in 4.2.1; the lock has litellm 1.103.10 and filelock 4.2.10
 
 ### Fixed
 
