@@ -268,10 +268,52 @@ th.sortable {
     stroke-linecap: round;
 }
 
+/* React Flow gives its default node 150px; a name is often longer */
+.react-flow__node-default { width: auto !important; }
+
 .react-flow__minimap {
-    background: #1f2937 !important;
-    border-color: #374151 !important;
+    background: var(--bg-surface) !important;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
 }
+.react-flow__minimap-mask { fill: var(--bg-page) !important; fill-opacity: 0.7; }
+.react-flow__minimap-node { fill: var(--border-strong) !important; stroke: none !important; }
+.react-flow__controls {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: var(--shadow-card) !important;
+}
+.react-flow__controls-button {
+    background: var(--bg-surface) !important;
+    border-bottom-color: var(--border) !important;
+    color: var(--text-secondary);
+    fill: currentColor !important;
+}
+.react-flow__controls-button:hover { background: var(--bg-surface-2) !important; }
+.react-flow__attribution { background: transparent !important; }
+.react-flow__attribution a { color: var(--text-tertiary) !important; }
+
+/* ─── Visual Builder page: the canvas and the panel take what is left of the window ─── */
+.vb-page-inner { display: flex; flex-direction: column; gap: 16px; }
+.vb-canvas { min-height: 420px; }
+@media (min-width: 1024px) {
+    /* 64px of navigation, 22px above, and 76px below for the Help button */
+    main.dashboard-main:has(.vb-page) { padding-bottom: 76px !important; }
+    .vb-page-inner { height: calc(100dvh - 162px); min-height: 520px; }
+    .vb-canvas { flex: 1; min-height: 0; }
+}
+
+/* The canvas's bar and the panel's buttons */
+.vb-bar { gap: 8px; flex-wrap: wrap; }
+.vb-bar-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.vb-btn.m-btn { height: 28px; padding: 0 10px; font-size: 11.5px; border-radius: 8px; }
+.vb-btn.vb-btn-icon { width: 28px; padding: 0; }
+.vb-btn[aria-pressed="true"] { background: var(--accent-soft) !important; color: var(--accent) !important; }
+.vb-section-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 28px; }
+.vb-field.vb-field { min-height: 30px; padding: 5px 9px; border-radius: 8px; font-size: 12px; }
+.vb-check { display: inline-flex; align-items: center; gap: 8px; font-size: 11.5px; }
 
 /* ─── Floating Toolbar (Excalidraw style) ─── */
 .floating-toolbar {

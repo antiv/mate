@@ -1604,6 +1604,25 @@ class TestReviewOfPhase2(_TwoWorkspaces):
         self.assertEqual(response.status_code, 200, response.text)
         self.assertTrue(requested[0].startswith(f"/apps/{A_ROOT}/users/".encode()), requested)
 
+    def test_a_conversation_is_named_by_its_first_words_without_a_model_for_it(self):
+        saved = []
+
+        async def fake_get(client, url, **kwargs):
+            return httpx.Response(200, json={"state": {}, "events": [
+                {"author": "user", "content": {"parts": [{"text": "Which  opening\nshould I play against the Sicilian, and why?"}]}}]})
+
+        async def fake_patch(client, url, json=None, **kwargs):
+            saved.append(json)
+            return httpx.Response(200)
+
+        with patch("httpx.AsyncClient.get", new=fake_get), patch("httpx.AsyncClient.patch", new=fake_patch), \
+                patch.dict(os.environ, {"TITLE_GEN_MODEL": ""}):
+            response = self._as(ALICE).post("/dashboard/api/workroom/title", json={
+                "agent": A_ROOT, "user_id": ALICE, "session_id": "s1"})
+        title = "Which opening should I play against the Sicilian, …"
+        self.assertEqual(response.json(), {"title": title})
+        self.assertEqual(saved, [{"stateDelta": {"_title": title}}])
+
     def test_a_rating_is_of_a_session_of_the_caller_with_the_agent(self):
         session = self.Session()
         session.add(LangGraphSession(id="alice-session", app_name=A_ROOT, user_id=ALICE))

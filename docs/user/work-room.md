@@ -32,7 +32,9 @@ and text files. While the agent answers, the arrow is a square that stops it.
 ## Conversations
 
 Each conversation is kept. The sidebar shows them under **Recent Sessions**, newest
-first, named automatically after the first reply so you can find them again. It shows
+first. Each is named after the first reply, by a model when the administrator has chosen
+one (`TITLE_GEN_MODEL`) and otherwise by the first words of your message. An older one
+without a name gets it with the next reply. It shows
 20; **Show more** adds 20 more.
 
 **Search sessions** above the list keeps the conversations whose name holds every

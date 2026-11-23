@@ -10,7 +10,7 @@ generated: true
 
 # HTTP API reference
 
-Every HTTP route declared in the code: **298** routes. 37 have no docstring and so no summary here.
+Every HTTP route declared in the code: **299** routes. 37 have no docstring and so no summary here.
 
 This page lists what exists and where it is implemented. For request and response schemas, and to try a call, use the live Swagger UI under **Documentation → API** in the dashboard.
 
@@ -589,7 +589,7 @@ Internal, port 8001. Reached through the auth server's proxy, not exposed direct
 
 ## Agent server: LangGraph runtime
 
-Used instead of the ADK runtime when `AGENT_FRAMEWORK=langgraph`; emulates the same HTTP/SSE contract. 12 routes.
+Used instead of the ADK runtime when `AGENT_FRAMEWORK=langgraph`; emulates the same HTTP/SSE contract. 13 routes.
 
 ### Other
 
@@ -601,6 +601,7 @@ Used instead of the ADK runtime when `AGENT_FRAMEWORK=langgraph`; emulates the s
 | `POST` | `/apps/{app_name}/users/{user_id}/sessions` | — | shared/utils/langgraph/api.py · create_session |
 | `DELETE` | `/apps/{app_name}/users/{user_id}/sessions/{session_id}` | — | shared/utils/langgraph/api.py · delete_session |
 | `GET` | `/apps/{app_name}/users/{user_id}/sessions/{session_id}` | — | shared/utils/langgraph/api.py · get_session |
+| `PATCH` | `/apps/{app_name}/users/{user_id}/sessions/{session_id}` | Merge stateDelta into the session's state without a run, as ADK does | shared/utils/langgraph/api.py · update_session |
 | `POST` | `/apps/{app_name}/users/{user_id}/sessions/{session_id}` | — | shared/utils/langgraph/api.py · create_session_with_id |
 | `GET` | `/apps/{app_name}/users/{user_id}/sessions/{session_id}/artifacts` | — | shared/utils/langgraph/api.py · list_artifacts |
 | `GET` | `/apps/{app_name}/users/{user_id}/sessions/{session_id}/artifacts/{filename}/versions` | — | shared/utils/langgraph/api.py · list_artifact_versions |
