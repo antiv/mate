@@ -10,7 +10,7 @@ generated: true
 
 # HTTP API reference
 
-Every HTTP route declared in the code: **296** routes. 37 have no docstring and so no summary here.
+Every HTTP route declared in the code: **297** routes. 37 have no docstring and so no summary here.
 
 This page lists what exists and where it is implemented. For request and response schemas, and to try a call, use the live Swagger UI under **Documentation → API** in the dashboard.
 
@@ -18,7 +18,7 @@ Requests to `/dashboard/api/*` require an admin, apart from the short allowlist 
 
 ## Auth server and dashboard
 
-Port 8000. Everything a browser or an external client talks to. 276 routes.
+Port 8000. Everything a browser or an external client talks to. 277 routes.
 
 ### Authentication
 
@@ -408,6 +408,7 @@ Widget API key management endpoints.
 
 | Method | Path | Summary | Implemented in |
 |---|---|---|---|
+| `GET` | `/dashboard/api/workroom/sessions/search` | The caller's own sessions with an agent of their workspace whose messages hold every word of q: the Work Room's session search | shared/utils/dashboard/dashboard_server.py · search_workroom_sessions |
 | `POST` | `/dashboard/api/workroom/title` | Generate and persist a descriptive title for a Work Room session | shared/utils/dashboard/dashboard_server.py · generate_session_title |
 
 ### Dashboard - Workspaces

@@ -41,6 +41,22 @@
     }
 
     /* Agent cards grid */
+    /* The search above the agents of the welcome page */
+    .wr-agent-search {
+        position: relative;
+        max-width: 420px;
+        margin: 18px auto 14px;
+    }
+    .wr-agent-search i {
+        position: absolute;
+        left: 12px;
+        top: 50%;
+        transform: translateY(-50%);
+        font-size: 12px;
+        color: var(--text-tertiary);
+    }
+    .wr-agent-search .m-input { padding-left: 32px; }
+    .wr-agent-search-empty { text-align: center; font-size: 13px; color: var(--text-secondary); }
     .wr-agents-grid {
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
@@ -599,9 +615,18 @@
 
         {% if agents %}
         <div style="width:100%;">
+            <div class="wr-agent-search">
+                <i class="fas fa-search" aria-hidden="true"></i>
+                <input type="search" id="wrAgentSearch" class="m-input" placeholder="Search agents"
+                       aria-label="Search agents" aria-describedby="wrAgentSearchEmpty" autocomplete="off" autofocus>
+            </div>
+            <p id="wrAgentSearchEmpty" class="wr-agent-search-empty" hidden>
+                No agent matches. <button type="button" id="wrAgentSearchClear" class="m-link">Clear the search</button>
+            </p>
             <div class="wr-agents-grid">
                 {% for agent in agents %}
-                <a href="/dashboard/workroom?agent={{ agent.name | urlencode }}" class="wr-agent-card">
+                <a href="/dashboard/workroom?agent={{ agent.name | urlencode }}" class="wr-agent-card"
+                   data-search="{{ ((agent.display_name or '') ~ ' ' ~ agent.name ~ ' ' ~ (agent.description or '')) | lower }}">
                     <div class="wr-agent-avatar">
                         {% if agent.type == 'graph' %}<i class="fas fa-project-diagram"></i>
                         {% elif agent.type == 'loop' %}<i class="fas fa-redo"></i>
@@ -778,6 +803,53 @@
 {% endblock %}
 
 {% block scripts %}
+{% if not selected_agent and agents %}
+<script nonce="{{ request.state.csp_nonce }}">
+// The welcome page's agent search: filters the cards by name and description as
+// you type; Enter opens the only match, Escape clears
+(function () {
+    "use strict";
+    var box = document.getElementById("wrAgentSearch");
+    var empty = document.getElementById("wrAgentSearchEmpty");
+    var cards = Array.prototype.slice.call(document.querySelectorAll(".wr-agent-card[data-search]"));
+    if (!box) return;
+
+    function visible() {
+        return cards.filter(function (card) { return !card.hidden; });
+    }
+
+    function apply() {
+        var words = box.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+        cards.forEach(function (card) {
+            var text = card.getAttribute("data-search");
+            card.hidden = !words.every(function (w) { return text.indexOf(w) >= 0; });
+        });
+        empty.hidden = visible().length > 0;
+    }
+
+    function clear() {
+        box.value = "";
+        apply();
+        box.focus();
+    }
+
+    box.addEventListener("input", apply);
+    box.addEventListener("keydown", function (e) {
+        if (e.key === "Enter") {
+            var shown = visible();
+            if (shown.length === 1) {
+                e.preventDefault();
+                window.location.href = shown[0].getAttribute("href");
+            }
+        } else if (e.key === "Escape" && box.value) {
+            e.preventDefault();
+            clear();
+        }
+    });
+    document.getElementById("wrAgentSearchClear").addEventListener("click", clear);
+})();
+</script>
+{% endif %}
 {% if selected_agent %}
 <script nonce="{{ request.state.csp_nonce }}">
 (function () {
@@ -878,55 +950,142 @@
     }
 
     // ── Render session list in sidebar ──────────────────────────
-    function renderSessions(sessions) {
+    // Every session of the user with the agent, newest first, 20 at a time. The
+    // search box above filters them by title as you type; Enter also asks the
+    // server for the sessions whose messages hold the words.
+    var SESSION_PAGE = 20;
+    var allSessions = [];
+    var shownCount = SESSION_PAGE;
+    var messageMatches = null;   // the server's answer for the query, or null
+
+    function escText(text) {
+        var div = document.createElement("div");
+        div.textContent = text == null ? "" : String(text);
+        return div.innerHTML;
+    }
+
+    function sessionLabel(s) {
+        // Prefer LLM-generated title stored in session state, fall back to first user message
+        var label = (s.state && s.state._title) || "";
+        if (!label) {
+            var events = s.events || [];
+            var firstUser = events.find(function (e) {
+                return e.author === "user" && e.content && e.content.parts;
+            });
+            if (firstUser) {
+                var part = (firstUser.content.parts || []).find(function (p) { return p.text; });
+                if (part && part.text) label = part.text;
+            }
+        }
+        return label || "Session";
+    }
+
+    function sessionLink(s, label, extra) {
+        var short = label.length > 38 ? label.slice(0, 38) + "…" : label;
+        var ts   = s.lastUpdateTime ? relTime(s.lastUpdateTime) : "";
+        var href = "/dashboard/workroom?agent=" + encodeURIComponent(AGENT)
+                 + "&session=" + encodeURIComponent(s.id);
+        var cls = s.id === SESSION ? "sidebar-active" : "hover:bg-gray-100 dark:hover:bg-gray-700";
+        return '<a href="' + escText(href) + '" '
+            + 'class="flex flex-col px-3 py-1.5 rounded-lg text-gray-700 dark:text-gray-300 ' + cls + '" '
+            + 'title="' + escText(label) + '">'
+            + '<span class="text-xs font-medium truncate leading-tight">' + escText(short) + '</span>'
+            + (extra ? '<span class="text-xs text-gray-500 dark:text-gray-400 wr-session-snippet">' + escText(extra) + '</span>' : '')
+            + (ts ? '<span class="text-xs text-gray-400 dark:text-gray-500">' + escText(ts) + '</span>' : '')
+            + '</a>';
+    }
+
+    function note(text) {
+        return '<div class="px-3 py-1.5 text-xs text-gray-400 dark:text-gray-500">' + escText(text) + '</div>';
+    }
+
+    function paintSessions() {
         var listEl = document.getElementById("workroomSessionList");
         if (!listEl) return;
+        var box = document.getElementById("workroomSessionSearch");
+        var query = box ? box.value.trim().toLowerCase() : "";
 
-        if (!sessions || sessions.length === 0) {
-            listEl.innerHTML =
-                '<div class="px-3 py-1.5 text-xs text-gray-400 dark:text-gray-500">No sessions yet</div>';
+        if (!allSessions.length) {
+            listEl.innerHTML = note("No sessions yet");
             return;
         }
+        if (!query) {
+            var page = allSessions.slice(0, shownCount);
+            listEl.innerHTML = page.map(function (s) { return sessionLink(s, sessionLabel(s)); }).join("")
+                + (allSessions.length > shownCount
+                    ? '<button type="button" id="workroomSessionsMore" class="px-3 py-1.5 text-xs text-blue-600 dark:text-blue-400 hover:underline">Show more ('
+                      + (allSessions.length - shownCount) + ')</button>'
+                    : "");
+            return;
+        }
+        var words = query.split(/\s+/);
+        var byTitle = allSessions.filter(function (s) {
+            var label = sessionLabel(s).toLowerCase();
+            return words.every(function (w) { return label.indexOf(w) >= 0; });
+        });
+        var html = byTitle.map(function (s) { return sessionLink(s, sessionLabel(s)); });
+        if (messageMatches) {
+            var byId = {};
+            allSessions.forEach(function (s) { byId[s.id] = s; });
+            messageMatches.forEach(function (m) {
+                if (byTitle.some(function (s) { return s.id === m.id; })) return;
+                var s = byId[m.id] || { id: m.id };
+                html.push(sessionLink(s, byId[m.id] ? sessionLabel(s) : "Session", m.snippet));
+            });
+        }
+        listEl.innerHTML = html.length ? html.join("")
+            : note(messageMatches ? "No session holds those words." : "No title matches. Press Enter to search the messages.");
+    }
 
-        // Sort newest first
-        sessions.sort(function (a, b) {
+    function renderSessions(sessions) {
+        allSessions = (sessions || []).slice().sort(function (a, b) {
             return (b.lastUpdateTime || 0) - (a.lastUpdateTime || 0);
         });
-
-        listEl.innerHTML = sessions.slice(0, 20).map(function (s) {
-            // Prefer LLM-generated title stored in session state, fall back to first user message
-            var label = (s.state && s.state._title) || "";
-            if (!label) {
-                var events = s.events || [];
-                var firstUser = events.find(function (e) {
-                    return e.author === "user" && e.content && e.content.parts;
-                });
-                if (firstUser) {
-                    var part = (firstUser.content.parts || []).find(function (p) { return p.text; });
-                    if (part && part.text) {
-                        label = part.text.length > 38
-                            ? part.text.slice(0, 38) + "…"
-                            : part.text;
-                    }
-                }
-            }
-            if (!label) label = "Session";
-            var ts   = s.lastUpdateTime ? relTime(s.lastUpdateTime) : "";
-            var href = "/dashboard/workroom?agent=" + encodeURIComponent(AGENT)
-                     + "&session=" + encodeURIComponent(s.id);
-            var active = s.id === SESSION;
-            var cls = active
-                ? "sidebar-active"
-                : "hover:bg-gray-100 dark:hover:bg-gray-700";
-
-            return '<a href="' + href + '" '
-                + 'class="flex flex-col px-3 py-1.5 rounded-lg text-gray-700 dark:text-gray-300 ' + cls + '" '
-                + 'title="' + label + '">'
-                + '<span class="text-xs font-medium truncate leading-tight">' + label + '</span>'
-                + (ts ? '<span class="text-xs text-gray-400 dark:text-gray-500">' + ts + '</span>' : '')
-                + '</a>';
-        }).join("");
+        paintSessions();
     }
+
+    function searchMessages(query) {
+        var listEl = document.getElementById("workroomSessionList");
+        if (listEl) listEl.insertAdjacentHTML("beforeend", note("Searching the messages…"));
+        fetch("/dashboard/api/workroom/sessions/search?agent=" + encodeURIComponent(AGENT)
+              + "&q=" + encodeURIComponent(query), { credentials: "same-origin" })
+            .then(function (r) { return r.ok ? r.json() : { sessions: [] }; })
+            .then(function (data) {
+                var box = document.getElementById("workroomSessionSearch");
+                // A newer query was typed meanwhile
+                if (!box || box.value.trim() !== query) return;
+                messageMatches = data.sessions || [];
+                paintSessions();
+            })
+            .catch(function () { messageMatches = []; paintSessions(); });
+    }
+
+    (function wireSessionSearch() {
+        var box = document.getElementById("workroomSessionSearch");
+        var listEl = document.getElementById("workroomSessionList");
+        if (listEl) {
+            listEl.addEventListener("click", function (e) {
+                if (e.target && e.target.id === "workroomSessionsMore") {
+                    shownCount += SESSION_PAGE;
+                    paintSessions();
+                }
+            });
+        }
+        if (!box) return;
+        box.addEventListener("input", function () { messageMatches = null; paintSessions(); });
+        box.addEventListener("keydown", function (e) {
+            if (e.key === "Enter") {
+                e.preventDefault();
+                var query = box.value.trim();
+                if (query) searchMessages(query);
+            } else if (e.key === "Escape" && box.value) {
+                e.preventDefault();
+                box.value = "";
+                messageMatches = null;
+                paintSessions();
+            }
+        });
+    })();
 
     function loadSessions(userId) {
         fetch("/apps/" + AGENT + "/users/" + userId + "/sessions", {

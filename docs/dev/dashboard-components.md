@@ -280,6 +280,20 @@ runs it as `window.mateAgentPage`.
 - **File Search** reads the agent from `<prefix>Name` and `<prefix>Project` of the
   form that opened it, `agent` here and `vb` in the Visual Builder.
 
+## Search in the Work Room
+
+- **Agents:** each card of the welcome page carries `data-search` (its name, display
+  name and description, in lower case); a script in `workroom.html` hides the cards
+  that don't hold every word. No route is involved.
+- **Sessions:** the sidebar's list keeps every session the agent server lists for
+  the user, and shows 20 at a time. Typing filters them by title. Enter asks
+  `GET /dashboard/api/workroom/sessions/search?agent=&q=`, which reads the caller's
+  own events with that agent from both runtimes' stores
+  (`DashboardServer._search_session_messages`) and matches the decoded text, so
+  letters a JSON column stores escaped (č, ж) are found; it reads at most
+  `SESSION_SEARCH_MAX_EVENTS` (5,000) events per runtime. An agent of another
+  workspace answers 404.
+
 ## Tests
 
 - `shared/test/js/data_table.test.js` covers searching, sorting, paging and

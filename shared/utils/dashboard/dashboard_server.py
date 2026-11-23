@@ -3548,6 +3548,100 @@ class DashboardServer:
             return memory_blocks.get('enabled', True) is not False
         return False
 
+    def _adk_session_sync_uri(self) -> str:
+        """The ADK session database's URI for a synchronous engine: the async drivers
+        swapped for sync ones, and a relative SQLite path made absolute."""
+        uri = self.session_service_uri
+        if uri.startswith("sqlite+aiosqlite://"):
+            uri = uri.replace("sqlite+aiosqlite://", "sqlite://")
+        elif uri.startswith("postgresql+asyncpg://"):
+            uri = uri.replace("postgresql+asyncpg://", "postgresql+psycopg2://")
+        elif uri.startswith("mysql+aiomysql://"):
+            uri = uri.replace("mysql+aiomysql://", "mysql://")
+        if uri.startswith("sqlite:///") and not uri.startswith("sqlite:////"):
+            rel_path = uri.replace("sqlite:///", "")
+            uri = f"sqlite:///{(self.project_root / rel_path).resolve()}"
+        return uri
+
+    # The Work Room's session search reads at most this many of the user's latest
+    # events with the agent
+    SESSION_SEARCH_MAX_EVENTS = 5000
+
+    def _search_session_messages(self, app_name: str, user_id: str, query: str,
+                                 limit: int = 50) -> List[Dict[str, Any]]:
+        """The user's sessions with the app whose messages hold every word of
+        `query`, newest first: [{id, snippet, updated_at}]. The text is matched
+        after decoding, so words with letters a JSON column stores escaped (č, ж)
+        are found too; it reads the user's latest SESSION_SEARCH_MAX_EVENTS events
+        of each runtime."""
+        words = [w for w in query.lower().split() if w]
+        if not words:
+            return []
+        found: Dict[str, Dict[str, Any]] = {}
+
+        def texts(event: Any) -> List[str]:
+            content = event.get("content") if isinstance(event, dict) else None
+            parts = content.get("parts") if isinstance(content, dict) else None
+            return [p["text"] for p in parts or [] if isinstance(p, dict) and isinstance(p.get("text"), str)]
+
+        def consider(session_id: str, event: Any, when: Any) -> None:
+            if session_id in found:
+                return
+            for text_part in texts(event):
+                lowered = text_part.lower()
+                if all(w in lowered for w in words):
+                    at = lowered.find(words[0])
+                    start = max(0, at - 40)
+                    snippet = ("…" if start else "") + text_part[start:start + 140].strip()
+                    if isinstance(when, (int, float)):  # LangGraph keeps epoch seconds
+                        from datetime import datetime, timezone
+                        when = datetime.fromtimestamp(when, tz=timezone.utc)
+                    found[session_id] = {"id": session_id, "snippet": snippet,
+                                         "updated_at": when.isoformat() if hasattr(when, "isoformat") else when}
+                    return
+
+        def parse(raw: Any) -> Any:
+            if isinstance(raw, (dict, list)):
+                return raw
+            try:
+                return json.loads(raw) if raw else None
+            except (TypeError, ValueError):
+                return None
+
+        try:
+            from sqlalchemy import create_engine, text
+            engine = create_engine(self._adk_session_sync_uri())
+            try:
+                with engine.connect() as conn:
+                    rows = conn.execute(
+                        text("SELECT session_id, event_data, timestamp FROM events "
+                             "WHERE app_name = :app AND user_id = :uid ORDER BY timestamp DESC LIMIT :n"),
+                        {"app": app_name, "uid": user_id, "n": self.SESSION_SEARCH_MAX_EVENTS}).fetchall()
+                for session_id, raw, when in rows:
+                    consider(session_id, parse(raw), when)
+            finally:
+                engine.dispose()
+        except Exception as e:
+            logger.debug("ADK session search skipped: %s", e)
+
+        if self.db_client:
+            db = self.db_client.get_session()
+            try:
+                from shared.utils.models import LangGraphEvent, LangGraphSession
+                rows = (db.query(LangGraphEvent.session_id, LangGraphEvent.content, LangGraphEvent.timestamp)
+                        .join(LangGraphSession, LangGraphEvent.session_id == LangGraphSession.id)
+                        .filter(LangGraphSession.app_name == app_name, LangGraphSession.user_id == user_id)
+                        .order_by(LangGraphEvent.timestamp.desc())
+                        .limit(self.SESSION_SEARCH_MAX_EVENTS).all())
+                for session_id, raw, when in rows:
+                    consider(session_id, {"content": parse(raw)}, when)
+            except Exception as e:
+                logger.debug("LangGraph session search skipped: %s", e)
+            finally:
+                db.close()
+
+        return sorted(found.values(), key=lambda f: str(f["updated_at"] or ""), reverse=True)[:limit]
+
     def _get_sessions(self, runtime: str = "all", app_name: Optional[str] = None,
                       user_id: Optional[str] = None, search: Optional[str] = None,
                       page: int = 1, limit: int = 50,
@@ -3615,18 +3709,7 @@ class DashboardServer:
         if runtime in ("all", "adk"):
             try:
                 from sqlalchemy import create_engine, text
-                uri = self.session_service_uri
-                if uri.startswith("sqlite+aiosqlite://"):
-                    uri = uri.replace("sqlite+aiosqlite://", "sqlite://")
-                elif uri.startswith("postgresql+asyncpg://"):
-                    uri = uri.replace("postgresql+asyncpg://", "postgresql+psycopg2://")
-                elif uri.startswith("mysql+aiomysql://"):
-                    uri = uri.replace("mysql+aiomysql://", "mysql://")
-                
-                if uri.startswith("sqlite:///") and not uri.startswith("sqlite:////"):
-                    rel_path = uri.replace("sqlite:///", "")
-                    abs_path = str((self.project_root / rel_path).resolve())
-                    uri = f"sqlite:///{abs_path}"
+                uri = self._adk_session_sync_uri()
 
                 engine = create_engine(uri)
                 with engine.connect() as conn:
@@ -3690,17 +3773,7 @@ class DashboardServer:
         adk_conn = None
         try:
             from sqlalchemy import create_engine, text
-            uri = self.session_service_uri
-            if uri.startswith("sqlite+aiosqlite://"):
-                uri = uri.replace("sqlite+aiosqlite://", "sqlite://")
-            elif uri.startswith("postgresql+asyncpg://"):
-                uri = uri.replace("postgresql+asyncpg://", "postgresql+psycopg2://")
-            elif uri.startswith("mysql+aiomysql://"):
-                uri = uri.replace("mysql+aiomysql://", "mysql://")
-            if uri.startswith("sqlite:///") and not uri.startswith("sqlite:////"):
-                rel_path = uri.replace("sqlite:///", "")
-                abs_path = str((self.project_root / rel_path).resolve())
-                uri = f"sqlite:///{abs_path}"
+            uri = self._adk_session_sync_uri()
             adk_engine = create_engine(uri)
             adk_conn = adk_engine.connect()
         except Exception:
@@ -3788,18 +3861,7 @@ class DashboardServer:
         if runtime in ("adk", "auto"):
             try:
                 from sqlalchemy import create_engine, text
-                uri = self.session_service_uri
-                if uri.startswith("sqlite+aiosqlite://"):
-                    uri = uri.replace("sqlite+aiosqlite://", "sqlite://")
-                elif uri.startswith("postgresql+asyncpg://"):
-                    uri = uri.replace("postgresql+asyncpg://", "postgresql+psycopg2://")
-                elif uri.startswith("mysql+aiomysql://"):
-                    uri = uri.replace("mysql+aiomysql://", "mysql://")
-                
-                if uri.startswith("sqlite:///") and not uri.startswith("sqlite:////"):
-                    rel_path = uri.replace("sqlite:///", "")
-                    abs_path = str((self.project_root / rel_path).resolve())
-                    uri = f"sqlite:///{abs_path}"
+                uri = self._adk_session_sync_uri()
 
                 engine = create_engine(uri)
                 with engine.connect() as conn:
@@ -3900,18 +3962,7 @@ class DashboardServer:
         if runtime in ("adk", "auto"):
             try:
                 from sqlalchemy import create_engine, text
-                uri = self.session_service_uri
-                if uri.startswith("sqlite+aiosqlite://"):
-                    uri = uri.replace("sqlite+aiosqlite://", "sqlite://")
-                elif uri.startswith("postgresql+asyncpg://"):
-                    uri = uri.replace("postgresql+asyncpg://", "postgresql+psycopg2://")
-                elif uri.startswith("mysql+aiomysql://"):
-                    uri = uri.replace("mysql+aiomysql://", "mysql://")
-                
-                if uri.startswith("sqlite:///") and not uri.startswith("sqlite:////"):
-                    rel_path = uri.replace("sqlite:///", "")
-                    abs_path = str((self.project_root / rel_path).resolve())
-                    uri = f"sqlite:///{abs_path}"
+                uri = self._adk_session_sync_uri()
 
                 engine = create_engine(uri)
                 key = {"sid": session_id, "app": app_name, "uid": user_id}
@@ -8276,6 +8327,16 @@ class DashboardServer:
                 "selected_session": session or "",
                 "is_admin": is_admin,
             })
+
+        @self.app.get("/dashboard/api/workroom/sessions/search", tags=["Dashboard - WorkRoom"])
+        async def search_workroom_sessions(request: Request, agent: str = Query(..., min_length=1),
+                                           q: str = Query(..., min_length=1, max_length=200),
+                                           ctx: RequestContext = Depends(get_request_context)):
+            """The caller's own sessions with an agent of their workspace whose messages
+            hold every word of q: the Work Room's session search."""
+            self._require_in_workspace(ctx, agent_name=agent)
+            matches = await asyncio.to_thread(self._search_session_messages, agent, ctx.user_id, q)
+            return {"sessions": matches}
 
         @self.app.post("/dashboard/api/workroom/title", tags=["Dashboard - WorkRoom"])
         async def generate_session_title(request: Request, ctx: RequestContext = Depends(get_request_context)):

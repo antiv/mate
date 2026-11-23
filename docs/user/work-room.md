@@ -17,7 +17,9 @@ in has, whatever their role.
 ## Start a conversation
 
 Select an agent, type a message and press **Send**. The list holds the agents your
-roles let you use. If no agent is offered, none you may use has been created yet; an
+roles let you use. **Search agents** above it keeps the agents whose name or
+description holds every word you type; Enter opens the agent when only one is left,
+and Escape clears the search. If no agent is offered, none you may use has been created yet; an
 administrator creates them on the **Agents** page, and sets who may use each.
 
 If an agent answers with an access-denied message, it names the roles it requires
@@ -28,8 +30,15 @@ images.
 
 ## Conversations
 
-Each conversation is kept. The sidebar shows them under **Recent Sessions**, named
-automatically after the first reply so you can find them again. **New Conversation**
+Each conversation is kept. The sidebar shows them under **Recent Sessions**, newest
+first, named automatically after the first reply so you can find them again. It shows
+20; **Show more** adds 20 more.
+
+**Search sessions** above the list keeps the conversations whose name holds every
+word you type. Press Enter to search what was said as well: the conversations whose
+messages hold the words are added, each with the passage that matched. It searches
+only your own conversations with this agent, the latest 5,000 messages of them.
+Escape clears the search. **New Conversation**
 starts a fresh one with the same agent; the agent does not carry anything over from
 the old conversation unless it stores it in a memory block or in your profile.
 
