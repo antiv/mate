@@ -35,11 +35,13 @@ installation, while project names are unique only within a workspace. If another
 workspace already has agents with those names, the import stops before it creates
 anything and asks you to choose another project name.
 
-After the import, open the project on the **Agents** page. Two things usually need
+After the import, open the project on the **Agents** page. Three things usually need
 your attention:
 
 - **Models.** A template names the models its authors used. If your server has no
   key for that provider, change **Model Name** on each agent.
+- **Keys.** A template holds none. Where its agents used one in an MCP server or a
+  tool, the imported agent's is empty: enter it on the agent's page.
 - **Roles.** Check **Allowed Roles** on the root agent so that the right people can
   use it.
 

@@ -46,6 +46,10 @@ Or use the API directly:
 curl -u admin:mate "http://localhost:8000/dashboard/api/agents/export?root_agent=my_agent&project_id=1" > my_agent.json
 ```
 
+The file holds `__stored__` in place of the keys in the agents' MCP servers and tools.
+Replace each before building, best with a `${VAR}` that you then set in `.env`.
+**Download Binary** builds with the stored keys, so whoever has the binary has them too.
+
 ### 2. Prepare the Build
 
 ```bash

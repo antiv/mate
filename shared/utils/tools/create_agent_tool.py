@@ -18,6 +18,7 @@ from ..database_client import get_database_client
 from ..models import DEFAULT_WORKSPACE_ID, AgentConfig
 from ..user_service import get_user_service
 from ..agent_cleanup import left_behind
+from .. import config_secrets
 from ..platform_only import features_added, has_code_folder, is_agent_name
 from ..workspaces import agent_workspace
 from ...utils.utils import mask_config_secrets, reload_agent_cache
@@ -689,6 +690,12 @@ def update_agent(
                     "status": "error",
                     "error_message": "No fields to update. Provide at least one field: description, instruction, model, parent_agent, tool_config, or mcp_servers_config"
                 }
+
+            # read_agent hides the secrets: a hidden value it gives back keeps the stored one
+            try:
+                config_secrets.require_config(config_data, agent_config.to_dict())
+            except config_secrets.HiddenValue as e:
+                return {"status": "error", "error_message": str(e)}
 
             if not _for_the_platform(session, current_agent_name):
                 before = {column: getattr(agent_config, column) for column in (

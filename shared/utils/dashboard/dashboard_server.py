@@ -21,7 +21,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 
-from shared.utils import audit_service
+from shared.utils import audit_service, config_secrets
 from ..ai_disclosure import resolve_disclosure, validate_waiver
 from shared.utils.path_safety import resolve_within_base
 from shared.utils.platform_only import features_added, has_code_folder, is_agent_name
@@ -1224,6 +1224,14 @@ class DashboardServer:
                                 detail=f"Not an agent of this workspace: {', '.join(outside)}")
 
     @staticmethod
+    def _keep_hidden_values(config: Dict[str, Any], stored: Optional[Dict[str, Any]]) -> None:
+        """Put back what a masked config hides (config_secrets.py); 400 when it can't be."""
+        try:
+            config_secrets.require_config(config, stored)
+        except config_secrets.HiddenValue as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
+    @staticmethod
     def _refuse_bad_approval_config(config: Dict[str, Any]) -> None:
         """400 when the tool_config's require_confirmation doesn't validate (approval_config.py)."""
         from shared.utils.approval_config import validate
@@ -2017,6 +2025,10 @@ class DashboardServer:
             import json
             # Convert list fields to JSON strings for database storage
             processed_data = config_data.copy()
+            # A masked config (an import, a template) has no stored values to go with it
+            if processed_data.get('model_api_key') == STORED_SECRET_SENTINEL:
+                processed_data['model_api_key'] = None
+            config_secrets.restore_config(processed_data, None)
             if 'description' in processed_data:
                 processed_data['description'] = sanitize_agent_text(processed_data['description'])
             if 'instruction' in processed_data:
@@ -2294,8 +2306,10 @@ class DashboardServer:
             session.close()
 
     def _export_agent_configs(self, search: str = None, root_agent: str = None, project_id: Optional[int] = None,
-                              workspace_id: Optional[int] = None) -> Dict[str, Any]:
-        """Export agent configurations to JSON format with optional filtering."""
+                              workspace_id: Optional[int] = None, for_build: bool = False) -> Dict[str, Any]:
+        """Export agent configurations to JSON format with optional filtering. Secrets
+        are masked, but for_build the MCP servers' and tools' are not: a standalone agent
+        runs with them."""
         if not self.db_client:
             return {"error": "Database connection failed"}
         
@@ -2353,6 +2367,8 @@ class DashboardServer:
                     "disabled": config.disabled,
                     "hardcoded": config.hardcoded
                 }
+                if not for_build:
+                    agent_data = mask_config_secrets(agent_data)
                 export_data["agents"].append(agent_data)
                 
                 if config.tool_config:
@@ -2568,6 +2584,12 @@ class DashboardServer:
                         skipped_count += 1
                         errors.append(f"Agent '{agent_data['name']}': this name is taken")
                         continue
+                    # A masked key or value keeps the stored one
+                    agent_data = dict(agent_data)
+                    if agent_data.get("model_api_key") == STORED_SECRET_SENTINEL:
+                        del agent_data["model_api_key"]
+                    hidden = config_secrets.restore_config(
+                        agent_data, existing_agent.to_dict() if existing_agent else None)
                     if not platform_admin:
                         added = features_added(agent_data, existing_agent.to_dict() if existing_agent else None)
                         if added:
@@ -2617,7 +2639,10 @@ class DashboardServer:
                         )
                         session.add(new_agent)
                         imported_count += 1
-                        
+                    if hidden:
+                        errors.append(f"Agent '{agent_data['name']}': imported without its hidden values, "
+                                      f"enter them ({', '.join(hidden)})")
+
                 except Exception as e:
                     errors.append(f"Error importing agent '{agent_data.get('name', 'Unknown')}': {str(e)}")
             
@@ -3199,6 +3224,14 @@ class DashboardServer:
         except Exception as e:
             return {"error": f"Failed to save template: {str(e)}"}
     
+    @staticmethod
+    def _template_value(field: str, value: Any, db_agent: Any, sub_names: Any) -> Any:
+        """A template agent's config field as the project's agent would have it: its text
+        with the names mapped, and a value the template hides as the agent has it."""
+        if isinstance(value, str):
+            value = sub_names(value)
+        return config_secrets.restore(field, value, getattr(db_agent, field))[0] if value else value
+
     def _get_template_sync_status(self, project_id: int) -> Dict[str, Any]:
         """Get sync status: compare project agents with source template to find differences."""
         if not self.db_client:
@@ -3279,12 +3312,13 @@ class DashboardServer:
                             changes.append("description")
                             
                         # Compare JSON structure properly, applying mapping
-                        tpl_mcp_raw = tpl_agent.get("mcp_servers_config")
+                        tpl_mcp_raw = self._template_value(
+                            "mcp_servers_config", tpl_agent.get("mcp_servers_config"), db_agent, sub_names)
                         if isinstance(tpl_mcp_raw, str) and tpl_mcp_raw:
                             try:
-                                tpl_mcp_raw = json.loads(sub_names(tpl_mcp_raw))
+                                tpl_mcp_raw = json.loads(tpl_mcp_raw)
                             except json.JSONDecodeError:
-                                tpl_mcp_raw = sub_names(tpl_mcp_raw)
+                                pass
                         tpl_mcp = to_json_str(tpl_mcp_raw)
                         
                         db_mcp_raw = db_agent.mcp_servers_config if isinstance(db_agent.mcp_servers_config, (dict, list)) else json.loads(db_agent.mcp_servers_config) if db_agent.mcp_servers_config else ""
@@ -3292,12 +3326,13 @@ class DashboardServer:
                         if tpl_mcp != db_mcp:
                             changes.append("mcp_servers_config")
                             
-                        tpl_tool_raw = tpl_agent.get("tool_config")
+                        tpl_tool_raw = self._template_value(
+                            "tool_config", tpl_agent.get("tool_config"), db_agent, sub_names)
                         if isinstance(tpl_tool_raw, str) and tpl_tool_raw:
                             try:
-                                tpl_tool_raw = json.loads(sub_names(tpl_tool_raw))
+                                tpl_tool_raw = json.loads(tpl_tool_raw)
                             except json.JSONDecodeError:
-                                tpl_tool_raw = sub_names(tpl_tool_raw)
+                                pass
                         tpl_tool = to_json_str(tpl_tool_raw)
                         
                         db_tool_raw = db_agent.tool_config if isinstance(db_agent.tool_config, (dict, list)) else json.loads(db_agent.tool_config) if db_agent.tool_config else ""
@@ -3424,7 +3459,7 @@ class DashboardServer:
                         for field in ("tool_config", "mcp_servers_config"):
                             value = tpl_agent.get(field)
                             if value:
-                                synced[field] = sub_names(value) if isinstance(value, str) else value
+                                synced[field] = self._template_value(field, value, existing, sub_names)
                     else:
                         synced = {field: tpl_agent.get(field) for field in (
                             "tool_config", "mcp_servers_config", "model_base_url", "hardcoded")
@@ -3488,10 +3523,8 @@ class DashboardServer:
                         changed = True
                     
                     # Convert template MCP to string, map names, and set
-                    tpl_mcp_raw = tpl_agent.get("mcp_servers_config")
-                    if isinstance(tpl_mcp_raw, str):
-                        tpl_mcp_raw = sub_names(tpl_mcp_raw)
-                    new_mcp = to_json_str(tpl_mcp_raw)
+                    new_mcp = to_json_str(self._template_value(
+                        "mcp_servers_config", tpl_agent.get("mcp_servers_config"), db_agent, sub_names))
                     
                     db_mcp_raw = db_agent.mcp_servers_config if isinstance(db_agent.mcp_servers_config, (dict, list)) else json.loads(db_agent.mcp_servers_config) if db_agent.mcp_servers_config else ""
                     db_mcp = to_json_str(db_mcp_raw)
@@ -3500,10 +3533,8 @@ class DashboardServer:
                         changed = True
                     
                     # Convert template Tool to string, map names, and set
-                    tpl_tool_raw = tpl_agent.get("tool_config")
-                    if isinstance(tpl_tool_raw, str):
-                        tpl_tool_raw = sub_names(tpl_tool_raw)
-                    new_tool = to_json_str(tpl_tool_raw)
+                    new_tool = to_json_str(self._template_value(
+                        "tool_config", tpl_agent.get("tool_config"), db_agent, sub_names))
                     
                     db_tool_raw = db_agent.tool_config if isinstance(db_agent.tool_config, (dict, list)) else json.loads(db_agent.tool_config) if db_agent.tool_config else ""
                     db_tool = to_json_str(db_tool_raw)
@@ -5532,7 +5563,7 @@ class DashboardServer:
                 raise HTTPException(status_code=400, detail="project_id must be an integer")
             self._require_in_workspace(ctx, project_id=project_id)
 
-            export_data = self._export_agent_configs(root_agent=root_agent, project_id=project_id)
+            export_data = self._export_agent_configs(root_agent=root_agent, project_id=project_id, for_build=True)
             if "error" in export_data:
                 raise HTTPException(status_code=500, detail=export_data["error"])
             if not export_data.get("agents"):
@@ -6033,6 +6064,7 @@ class DashboardServer:
             }
             self._require_in_workspace(ctx, project_id=config_data["project_id"] or 1)
             self._check_agent_names(ctx, name, parent_agents_list)
+            self._keep_hidden_values(config_data, None)
             self._refuse_platform_only(ctx, config_data)
             self._refuse_bad_approval_config(config_data)
             success = self._create_agent_config(config_data, changed_by=ctx.user_id)
@@ -6123,7 +6155,9 @@ class DashboardServer:
             if config_data["project_id"] is not None:
                 self._require_in_workspace(ctx, project_id=config_data["project_id"])
             self._check_agent_names(ctx, name, parent_agents_list, config_id)
-            self._refuse_platform_only(ctx, config_data, self._agent_config_dict(config_id))
+            stored = self._agent_config_dict(config_id)
+            self._keep_hidden_values(config_data, stored)
+            self._refuse_platform_only(ctx, config_data, stored)
             self._refuse_bad_approval_config(config_data)
             # Read before writing: switching the Art. 50 notice off, or back on, is
             # a compliance decision and gets its own entry rather than hiding

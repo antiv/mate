@@ -119,6 +119,30 @@ class TestPolicy(unittest.TestCase):
         for url in sorted(urls):
             self.assertTrue(allowed(url), url)
 
+    def test_every_cdn_file_is_of_one_version_and_checked(self):
+        # An exact version, and the hash the browser compares it with. Tailwind's CDN sends
+        # no CORS headers, which integrity needs, and Google makes its font sheets per browser
+        import re
+        root = Path(__file__).resolve().parents[2]
+        tags = []
+        for path in (root / "templates").rglob("*.html"):
+            text = path.read_text(encoding="utf-8")
+            tags += [(path.name, tag) for tag in re.findall(r"<(?:script|link)\b[^>]*https://[^>]*>", text)]
+            # The canvas's Python runner writes its tag in script
+            tags += [(path.name, tag.replace("' +", "")) for tag in re.findall(
+                r"src=\"https://cdn\.jsdelivr\.net/pyodide[^>]*>", text)]
+        checked = 0
+        for name, tag in tags:
+            url = re.search(r'(?:src|href)="(https://[^"]+)"', tag).group(1)
+            if "fonts.g" in url:
+                continue
+            with self.subTest(page=name, url=url):
+                self.assertRegex(url, r"[@/]v?\d+\.\d+\.\d+(?:/|$)")
+                if not url.startswith("https://cdn.tailwindcss.com/"):
+                    self.assertRegex(tag, r'integrity="sha384-[A-Za-z0-9+/]{64}" crossorigin="anonymous"')
+                    checked += 1
+        self.assertGreater(checked, 10)
+
     def test_the_dashboard_may_only_be_framed_by_itself(self):
         d = _directives(csp.build_policy())
         self.assertEqual(d["frame-ancestors"], ["'self'"])
