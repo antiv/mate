@@ -30,11 +30,9 @@ agent's row on the Agents page, or **Advanced Setup** in the Visual Builder; its
 at the top then leads back to the canvas. **Add Agent** opens an empty one,
 `/dashboard/agents/new`. An agent of another workspace is not found.
 
-The top of the page names the agent, its type, model and project, and holds:
-
-- **Test**, for a root agent: a chat with it in the Work Room;
-- **⋯**: **Copy**, **Open in Visual Builder**, **Export** (a root agent and its tree,
-  as a file) and **Delete**.
+The top of the page names the agent, its type, model and project, and holds **⋯**:
+**Copy**, **Open in Visual Builder**, **Export** (a root agent and its tree,
+as a file) and **Delete**.
 
 Under it are the tabs. The page's address names the tab open (`#versions`), so a
 reload or a link comes back to it.
@@ -56,6 +54,14 @@ reload or a link comes back to it.
 - **Traces**: the 50 latest traces with a span of the agent. **Open** shows one on
   the [Traces](sessions-and-traces.md) page. Traces are recorded only with
   `OTEL_TRACING_ENABLED` and `OTEL_TRACES_DB_EXPORT`.
+- **Channels**: where the agent is reached besides the Work Room. Its triggers
+  (**Manage in Triggers**), for a root agent its widget keys (**Manage widget keys**
+  opens the dialog to add, turn off or delete one, and copy the embed code), and its
+  Slack integrations (**Manage in Integrations**). A widget key is shown by its
+  first characters only; the dialog shows it whole.
+- **Test**, for a root agent: a chat with it, as in the Work Room, without leaving
+  the page. It runs the agent as saved, so save a change before trying it. **Open
+  in Work Room** continues there.
 
 A new agent has only **Settings** until it is created.
 

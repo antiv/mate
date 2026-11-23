@@ -16,7 +16,8 @@ mateActions.allow('mateAgentPage.save', 'mateAgentPage.discard',
                   'mateAgentPage.addParent', 'mateAgentPage.removeParent',
                   'mateAgentPage.roleKey', 'mateAgentPage.addRoleFromInput', 'mateAgentPage.removeRole',
                   'mateAgentPage.clearGuardrails', 'mateAgentPage.reloadSessions',
-                  'mateAgentPage.reloadUsage', 'mateAgentPage.reloadTraces');
+                  'mateAgentPage.reloadUsage', 'mateAgentPage.reloadTraces',
+                  'mateAgentPage.manageWidgetKeys');
 
 (function () {
     'use strict';
@@ -662,6 +663,97 @@ mateActions.allow('mateAgentPage.save', 'mateAgentPage.discard',
         if (tracesTable) loadTraces();
     }
 
+    // Channels: the triggers, widget keys and Slack integrations of the agent
+    let channelTables = null;
+
+    const activeBadge = (on) => (on
+        ? '<span class="m-badge m-badge-success">On</span>'
+        : '<span class="m-badge">Off</span>');
+
+    function startChannels() {
+        const esc = MateTable.esc;
+        channelTables = {
+            triggers: new MateTable(el('agentTriggersTable'), {
+                noun: ['trigger', 'triggers'],
+                label: 'Triggers',
+                search: false,
+                empty: 'No trigger runs this agent.',
+                columns: [
+                    { key: 'name', label: 'Name', className: 'm-cell-strong' },
+                    { key: 'trigger_type', label: 'Type' },
+                    { key: 'when', label: 'When', className: 'm-mono',
+                      value: (t) => (t.trigger_type === 'cron' ? t.cron_expression : t.webhook_path) || '' },
+                    { key: 'output_type', label: 'Output' },
+                    { key: 'last_fired_at', label: 'Last run', render: (t) => when(t.last_fired_at) },
+                    { key: 'is_enabled', label: 'Enabled', render: (t) => activeBadge(t.is_enabled) },
+                ],
+            }),
+            slack: new MateTable(el('agentSlackTable'), {
+                noun: ['integration', 'integrations'],
+                label: 'Slack integrations',
+                search: false,
+                empty: 'Not connected to Slack.',
+                columns: [
+                    { key: 'label', label: 'Label', className: 'm-cell-strong' },
+                    { key: 'platform', label: 'Platform' },
+                    { key: 'team_id', label: 'Team', className: 'm-mono' },
+                    { key: 'is_active', label: 'Active', render: (i) => activeBadge(i.is_active) },
+                ],
+            }),
+        };
+        if (el('agentWidgetKeysTable')) {
+            channelTables.widget = new MateTable(el('agentWidgetKeysTable'), {
+                noun: ['widget key', 'widget keys'],
+                label: 'Widget keys',
+                search: false,
+                empty: 'No widget key: the agent is on no website.',
+                columns: [
+                    { key: 'label', label: 'Label', className: 'm-cell-strong' },
+                    // The start of the key only: the dialog shows it whole
+                    { key: 'api_key', label: 'Key', className: 'm-mono', sortable: false,
+                      render: (k) => esc(`${String(k.api_key || '').slice(0, 10)}…`) },
+                    { key: 'allowed_origins', label: 'Sites', sortable: false,
+                      render: (k) => esc((k.allowed_origins || []).join(', ') || 'Any') },
+                    { key: 'is_active', label: 'Active', render: (k) => activeBadge(k.is_active) },
+                ],
+            });
+            // The dialog adds, turns off and deletes keys: list them again when it closes
+            new MutationObserver(() => {
+                if (el('widgetKeysModal').classList.contains('hidden')) loadChannels();
+            }).observe(el('widgetKeysModal'), { attributes: true, attributeFilter: ['class'] });
+        }
+        loadChannels();
+    }
+
+    async function loadChannels() {
+        const mine = (rows) => (rows || []).filter((row) => row.agent_name === config.name);
+        const load = async (table, url, pick) => {
+            if (!table) return;
+            try {
+                table.setRows(pick(await getJson(url)));
+            } catch (e) {
+                table.setError(e.message);
+            }
+        };
+        await Promise.all([
+            load(channelTables.triggers, `/dashboard/api/triggers?${new URLSearchParams({ agent_name: config.name })}`,
+                 (r) => r.triggers || []),
+            load(channelTables.widget, `/dashboard/api/widget-keys?${new URLSearchParams({ project_id: config.project_id })}`,
+                 (r) => mine(r.keys)),
+            load(channelTables.slack, '/dashboard/api/channel-integrations', (r) => mine(r.integrations)),
+        ]);
+    }
+
+    function manageWidgetKeys() {
+        showWidgetKeysModal(config.name, config.project_id);
+    }
+
+    // Test: the Work Room framed, loaded when the tab first opens
+    function startTest() {
+        const frame = el('agentTestFrame');
+        if (frame && !frame.src) frame.src = frame.dataset.src;
+    }
+
     function openTab(id) {
         const name = id.replace(/^tab-/, '');
         if (name === 'versions' && !loaded.versions) loadVersionHistory(config.id, config.name);
@@ -669,6 +761,8 @@ mateActions.allow('mateAgentPage.save', 'mateAgentPage.discard',
         if (name === 'evals' && !loaded.evals) startEvals();
         if (name === 'usage' && !loaded.usage) startUsage();
         if (name === 'traces' && !loaded.traces) startTraces();
+        if (name === 'channels' && !loaded.channels) startChannels();
+        if (name === 'test') startTest();
         loaded[name] = true;
         // The tab is in the address, so a reload (after a rollback, say) comes back to it
         try { history.replaceState(null, '', name === 'settings' ? window.location.pathname + window.location.search : `#${name}`); } catch (e) { /* no address change */ }
@@ -791,7 +885,7 @@ mateActions.allow('mateAgentPage.save', 'mateAgentPage.discard',
         addRoleFromInput: () => addRole(el('agentRoleAdd').value),
         // After a rollback: the page of the version's name, on the tab shown
         reloadAs: (name) => leave(pageUrl(name, window.location.hash)),
-        reloadSessions, reloadUsage, reloadTraces,
+        reloadSessions, reloadUsage, reloadTraces, manageWidgetKeys,
         isDirty,
     };
 

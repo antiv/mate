@@ -140,6 +140,23 @@ class TestAgentPage(_TwoWorkspaces):
                                    params={"agent_name": B_ROOT})
         self.assertEqual(response.status_code, 404)
 
+    def test_channels_and_test_tabs(self):
+        html = self._get(f"/dashboard/agents/{A_ROOT}").text
+        for marker in ('id="tab-channels"', 'id="tab-test"', 'id="agentWidgetKeysTable"',
+                       'id="widgetKeysModal"', f'data-src="/dashboard/workroom?agent={A_ROOT}&embed=1"'):
+            self.assertIn(marker, html)
+        # A sub-agent has no app to chat with, nor a widget of its own
+        html = self._get("/dashboard/agents/ws_a_sub").text
+        self.assertIn('id="tab-channels"', html)
+        for marker in ('id="tab-test"', 'id="agentWidgetKeysTable"', 'id="widgetKeysModal"'):
+            self.assertNotIn(marker, html)
+
+    def test_embed_shows_the_page_alone(self):
+        framed = self._get(f"/dashboard/workroom?agent={A_ROOT}&embed=1").text
+        self.assertRegex(framed, r"<body[^>]* data-embed>")
+        plain = self._get(f"/dashboard/workroom?agent={A_ROOT}").text
+        self.assertNotRegex(plain, r"<body[^>]* data-embed")
+
     def _get_json(self, path: str, **params):
         response = self.client.get(path, headers=_platform_admin(A), params=params)
         self.assertEqual(response.status_code, 200, response.text)

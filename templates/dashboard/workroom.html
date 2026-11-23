@@ -649,9 +649,12 @@
             <button id="widgetNewChat" type="button" class="wr-bar-action">
                 <i class="fas fa-plus"></i>New
             </button>
+            {# Framed by an agent page's Test tab (?embed=1), the chat stays with that agent #}
+            {% if request.query_params.get('embed') != '1' %}
             <a href="/dashboard/workroom" class="wr-bar-action">
                 <i class="fas fa-exchange-alt"></i>Change
             </a>
+            {% endif %}
         </div>
 
         <!-- Body: chat + canvas side by side -->
