@@ -1289,14 +1289,18 @@ class DashboardServer:
         finally:
             session.close()
     
+    # The longest period whose usage is also given by the hour
+    USAGE_BY_HOUR_MAX_HOURS = 24 * 31
+
     def _get_token_usage_logs(self, hours: int = 24, limit: int = 100, page: int = 1,
                               user_id: Optional[str] = None,
                               workspace_id: Optional[int] = None,
                               agent_name: Optional[str] = None) -> Dict[str, Any]:
         """Get paginated token usage logs, only `user_id`'s, `workspace_id`'s and
-        `agent_name`'s when they are given. With `agent_name`, also `by_model`: the
-        calls, tokens and cost of the whole period per model (the agent page's Usage
-        tab)."""
+        `agent_name`'s when they are given. With `agent_name`, also what the agent
+        page's Usage tab shows of the whole period: `by_model`, its calls, tokens and
+        cost per model, and on the first page of a period up to USAGE_BY_HOUR_MAX_HOURS
+        `by_hour`, the tokens and cost per model and hour, in UTC as they are stored."""
         if not self.db_client:
             return {"error": "Database connection failed"}
         
@@ -1334,9 +1338,25 @@ class DashboardServer:
                 self.TokenUsageLog.timestamp.desc()
             ).offset(offset).limit(limit).all()
             
-            by_model = None
+            by_model = by_hour = None
             if agent_name is not None:
                 usage = self.TokenUsageLog
+                if page == 1 and hours <= self.USAGE_BY_HOUR_MAX_HOURS:
+                    day, hour = func.date(usage.timestamp), func.extract('hour', usage.timestamp)
+                    # func.date() gives a str on SQLite and a date on PostgreSQL/MySQL
+                    by_hour = [{
+                        "date": str(row.day),
+                        "hour": int(row.hour),
+                        "model_name": row.model_name,
+                        "prompt_tokens": int(row.prompt_tokens or 0),
+                        "response_tokens": int(row.response_tokens or 0),
+                        "cost_usd": float(row.cost_usd) if row.cost_usd is not None else None,
+                    } for row in session.query(
+                        day.label("day"), hour.label("hour"), usage.model_name,
+                        func.sum(usage.prompt_tokens).label("prompt_tokens"),
+                        func.sum(usage.response_tokens).label("response_tokens"),
+                        func.sum(usage.cost_usd).label("cost_usd"),
+                    ).filter(*in_window).group_by(day, hour, usage.model_name).order_by(day, hour).all()]
                 by_model = [{
                     "model_name": row.model_name,
                     "calls": row.calls,
@@ -1375,6 +1395,8 @@ class DashboardServer:
             }
             if by_model is not None:
                 result["by_model"] = by_model
+            if by_hour is not None:
+                result["by_hour"] = by_hour
             return result
         except Exception as e:
             print(f"Error getting usage logs: {e}")
@@ -4721,7 +4743,7 @@ class DashboardServer:
         ):
             """Get paginated token usage logs: a member's own in the current workspace
             (My Usage), the workspace's for its admins. With agent_name, one agent's,
-            and their totals per model (by_model)."""
+            and their totals per model (by_model) and per model and hour (by_hour)."""
             view = self._view_workspace(ctx, all_workspaces)
             if agent_name:
                 self._require_in_workspace(ctx, agent_name=agent_name)

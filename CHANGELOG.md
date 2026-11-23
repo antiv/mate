@@ -46,11 +46,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Versions:** the version history with its diff, Rollback, Run Evals and tags
   - **Sessions:** the conversations with the agent from every surface, with search; a sub-agent shows its root agent's. Open shows one in the Session Inspector
   - **Evals:** the agent's test cases with their latest result, and the score of each version
-  - **Usage:** the agent's model calls over 24 hours, 7 or 30 days, with calls, tokens and cost per model
+  - **Usage:** the agent's model calls over 24 hours, 7 or 30 days, with calls, tokens and cost per model, and charts of the tokens and the cost over time, by model
   - **Traces:** the traces that ran the agent
   - **Channels:** its triggers, widget keys (with their dialog) and Slack integrations
   - **Test**, for a root agent: a chat with it, the Work Room framed in the page
-  - **API:** `GET /dashboard/api/sessions` takes `exact_app=true` (its `app_name` otherwise matches part of a name), `GET /dashboard/api/usage/logs` takes `agent_name` and then returns `by_model`, and `GET /dashboard/api/traces` takes `agent_name`; both answer 404 for another workspace's agent. `/dashboard/evals?agent=<name>` opens an agent's suite, `/dashboard/traces?trace_id=<id>&hours=<n>` one trace, and `?embed=1` shows a dashboard page without its navigation and sidebar
+  - **API:** `GET /dashboard/api/sessions` takes `exact_app=true` (its `app_name` otherwise matches part of a name), `GET /dashboard/api/usage/logs` takes `agent_name` and then returns `by_model` and, for up to 31 days, `by_hour`, and `GET /dashboard/api/traces` takes `agent_name`; both answer 404 for another workspace's agent. `/dashboard/evals?agent=<name>` opens an agent's suite, `/dashboard/traces?trace_id=<id>&hours=<n>` one trace, and `?embed=1` shows a dashboard page without its navigation and sidebar
   - **Components:** `m-section`, `m-chips`, `m-menu` and `m-savebar` in `static/css/components.css`. See `docs/user/agents.md` and `docs/dev/dashboard-components.md`
 
 ### Security

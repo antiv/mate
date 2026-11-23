@@ -565,27 +565,44 @@ mateActions.allow('mateAgentPage.save', 'mateAgentPage.discard',
         }
     }
 
-    // Model calls of the agent: totals per model, and each call
+    // Model calls of the agent: totals per model, the charts, and each call
     let usageTable = null;
+    let usageCharts = null;
 
-    function renderUsageModels(models) {
+    function renderUsageModels(models, named) {
         el('agentUsageModels').replaceChildren(...(models || []).map((m) => {
             const card = document.createElement('div');
             card.className = 'm-card';
+            // The cards are the charts' legend
+            const color = usageCharts.colorOf(named.has(m.model_name || 'unknown model') ? (m.model_name || 'unknown model') : usageCharts.OTHER);
             card.innerHTML = `<div class="m-card-body agent-usage-model">
-                <span class="m-section-title m-mono">${MateTable.esc(m.model_name || 'unknown model')}</span>
+                <span class="m-section-title m-mono"><span class="agent-usage-swatch" aria-hidden="true"></span><span>${MateTable.esc(m.model_name || 'unknown model')}</span></span>
                 <dl class="m-details">
                     <dt>Calls</dt><dd>${number(m.calls)}</dd>
                     <dt>Tokens in</dt><dd>${number(m.prompt_tokens)}</dd>
                     <dt>Tokens out</dt><dd>${number(m.response_tokens)}</dd>
                     <dt>Cost</dt><dd>${cost(m.cost_usd)}</dd>
                 </dl></div>`;
+            card.querySelector('.agent-usage-swatch').style.background = color;
             return card;
         }));
     }
 
+    function drawUsage(byHour, hours) {
+        const drawn = usageCharts.draw(byHour, hours);
+        const any = drawn.models.length > 0;
+        el('agentUsageCharts').hidden = !any;
+        el('agentUsageNumbers').hidden = !any;
+        el('agentUsageCostCard').hidden = !drawn.hasCost;
+        el('agentUsageCostNote').hidden = !drawn.missingCost;
+        // Once shown: a hidden canvas has no size
+        usageCharts.paint();
+        return drawn;
+    }
+
     function startUsage() {
         const esc = MateTable.esc;
+        usageCharts = mateUsageChart.create({ tokens: el('agentUsageTokens'), cost: el('agentUsageCost'), table: el('agentUsageNumbersTable') });
         usageTable = new MateTable(el('agentUsageTable'), {
             noun: ['call', 'calls'],
             label: 'Model calls',
@@ -608,7 +625,8 @@ mateActions.allow('mateAgentPage.save', 'mateAgentPage.discard',
                                                      page: String(Math.floor(offset / limit) + 1), limit: String(limit) });
                 const result = await getJson(`/dashboard/api/usage/logs?${params}`);
                 if (result.error) throw new Error(result.error);
-                renderUsageModels(result.by_model);
+                // by_hour comes with the first page; the others only page the calls
+                if (result.by_hour) renderUsageModels(result.by_model, new Set(drawUsage(result.by_hour, Number(el('agentUsageHours').value)).models));
                 return { rows: result.logs || [], total: result.total_records || 0 };
             },
         });

@@ -74,3 +74,21 @@
     border-radius: 14px;
     background: var(--bg-page);
 }
+
+/* The Usage tab's charts, side by side where there is room */
+.agent-usage-charts {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
+    gap: 12px;
+}
+.agent-usage-chart { margin: 0; padding: 14px 16px; min-width: 0; }
+.agent-usage-plot { position: relative; height: 220px; margin-top: 10px; }
+.agent-usage-model .m-section-title { display: flex; align-items: baseline; gap: 8px; }
+.agent-usage-swatch {
+    flex: none;
+    width: 10px;
+    height: 10px;
+    border-radius: 3px;
+}
+.agent-usage-numbers > summary { font-size: 12.5px; color: var(--text-secondary); cursor: pointer; }
+.agent-usage-numbers[open] > summary { margin-bottom: 8px; }
