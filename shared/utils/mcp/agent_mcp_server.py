@@ -6,6 +6,7 @@ Dynamically creates MCP endpoints for agents from database configuration
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import StreamingResponse, Response
 from ..tools.agent_mcp_protocol_handler import AgentMCPProtocolHandler
+from ..tools.mcp_jsonrpc import no_stream, wants_stream
 from .mcp_auth import agent_allowed, mcp_workspace, require_mcp_user
 import logging
 
@@ -62,7 +63,7 @@ class AgentMCPServer:
                 tool_name = params.get("name")
                 arguments = params.get("arguments", {})
                 request_id = body.get("id", 1)
-                return await self.mcp_handler.call_mcp_tool(tool_name, arguments, request_id)
+                return await self.mcp_handler.call_mcp_tool(tool_name, arguments, request_id, user)
             except Exception as e:
                 return {
                     "jsonrpc": "2.0",
@@ -74,14 +75,16 @@ class AgentMCPServer:
                 }
 
         @self.app.get(f"{base_path}", tags=[f"MCP - Agent: {self.agent_name}"])
-        async def agent_mcp_info(user: str = Depends(require_user)):
+        async def agent_mcp_info(request: Request, user: str = Depends(require_user)):
             """Agent MCP server info endpoint"""
+            if wants_stream(request):
+                return no_stream()
             return self.mcp_handler.get_mcp_info()
 
         @self.app.post(f"{base_path}", tags=[f"MCP - Agent: {self.agent_name}"])
         async def agent_mcp_protocol_handler(request: Request, user: str = Depends(require_user)):
             """Handle Agent MCP protocol requests at the root endpoint"""
-            return await self.mcp_handler.handle_mcp_request(request)
+            return await self.mcp_handler.handle_mcp_request(request, user)
 
         @self.app.options(f"{base_path}")
         async def agent_mcp_options():

@@ -119,7 +119,7 @@ the auth server's proxy, and the runtime sees them all.
 | `resume_status`, `resume_result` | after an inbox decision or an expiry: `resuming`, then `ok` with the run's reply (cut at 4,000 characters) or `error` with the failure |
 
 - **Arguments are capped.** They are stored as JSON, cut at 16,000 characters (`MAX_ARGS_CHARS`); a cut value ends in `…` and is no longer valid JSON.
-- **A2A and MCP runs** carry no marker in their ids: an A2A run's user is `A2A_USER_<context id>`, or the caller when the auth server's proxy sends `x-mate-a2a-user`, and MATE's MCP servers call agents over A2A with the caller's id.
+- **A2A and MCP runs** carry no marker in their ids: an A2A run's user is `A2A_USER_<context id>`, or the caller when the auth server's proxy sends `x-mate-a2a-user`, and MATE's MCP servers call agents over A2A without it, in a context made from the caller when the call has a `session_id`.
   - The agent server's `/a2a/` middleware (`CallerAsA2AUser` in `shared/utils/a2a_routes.py`) sets a context variable for the request (`shared/utils/run_surface.py`): `mcp` when the request has `x-mate-surface: mcp`, which MATE's MCP bridge sends, else `a2a`.
   - The plugin reads it. The auth server's proxy drops `x-mate-surface` from what clients send.
   - Only the ADK runtime serves A2A.

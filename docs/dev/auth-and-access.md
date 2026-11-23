@@ -563,7 +563,10 @@ hands to the executor, and ADK runs the agent as that user. Without it ADK runs 
 agent as `A2A_USER_<context id>`, an id the client picks: anyone sending another
 caller's `contextId` would continue that session, and RBAC would check a made-up
 user. Admin requests and the MCP bridge, which calls the agent server directly, send
-no header and keep ADK's id.
+no header and keep ADK's id. The bridge's caller doesn't pick the context either: for
+a call with a `session_id` it is a hash of the caller, the agent and the `session_id`
+(`mcp_context_id` in `shared/utils/tools/agent_mcp_protocol_handler.py`), and without
+one the agent server makes a new one.
 
 `/list-apps` answers with the agents of the request's workspace, for everyone: the
 one `X-MATE-Workspace` names, else the caller's default. An app with no

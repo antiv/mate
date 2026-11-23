@@ -3,15 +3,17 @@ MCP Protocol Handler for Agent Tools
 Handles JSON-RPC MCP protocol requests for agent execution
 """
 
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Union
 from fastapi import Request, HTTPException
 from fastapi.responses import StreamingResponse, Response
 import asyncio
+import hashlib
 import httpx
 import os
 import json
 import time
 from shared.utils.utils import get_adk_config
+from shared.utils.tools.mcp_jsonrpc import arguments_of, dispatch
 
 
 
@@ -40,6 +42,26 @@ def a2a_result_text(result: Any) -> Optional[str]:
             status_message = status.get("message") if isinstance(status.get("message"), dict) else {}
             found = texts(status_message.get("parts"))
     return "\n".join(found) if found else None
+
+
+def a2a_task_failed(result_data: Any) -> bool:
+    """True when an A2A answer holds a task that failed or was rejected."""
+    result = result_data.get("result") if isinstance(result_data, dict) else None
+    status = result.get("status") if isinstance(result, dict) else None
+    return isinstance(status, dict) and status.get("state") in ("failed", "rejected")
+
+
+def mcp_context_id(user_id: str, agent_name: str, session_id: str) -> str:
+    """
+    The A2A context of a caller's session_id with an agent.
+
+    ADK continues whatever conversation has the context id it is given, as the user
+    A2A_USER_<context id>. So the caller never picks it: it is made from who they are,
+    and the same session_id of two callers is two conversations.
+    """
+    key = json.dumps([user_id, agent_name, session_id]).encode()
+    return f"mcp-{hashlib.sha256(key).hexdigest()}"
+
 
 class AgentMCPProtocolHandler:
     """Handles MCP protocol requests for agent execution"""
@@ -199,7 +221,7 @@ class AgentMCPProtocolHandler:
                         },
                         "session_id": {
                             "type": "string",
-                            "description": "Optional session ID for maintaining conversation context"
+                            "description": "Optional: calls with the same session_id continue one conversation"
                         }
                     },
                     "required": ["message"]
@@ -207,8 +229,9 @@ class AgentMCPProtocolHandler:
             }
         ]
     
-    async def call_mcp_tool(self, tool_name: str, arguments: Dict[str, Any], request_id: int = 1) -> Dict[str, Any]:
-        """Call an agent via MCP protocol"""
+    async def call_mcp_tool(self, tool_name: str, arguments: Dict[str, Any], request_id: int = 1,
+                            user_id: str = "") -> Dict[str, Any]:
+        """Call an agent via MCP protocol, for the caller user_id"""
         if not self.agent_available:
             raise HTTPException(status_code=503, detail=f"Agent MCP server for {self.agent_name} not available")
         
@@ -235,6 +258,8 @@ class AgentMCPProtocolHandler:
             }
         
         session_id = arguments.get("session_id")
+        if session_id is not None and not isinstance(session_id, str):
+            return self._error(request_id, -32602, "session_id must be a string")
         
         try:
             # Call agent via A2A endpoint on ADK server
@@ -261,9 +286,10 @@ class AgentMCPProtocolHandler:
                 "id": 1
             }
             
-            # Add session context if provided
-            if session_id:
-                a2a_payload["params"]["sessionId"] = session_id
+            # The caller's conversation of that name; without one, each call is its own
+            if session_id and user_id:
+                a2a_payload["params"]["message"]["contextId"] = mcp_context_id(
+                    user_id, self.agent_name, session_id)
             
             from shared.utils.run_surface import SURFACE_HEADER
             async with httpx.AsyncClient(timeout=300.0) as client:
@@ -325,6 +351,9 @@ class AgentMCPProtocolHandler:
                         "id": request_id,
                         "result": {
                             "content": content,
+                            # A failed run comes back as a task with the error in its
+                            # text: the client must not take it for the agent's answer
+                            "isError": a2a_task_failed(result_data),
                             "raw_result": result_data
                         }
                     }
@@ -349,49 +378,22 @@ class AgentMCPProtocolHandler:
                 }
             }
     
-    async def handle_mcp_request(self, request: Request) -> Dict[str, Any]:
-        """Handle generic MCP protocol request"""
-        try:
-            body = await request.json()
-            method = body.get("method")
-            params = body.get("params", {})
-            request_id = body.get("id", 1)
-            
-            if method == "initialize":
-                return self.get_mcp_initialize(request_id)
-            elif method == "tools/list":
-                return self.get_mcp_tools_list(request_id)
-            elif method == "tools/call":
-                tool_name = params.get("name")
-                arguments = params.get("arguments", {})
-                return await self.call_mcp_tool(tool_name, arguments, request_id)
-            elif method == "prompts/list":
-                return self.get_mcp_prompts_list(request_id)
-            elif method == "prompts/get":
-                return self.get_mcp_prompt(params.get("name"), params.get("arguments", {}), request_id)
-            elif method == "resources/list":
-                return self.get_mcp_resources_list(request_id)
-            elif method == "resources/read":
-                return self.read_mcp_resource(params.get("uri"), request_id)
-            else:
-                return {
-                    "jsonrpc": "2.0",
-                    "id": request_id,
-                    "error": {
-                        "code": -32601,
-                        "message": f"Method '{method}' not found"
-                    }
-                }
-        except Exception as e:
-            return {
-                "jsonrpc": "2.0",
-                "id": body.get("id", 1) if 'body' in locals() else 1,
-                "error": {
-                    "code": -32603,
-                    "message": f"Internal error: {str(e)}"
-                }
-            }
-    
+    async def handle_mcp_request(self, request: Request, user_id: str = "") -> Union[Dict[str, Any], Response]:
+        """Answer an MCP message posted to the server's endpoint by user_id"""
+        return await dispatch(request, {
+            "initialize": lambda params, request_id: self.get_mcp_initialize(request_id),
+            "tools/list": lambda params, request_id: self.get_mcp_tools_list(request_id),
+            "tools/call": lambda params, request_id: self.call_mcp_tool(
+                params.get("name"), arguments_of(params), request_id, user_id),
+            "prompts/list": lambda params, request_id: self.get_mcp_prompts_list(request_id),
+            "prompts/get": lambda params, request_id: self.get_mcp_prompt(
+                params.get("name"), arguments_of(params), request_id),
+            "resources/list": lambda params, request_id: self.get_mcp_resources_list(request_id),
+            "resources/templates/list": lambda params, request_id: self._result(
+                request_id, {"resourceTemplates": []}),
+            "resources/read": lambda params, request_id: self.read_mcp_resource(params.get("uri"), request_id),
+        })
+
     async def get_mcp_sse_stream(self) -> StreamingResponse:
         """Get Server-Sent Events stream for real-time communication"""
         if not self.agent_available:

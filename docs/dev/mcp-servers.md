@@ -22,11 +22,12 @@ MATE exposes:
 
 **Endpoints:**
 - `GET /images/mcp/health` - Health check (no auth required; status only)
-- `GET /images/mcp` - Server info endpoint
+- `POST /images/mcp` - The MCP endpoint: what a client connects to
+- `GET /images/mcp` - Server info endpoint; 405 when a client asks it for a stream
 - `POST /images/mcp/initialize` - MCP protocol initialization
 - `POST /images/mcp/tools/list` - List available tools
 - `POST /images/mcp/tools/call` - Execute tool calls
-- `GET /images/mcp/sse` - Server-Sent Events stream for real-time communication
+- `GET /images/mcp/sse` - MATE's own keep-alive stream, not an MCP transport ([Protocol Details](#protocol-details))
 - `OPTIONS /images/mcp` & `/images/mcp/sse` - CORS preflight handlers
 
 **Available Tools (3):**
@@ -55,11 +56,12 @@ platform feature (the default workspace always); another workspace's token gets 
 
 **Endpoints:**
 - `GET /gdrive/mcp/health` - Health check (no auth required)
-- `GET /gdrive/mcp` - Server info endpoint
+- `POST /gdrive/mcp` - The MCP endpoint: what a client connects to
+- `GET /gdrive/mcp` - Server info endpoint; 405 when a client asks it for a stream
 - `POST /gdrive/mcp/initialize` - MCP protocol initialization
 - `POST /gdrive/mcp/tools/list` - List available tools
 - `POST /gdrive/mcp/tools/call` - Execute tool calls
-- `GET /gdrive/mcp/sse` - Server-Sent Events stream for real-time communication
+- `GET /gdrive/mcp/sse` - MATE's own keep-alive stream, not an MCP transport ([Protocol Details](#protocol-details))
 - `OPTIONS /gdrive/mcp` & `/gdrive/mcp/sse` - CORS preflight handlers
 
 **Available Tools (7):**
@@ -93,11 +95,12 @@ MCP_EXPOSED_AGENTS=creative_agent,main_entity,jira_agent
 
 **Endpoints (for each agent):**
 - `GET /agents/{agent_name}/mcp/health` - Health check (no auth required; shows the agent's name and description)
-- `GET /agents/{agent_name}/mcp` - Server info endpoint
+- `POST /agents/{agent_name}/mcp` - The MCP endpoint: what a client connects to
+- `GET /agents/{agent_name}/mcp` - Server info endpoint; 405 when a client asks it for a stream
 - `POST /agents/{agent_name}/mcp/initialize` - MCP protocol initialization
 - `POST /agents/{agent_name}/mcp/tools/list` - List available tools
 - `POST /agents/{agent_name}/mcp/tools/call` - Execute tool calls
-- `GET /agents/{agent_name}/mcp/sse` - Server-Sent Events stream for real-time communication
+- `GET /agents/{agent_name}/mcp/sse` - MATE's own keep-alive stream, not an MCP transport ([Protocol Details](#protocol-details))
 - `OPTIONS /agents/{agent_name}/mcp` & `/agents/{agent_name}/mcp/sse` - CORS preflight handlers
 
 `GET /mcp` lists the exposed agents the caller may use:
@@ -131,8 +134,8 @@ recorded as an MCP run's, answered in the inbox ([Approval requests](approvals.m
 - `call_{agent_name}_agent` - Call the agent with a message
   - **Parameters:**
     - `message` (required): The message to send to the agent
-    - `session_id` (optional): Session ID for maintaining conversation context
-  - **Returns:** Agent's response as text content
+    - `session_id` (optional): calls of one caller with the same `session_id` continue one conversation; without it, each call is a conversation of its own. The A2A context is made from the caller, the agent and the `session_id` (`mcp_context_id`), so the same `session_id` of another caller is another conversation
+  - **Returns:** Agent's response as text content. A run that failed has `isError: true` and the error as its text
 
 **Prompt and resource (1 each per agent):**
 - Prompt `ask_{agent_name}` with a required `question` argument. `prompts/get`
@@ -306,8 +309,15 @@ External MCP servers are created via `create_mcp_tools_from_config()`, which dis
 ## Protocol Details
 
 - **Protocol:** JSON-RPC 2.0
-- **MCP Version:** `2024-11-05`
-- **SSE Support:** Server-Sent Events for real-time communication
+- **MCP Version:** `2024-11-05`, whatever version the client asks for
+- **Transport:** JSON-RPC over `POST`, each answered in its own response with JSON. The servers send nothing on their own, so a `GET` that asks for `text/event-stream` gets 405, which MCP clients expect. `GET .../sse` sends keep-alives in MATE's own form; a client on the legacy HTTP+SSE transport can't connect to it
+- **Runtime:** an agent's tool call goes over A2A, which only the ADK runtime serves. With `AGENT_FRAMEWORK=langgraph` the agent servers list their tools, but a call answers "Agent call failed (HTTP 404)"
+- **Messages:** `shared/utils/tools/mcp_jsonrpc.py` reads them for the three servers:
+  - a `notifications/...` message, and a response of the client, get 202 with no body;
+  - `ping` gets an empty result;
+  - a body that isn't JSON or isn't one message (a batch) gets 400;
+  - a request without an `id` is answered with id 1
+- **Checked with** the MCP Python SDK's client (1.30 and 2.3.0) and MCP Inspector 2.13.0, on streamable HTTP: initialize, ping, tools, prompts, resources, and a tool call that succeeds and one that fails. All accept `2024-11-05`; the newer ones try `server/discover` first and go on with `initialize`
 - **CORS:** Enabled for web-based MCP clients
 - **Authentication:** Every endpoint except health and CORS preflight requires a caller. Agent servers, `GET /mcp` and `/gdrive/mcp` take a personal access token, Basic auth, the dashboard's login token or a session ([Who may call](#who-may-call)); `/images/mcp` takes a signed-in dashboard user and no personal access tokens
 - **Availability:** both built-in servers answer 503 while their dependencies aren't configured; the image server's health check reports `degraded` with the reason
