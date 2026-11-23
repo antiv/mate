@@ -8,9 +8,14 @@ import json
 import unittest
 from datetime import datetime, timezone
 
+from fastapi.testclient import TestClient
+
+import auth_server
 from server import auth
-from shared.test.test_cross_workspace import A, A_ROOT, B_ROOT, _platform_admin, _TwoWorkspaces
-from shared.utils.models import LangGraphEvent, LangGraphSession
+from shared.test.test_cross_workspace import (
+    A, A_ROOT, ALICE, B_ROOT, _platform_admin, _signed_in, _TwoWorkspaces,
+)
+from shared.utils.models import AgentConfig, LangGraphEvent, LangGraphSession
 
 SEARCH = "/dashboard/api/workroom/sessions/search"
 
@@ -48,6 +53,29 @@ class TestWorkRoomSearch(_TwoWorkspaces):
 
         self.assertEqual([s["id"] for s in self._search("backup gde").json()["sessions"]], ["mine-1"])
         self.assertEqual(self._search("nowhere to be found").json()["sessions"], [])
+
+    def test_a_member_searches_their_own_sessions(self):
+        self._add_session("alices", ALICE, ["Where are the keys?"])
+        self._add_session("admins", auth.AUTH_USERNAME, ["Where are the keys?"])
+        alice = TestClient(auth_server.app, cookies=_signed_in(ALICE))
+
+        def search(agent: str):
+            return alice.get(SEARCH, params={"agent": agent, "q": "keys"})
+
+        response = search(A_ROOT)
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual([s["id"] for s in response.json()["sessions"]], ["alices"])
+        self.assertEqual(search(B_ROOT).status_code, 404)
+        # An agent whose roles they don't hold is not found, as in the Work Room
+        session = self.Session()
+        session.query(AgentConfig).filter_by(name=A_ROOT).update({"allowed_for_roles": '["auditor"]'})
+        session.commit()
+        session.close()
+        self.assertEqual(search(A_ROOT).status_code, 404)
+
+    def test_nobody_signed_in_is_refused(self):
+        response = TestClient(auth_server.app, follow_redirects=False).get(SEARCH, params={"agent": A_ROOT, "q": "x"})
+        self.assertNotEqual(response.status_code, 200)
 
     def test_another_workspace_s_agent_is_a_404(self):
         self.assertEqual(self._search("x", agent=B_ROOT).status_code, 404)

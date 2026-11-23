@@ -291,8 +291,9 @@ runs it as `window.mateAgentPage`.
   own events with that agent from both runtimes' stores
   (`DashboardServer._search_session_messages`) and matches the decoded text, so
   letters a JSON column stores escaped (č, ж) are found; it reads at most
-  `SESSION_SEARCH_MAX_EVENTS` (5,000) events per runtime. An agent of another
-  workspace answers 404.
+  `SESSION_SEARCH_MAX_EVENTS` (5,000) events per runtime. It is open to members
+  (`USER_READABLE_PATHS`); an agent of another workspace, or one whose roles the
+  caller doesn't hold, answers 404.
 
 ## Tests
 

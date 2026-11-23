@@ -43,6 +43,7 @@ USER_ROUTES = {
     ("POST", "/dashboard/api/tokens"),
     ("DELETE", "/dashboard/api/tokens/{token_id}"),
     ("POST", "/dashboard/api/workroom/title"),
+    ("GET", "/dashboard/api/workroom/sessions/search"),
     ("GET", "/dashboard/api/workspaces"),
     ("PUT", "/dashboard/api/workspaces/current"),
     ("POST", "/dashboard/api/members/leave"),

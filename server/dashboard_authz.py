@@ -48,10 +48,11 @@ USER_WRITABLE_PATHS = [
     re.compile(r"^/dashboard/api/tokens/\d+/?$"),
 ]
 
-# Routes a non-admin may read. The Work Room shows their own ratings, the account
-# menu their own personal access tokens, and My Usage their own usage logs; each is
-# scoped to the caller.
+# Routes a non-admin may read. The Work Room shows their own ratings and searches their
+# own conversations, the account menu their own personal access tokens, and My Usage
+# their own usage logs; each is scoped to the caller.
 USER_READABLE_PATHS = [
+    re.compile(r"^/dashboard/api/workroom/sessions/search/?$"),
     re.compile(r"^/dashboard/api/feedback/?$"),
     re.compile(r"^/dashboard/api/workspaces/?$"),
     re.compile(r"^/dashboard/api/tokens/?$"),

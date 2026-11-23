@@ -1049,7 +1049,10 @@
         if (listEl) listEl.insertAdjacentHTML("beforeend", note("Searching the messages…"));
         fetch("/dashboard/api/workroom/sessions/search?agent=" + encodeURIComponent(AGENT)
               + "&q=" + encodeURIComponent(query), { credentials: "same-origin" })
-            .then(function (r) { return r.ok ? r.json() : { sessions: [] }; })
+            .then(function (r) {
+                if (!r.ok) throw new Error(String(r.status));
+                return r.json();
+            })
             .then(function (data) {
                 var box = document.getElementById("workroomSessionSearch");
                 // A newer query was typed meanwhile
@@ -1057,7 +1060,13 @@
                 messageMatches = data.sessions || [];
                 paintSessions();
             })
-            .catch(function () { messageMatches = []; paintSessions(); });
+            .catch(function () {
+                // Not "no session holds those words": nothing was searched
+                var box = document.getElementById("workroomSessionSearch");
+                if (!box || box.value.trim() !== query) return;
+                paintSessions();
+                if (listEl) listEl.insertAdjacentHTML("beforeend", note("The messages could not be searched. Try again."));
+            });
     }
 
     (function wireSessionSearch() {
