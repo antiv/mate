@@ -142,7 +142,9 @@ Room and the account menu need: renaming a conversation, rating a reply, reading
 own ratings, listing, creating and revoking one's own personal access tokens,
 listing and switching one's workspaces, leaving one, accepting an invitation,
 searching one's own conversations (`GET /dashboard/api/workroom/sessions/search`, with an
-agent the caller may use), and reading one's own usage logs (`GET /dashboard/api/usage/logs`, which keeps a non-admin
+agent the caller may use), the command palette's agents and conversations (`GET
+/dashboard/api/palette`, the agents the caller may chat with and their own sessions), and
+reading one's own usage logs (`GET /dashboard/api/usage/logs`, which keeps a non-admin
 to their own `user_id`).
 
 The log views (`/stats`, `/usage/logs`, `/audit-logs` and its export, `/guardrail-logs`,

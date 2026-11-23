@@ -251,6 +251,7 @@ Drawn with the tokens of `static/css/redesign.css` and its font. The data in the
 5. **Search in the Work Room.**
    - As built: the agent search on the welcome page, in the browser; the session list keeps every session with Show more, filters by title as you type, and searches the messages on Enter (`/dashboard/api/workroom/sessions/search`, the caller's own sessions only).
 6. **The command palette,** if there is time.
+   - As built: on every page, with Search in the header; agents, the caller's recent conversations, and the pages of the sidebars. An administrator goes to an agent's page, a member to a chat with it.
 
 Each PR:
 - has tests;

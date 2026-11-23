@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **A command palette** (dashboard redesign, step 6, #376) - Ctrl+K (⌘K on a Mac), or **Search** in the header, jumps to an agent, one of your recent conversations or a page you may open. Every word typed has to match, with or without accents; arrow keys and Enter choose, Ctrl+Enter opens a new tab. An administrator goes to an agent's page, a member to a chat with it (`GET /dashboard/api/palette`). Inside a code editor Ctrl+K stays the editor's
 - **Search in the Work Room** (dashboard redesign, step 5, #376) - **Search agents** above the welcome page's agents filters them by name and description as you type; Enter opens the only match. **Search sessions** above the sidebar's conversations filters them by name as you type, and Enter also finds the conversations whose messages hold the words, with the passage that matched (`GET /dashboard/api/workroom/sessions/search`, your own conversations with that agent only). The list now holds every conversation, 20 at a time with **Show more**, instead of only the latest 20
 - **A record of every approval request** (approvals inbox, phase 1, #376) - each time an agent pauses before a tool it must ask about (`require_confirmation`), the agent runtime writes a row to the new `approval_requests` table (migration V050):
   - the agent, the tool and its arguments (at most 16,000 characters);

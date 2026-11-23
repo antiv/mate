@@ -1,0 +1,69 @@
+{# The command palette (static/js/command-palette.js), included by base.html for whoever is
+   signed in. Its pages are those of the sidebars of the three spaces that this user may
+   open: test_command_palette.py compares the two. #}
+{% set _admin = is_admin is not defined or is_admin %}
+{% set _used = features_in_use() if _admin and platform_admin and features_in_use is defined else {} %}
+{% set _pages = [('Work Room', '/dashboard/workroom', 'fa-comments', 'Work Room', 'chat')] %}
+{% if _admin %}
+{% set _pages = _pages + [
+    ('Agents', '/dashboard/agents', 'fa-robot', 'Studio', ''),
+    ('Visual Builder', '/dashboard/agents/visual', 'fa-sitemap', 'Studio', 'canvas'),
+    ('Triggers', '/dashboard/triggers', 'fa-bolt', 'Studio', 'cron webhook schedule'),
+    ('Integrations', '/dashboard/integrations', 'fa-plug', 'Studio', 'slack'),
+    ('Template Library', '/dashboard/templates', 'fa-layer-group', 'Studio', ''),
+    ('Evals', '/dashboard/evals', 'fa-flask', 'Studio', 'test cases'),
+    ('Traces', '/dashboard/traces', 'fa-project-diagram', 'Studio', ''),
+    ('Overview', '/dashboard/overview', 'fa-th-large', 'Control Room', ''),
+    ('Usage Analytics', '/dashboard/usage', 'fa-chart-bar', 'Control Room', 'tokens cost'),
+    ('Audit Logs', '/dashboard/audit-logs', 'fa-clipboard-list', 'Control Room', ''),
+    ('Guardrail Logs', '/dashboard/guardrail-logs', 'fa-shield-halved', 'Control Room', ''),
+    ('Session Tracking', '/dashboard/sessions', 'fa-comments', 'Control Room', 'conversations'),
+    ('Approvals', '/dashboard/approvals', 'fa-user-check', 'Workspace', 'inbox'),
+    ('Members', '/dashboard/members', 'fa-user-friends', 'Workspace', 'invite roles'),
+    ('Models and keys', '/dashboard/models', 'fa-key', 'Workspace', 'provider'),
+    ('Rate Limits', '/dashboard/rate-limits', 'fa-shield-alt', 'Workspace', 'budget'),
+    ('Alerts', '/dashboard/alerts', 'fa-bell', 'Workspace', ''),
+    ('Documentation', '/dashboard/docs', 'fa-book', 'Control Room', 'help guides'),
+] %}
+{% if platform_admin %}
+{% set _pages = _pages + [
+    ('Workspaces', '/dashboard/workspaces', 'fa-building', 'Platform', ''),
+    ('Users', '/dashboard/users', 'fa-users', 'Platform', ''),
+    ('Settings', '/dashboard/settings', 'fa-sliders-h', 'Platform', ''),
+    ('Migrations', '/dashboard/migrations', 'fa-database', 'Platform', ''),
+] %}
+{% if _used.wizard %}
+{% set _pages = _pages + [
+    ('Wizard Leads', '/dashboard/wizard-leads', 'fa-inbox', 'Platform', ''),
+    ('Wizard Partners & Pricing', '/dashboard/wizard-pricing', 'fa-tags', 'Platform', ''),
+] %}
+{% endif %}
+{% if _used.shop %}
+{% set _pages = _pages + [('Shop Orders', '/dashboard/shop-orders', 'fa-shopping-bag', 'Platform', '')] %}
+{% endif %}
+{% endif %}
+{% else %}
+{% set _pages = _pages + [('My Usage', '/dashboard/usage', 'fa-chart-bar', 'Analytics', 'tokens cost')] %}
+{% endif %}
+<div id="commandPalette" class="m-dialog-backdrop m-palette-backdrop" hidden>
+    <div class="m-dialog m-dialog-lg m-palette" role="dialog" aria-modal="true" aria-label="Search">
+        <div class="m-palette-search">
+            <i class="fas fa-search" aria-hidden="true"></i>
+            <input type="text" id="commandPaletteInput" placeholder="Go to an agent, a conversation or a page"
+                   role="combobox" aria-label="Go to" aria-autocomplete="list" aria-expanded="false"
+                   aria-controls="commandPaletteList" autocomplete="off" spellcheck="false">
+            <button type="button" class="m-btn m-btn-ghost m-btn-icon" data-click="mateCommandPalette.close" aria-label="Close">
+                <i class="fas fa-times" aria-hidden="true"></i></button>
+        </div>
+        <div class="m-palette-results">
+            <div id="commandPaletteList" role="listbox" aria-label="Results"></div>
+            <p id="commandPaletteNote" class="m-hint m-palette-note" role="status" hidden></p>
+        </div>
+    </div>
+</div>
+<script type="application/json" id="command-palette-pages">[
+    {%- for label, url, icon, hint, keywords in _pages -%}
+    {{ {"label": label, "url": url, "icon": icon, "hint": hint, "keywords": hint ~ " " ~ keywords} | tojson }}{% if not loop.last %},{% endif %}
+    {%- endfor -%}
+]</script>
+<script src="/static/js/command-palette.js?v=1"></script>
