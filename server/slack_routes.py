@@ -19,11 +19,12 @@ import logging
 import re
 import time
 from collections import OrderedDict
-from typing import Optional
+from typing import Optional, Tuple
 from urllib.parse import parse_qs
 
 import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from shared.utils.agent_invoke import run_agent_message
@@ -40,6 +41,7 @@ dashboard_router = APIRouter(prefix="/dashboard/api", tags=["Dashboard - Channel
 
 
 SLACK_POST_MESSAGE_URL = "https://slack.com/api/chat.postMessage"
+SLACK_AUTH_TEST_URL = "https://slack.com/api/auth.test"
 _MENTION_RE = re.compile(r"<@[A-Z0-9]+>")
 
 # Bounded set of recently handled Slack event ids — Slack retries deliveries, and
@@ -518,8 +520,36 @@ async def slack_interactions(request: Request, background_tasks: BackgroundTasks
 
 _EDITABLE_FIELDS = (
     "platform", "project_id", "agent_name", "label",
-    "team_id", "bot_token", "signing_secret", "is_active",
+    "bot_token", "signing_secret", "is_active",
 )
+
+
+async def _slack_team(bot_token: Optional[str]) -> Tuple[str, str]:
+    """The (id, name) of the Slack team the bot token is of, as Slack's auth.test names
+    it. 400 when Slack refuses the token; 502 when Slack gives no answer, rather than
+    saving a team nobody checked."""
+    token = (bot_token or "").strip()
+    if not token:
+        raise HTTPException(status_code=400, detail="A Slack integration needs a bot token")
+    unreachable = HTTPException(status_code=502, detail="Slack could not be reached to check the bot token. "
+                                "Nothing was saved; try again.")
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            # In the body, as httpx quotes a header it cannot send in its error
+            resp = await client.post(SLACK_AUTH_TEST_URL, data={"token": token})
+        answer = resp.json() if resp.status_code == 200 else None
+    except (httpx.HTTPError, ValueError) as exc:
+        logger.warning("Slack auth.test failed: %s", type(exc).__name__)
+        raise unreachable from None
+    if not isinstance(answer, dict):
+        logger.warning("Slack auth.test answered %s", resp.status_code)
+        raise unreachable
+    if not answer.get("ok"):
+        raise HTTPException(status_code=400, detail=f"Slack refused the bot token: {answer.get('error')}")
+    if not answer.get("team_id"):
+        logger.warning("Slack auth.test named no team")
+        raise unreachable
+    return answer["team_id"], answer.get("team") or answer["team_id"]
 
 
 def _workspace_integration(session: Session, ctx: RequestContext,
@@ -534,21 +564,26 @@ def _workspace_integration(session: Session, ctx: RequestContext,
 
 
 def _check_target(session: Session, ctx: RequestContext, project_id: Optional[int],
-                  agent_name: str, team_id: Optional[str],
-                  integration_id: Optional[int] = None) -> None:
-    """404 unless the project and agent are the workspace's; 409 when another
-    integration, of any workspace, has the Slack team (V047). Neither says whose: the
-    first to connect a team keeps it, and a platform administrator, who opens every
-    workspace, resolves a dispute."""
+                  agent_name: str) -> None:
+    """404 unless the project and agent are the workspace's."""
     missing = missing_from(session, ctx.workspace_id, is_platform_admin=ctx.is_platform_admin,
                            project_id=project_id, agent_name=agent_name)
     if missing:
         raise HTTPException(status_code=404, detail=f"{missing} not found")
-    if team_id and session.query(ChannelIntegration.id).filter(
+
+
+_TEAM_TAKEN = ("This Slack team is already connected. "
+               "If it is yours, ask a platform administrator.")
+
+
+def _check_team(session: Session, team_id: str, integration_id: Optional[int] = None) -> None:
+    """409 when another integration, of any workspace, has the Slack team (V047). It
+    doesn't say whose: the first to connect a team keeps it, and a platform
+    administrator, who opens every workspace, resolves a dispute."""
+    if session.query(ChannelIntegration.id).filter(
             ChannelIntegration.team_id == team_id,
             ChannelIntegration.id != integration_id).first():
-        raise HTTPException(status_code=409, detail="This Slack team is already connected. "
-                            "If it is yours, ask a platform administrator.")
+        raise HTTPException(status_code=409, detail=_TEAM_TAKEN)
 
 
 @dashboard_router.get("/channel-integrations")
@@ -580,14 +615,21 @@ async def create_integration(request: Request, ctx: RequestContext = Depends(get
     if not session:
         raise HTTPException(status_code=500, detail="Database unavailable")
     try:
-        _check_target(session, ctx, project_id, agent_name, data.get("team_id") or None)
+        _check_target(session, ctx, project_id, agent_name)
+        platform = (data.get("platform") or "slack").strip()
+        bot_token = (data.get("bot_token") or "").strip() or None
+        team_id = team_name = None
+        if platform == "slack":
+            team_id, team_name = await _slack_team(bot_token)
+            _check_team(session, team_id)
         integration = ChannelIntegration(
-            platform=(data.get("platform") or "slack").strip(),
+            platform=platform,
             project_id=project_id,
             agent_name=agent_name,
             label=data.get("label"),
-            team_id=(data.get("team_id") or None),
-            bot_token=data.get("bot_token"),
+            team_id=team_id,
+            team_name=team_name,
+            bot_token=bot_token,
             signing_secret=data.get("signing_secret"),
             is_active=data.get("is_active", True),
         )
@@ -599,6 +641,10 @@ async def create_integration(request: Request, ctx: RequestContext = Depends(get
         return {"success": True, "integration": integration.to_dict()}
     except HTTPException:
         raise
+    except IntegrityError:
+        # Connected by another request since the check
+        session.rollback()
+        raise HTTPException(status_code=409, detail=_TEAM_TAKEN)
     except Exception as exc:
         session.rollback()
         raise HTTPException(status_code=500, detail=str(exc))
@@ -616,15 +662,23 @@ async def update_integration(integration_id: int, request: Request,
         raise HTTPException(status_code=500, detail="Database unavailable")
     try:
         integration = _workspace_integration(session, ctx, integration_id)
-        if any(field in data for field in ("project_id", "agent_name", "team_id")):
+        if any(field in data for field in ("project_id", "agent_name")):
             agent_name = data.get("agent_name", integration.agent_name)
             _check_target(session, ctx, data.get("project_id", integration.project_id),
-                          agent_name.strip() if isinstance(agent_name, str) else agent_name,
-                          data.get("team_id", integration.team_id) or None, integration.id)
+                          agent_name.strip() if isinstance(agent_name, str) else agent_name)
+        platform = data.get("platform", integration.platform)
+        # A row from before V052 has no team name: its team was typed in, and is checked
+        # when it is edited. It can be switched off without Slack's answer.
+        unchecked = not integration.team_name and data.get("is_active", integration.is_active)
+        if platform == "slack" and (
+                "bot_token" in data or platform != integration.platform or unchecked):
+            team_id, team_name = await _slack_team(data.get("bot_token", integration.bot_token))
+            _check_team(session, team_id, integration.id)
+            integration.team_id, integration.team_name = team_id, team_name
         for field in _EDITABLE_FIELDS:
             if field in data:
                 val = data[field]
-                if field == "agent_name" and isinstance(val, str):
+                if field in ("agent_name", "bot_token") and isinstance(val, str):
                     val = val.strip()
                 setattr(integration, field, val)
         if isinstance(data.get("config"), dict):
@@ -634,6 +688,10 @@ async def update_integration(integration_id: int, request: Request,
         return {"success": True, "integration": integration.to_dict()}
     except HTTPException:
         raise
+    except IntegrityError:
+        # Connected by another request since the check
+        session.rollback()
+        raise HTTPException(status_code=409, detail=_TEAM_TAKEN)
     except Exception as exc:
         session.rollback()
         raise HTTPException(status_code=500, detail=str(exc))

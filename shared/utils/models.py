@@ -962,6 +962,8 @@ class ChannelIntegration(Base):
     label = Column(String(255), nullable=True)
     # Slack team/workspace id; one integration per team (V047)
     team_id = Column(String(64), nullable=True, unique=True, index=True)
+    # As Slack's auth.test named the team of bot_token (V052); NULL: team_id was typed in
+    team_name = Column(String(255), nullable=True)
     bot_token = Column(EncryptedText, nullable=True)  # xoxb-... token used to post replies; encrypted
     signing_secret = Column(EncryptedText, nullable=True)  # verifies inbound request signatures; encrypted
     config = Column(Text, nullable=True)  # JSON per-integration options; nothing reads it yet
@@ -991,6 +993,7 @@ class ChannelIntegration(Base):
             'agent_name': self.agent_name,
             'label': self.label,
             'team_id': self.team_id,
+            'team_name': self.team_name,
             'config': self.get_config(),
             'is_active': self.is_active,
             'created_at': self.created_at.isoformat() if self.created_at else None,

@@ -56,6 +56,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- **A Slack integration's team id comes from Slack** (#372) - creating an integration, or changing its bot token, asks Slack's `auth.test` which team the token is of and ignores a team id sent in the request, so a workspace can no longer connect another one's Slack team by typing its id. A token Slack refuses is a 400 with Slack's reason, and no answer from Slack a 502; nothing is saved in either case. The form shows the team's id and name instead of asking for the id (migration V052 adds `channel_integrations.team_name`). An existing integration is checked the next time it is edited and left active
 - **Fixes from the security review of the approvals inbox** (phase 4, #376):
   - An answer to an approval is read the way ADK reads it, and the agent receives only a plain yes or no. A forged answer in the `{"response": "..."}` form could run a tool an administrator had rejected.
   - When the request can't be found or read, the answer is not passed on. Before, it was.
