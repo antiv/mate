@@ -265,6 +265,15 @@ runs it as `window.mateAgentPage`.
   `GET /dashboard/api/traces?agent_name=`, the traces with a span whose
   `gen_ai.agent.name` or `mate.agent.name` is the agent. Both answer 404 for another
   workspace's agent.
+- **Channels** reads `/dashboard/api/triggers?agent_name=`, and the workspace's
+  widget keys and channel integrations, keeping the agent's in the browser. The
+  widget key dialog (`widget_keys_modal.html`, `widget-keys.js`) is on the page;
+  the list reloads when it closes.
+- **Test** frames `/dashboard/workroom?agent=<name>&embed=1`, loaded when the tab
+  first opens. `?embed=1` puts `data-embed` on `<body>` (`base.html`), which hides
+  the navigation, the sidebar and the Help button; the Work Room then drops its
+  **Change** link, so the chat stays with the agent. The dashboard's
+  `frame-ancestors 'self'` lets the page frame it.
 - **Links out:** `/dashboard/evals?agent=<name>` opens the agent's suite and
   `/dashboard/traces?trace_id=<id>&hours=<n>` one trace, as
   `/dashboard/sessions?session_id=…` opens a session.

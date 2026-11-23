@@ -245,6 +245,7 @@ Drawn with the tokens of `static/css/redesign.css` and its font. The data in the
    - Then Versions, Sessions, Evals, Usage, Traces, Channels and Test.
    - As built (4c): Versions (the version history panes, which the dialog keeps for the Visual Builder and Trace Replay) and Sessions (exact app name; a sub-agent shows its root's sessions, Open goes to the Session Inspector). The header's History button became the Versions tab.
    - As built (4d): Evals (test cases and score by version, Open in Evals), Usage (per model totals for 24 hours, 7 or 30 days, and each call; no chart yet) and Traces (traces with a span of the agent). The usage logs and traces APIs take agent_name. Channels and Test remain.
+   - As built (4e): Channels (triggers, widget keys with their dialog, Slack; read from the existing APIs) and Test (the Work Room framed with ?embed=1). The header's Test button became the Test tab. Step 4 is complete.
    - As built (4a): the page, its header and the Settings tab. Test and History are buttons in the header for now, opening the Work Room and the version history dialog. In 4a each right-hand section opened the dialog of `config_modals.html`; since 4b it holds the dialog's fields itself (one macro per dialog, which the Visual Builder's dialogs call too), with no Configure step. The roles picker accepts `widget`, which a widget agent needs, but offers it apart from the members' roles.
 5. **Search in the Work Room.**
 6. **The command palette,** if there is time.

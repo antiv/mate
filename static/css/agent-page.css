@@ -65,3 +65,12 @@
 .agent-usage-model { display: flex; flex-direction: column; gap: 6px; }
 .agent-usage-model .m-details { font-size: 12px; }
 .agent-usage-model .m-section-title { font-size: 12.5px; overflow-wrap: anywhere; }
+
+/* The Test tab: the Work Room, framed (?embed=1) */
+.agent-test-frame {
+    width: 100%;
+    height: max(520px, calc(100vh - 260px));
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: var(--bg-page);
+}

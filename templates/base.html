@@ -416,6 +416,12 @@
             #sidebarBackdrop { display: none !important; }
             #hamburgerBtn { display: none !important; }
         }
+        /* ?embed=1: the page alone, as the agent page's Test tab frames the Work Room */
+        body[data-embed] .dashboard-nav,
+        body[data-embed] .mate-mobile-tabs,
+        body[data-embed] #sidebar,
+        body[data-embed] #sidebarBackdrop,
+        body[data-embed] #mateHelp { display: none !important; }
     </style>
     <link rel="stylesheet" href="/static/css/dashboard-responsive.css">
     {% block extra_head %}{% endblock %}
@@ -425,7 +431,7 @@
 {# The installation's own pages are for platform administrators only #}
 {% set platform_admin = is_platform_admin(request) if is_platform_admin is defined else true %}
 {% set ws_switcher = workspace_switcher(request) if workspace_switcher is defined else none %}
-<body data-platform-admin="{{ 'true' if platform_admin else 'false' }}">
+<body data-platform-admin="{{ 'true' if platform_admin else 'false' }}"{% if request.query_params.get('embed') == '1' %} data-embed{% endif %}>
     <!-- Sidebar backdrop (mobile) -->
     <div id="sidebarBackdrop" class="hidden fixed inset-0 z-40 md:hidden" style="background: rgba(20,15,10,0.45);" aria-hidden="true"></div>
 
