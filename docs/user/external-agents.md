@@ -47,8 +47,7 @@ whatever its workspace has.
 
 Write the key as `${VAR}` to read it from the server environment. A key typed
 literally is stored in the `agents_config` row and captured in that agent's
-version history, and is therefore visible to anyone who can read the database or
-export the configuration.
+version history, and is therefore visible to anyone who can read the database.
 
 The dashboard never sends a stored literal key to the browser — it is replaced by
 a sentinel, and saving the form with the sentinel unchanged leaves the stored

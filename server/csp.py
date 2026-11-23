@@ -46,10 +46,10 @@ REPORT_PATH = "/csp-report"
 # must match exactly. Pyodide is not here: it runs only on the canvas page.
 _SCRIPT_HOSTS = [
     "https://cdn.tailwindcss.com",  # serves only Tailwind
-    "https://cdn.jsdelivr.net/npm/chart.js",
+    "https://cdn.jsdelivr.net/npm/chart.js@4.6.1/dist/chart.umd.min.js",
     "https://cdn.jsdelivr.net/npm/monaco-editor@0.44.0/",
-    "https://cdn.jsdelivr.net/npm/react@18/umd/react.production.min.js",
-    "https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.production.min.js",
+    "https://cdn.jsdelivr.net/npm/react@18.3.1/umd/react.production.min.js",
+    "https://cdn.jsdelivr.net/npm/react-dom@18.3.1/umd/react-dom.production.min.js",
     "https://cdn.jsdelivr.net/npm/reactflow@11.11.4/",
     "https://cdn.jsdelivr.net/npm/markdown-it@15.0.2/",
     "https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/",  # FastAPI's /admin-docs and /docs

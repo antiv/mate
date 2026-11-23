@@ -378,7 +378,22 @@ reads `mcp_servers_config` as the runtimes do: they decode an entry's `headers`,
 placeholder spelled with JSON escapes (`${VAR}`) there is seen too. A new base
 URL beside a stored key the request keeps without naming it (the `__stored__`
 sentinel) is refused as well, as the key would go to that host: the caller types
-the key again. So a
+the key again. The keys inside `mcp_servers_config` and `tool_config` are hidden and kept
+the same way, for every caller (`shared/utils/config_secrets.py`):
+
+- `mask_config_secrets` masks them wherever a config leaves the server: the agent list and
+  the pages that embed it, versions, a rollback's answer, an export, a template, and
+  `read_agent`. Only a standalone build's export (`for_build`) has them.
+- Create and update answer 400 when a hidden value can't be put back, and `update_agent`
+  returns an error. A value is put back only into the same place of the same entry, with
+  its `url`, `command` and `args` unchanged.
+- An import and a template restore from the agent they write over. What can't be put back
+  becomes empty, and an import lists it in `errors`. `_create_agent_config` never stores
+  the sentinel.
+- `_refuse_platform_only` runs after the values are put back, so a config saved as it was
+  shown is no change.
+
+So a
 workspace admin keeps what a platform administrator set up, as it is. Agent create,
 update, rollback and template import refuse; an agent import and a template sync skip
 the agent and say why (`errors`, `agents_skipped`). A sync checks an existing agent's

@@ -260,6 +260,8 @@ EU AI Act requires the notice unless it is already obvious to the person.
   project, optionally with the project's memory blocks and file-search stores. The
   source is not changed.
 - **Export** and **Import** move a project's agents between installations as a file.
+  The file holds `__stored__` in place of keys: importing it over the same agents keeps
+  theirs, and the result lists what to enter for a new one.
   An import only writes to projects of the current workspace: an agent, memory block
   or trigger naming another project is skipped and listed in the result, and so is
   an agent whose name another workspace uses, even with overwriting on. An agent or

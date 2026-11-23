@@ -83,8 +83,12 @@ def mask_api_key(value: Optional[str]) -> Optional[str]:
 
 
 def mask_config_secrets(config: Dict[str, Any]) -> Dict[str, Any]:
-    """A copy of an agent config dict, or a version snapshot, with its key masked."""
+    """A copy of an agent config dict, or a version snapshot, with its secrets masked."""
+    from .config_secrets import FIELDS, mask
     masked = dict(config)
+    for field in FIELDS:
+        if masked.get(field):
+            masked[field] = mask(field, masked[field])
     if "model_api_key" in masked:
         masked["model_api_key"] = mask_api_key(masked["model_api_key"])
     return masked

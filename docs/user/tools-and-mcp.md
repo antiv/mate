@@ -10,6 +10,7 @@ covers:
   - static/js/agent-tools.js
   - shared/utils/tools/tool_factory.py
   - shared/utils/tools/mcp_tools.py
+  - shared/utils/config_secrets.py
   - shared/utils/langgraph/hitl.py
 ---
 
@@ -198,6 +199,24 @@ one entry per server:
   `localhost`) is skipped too (see [What only a platform administrator can set](agents.md#what-only-a-platform-administrator-can-set)).
 
 ## Use your agents from other tools
+
+### Keys in an MCP server's settings
+
+A key written into the settings is hidden once saved: in its place the dashboard, an
+export and an agent that reads the configuration see `__stored__`. This covers the values
+of `env` and `headers`, arguments and addresses that carry a key, and, in the tool
+settings, the address that approval notifications go to. A `${VAR}` reference stays as
+written, since it holds no key.
+
+- **Leave `__stored__` as it is** and saving keeps the key. Type over it to change it.
+- **Changing the server's address, command or arguments** takes its keys again: a stored
+  key is sent only where it was sent before. So does renaming the server.
+- **A copy, or an import as a new agent,** doesn't take the keys along. Copy asks you to
+  enter them; an import says which are missing. **Clone to Project** and **Download
+  Binary** do take them.
+
+The keys are still stored with the agent and in its versions, readable by whoever can read
+the database. A `${VAR}` keeps them out of it.
 
 It also works the other way round: an administrator can expose chosen agents as MCP
 servers, at `/agents/<agent name>/mcp`, so that other MCP clients can call them.

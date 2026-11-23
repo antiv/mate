@@ -40,6 +40,8 @@ your attention:
 
 - **Models.** A template names the models its authors used. If your server has no
   key for that provider, change **Model Name** on each agent.
+- A template holds no keys. Where its agents used one in an MCP server or a tool, the
+  imported agent's is empty: enter it on the agent's page.
 - **Roles.** Check **Allowed Roles** on the root agent so that the right people can
   use it.
 

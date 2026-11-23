@@ -4,7 +4,7 @@
 
 {% block extra_head %}
 <link rel="stylesheet" href="/static/css/widget/chat.css?v=8">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.6/ace.min.js" defer></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.6/ace.min.js" integrity="sha384-VeLPY4H4hgSXm0s/DQ7akVyaPRCb3RlBoBUPfMSinovwd++G8rfnm3eeH0MQ/xHk" crossorigin="anonymous" defer></script>
 <style>
     /* ── Work Room layout (redesign tokens) ───────────────── */
     .wr-root {
@@ -1450,7 +1450,8 @@
         var json = JSON.stringify(code).replace(/</g, "\\u003c");
         var open = "<" + "script";
         return '<!DOCTYPE html><html><head>' +
-            open + ' src="https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js"><\/script>' +
+            open + ' src="https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js"' +
+            ' integrity="sha384-i3R37b3tF+HWudsUf1VSEOY2YxwSNMqY8DQa9Z0O3xh+NkJ9o+yjcGyIi5huj+nB" crossorigin="anonymous"><\/script>' +
             '<style>' +
             'html,body{margin:0;padding:0;height:100%;background:#fff;}' +
             'body{padding:1rem;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;line-height:1.6;box-sizing:border-box;overflow:auto;}' +

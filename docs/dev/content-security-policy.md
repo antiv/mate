@@ -198,6 +198,14 @@ Adding a CDN script to a template means adding its path there;
 Styles, fonts and connections still allow the whole hosts: none of them can run
 code.
 
+Each such tag names an exact version and has an `integrity` hash, so a file changed on
+the CDN is not run; `test_csp.py` fails on a tag without one. To move a version, take the
+hash of the new file and compare it with the npm package's own. Three things have no hash:
+
+- **Tailwind:** its CDN sends no CORS headers, which `integrity` needs. The version is fixed.
+- **What Monaco, Ace and Pyodide load themselves,** of their fixed version.
+- **FastAPI's `/admin-docs` and `/docs` pages** (Swagger UI, ReDoc), whose tags are FastAPI's.
+
 ## Also allowed
 
 - **`eval()` on ADK's dev UI.** A library bundled into ADK's dev UI
