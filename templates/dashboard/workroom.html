@@ -119,67 +119,83 @@
     }
 
     /* ── Chat state ───────────────────────────────────────── */
+    /* The conversation fills the space beside the sidebar: the page gives up its padding.
+       Its text and the composer keep a readable column (--wr-column) in the middle */
+    main.dashboard-main:has(.wr-chat-root) { padding: 0 !important; }
+    .wr-root:has(.wr-chat-root) { height: calc(100dvh - 64px); }
+    body[data-embed] .wr-root:has(.wr-chat-root) { height: 100dvh; min-height: 0; }
     .wr-chat-root {
+        --wr-column: 48rem;
+        --wr-gutter: max(20px, calc((100% - var(--wr-column)) / 2));
+        /* chat.css follows the system's theme; here the dashboard's decides */
+        --w-primary: var(--accent);
+        --w-primary-hover: var(--accent-hover);
+        --w-bg: var(--bg-page);
+        --w-bg-secondary: var(--bg-surface-2);
+        --w-text: var(--text-primary);
+        --w-text-secondary: var(--text-secondary);
+        --w-border: var(--border);
+        --w-agent-bubble: transparent;
+        --w-agent-text: var(--text-primary);
         flex: 1;
         display: flex;
         flex-direction: column;
         min-height: 0;
-        max-width: 56rem;
         width: 100%;
-        margin: 0 auto;
     }
 
     /* Agent bar */
     .wr-agent-bar {
         display: flex;
         align-items: center;
-        gap: 10px;
+        gap: 6px;
         padding: 10px 16px;
-        background: var(--bg-surface-2);
-        border: 1px solid var(--border);
-        border-radius: 16px 16px 0 0;
         flex-shrink: 0;
     }
     .wr-agent-bar-avatar {
-        width: 30px;
-        height: 30px;
-        border-radius: 9px;
+        width: 28px;
+        height: 28px;
+        border-radius: 999px;
         background: linear-gradient(135deg, var(--accent), var(--accent-3));
         display: flex;
         align-items: center;
         justify-content: center;
         color: #fff;
-        font-size: 12px;
+        font-size: 11px;
         flex-shrink: 0;
     }
     .wr-agent-bar-name {
-        font-size: 13.5px;
-        font-weight: 700;
+        font-size: 14px;
+        font-weight: 600;
         color: var(--text-primary);
         flex: 1;
+        min-width: 0;
+        margin-left: 4px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
     }
     .wr-canvas-toggle-label {
         display: inline-flex;
         align-items: center;
         gap: 6px;
-        font-size: 11.5px;
+        font-size: 12px;
         color: var(--text-secondary);
         font-weight: 500;
         cursor: pointer;
-        margin-right: 8px;
-        margin-left: auto;
+        padding: 6px 10px;
     }
     .wr-canvas-toggle-label input { cursor: pointer; accent-color: var(--accent); }
 
     .wr-agent-bar .wr-bar-action {
         display: inline-flex;
         align-items: center;
-        gap: 5px;
-        font-size: 11.5px;
-        font-weight: 600;
+        gap: 6px;
+        font-size: 12px;
+        font-weight: 500;
         color: var(--text-secondary);
-        padding: 5px 8px;
-        border-radius: 8px;
+        padding: 6px 10px;
+        border-radius: 999px;
         transition: all 0.15s ease;
         text-decoration: none;
         border: none;
@@ -188,139 +204,166 @@
     }
     .wr-agent-bar .wr-bar-action:hover {
         color: var(--text-primary);
-        background: var(--bg-surface);
+        background: var(--bg-surface-2);
     }
 
-    /* Override widget-container to fit inside wr-chat-root */
+    /* The chat itself, without a frame */
     .wr-chat-root .widget-container {
-        border-radius: 0 0 16px 16px;
-        border: 1px solid var(--border);
-        border-top: none;
         flex: 1;
-        display: flex;
-        flex-direction: column;
+        height: auto;
         min-height: 0;
         overflow: hidden;
-        background: var(--bg-surface);
+        background: none;
     }
     .wr-chat-root .widget-header { display: none; } /* we use wr-agent-bar instead */
     .wr-chat-root .widget-messages {
         flex: 1;
         overflow-y: auto;
         min-height: 0;
-        padding: 18px;
-        background: var(--bg-surface);
-    }
-    .wr-chat-root .widget-input-area {
-        flex-shrink: 0;
-        border-top: 1px solid var(--border);
-        padding: 14px;
-        background: var(--bg-surface);
-        border-radius: 0 0 16px 16px;
+        padding: 16px var(--wr-gutter) 28px;
+        gap: 22px;
     }
 
-    /* Override message bubble styles for redesign look inside workroom */
+    /* Messages: the agent's as text, the user's in a bubble */
     .wr-chat-root .widget-message-wrapper {
-        display: flex;
-        align-items: flex-start;
-        gap: 0.5rem;
-        max-width: 80%;
-        align-self: flex-start;
-        animation: fadeIn 0.2s ease;
-    }
-    .wr-chat-root .widget-message-wrapper .widget-message {
+        gap: 14px;
         max-width: 100%;
-        animation: none;
+        width: 100%;
     }
-    .wr-chat-root .widget-agent-avatar {
-        width: 1.75rem;
-        height: 1.75rem;
-        border-radius: 9999px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: #fff;
-        font-weight: 600;
-        font-size: 0.7rem;
-        flex-shrink: 0;
-        margin-top: 0.125rem;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-        text-transform: uppercase;
-        user-select: none;
-    }
-
+    .wr-chat-root .widget-agent-avatar { box-shadow: none; text-shadow: none; }
     .wr-chat-root .widget-message {
         max-width: 80%;
-        border-radius: 14px;
-        padding: 10px 14px;
-        font-size: 13px;
-        line-height: 1.6;
+        font-size: 15px;
+        line-height: 1.65;
     }
     .wr-chat-root .widget-message.user {
         background: var(--accent-soft);
         color: var(--text-primary);
-        border-radius: 14px 14px 4px 14px;
-        box-shadow: none;
+        border-radius: 22px 22px 6px 22px;
+        padding: 10px 18px;
+        white-space: pre-wrap;
     }
     .wr-chat-root .widget-message.agent {
-        background: var(--bg-surface-2);
-        border: 1px solid var(--border);
-        color: var(--text-primary);
-        border-radius: 14px 14px 14px 4px;
-        box-shadow: none;
+        flex: 1;
+        min-width: 0;
+        max-width: 100%;
+        padding: 3px 0 0;
+        background: none;
+        border-radius: 0;
     }
-
-    /* Override greeting */
-    .wr-chat-root .widget-greeting {
-        color: var(--text-tertiary);
-        font-size: 0.9rem;
-        padding: 3rem 1rem;
+    /* Tailwind takes the markers off lists, and chat.js makes each item a list of its
+       own, with a break between them and empty paragraphs around */
+    .wr-chat-root .widget-message.agent ul { list-style: disc; }
+    .wr-chat-root .widget-message.agent ul + br,
+    .wr-chat-root .widget-message.agent p:empty { display: none; }
+    .wr-chat-root .widget-message-actions {
+        justify-content: flex-start;
+        gap: 4px;
+        margin-left: -5px;
     }
-
-    /* Override input styling */
-    .wr-chat-root .widget-input {
-        border-radius: 12px;
-        border: 1px solid var(--border);
-        padding: 11px 14px;
-        font-size: 13px;
-        background: var(--bg-surface-2);
-        color: var(--text-primary);
-        font-family: inherit;
-        transition: all 0.15s ease;
-    }
-    .wr-chat-root .widget-input:focus {
-        border-color: var(--accent);
+    .wr-chat-root .widget-message-action-btn:hover { background: var(--bg-surface-2); }
+    .wr-chat-root .widget-message.user .widget-msg-file-attachment {
         background: var(--bg-surface);
+        border-color: var(--border);
+        color: var(--text-primary);
+    }
+
+    /* The composer: one rounded field that holds its buttons */
+    .wr-chat-root .widget-input-area {
+        align-items: flex-end;
+        gap: 4px;
+        margin: 0 var(--wr-gutter) 20px;
+        padding: 8px;
+        background: var(--bg-surface);
+        border: 1px solid var(--border);
+        border-radius: 30px;
+        box-shadow: var(--shadow-card);
+        transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+    .wr-chat-root .widget-input-area:focus-within {
+        border-color: var(--accent);
         box-shadow: 0 0 0 3px var(--accent-soft);
     }
-
-    /* Override send button */
-    .wr-chat-root .widget-send-btn {
-        background: var(--accent);
-        color: #fff;
-        border-radius: 12px;
-        padding: 0 18px;
-        font-weight: 700;
-        font-size: 13px;
+    .wr-chat-root .widget-image-preview { padding: 0 var(--wr-gutter) 10px; }
+    .wr-chat-root .widget-input {
+        align-self: center;
+        min-height: 44px;
+        padding: 10px 8px;
+        border: 0;
+        border-radius: 0;
+        background: none;
+        color: var(--text-primary);
         font-family: inherit;
-        box-shadow: none;
+        font-size: 15px;
+        line-height: 24px;
+    }
+    .wr-chat-root .widget-input:focus { box-shadow: none; }
+    /* Their text stays as their name; the icon is what is seen */
+    .wr-chat-root .widget-attach-btn,
+    .wr-chat-root .widget-send-btn {
+        width: 44px;
+        height: 44px;
+        padding: 0;
+        border: 0;
+        border-radius: 999px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0;
         transition: all 0.15s ease;
     }
-    .wr-chat-root .widget-send-btn:hover {
-        background: var(--accent-hover);
-        transform: translateY(-1px);
+    .wr-chat-root .widget-attach-btn::before,
+    .wr-chat-root .widget-send-btn::before {
+        font-family: "Font Awesome 6 Free";
+        font-weight: 900;
+        font-size: 16px;
     }
-    .wr-chat-root .widget-send-btn:disabled {
-        opacity: 0.4;
-        transform: none;
-        box-shadow: none;
+    .wr-chat-root .widget-attach-btn { color: var(--text-secondary); }
+    .wr-chat-root .widget-attach-btn:hover { background: var(--bg-surface-2); color: var(--text-primary); }
+    .wr-chat-root .widget-attach-btn::before { content: "\f067"; }
+    .wr-chat-root .widget-send-btn { background: var(--accent); color: #fff; }
+    .wr-chat-root .widget-send-btn:hover { background: var(--accent-hover); }
+    .wr-chat-root .widget-send-btn::before { content: "\f062"; }
+    .wr-chat-root .widget-send-btn.widget-stop-btn { background: var(--text-primary); color: var(--bg-page); }
+    .wr-chat-root .widget-send-btn.widget-stop-btn::before { content: "\f04d"; font-size: 13px; }
+    /* Nothing to send yet */
+    .wr-chat-root .widget-image-preview:not(.active) + .widget-input-area
+        .widget-input:placeholder-shown ~ .widget-send-btn:not(.widget-stop-btn) {
+        background: var(--bg-surface-2);
+        color: var(--text-tertiary);
+    }
+    .wr-chat-root .widget-attach-btn:focus-visible,
+    .wr-chat-root .widget-send-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+    /* A new conversation: the greeting and the composer in the middle. While an earlier
+       one loads (wr-restoring) the composer stays at the bottom, where it will be */
+    .wr-chat-root .widget-greeting {
+        padding: 0;
+        font-size: clamp(24px, 4vw, 36px);
+        font-weight: 500;
+        letter-spacing: -0.01em;
+        line-height: 1.25;
+        color: var(--text-primary);
+    }
+    .wr-chat-root.wr-restoring .widget-greeting { visibility: hidden; }
+    .wr-chat-root:not(.wr-restoring) .widget-container:not(:has(.widget-message)) {
+        justify-content: center;
+        padding-bottom: 8vh;
+        background: radial-gradient(ellipse 60% 55% at 50% 58%,
+            color-mix(in oklab, var(--accent) 16%, transparent), transparent 75%);
+    }
+    .wr-chat-root:not(.wr-restoring) .widget-messages:not(:has(.widget-message)) {
+        flex: none;
+        padding-bottom: 28px;
     }
 
-    /* Override attach button */
-    .wr-chat-root .widget-attach-btn {
-        border-radius: 12px;
-        border-color: var(--border);
-        background: var(--bg-surface-2);
+    /* The Help button is at the composer's height: above it where they would meet */
+    @media (max-width: 1180px) {
+        body:has(.wr-chat-root:not(.canvas-open)) .mate-help-button { bottom: 100px; }
+        /* A composer with more in it is taller than that */
+        body:has(.wr-chat-root:not(.canvas-open) :is(.widget-input:not(:placeholder-shown), .widget-image-preview.active))
+            .mate-help-button { display: none; }
+        .wr-chat-root .widget-messages { padding-bottom: 76px; }
     }
 
     /* ── Chat + Canvas row ─────────────────────────────────── */
@@ -339,9 +382,6 @@
     }
     .wr-body-row.canvas-open .wr-chat-side {
         flex: 0 0 420px;
-    }
-    .wr-chat-root.canvas-open {
-        max-width: none;
     }
 
     /* ── Drag resizer ──────────────────────────────────────── */
@@ -378,7 +418,8 @@
         flex-direction: column;
         background: var(--bg-page);
         border: 1px solid var(--border);
-        border-radius: 0 0 16px 0;
+        border-radius: 16px;
+        margin: 0 16px 76px 0; /* the Help button is below it */
         overflow: hidden;
         font-size: 0.8125rem;
     }
@@ -452,9 +493,8 @@
     /* ── Code blocks inside chat messages ─────────────────── */
     .mate-code-block {
         margin: 0.5rem 0;
-        border-radius: 8px;
+        border-radius: 12px;
         overflow: hidden;
-        /* No outer border — message bubble is already a container */
         background: rgba(0,0,0,0.03);
     }
     .dark .mate-code-block { background: rgba(0,0,0,0.25); }
@@ -489,7 +529,7 @@
         transition: background 0.15s;
     }
     .mate-canvas-btn:hover { background: var(--accent-soft); }
-    .mate-code-block pre {
+    .wr-chat-root .mate-code-block pre {
         margin: 0;
         padding: 0.625rem 0.875rem;
         background: transparent;
@@ -497,9 +537,8 @@
         transition: max-height 0.2s ease, opacity 0.2s ease;
         max-height: 400px;
     }
-    .dark .mate-code-block pre { background: transparent; }
     /* Collapsed state — code shown in canvas */
-    .mate-code-block.canvas-active pre {
+    .wr-chat-root .mate-code-block.canvas-active pre {
         max-height: 0;
         opacity: 0;
         padding-top: 0;
@@ -576,12 +615,16 @@
     @media (max-width: 767px) {
         /* 64px nav + 45px space tabs + 14px*2 main padding */
         .wr-root { height: calc(100dvh - 137px); }
+        .wr-root:has(.wr-chat-root) { height: calc(100dvh - 109px); }
 
         .wr-agent-bar {
             flex-wrap: wrap;
-            row-gap: 6px;
-            padding: 10px 12px;
+            gap: 2px 4px;
+            padding: 8px 12px;
         }
+        .wr-agent-bar-name { flex-basis: calc(100% - 40px); }
+        .wr-canvas-toggle-label { padding: 6px 4px 6px 0; }
+        .wr-agent-bar .wr-bar-action { padding: 6px 7px; gap: 4px; }
 
         /* Chat + canvas stack vertically instead of side by side */
         .wr-body-row.canvas-open { flex-direction: column; }
@@ -590,11 +633,12 @@
             min-height: 0;
         }
         .wr-body-row.canvas-open .wr-resizer { display: none; }
-        .wr-canvas-panel { border-radius: 0 0 16px 16px; }
+        .wr-canvas-panel { margin: 0 12px 76px; }
 
-        .wr-chat-root .widget-messages { padding: 12px; }
-        .wr-chat-root .widget-message-wrapper { max-width: 92%; }
-        .wr-chat-root .widget-message { max-width: 100%; }
+        .wr-chat-root { --wr-gutter: 12px; }
+        .wr-chat-root .widget-message-wrapper { gap: 10px; }
+        .wr-chat-root .widget-message.user { max-width: 88%; }
+        .wr-chat-root .widget-input-area { margin-bottom: 12px; }
         /* 16px avoids iOS zoom on focus */
         .wr-chat-root .widget-input { font-size: 16px; }
     }
@@ -657,7 +701,7 @@
 
 {% else %}
     <!-- ── CHAT: Agent selected ──────────────────────────── -->
-    <div class="wr-chat-root">
+    <div class="wr-chat-root{% if selected_session %} wr-restoring{% endif %}">
         <!-- Agent bar -->
         <div class="wr-agent-bar">
             <div class="wr-agent-bar-avatar"><i class="fas fa-robot"></i></div>
@@ -701,7 +745,7 @@
                     <div class="widget-image-preview" id="widgetImagePreview"></div>
                     <div class="widget-input-area">
                         <input type="file" id="widgetFileInput" accept="image/*,application/pdf,text/*,.json,.py,.js,.css,.csv,.yaml,.yml" style="display:none" multiple>
-                        <button class="widget-attach-btn" id="widgetAttachBtn" title="Attach image">&#x1F4CE;</button>
+                        <button class="widget-attach-btn" id="widgetAttachBtn" title="Attach files">&#x1F4CE;</button>
                         <textarea class="widget-input" id="widgetInput" placeholder="Type a message…" rows="1"></textarea>
                         <button class="widget-send-btn" id="widgetSendBtn">Send</button>
                     </div>
@@ -946,6 +990,8 @@
         window.STANDALONE_AGENT_NAME = AGENT;
         var s = document.createElement("script");
         s.src = "/static/js/standalone/chat.js?v=" + Date.now();
+        // An earlier conversation is shown by now, or there is nothing to show
+        s.onload = function () { document.querySelector(".wr-chat-root").classList.remove("wr-restoring"); };
         document.body.appendChild(s);
     }
 
