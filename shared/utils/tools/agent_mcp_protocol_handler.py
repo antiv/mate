@@ -3,7 +3,7 @@ MCP Protocol Handler for Agent Tools
 Handles JSON-RPC MCP protocol requests for agent execution
 """
 
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Union
 from fastapi import Request, HTTPException
 from fastapi.responses import StreamingResponse, Response
 import asyncio
@@ -12,6 +12,7 @@ import os
 import json
 import time
 from shared.utils.utils import get_adk_config
+from shared.utils.tools.mcp_jsonrpc import arguments_of, dispatch
 
 
 
@@ -40,6 +41,14 @@ def a2a_result_text(result: Any) -> Optional[str]:
             status_message = status.get("message") if isinstance(status.get("message"), dict) else {}
             found = texts(status_message.get("parts"))
     return "\n".join(found) if found else None
+
+
+def a2a_task_failed(result_data: Any) -> bool:
+    """True when an A2A answer holds a task that failed or was rejected."""
+    result = result_data.get("result") if isinstance(result_data, dict) else None
+    status = result.get("status") if isinstance(result, dict) else None
+    return isinstance(status, dict) and status.get("state") in ("failed", "rejected")
+
 
 class AgentMCPProtocolHandler:
     """Handles MCP protocol requests for agent execution"""
@@ -325,6 +334,9 @@ class AgentMCPProtocolHandler:
                         "id": request_id,
                         "result": {
                             "content": content,
+                            # A failed run comes back as a task with the error in its
+                            # text: the client must not take it for the agent's answer
+                            "isError": a2a_task_failed(result_data),
                             "raw_result": result_data
                         }
                     }
@@ -349,49 +361,22 @@ class AgentMCPProtocolHandler:
                 }
             }
     
-    async def handle_mcp_request(self, request: Request) -> Dict[str, Any]:
-        """Handle generic MCP protocol request"""
-        try:
-            body = await request.json()
-            method = body.get("method")
-            params = body.get("params", {})
-            request_id = body.get("id", 1)
-            
-            if method == "initialize":
-                return self.get_mcp_initialize(request_id)
-            elif method == "tools/list":
-                return self.get_mcp_tools_list(request_id)
-            elif method == "tools/call":
-                tool_name = params.get("name")
-                arguments = params.get("arguments", {})
-                return await self.call_mcp_tool(tool_name, arguments, request_id)
-            elif method == "prompts/list":
-                return self.get_mcp_prompts_list(request_id)
-            elif method == "prompts/get":
-                return self.get_mcp_prompt(params.get("name"), params.get("arguments", {}), request_id)
-            elif method == "resources/list":
-                return self.get_mcp_resources_list(request_id)
-            elif method == "resources/read":
-                return self.read_mcp_resource(params.get("uri"), request_id)
-            else:
-                return {
-                    "jsonrpc": "2.0",
-                    "id": request_id,
-                    "error": {
-                        "code": -32601,
-                        "message": f"Method '{method}' not found"
-                    }
-                }
-        except Exception as e:
-            return {
-                "jsonrpc": "2.0",
-                "id": body.get("id", 1) if 'body' in locals() else 1,
-                "error": {
-                    "code": -32603,
-                    "message": f"Internal error: {str(e)}"
-                }
-            }
-    
+    async def handle_mcp_request(self, request: Request) -> Union[Dict[str, Any], Response]:
+        """Answer an MCP message posted to the server's endpoint"""
+        return await dispatch(request, {
+            "initialize": lambda params, request_id: self.get_mcp_initialize(request_id),
+            "tools/list": lambda params, request_id: self.get_mcp_tools_list(request_id),
+            "tools/call": lambda params, request_id: self.call_mcp_tool(
+                params.get("name"), arguments_of(params), request_id),
+            "prompts/list": lambda params, request_id: self.get_mcp_prompts_list(request_id),
+            "prompts/get": lambda params, request_id: self.get_mcp_prompt(
+                params.get("name"), arguments_of(params), request_id),
+            "resources/list": lambda params, request_id: self.get_mcp_resources_list(request_id),
+            "resources/templates/list": lambda params, request_id: self._result(
+                request_id, {"resourceTemplates": []}),
+            "resources/read": lambda params, request_id: self.read_mcp_resource(params.get("uri"), request_id),
+        })
+
     async def get_mcp_sse_stream(self) -> StreamingResponse:
         """Get Server-Sent Events stream for real-time communication"""
         if not self.agent_available:

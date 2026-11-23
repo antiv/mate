@@ -6,6 +6,7 @@ Dynamically creates MCP endpoints for agents from database configuration
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import StreamingResponse, Response
 from ..tools.agent_mcp_protocol_handler import AgentMCPProtocolHandler
+from ..tools.mcp_jsonrpc import no_stream, wants_stream
 from .mcp_auth import agent_allowed, mcp_workspace, require_mcp_user
 import logging
 
@@ -74,8 +75,10 @@ class AgentMCPServer:
                 }
 
         @self.app.get(f"{base_path}", tags=[f"MCP - Agent: {self.agent_name}"])
-        async def agent_mcp_info(user: str = Depends(require_user)):
+        async def agent_mcp_info(request: Request, user: str = Depends(require_user)):
             """Agent MCP server info endpoint"""
+            if wants_stream(request):
+                return no_stream()
             return self.mcp_handler.get_mcp_info()
 
         @self.app.post(f"{base_path}", tags=[f"MCP - Agent: {self.agent_name}"])

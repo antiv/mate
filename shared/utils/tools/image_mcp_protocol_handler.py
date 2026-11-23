@@ -3,10 +3,11 @@ MCP Protocol Handler for Image Generation Tools
 Handles JSON-RPC MCP protocol requests for image generation tools
 """
 
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Union
 from fastapi import Request, HTTPException
 from fastapi.responses import StreamingResponse, Response
 import asyncio
+from shared.utils.tools.mcp_jsonrpc import arguments_of, dispatch
 
 
 class ImageMCPProtocolHandler:
@@ -342,50 +343,17 @@ class ImageMCPProtocolHandler:
                 }
             }
     
-    async def handle_mcp_request(self, request: Request) -> Dict[str, Any]:
-        """Handle MCP protocol requests"""
+    async def handle_mcp_request(self, request: Request) -> Union[Dict[str, Any], Response]:
+        """Answer an MCP message posted to the server's endpoint"""
         if not self.image_tools_available:
             raise HTTPException(status_code=503, detail="Image MCP server not available")
-        
-        try:
-            # Parse the JSON-RPC request
-            body = await request.json()
-            method = body.get("method")
-            request_id = body.get("id", 1)
-            
-            if method == "initialize":
-                return self.get_mcp_initialize(request_id)
-            
-            elif method == "tools/list":
-                return self.get_mcp_tools_list(request_id)
-            
-            elif method == "tools/call":
-                # Handle tool execution
-                params = body.get("params", {})
-                tool_name = params.get("name")
-                arguments = params.get("arguments", {})
-                return await self.call_mcp_tool(tool_name, arguments, request_id)
-            
-            else:
-                return {
-                    "jsonrpc": "2.0",
-                    "id": request_id,
-                    "error": {
-                        "code": -32601,
-                        "message": f"Method '{method}' not found"
-                    }
-                }
-        
-        except Exception as e:
-            return {
-                "jsonrpc": "2.0",
-                "id": body.get("id", 1) if 'body' in locals() else 1,
-                "error": {
-                    "code": -32603,
-                    "message": f"Internal error: {str(e)}"
-                }
-            }
-    
+        return await dispatch(request, {
+            "initialize": lambda params, request_id: self.get_mcp_initialize(request_id),
+            "tools/list": lambda params, request_id: self.get_mcp_tools_list(request_id),
+            "tools/call": lambda params, request_id: self.call_mcp_tool(
+                params.get("name"), arguments_of(params), request_id),
+        })
+
     async def get_mcp_sse_stream(self) -> StreamingResponse:
         """Get MCP Server-Sent Events stream"""
         if not self.image_tools_available:

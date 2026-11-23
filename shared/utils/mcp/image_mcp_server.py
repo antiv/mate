@@ -6,6 +6,7 @@ Handles Image MCP endpoints and protocol requests
 from fastapi import Depends, FastAPI, Request, HTTPException
 from fastapi.responses import StreamingResponse, Response
 from ..tools.image_mcp_protocol_handler import ImageMCPProtocolHandler
+from ..tools.mcp_jsonrpc import no_stream, wants_stream
 
 
 def _require_user(request: Request) -> str:
@@ -79,8 +80,10 @@ class ImageMCPServer:
                 }
 
         @self.app.get("/images/mcp", tags=["MCP - Images"])
-        async def image_mcp_info(user: str = Depends(_require_user)):
+        async def image_mcp_info(request: Request, user: str = Depends(_require_user)):
             """Image MCP server info endpoint"""
+            if wants_stream(request):
+                return no_stream()
             return self.mcp_handler.get_mcp_info()
 
         @self.app.post("/images/mcp", tags=["MCP - Images"])

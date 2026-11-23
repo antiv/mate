@@ -6,6 +6,7 @@ Handles Google Drive MCP endpoints and protocol requests
 from fastapi import Depends, FastAPI, Request, HTTPException
 from fastapi.responses import StreamingResponse, Response
 from ..tools.google_drive_mcp_protocol_handler import GoogleDriveMCPProtocolHandler
+from ..tools.mcp_jsonrpc import no_stream, wants_stream
 from .mcp_auth import require_drive_user
 
 
@@ -62,8 +63,10 @@ class GoogleDriveMCPServer:
                 }
 
         @self.app.get("/gdrive/mcp", tags=["MCP - Google Drive"])
-        async def gdrive_mcp_info(user: str = Depends(require_drive_user)):
+        async def gdrive_mcp_info(request: Request, user: str = Depends(require_drive_user)):
             """Google Drive MCP server info endpoint"""
+            if wants_stream(request):
+                return no_stream()
             return self.mcp_handler.get_mcp_info()
 
         @self.app.post("/gdrive/mcp", tags=["MCP - Google Drive"])
