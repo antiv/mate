@@ -128,7 +128,9 @@ An agent exposed as an MCP server (`MCP_EXPOSED_AGENTS`, see
 `shared/utils/tools/agent_mcp_protocol_handler.py` turns an MCP `tools/call` into an
 A2A `message/send` request and posts it straight to the ADK server at
 `http://<adk_host>:<adk_port>/a2a/{agent_name}`, not through the auth server's proxy;
-the MCP routes check the caller themselves. It reads the reply's text from the
+the MCP routes check the caller themselves. A call with a `session_id` carries a
+`contextId` made from the caller, the agent and the `session_id` (`mcp_context_id`), so
+its calls are one conversation. It reads the reply's text from the
 returned message, or from the task's artifacts. Exposing an agent over MCP therefore
 needs A2A enabled on the ADK server.
 

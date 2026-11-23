@@ -70,6 +70,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **MATE's MCP servers with a real MCP client** (#376, from #389) - an agent's server, Image Generation and Google Drive, checked with the MCP SDK's client:
   - **A failed run was a success:** when the agent's model call failed, the client got the error text as the agent's answer. The result now has `isError: true`
+  - **`session_id` works:** calls of one caller to an agent's tool with the same `session_id` continue one conversation, as the tool says; it was sent where A2A doesn't read it, so every call started a new one. Another caller's `session_id` of the same name is another conversation
   - `ping` is answered; it got `-32601`
   - A notification, such as `notifications/initialized`, and a response of the client get 202 with no body; they got an error
   - A batch, or a body that isn't a JSON object, gets 400; it crashed the request with a 500. A body that isn't JSON gets 400 with `-32700`. `params` or `arguments` that are null no longer fail

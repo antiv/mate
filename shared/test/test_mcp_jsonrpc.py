@@ -15,7 +15,9 @@ from shared.utils.mcp.agent_mcp_server import AgentMCPServer
 from shared.utils.mcp.google_drive_mcp_server import GoogleDriveMCPServer
 from shared.utils.mcp.image_mcp_server import ImageMCPServer
 from shared.utils.mcp.mcp_auth import require_mcp_user
-from shared.utils.tools.agent_mcp_protocol_handler import AgentMCPProtocolHandler, a2a_task_failed
+from shared.utils.tools.agent_mcp_protocol_handler import (
+    AgentMCPProtocolHandler, a2a_task_failed, mcp_context_id,
+)
 
 PATHS = ("/agents/helper/mcp", "/images/mcp", "/gdrive/mcp")
 
@@ -134,6 +136,68 @@ class TestFailedRun(unittest.TestCase):
         self.assertIs(failed["isError"], True)
         self.assertEqual(failed["content"], [{"type": "text", "text": "why"}])
         self.assertIs(completed["isError"], False)
+
+
+class TestSessionId(unittest.TestCase):
+    """calls with one session_id continue one conversation, of the caller's own"""
+
+    def setUp(self):
+        app = FastAPI()
+        for name in ("agent_allowed", "mcp_workspace"):
+            patcher = patch(f"shared.utils.mcp.agent_mcp_server.{name}", return_value=True)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        for agent in ("helper", "other"):
+            AgentMCPServer(app, agent, "Helps")
+        self.caller = "alice"
+        app.dependency_overrides[require_mcp_user] = lambda: self.caller
+        # TestClient is built on httpx too: only the handler's own client is replaced
+        self.a2a = AsyncMock()
+        self.a2a.post.return_value.status_code = 200
+        self.a2a.post.return_value.json = lambda: {"result": {"kind": "message", "parts": [{"text": "ok"}]}}
+        client = patch("shared.utils.tools.agent_mcp_protocol_handler.httpx")
+        client.start().AsyncClient.return_value.__aenter__.return_value = self.a2a
+        self.addCleanup(client.stop)
+        self.client = TestClient(app)
+
+    def _context(self, session_id, caller="alice", agent="helper", path="", **arguments):
+        self.caller = caller
+        self.a2a.post.reset_mock()
+        arguments = {"message": "hi", **({} if session_id is None else {"session_id": session_id}), **arguments}
+        response = self.client.post(f"/agents/{agent}/mcp{path}", json={
+            "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+            "params": {"name": f"call_{agent}_agent", "arguments": arguments}})
+        self.assertIn("result", response.json(), response.text)
+        sent = self.a2a.post.call_args.kwargs["json"]["params"]
+        self.assertEqual(list(sent), ["message"])
+        return sent["message"].get("contextId")
+
+    def test_the_same_caller_agent_and_session_is_one_context(self):
+        context = self._context("s1")
+        self.assertEqual(context, mcp_context_id("alice", "helper", "s1"))
+        self.assertEqual(self._context("s1"), context)
+        self.assertEqual(self._context("s1", path="/tools/call"), context)
+
+    def test_another_caller_agent_or_session_is_another_context(self):
+        contexts = {self._context("s1"), self._context("s1", caller="bob"),
+                    self._context("s1", agent="other"), self._context("s2")}
+        self.assertEqual(len(contexts), 4)
+        # A caller can't write the context of another: theirs is hashed too
+        self.assertNotIn(self._context(mcp_context_id("alice", "helper", "s1"), caller="bob"), contexts)
+        # The parts can't be shifted into each other
+        self.assertNotEqual(mcp_context_id("a", "b", "c"), mcp_context_id("a", "b\", \"c", ""))
+
+    def test_without_a_session_each_call_is_its_own(self):
+        self.assertIsNone(self._context(None))
+        self.assertIsNone(self._context(""))
+
+    def test_a_session_id_is_a_string(self):
+        for session_id in (1, ["s1"], {"a": 1}):
+            response = self.client.post("/agents/helper/mcp", json={
+                "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                "params": {"name": "call_helper_agent", "arguments": {"message": "hi", "session_id": session_id}}})
+            self.assertEqual(response.json()["error"]["code"], -32602)
+        self.a2a.post.assert_not_called()
 
 
 if __name__ == "__main__":

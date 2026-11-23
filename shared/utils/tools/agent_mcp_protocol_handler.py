@@ -7,6 +7,7 @@ from typing import Dict, Any, List, Optional, Union
 from fastapi import Request, HTTPException
 from fastapi.responses import StreamingResponse, Response
 import asyncio
+import hashlib
 import httpx
 import os
 import json
@@ -48,6 +49,18 @@ def a2a_task_failed(result_data: Any) -> bool:
     result = result_data.get("result") if isinstance(result_data, dict) else None
     status = result.get("status") if isinstance(result, dict) else None
     return isinstance(status, dict) and status.get("state") in ("failed", "rejected")
+
+
+def mcp_context_id(user_id: str, agent_name: str, session_id: str) -> str:
+    """
+    The A2A context of a caller's session_id with an agent.
+
+    ADK continues whatever conversation has the context id it is given, as the user
+    A2A_USER_<context id>. So the caller never picks it: it is made from who they are,
+    and the same session_id of two callers is two conversations.
+    """
+    key = json.dumps([user_id, agent_name, session_id]).encode()
+    return f"mcp-{hashlib.sha256(key).hexdigest()}"
 
 
 class AgentMCPProtocolHandler:
@@ -208,7 +221,7 @@ class AgentMCPProtocolHandler:
                         },
                         "session_id": {
                             "type": "string",
-                            "description": "Optional session ID for maintaining conversation context"
+                            "description": "Optional: calls with the same session_id continue one conversation"
                         }
                     },
                     "required": ["message"]
@@ -216,8 +229,9 @@ class AgentMCPProtocolHandler:
             }
         ]
     
-    async def call_mcp_tool(self, tool_name: str, arguments: Dict[str, Any], request_id: int = 1) -> Dict[str, Any]:
-        """Call an agent via MCP protocol"""
+    async def call_mcp_tool(self, tool_name: str, arguments: Dict[str, Any], request_id: int = 1,
+                            user_id: str = "") -> Dict[str, Any]:
+        """Call an agent via MCP protocol, for the caller user_id"""
         if not self.agent_available:
             raise HTTPException(status_code=503, detail=f"Agent MCP server for {self.agent_name} not available")
         
@@ -244,6 +258,8 @@ class AgentMCPProtocolHandler:
             }
         
         session_id = arguments.get("session_id")
+        if session_id is not None and not isinstance(session_id, str):
+            return self._error(request_id, -32602, "session_id must be a string")
         
         try:
             # Call agent via A2A endpoint on ADK server
@@ -270,9 +286,10 @@ class AgentMCPProtocolHandler:
                 "id": 1
             }
             
-            # Add session context if provided
-            if session_id:
-                a2a_payload["params"]["sessionId"] = session_id
+            # The caller's conversation of that name; without one, each call is its own
+            if session_id and user_id:
+                a2a_payload["params"]["message"]["contextId"] = mcp_context_id(
+                    user_id, self.agent_name, session_id)
             
             from shared.utils.run_surface import SURFACE_HEADER
             async with httpx.AsyncClient(timeout=300.0) as client:
@@ -361,13 +378,13 @@ class AgentMCPProtocolHandler:
                 }
             }
     
-    async def handle_mcp_request(self, request: Request) -> Union[Dict[str, Any], Response]:
-        """Answer an MCP message posted to the server's endpoint"""
+    async def handle_mcp_request(self, request: Request, user_id: str = "") -> Union[Dict[str, Any], Response]:
+        """Answer an MCP message posted to the server's endpoint by user_id"""
         return await dispatch(request, {
             "initialize": lambda params, request_id: self.get_mcp_initialize(request_id),
             "tools/list": lambda params, request_id: self.get_mcp_tools_list(request_id),
             "tools/call": lambda params, request_id: self.call_mcp_tool(
-                params.get("name"), arguments_of(params), request_id),
+                params.get("name"), arguments_of(params), request_id, user_id),
             "prompts/list": lambda params, request_id: self.get_mcp_prompts_list(request_id),
             "prompts/get": lambda params, request_id: self.get_mcp_prompt(
                 params.get("name"), arguments_of(params), request_id),

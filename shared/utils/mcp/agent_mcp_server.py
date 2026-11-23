@@ -63,7 +63,7 @@ class AgentMCPServer:
                 tool_name = params.get("name")
                 arguments = params.get("arguments", {})
                 request_id = body.get("id", 1)
-                return await self.mcp_handler.call_mcp_tool(tool_name, arguments, request_id)
+                return await self.mcp_handler.call_mcp_tool(tool_name, arguments, request_id, user)
             except Exception as e:
                 return {
                     "jsonrpc": "2.0",
@@ -84,7 +84,7 @@ class AgentMCPServer:
         @self.app.post(f"{base_path}", tags=[f"MCP - Agent: {self.agent_name}"])
         async def agent_mcp_protocol_handler(request: Request, user: str = Depends(require_user)):
             """Handle Agent MCP protocol requests at the root endpoint"""
-            return await self.mcp_handler.handle_mcp_request(request)
+            return await self.mcp_handler.handle_mcp_request(request, user)
 
         @self.app.options(f"{base_path}")
         async def agent_mcp_options():

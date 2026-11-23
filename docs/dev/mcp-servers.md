@@ -134,7 +134,7 @@ recorded as an MCP run's, answered in the inbox ([Approval requests](approvals.m
 - `call_{agent_name}_agent` - Call the agent with a message
   - **Parameters:**
     - `message` (required): The message to send to the agent
-    - `session_id` (optional): accepted, but has no effect yet: every call is a conversation of its own
+    - `session_id` (optional): calls of one caller with the same `session_id` continue one conversation; without it, each call is a conversation of its own. The A2A context is made from the caller, the agent and the `session_id` (`mcp_context_id`), so the same `session_id` of another caller is another conversation
   - **Returns:** Agent's response as text content. A run that failed has `isError: true` and the error as its text
 
 **Prompt and resource (1 each per agent):**
@@ -311,12 +311,13 @@ External MCP servers are created via `create_mcp_tools_from_config()`, which dis
 - **Protocol:** JSON-RPC 2.0
 - **MCP Version:** `2024-11-05`, whatever version the client asks for
 - **Transport:** JSON-RPC over `POST`, each answered in its own response with JSON. The servers send nothing on their own, so a `GET` that asks for `text/event-stream` gets 405, which MCP clients expect. `GET .../sse` sends keep-alives in MATE's own form; a client on the legacy HTTP+SSE transport can't connect to it
+- **Runtime:** an agent's tool call goes over A2A, which only the ADK runtime serves. With `AGENT_FRAMEWORK=langgraph` the agent servers list their tools, but a call answers "Agent call failed (HTTP 404)"
 - **Messages:** `shared/utils/tools/mcp_jsonrpc.py` reads them for the three servers:
   - a `notifications/...` message, and a response of the client, get 202 with no body;
   - `ping` gets an empty result;
   - a body that isn't JSON or isn't one message (a batch) gets 400;
   - a request without an `id` is answered with id 1
-- **Checked with** the MCP Python SDK's client (1.30): initialize, ping, tools, prompts, resources, and a tool call that succeeds and one that fails
+- **Checked with** the MCP Python SDK's client (1.30 and 2.3.0) and MCP Inspector 2.13.0, on streamable HTTP: initialize, ping, tools, prompts, resources, and a tool call that succeeds and one that fails. All accept `2024-11-05`; the newer ones try `server/discover` first and go on with `initialize`
 - **CORS:** Enabled for web-based MCP clients
 - **Authentication:** Every endpoint except health and CORS preflight requires a caller. Agent servers, `GET /mcp` and `/gdrive/mcp` take a personal access token, Basic auth, the dashboard's login token or a session ([Who may call](#who-may-call)); `/images/mcp` takes a signed-in dashboard user and no personal access tokens
 - **Availability:** both built-in servers answer 503 while their dependencies aren't configured; the image server's health check reports `degraded` with the reason
