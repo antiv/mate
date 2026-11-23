@@ -232,7 +232,7 @@ class TestAdkPlugin(_Database):
         self.assertEqual(self.rows(), [])
 
     def test_the_answer_in_the_users_message_decides_the_row(self):
-        self.record()
+        self.record(user_id="alice")
         message = types.Content(role="user", parts=[types.Part(function_response=types.FunctionResponse(
             id="adk-c1", name="adk_request_confirmation", response={"confirmed": False}))])
         self.ctx.user_id = "alice"
@@ -273,9 +273,22 @@ class TestLangGraph(_Database):
     def test_the_answer_decides_the_row(self):
         from shared.utils.langgraph.executor import _gate_decisions
         self.record(confirmation_call_id="adk-confirm-call_1")
-        allowed = asyncio.run(_gate_decisions({"adk-confirm-call_1": True}, "s1", "alice"))
+        allowed = asyncio.run(_gate_decisions({"adk-confirm-call_1": True}, "refunds", "u1", "s1"))
         self.assertEqual(allowed, {"adk-confirm-call_1": True})
         self.assertEqual(self.rows()[0].status, "approved")
+
+
+    def test_two_calls_with_one_id_are_two_requests(self):
+        from shared.utils.langgraph.hitl import confirmation_call_id
+        for amount in (5, 5000):
+            args = {"amount": amount}
+            self.record(confirmation_call_id=confirmation_call_id("refund:0", "issue_refund", args),
+                        args={"originalFunctionCall": {"id": "refund:0", "name": "issue_refund", "args": args}})
+        self.assertEqual([r.get_tool_args() for r in self.rows()], [{"amount": 5}, {"amount": 5000}])
+
+    def test_a_long_tool_call_id_is_cut_to_its_column(self):
+        self.record(args={"originalFunctionCall": {"id": "call_" + "x" * 900, "name": "issue_refund", "args": {}}})
+        self.assertEqual(len(self.rows()[0].tool_call_id), 255)
 
 
 class TestTriggerRunner(unittest.TestCase):

@@ -79,6 +79,11 @@ dashboard:
 | **Files** | Documents the agent can search. |
 | **Appearance** | Title, greeting, theme, colour, icon, whether visitors can attach files, and whether the page's address and title are passed to the agent. |
 
+Where attaching is on, visitors can send images, text files and PDFs, at most 5 PDFs in a message. The server
+reads a PDF's text for models that can't take the file itself. A PDF over 10 MB, or one
+that takes longer than 15 seconds to read, reaches the agent as a note that it could not be
+read.
+
 The admin page is opened with its own admin key, separate from the key in the embed
 code. Treat that link as a password: whoever has it can rewrite the agent's
 instruction.

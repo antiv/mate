@@ -450,7 +450,7 @@ async def proxy_adk(request: Request, path: str, username: str = Depends(get_aut
                         model_name = os.getenv("MODEL_NAME", "")
                         
                     from server.widget_routes import prepare_attachments
-                    processed_parts = prepare_attachments(message_parts, model_name)
+                    processed_parts = await asyncio.to_thread(prepare_attachments, message_parts, model_name)
 
                     payload["new_message"]["parts"] = processed_parts
                     body = json.dumps(payload).encode("utf-8")

@@ -9,6 +9,7 @@ Provides:
 - Dashboard endpoints for widget key CRUD
 """
 
+import asyncio
 import json
 import logging
 import os
@@ -66,21 +67,17 @@ _LANG_NAMES: dict = {
 
 
 import base64
-import io
-import PyPDF2
+
+# Each PDF of a message may take pdf_text.TIMEOUT_SECONDS
+MAX_PDFS_PER_MESSAGE = 5
+
 
 def extract_text_from_pdf_base64(base64_data: str) -> str:
+    from shared.utils import pdf_text
     try:
-        pdf_bytes = base64.b64decode(base64_data)
-        pdf_file = io.BytesIO(pdf_bytes)
-        pdf_reader = PyPDF2.PdfReader(pdf_file)
-        text_parts = []
-        for page_num in range(len(pdf_reader.pages)):
-            page = pdf_reader.pages[page_num]
-            text = page.extract_text()
-            if text:
-                text_parts.append(text)
-        return "\n".join(text_parts).strip()
+        if len(base64_data) > pdf_text.MAX_BYTES * 4 // 3 + 4:
+            raise pdf_text.PdfError(f"the file is larger than {pdf_text.MAX_BYTES // (1024 * 1024)} MB")
+        return pdf_text.pdf_text(base64.b64decode(base64_data))
     except Exception as e:
         return f"[Error extracting text from PDF: {str(e)}]"
 
@@ -145,8 +142,13 @@ def prepare_attachments(message_parts: list, model_name: str) -> list:
     The message's parts ready for the model: images as they are, a PDF as it is
     for Gemini and as its text otherwise, a text file as its text. 400 for any
     other file, and for an image when the model can't take one. Used by the
-    widget's chat and the proxied Work Room chat.
+    widget's chat and the proxied Work Room chat. Reading a PDF takes time: call
+    it off the event loop.
     """
+    pdfs = sum(1 for part in message_parts if isinstance(part, dict) and "inline_data" in part
+               and part["inline_data"].get("mime_type") == "application/pdf")
+    if pdfs > MAX_PDFS_PER_MESSAGE:
+        raise HTTPException(status_code=400, detail=f"At most {MAX_PDFS_PER_MESSAGE} PDF files per message.")
     has_images = False
     processed_parts = []
     for part in message_parts:
@@ -575,7 +577,7 @@ async def widget_chat(request: Request, wk: WidgetApiKey = Depends(verify_widget
     if not model_name:
         model_name = os.getenv("MODEL_NAME", "")
 
-    message_parts = prepare_attachments(message_parts, model_name)
+    message_parts = await asyncio.to_thread(prepare_attachments, message_parts, model_name)
 
     adk_payload = {
         "app_name": app_name,

@@ -15,7 +15,7 @@ from typing import Any, AsyncGenerator, AsyncIterator, Dict, Iterator, Optional,
 
 from langchain_core.messages import AIMessage, AIMessageChunk, ToolMessage
 
-from shared.utils.langgraph.hitl import confirmation_call_id
+from shared.utils.langgraph.hitl import CONFIRMATION_ID_KEY
 
 logger = logging.getLogger(__name__)
 
@@ -136,12 +136,11 @@ def model_response_events(
 def interrupt_to_event(interrupt_value: Any, author: str, invocation_id: str) -> Dict[str, Any]:
     """HITL: a paused require_confirmation tool → adk_request_confirmation functionCall."""
     payload = interrupt_value if isinstance(interrupt_value, dict) else {"value": interrupt_value}
-    original_call = payload.get("originalFunctionCall") or {}
     event = _new_event(author, invocation_id)
     event["content"] = {"role": "model", "parts": [{"functionCall": {
-        "id": confirmation_call_id(original_call["id"]) if original_call.get("id") else str(uuid.uuid4()),
+        "id": payload.get(CONFIRMATION_ID_KEY) or str(uuid.uuid4()),
         "name": CONFIRMATION_CALL_NAME,
-        "args": payload,
+        "args": {k: v for k, v in payload.items() if k != CONFIRMATION_ID_KEY},
     }}]}
     return event
 

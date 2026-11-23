@@ -25,6 +25,12 @@ CALLS = [
 ]
 
 
+def _id(call_id: str) -> str:
+    """The confirmation call id of one of CALLS."""
+    call, = [c for c in CALLS if c["id"] == call_id]
+    return confirmation_call_id(call["id"], call["name"], call["args"])
+
+
 def create_block(label: str) -> str:
     """Create a block."""
     return f"created {label}"
@@ -79,7 +85,7 @@ class TestParallelConfirmations(unittest.TestCase):
             pending = pending_confirmations(await graph.aget_state(config))
             self.assertTrue(pending)
             self.assertTrue({p["confirmation_id"] for p in pending}
-                            <= {"adk-confirm-call_1", "adk-confirm-call_2"})
+                            <= {_id("call_1"), _id("call_2")})
         asyncio.run(run())
 
     def test_answering_one_call_runs_only_that_call(self):
@@ -87,13 +93,13 @@ class TestParallelConfirmations(unittest.TestCase):
             graph, call = _graph()
             config = {"configurable": {"thread_id": thread_id}}
             await graph.ainvoke({"messages": [call]}, config=config)
-            await _answer(graph, config, {confirmation_call_id("call_2"): True})
+            await _answer(graph, config, {_id("call_2"): True})
             state = await graph.aget_state(config)
             self.assertNotIn("call_1", _tool_results(state.values))
             self.assertEqual([p["confirmation_id"] for p in pending_confirmations(state)],
-                             [confirmation_call_id("call_1")])
+                             [_id("call_1")])
 
-            await _answer(graph, config, {confirmation_call_id("call_1"): False})
+            await _answer(graph, config, {_id("call_1"): False})
             state = await graph.aget_state(config)
             self.assertEqual(pending_confirmations(state), [])
             results = _tool_results(state.values)
@@ -109,8 +115,8 @@ class TestParallelConfirmations(unittest.TestCase):
             graph, call = _graph()
             config = {"configurable": {"thread_id": thread_id}}
             await graph.ainvoke({"messages": [call]}, config=config)
-            await _answer(graph, config, {confirmation_call_id("call_1"): True,
-                                          confirmation_call_id("call_2"): False})
+            await _answer(graph, config, {_id("call_1"): True,
+                                          _id("call_2"): False})
             state = await graph.aget_state(config)
             self.assertEqual(pending_confirmations(state), [])
             results = _tool_results(state.values)
@@ -125,7 +131,17 @@ class TestParallelConfirmations(unittest.TestCase):
             graph, call = _graph()
             config = {"configurable": {"thread_id": "stale"}}
             await graph.ainvoke({"messages": [call]}, config=config)
-            self.assertEqual(await _resume_map(graph, config, {}, {"adk-confirm-call_9": True}), {})
+            self.assertEqual(await _resume_map(graph, config, {}, {"adk-confirm-nothing": True}), {})
+        asyncio.run(run())
+
+    def test_an_approval_does_not_run_another_call_with_the_same_id(self):
+        async def run():
+            graph, call = _graph()
+            config = {"configurable": {"thread_id": "same-id"}}
+            await graph.ainvoke({"messages": [call]}, config=config)
+            other = confirmation_call_id("call_1", "create_block", {"label": "something else"})
+            self.assertNotEqual(other, _id("call_1"))
+            self.assertEqual(await _resume_map(graph, config, {}, {other: True}), {})
         asyncio.run(run())
 
     def test_the_model_never_sees_the_injected_call_id(self):
@@ -168,7 +184,7 @@ class TestResumeValue(unittest.TestCase):
         class _I:
             def __init__(self, id_, call_id):
                 self.id = id_
-                self.value = {"originalFunctionCall": {"id": call_id}}
+                self.value = {"confirmationId": _id(call_id), "originalFunctionCall": {"id": call_id}}
 
         class _T:
             def __init__(self, interrupts):
@@ -181,7 +197,7 @@ class TestResumeValue(unittest.TestCase):
             async def aget_state(self, config):
                 return _S()
 
-        decisions = {confirmation_call_id("call_1"): True}
+        decisions = {_id("call_1"): True}
         self.assertEqual(asyncio.run(_resume_map(_G(), {}, {}, decisions)),
                          {"int-1": {CONFIRMATIONS_KEY: decisions}})
 

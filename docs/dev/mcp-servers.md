@@ -67,7 +67,7 @@ platform feature (the default workspace always); another workspace's token gets 
 **Available Tools (7):**
 - `list_files_in_folder` - List all files in a Google Drive folder
   - Uses `GOOGLE_DRIVE_FOLDER_ID` env var if folder_id not provided
-- `read_google_doc` - Read content from a Google Doc/PDF/text file by file ID
+- `read_google_doc` - Read content from a Google Doc/PDF/text file by file ID. A PDF is read up to 50 MB, for at most 15 seconds ([Attached files](architecture.md#attached-files))
 - `read_google_doc_by_name` - Read content from a Google Doc by searching for its name in a folder
 - `search_files` - Search for files in a Google Drive folder using a query
 - `get_file_metadata` - Get metadata for a specific Google Drive file

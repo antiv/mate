@@ -14,7 +14,7 @@ jinja2
 google-auth
 google-auth-httplib2
 google-api-python-client
-PyPDF2
+pypdf
 openai
 prometheus-client
 prometheus-fastapi-instrumentator

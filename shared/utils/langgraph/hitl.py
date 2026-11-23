@@ -9,7 +9,9 @@ frontend shows an approve/reject card, and the answer comes back through
 """
 
 import functools
+import hashlib
 import inspect
+import json
 import logging
 import uuid
 from typing import Annotated, Any, Callable, Dict, List
@@ -24,13 +26,20 @@ CONFIRMATION_RESPONSE_NAME = "adk_request_confirmation"
 CONFIRMATIONS_KEY = "confirmations"
 
 
-def confirmation_call_id(tool_call_id: str) -> str:
+# Where a pause keeps its confirmation call id; not part of what the chat is sent
+CONFIRMATION_ID_KEY = "confirmationId"
+
+
+def confirmation_call_id(tool_call_id: str, tool_name: str, args: Dict[str, Any]) -> str:
     """Id of the adk_request_confirmation call for a tool call; the answer carries it.
 
-    Derived from the model's tool call id, so it stays the same each time
-    LangGraph re-runs the paused tool, and is distinct from it, as on ADK.
+    Derived from the call, so it stays the same each time LangGraph re-runs the
+    paused tool. The tool and its arguments are part of it: some models give
+    two calls of a conversation the same id, and an approval of one must not
+    run the other.
     """
-    return f"adk-confirm-{tool_call_id}"
+    call = json.dumps([tool_call_id, tool_name, args], sort_keys=True, default=str)
+    return f"adk-confirm-{hashlib.sha256(call.encode('utf-8')).hexdigest()[:32]}"
 
 
 def wrap_with_confirmation(fn: Callable) -> Callable:
@@ -43,13 +52,11 @@ def wrap_with_confirmation(fn: Callable) -> Callable:
 
         tool_name = getattr(fn, "__name__", "tool")
         call_id = tool_call_id or str(uuid.uuid4())
-        confirmation_id = confirmation_call_id(call_id)
+        tool_args = {k: v for k, v in kwargs.items() if k != "tool_context"}
+        confirmation_id = confirmation_call_id(call_id, tool_name, tool_args)
         pause = {
-            "originalFunctionCall": {
-                "id": call_id,
-                "name": tool_name,
-                "args": {k: v for k, v in kwargs.items() if k != "tool_context"},
-            },
+            CONFIRMATION_ID_KEY: confirmation_id,
+            "originalFunctionCall": {"id": call_id, "name": tool_name, "args": tool_args},
             "toolConfirmation": {
                 "hint": f"Please approve or reject the execution of '{tool_name}'.",
                 "confirmed": False,
@@ -134,7 +141,7 @@ def pending_confirmations(state: Any) -> List[Dict[str, Any]]:
             if isinstance(call, dict) and call.get("id") and call["id"] not in finished:
                 pending.append({
                     "interrupt_id": getattr(pending_interrupt, "id", None),
-                    "confirmation_id": confirmation_call_id(call["id"]),
+                    "confirmation_id": value.get(CONFIRMATION_ID_KEY),
                 })
     return pending
 

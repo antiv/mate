@@ -399,6 +399,11 @@ A code-review at `high` over `2dd6826..2c3e648` (phases 1 to 3b). Each finding w
 
 **Not taken:** "a dynamic sub-agent takes its root's settings". Such an agent runs in a `Runner` of its own, without the plugin, so its request never reaches a chat or the inbox, and the tool doesn't run.
 
+### Found by the check before 2.1.0
+
+- **An answer was matched by session and call id only.** Two users may have sessions with the same id; `gate_answer` now also matches the app and the user.
+- **LangGraph's confirmation id was the model's tool call id.** Where a model repeats an id in a session, the second call kept the first one's request and arguments. The id is now a hash of the tool call id, the tool and its arguments (`adk-confirm-<hash>`).
+
 ## Phases
 
 1. **Table, capture and history.** The table, the plugin and translator hooks, the

@@ -92,7 +92,8 @@ def parse_confirmation_call(call_id: Optional[str], args: Any) -> Optional[Dict[
         return None
     return {
         "confirmation_call_id": str(call_id),
-        "tool_call_id": _get(original, "id"),
+        # The column's length: Gemini's ids carry a thought signature on some providers
+        "tool_call_id": str(_get(original, "id") or "")[:255] or None,
         "tool_name": str(tool_name),
         "tool_args": _get(original, "args"),
         "hint": _get(confirmation, "hint") or None,
@@ -307,10 +308,13 @@ def answering(request_id: Optional[int]) -> str:
         session.close()
 
 
-def gate_answer(*, session_id: str, confirmation_call_id: str, confirmed: bool,
-                answered_by: Optional[str]) -> Optional[bool]:
+def gate_answer(*, app_name: str, user_id: str, session_id: str, confirmation_call_id: str,
+                confirmed: bool) -> Optional[bool]:
     """
     The answer a run may receive for a confirmation call, or None when it may receive none.
+
+    A request is answered in the run that made it: the agent's app, the user and the
+    session. A session id alone is not one run, as two users may have the same.
 
     - No row, or no database to read it from: None. Without the row nobody can
       tell whether the chat may answer, so the check fails closed.
@@ -327,7 +331,8 @@ def gate_answer(*, session_id: str, confirmation_call_id: str, confirmed: bool,
         return None
     try:
         row = (session.query(ApprovalRequest)
-               .filter_by(session_id=session_id, confirmation_call_id=confirmation_call_id).first())
+               .filter_by(app_name=app_name, user_id=user_id, session_id=session_id,
+                          confirmation_call_id=confirmation_call_id).first())
         if not row:
             logger.warning("Approval answer dropped: no request recorded for call %s", confirmation_call_id)
             return None
@@ -344,7 +349,7 @@ def gate_answer(*, session_id: str, confirmation_call_id: str, confirmed: bool,
             logger.info("Approval request %s: the chat's answer dropped; the inbox answers it", request_id)
             return None
         if record_decision(session_id=session_id, confirmation_call_id=confirmation_call_id,
-                           confirmed=confirmed, decided_by=answered_by, via="chat"):
+                           confirmed=confirmed, decided_by=user_id, via="chat"):
             return confirmed
         # Decided meanwhile, in the inbox: what it decided, if not yet sent
     return _claim_answer(request_id)
