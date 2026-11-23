@@ -27,7 +27,7 @@ from fastapi.testclient import TestClient
 from shared.test.test_cross_workspace import (
     A, A_ROOT, B_MARKERS, _TwoWorkspaces, _platform_admin, auth_server,
 )
-from server import oauth_routes
+from server import oauth_routes, slack_routes
 from server.request_context import WORKSPACE_HEADER
 from shared.utils.trigger_runner import TriggerRunner
 
@@ -56,6 +56,8 @@ class TestPhase3EndToEnd(_TwoWorkspaces):
         self.reached: List[str] = []
 
         def agent_server(request: httpx.Request) -> httpx.Response:
+            if request.url == slack_routes.SLACK_AUTH_TEST_URL:
+                return httpx.Response(200, json={"ok": True, "team_id": TEAM, "team": "Acme"})
             self.reached.append(request.url.path)
             if request.url.path == "/list-apps":
                 return httpx.Response(200, json=[AGENT, A_ROOT])
@@ -165,7 +167,7 @@ class TestPhase3EndToEnd(_TwoWorkspaces):
         widget_key = self._ok(owner.post("/dashboard/api/widget-keys", json={
             "project_id": project_id, "agent_name": AGENT}))["key"]["api_key"]
         self._ok(owner.post("/dashboard/api/channel-integrations", json={
-            "project_id": project_id, "agent_name": AGENT, "team_id": TEAM,
+            "project_id": project_id, "agent_name": AGENT,
             "bot_token": "xoxb-acme", "signing_secret": SLACK_SECRET}))
         trigger = self._ok(owner.post("/dashboard/api/triggers", json={
             "name": "nightly", "agent_name": AGENT, "project_id": project_id,

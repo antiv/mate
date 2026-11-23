@@ -15,8 +15,9 @@ it in a channel or by sending it a direct message. Integrations are in
 **Studio → Integrations**. Slack is the platform available today; the others in the
 list are marked as coming soon.
 
-You need a MATE address that Slack can reach from the internet, and three values
-from Slack: the **Team ID**, a **Bot User OAuth Token** and the **Signing Secret**.
+You need a MATE address that Slack can reach from the internet, and two values from
+Slack: a **Bot User OAuth Token** and the **Signing Secret**. MATE reads the team id
+from the token, so MATE must also be able to reach `slack.com`.
 
 ## 1. Create the Slack app
 
@@ -27,7 +28,6 @@ from Slack: the **Team ID**, a **Bot User OAuth Token** and the **Signing Secret
    and `chat:write`.
 4. Click **Install to Workspace**, then copy the **Bot User OAuth Token**. It starts
    with `xoxb-`.
-5. Find the **Team ID** of your workspace. It starts with `T`.
 
 ## 2. Create the integration in MATE
 
@@ -35,11 +35,16 @@ from Slack: the **Team ID**, a **Bot User OAuth Token** and the **Signing Secret
    so the list must include `user`.
 2. On the Integrations page, copy the **Slack Event Request URL** shown at the top.
 3. Click **New Integration**, choose **Slack**, the project and the root agent, and
-   enter the Team ID, the bot token and the signing secret.
-4. Leave **Active** ticked and click **Create**.
+   enter the bot token and the signing secret.
+4. Leave **Active** ticked and click **Create**. MATE asks Slack which team the token
+   is of; the list then shows the team's name and id.
+
+If Slack refuses the token, nothing is saved and the message names Slack's reason, such
+as `invalid_auth` or `token_revoked`. If Slack cannot be reached, nothing is saved
+either; try again later.
 
 A Slack team connects to one integration on the whole installation, because Slack
-names only the team when it delivers a message. A Team ID that is already connected,
+names only the team when it delivers a message. A team that is already connected,
 in any workspace, is refused with "This Slack team is already connected", which doesn't
 say where. To move the team to another agent, edit the existing integration. The first
 workspace to connect a team keeps it; if another workspace connected yours, a platform
@@ -48,7 +53,12 @@ of the workspace you are working in, and the list shows only that workspace's
 integrations.
 
 When you edit the integration later, leave the two secret fields empty to keep the
-stored values.
+stored values. The team id is shown but cannot be changed by hand: a new bot token is
+checked with Slack as above, and the integration takes that token's team.
+
+In MATE 2.0 and earlier the team id was typed in. Such an integration works as before until
+you edit it. Saving it as active then checks the stored token and takes the token's
+team; saving it as inactive skips the check.
 
 ## 3. Point Slack at MATE
 
@@ -133,6 +143,7 @@ MATE running locally, open a tunnel to port 8000 with a tool such as `ngrok` or
 
 - **Slack does not verify the URL.** MATE is not reachable from the internet at that
   address, or the signing secret is wrong.
-- **The bot does not answer.** The integration is not **Active**, the Team ID does not
-  match (the server log names the team id it received), or the agent's Allowed Roles
-  does not include `user`.
+- **The bot does not answer.** The integration is not **Active**, its team id is not
+  the one Slack sends (the server log names the team id it received; edit and save an
+  integration from MATE 2.0 or earlier, or enter the bot token of the right workspace),
+  or the agent's Allowed Roles does not include `user`.

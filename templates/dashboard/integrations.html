@@ -100,20 +100,19 @@
                     </div>
                 </div>
 
-                <!-- Team ID -->
-                <div>
-                    <label for="integrationTeamId" class="block text-xs font-medium text-gray-700 dark:text-gray-300">Slack Workspace / Team ID *</label>
-                    <input type="text" id="integrationTeamId" placeholder="T01234567"
-                        class="mt-1 block w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-blue-500">
-                    <p class="mt-0.5 text-xs text-gray-400">Found in Slack app settings, or the <code>team_id</code> of an incoming event</p>
-                </div>
-
                 <!-- Bot token -->
                 <div>
                     <label for="integrationBotToken" class="block text-xs font-medium text-gray-700 dark:text-gray-300">Bot User OAuth Token *</label>
                     <input type="password" id="integrationBotToken" autocomplete="off" placeholder="xoxb-…"
                         class="mt-1 block w-full border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded px-2 py-1.5 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-blue-500">
                     <p class="mt-0.5 text-xs text-gray-400">Used to post replies. Needs <code>chat:write</code> scope.</p>
+                </div>
+
+                <!-- Team, read from the bot token -->
+                <div>
+                    <p class="block text-xs font-medium text-gray-700 dark:text-gray-300">Slack Workspace / Team ID</p>
+                    <p id="integrationTeam" class="mt-1 text-xs text-gray-900 dark:text-white"></p>
+                    <p id="integrationTeamNote" class="mt-0.5 text-xs text-gray-400"></p>
                 </div>
 
                 <!-- Signing secret -->
@@ -195,7 +194,7 @@ const IntegrationsPage = {
                     <td class="px-4 py-2 font-medium text-gray-900 dark:text-white capitalize">${escHtml(r.platform)}</td>
                     <td class="px-4 py-2 text-gray-700 dark:text-gray-300">${r.label ? escHtml(r.label) : '<span class="text-gray-400">—</span>'}</td>
                     <td class="px-4 py-2 text-gray-600 dark:text-gray-400 font-mono">${escHtml(r.agent_name)}</td>
-                    <td class="px-4 py-2 text-gray-500 dark:text-gray-400 font-mono">${r.team_id ? escHtml(r.team_id) : '<span class="text-gray-400">—</span>'}</td>
+                    <td class="px-4 py-2 text-gray-500 dark:text-gray-400">${r.team_name ? escHtml(r.team_name) + ' · ' : ''}${r.team_id ? `<span class="font-mono">${escHtml(r.team_id)}</span>` : '<span class="text-gray-400">—</span>'}</td>
                     <td class="px-4 py-2 text-center">${active}</td>
                     <td class="px-4 py-2 text-right">
                         <div class="flex items-center justify-end gap-3">
@@ -232,6 +231,16 @@ const IntegrationsPage = {
             : '<option value="">— no root agents in project —</option>';
     },
 
+    // Only shown: the server reads the team from the bot token
+    showTeam(row) {
+        document.getElementById('integrationTeam').textContent =
+            row ? [row.team_name, row.team_id].filter(Boolean).join(' · ') || '—' : '—';
+        document.getElementById('integrationTeamNote').textContent =
+            !row ? 'Read from the bot token when you create the integration.'
+                : row.team_name ? 'Read from the bot token. A new token may change it.'
+                    : 'Not checked with Slack yet. Saving an active integration reads it from the bot token.';
+    },
+
     openCreateModal() {
         this.populateProjects();
         document.getElementById('integrationModalTitle').textContent = 'New Integration';
@@ -241,7 +250,7 @@ const IntegrationsPage = {
         document.getElementById('integrationPlatform').value = 'slack';
         document.getElementById('integrationProject').value = '';
         document.getElementById('integrationAgent').innerHTML = '<option value="">— select project first —</option>';
-        document.getElementById('integrationTeamId').value = '';
+        this.showTeam(null);
         document.getElementById('integrationBotToken').value = '';
         document.getElementById('integrationSigningSecret').value = '';
         document.getElementById('integrationActive').checked = true;
@@ -258,7 +267,7 @@ const IntegrationsPage = {
         document.getElementById('integrationProject').value = row.project_id || '';
         this.onProjectChange();
         document.getElementById('integrationAgent').value = row.agent_name || '';
-        document.getElementById('integrationTeamId').value = row.team_id || '';
+        this.showTeam(row);
         document.getElementById('integrationBotToken').value = '';
         document.getElementById('integrationBotToken').placeholder = '•••••• (unchanged)';
         document.getElementById('integrationSigningSecret').value = '';
@@ -278,12 +287,10 @@ const IntegrationsPage = {
         const isEdit = !!id;
         const project_id = document.getElementById('integrationProject').value;
         const agent_name = document.getElementById('integrationAgent').value;
-        const team_id = document.getElementById('integrationTeamId').value.trim();
         const bot_token = document.getElementById('integrationBotToken').value.trim();
         const signing_secret = document.getElementById('integrationSigningSecret').value.trim();
 
         if (!project_id || !agent_name) { this.notify('Project and agent are required', 'error'); return; }
-        if (!team_id) { this.notify('Team ID is required', 'error'); return; }
         if (!isEdit && (!bot_token || !signing_secret)) { this.notify('Bot token and signing secret are required', 'error'); return; }
 
         const payload = {
@@ -291,7 +298,6 @@ const IntegrationsPage = {
             project_id: parseInt(project_id, 10),
             agent_name,
             label: document.getElementById('integrationLabel').value.trim(),
-            team_id,
             is_active: document.getElementById('integrationActive').checked,
         };
         // Only send secrets when provided (blank on edit = keep existing).

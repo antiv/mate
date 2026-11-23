@@ -302,8 +302,11 @@ the installation (a sign-in, a user change). Through them:
   before. Alert rules measure their own workspace (`docs/dev/alerts.md`).
 
 A Slack team connects to one integration on the installation (`UNIQUE (team_id)`,
-V047): an event names only its team. Creating or editing an integration onto a team
-that is taken answers 409 without saying whose it is. The first workspace to connect
+V047): an event names only its team. The team id is the one Slack's `auth.test` gives
+for the bot token, never the request's, so a workspace cannot connect a team it has no
+token of; a token Slack refuses answers 400, and no answer from Slack 502, with nothing
+saved. A row without `team_name` (V052) was typed in before this and is checked when it
+is next edited, unless the edit leaves it inactive. A token of a team that is taken answers 409 without saying whose it is. The first workspace to connect
 a team keeps it; the 409 tells the caller to ask a platform administrator, who can
 switch to the workspace holding it and delete that integration. An event with no
 team id gets the oldest integration that has none.

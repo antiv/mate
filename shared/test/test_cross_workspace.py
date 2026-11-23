@@ -33,7 +33,7 @@ import unittest
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Set, Tuple
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from fastapi import HTTPException, params
 from fastapi.routing import APIRoute, iter_route_contexts
@@ -50,7 +50,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 # auth_server sets OTEL_SDK_DISABLED on import; keep that out of other tests.
 with patch.dict(os.environ):
     import auth_server
-from server import auth, proxy_routes
+from server import auth, proxy_routes, slack_routes
 from server.dashboard_authz import PROTECTED_PREFIX, WRITE_METHODS, is_platform_only
 from server.request_context import SESSION_WORKSPACE_KEY, WORKSPACE_HEADER, resolve_workspace
 from server.pat_auth import verify_pat_hash
@@ -617,9 +617,9 @@ class TestLogsAndOperations(_TwoWorkspaces):
         self.assertEqual(values, {A: 0, B: 1})
 
     def test_a_slack_team_connects_to_one_integration(self):
-        response = self.client.post("/dashboard/api/channel-integrations", headers=_platform_admin(A),
-                                    json={"project_id": self.ids["project_a"], "agent_name": A_ROOT,
-                                          "team_id": "T_B"})
+        with patch.object(slack_routes, "_slack_team", AsyncMock(return_value=("T_B", "B"))):
+            response = self.client.post("/dashboard/api/channel-integrations", headers=_platform_admin(A),
+                                        json={"project_id": self.ids["project_a"], "agent_name": A_ROOT})
         self.assertEqual(response.status_code, 409)
         # Nor says in which workspace
         self.assertEqual(response.json()["detail"], "This Slack team is already connected. "
@@ -2427,8 +2427,6 @@ class TestSixthReviewOfPhase2(_TwoWorkspaces):
 
     def test_a_slack_user_of_another_workspace_is_not_the_default_one_s(self):
         import asyncio
-        from unittest.mock import AsyncMock
-        from server import slack_routes
         self.assertEqual(slack_routes._slack_user_id("T1", "U1"), "slack_T1_U1")
         self.assertEqual(slack_routes._slack_user_id("T1", "U1", A), "slack_T1_U1")
         self.assertEqual(slack_routes._slack_user_id("T1", "U1", B), f"slack_w{B}_T1_U1")
@@ -2811,7 +2809,8 @@ class TestAgentWithNoConfig(_TwoWorkspaces):
     def test_a_widget_key_or_slack_integration_targets_it_for_a_platform_admin_only(self):
         body = {"json": {"project_id": self.ids["project_a"], "agent_name": self.NO_CONFIG}}
         self.assertEqual(self._as_both("POST", "/dashboard/api/widget-keys", **body)[1], 404)
-        admin, carol = self._as_both("POST", "/dashboard/api/channel-integrations", **body)
+        with patch.object(slack_routes, "_slack_team", AsyncMock(return_value=("T_A", "A"))):
+            admin, carol = self._as_both("POST", "/dashboard/api/channel-integrations", **body)
         self.assertEqual((admin, carol), (200, 404))
 
     def test_it_is_a_parent_for_a_platform_admin_only(self):

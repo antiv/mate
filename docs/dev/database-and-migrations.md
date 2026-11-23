@@ -245,6 +245,8 @@ request context (`docs/dev/auth-and-access.md`, "The workspace of a request"):
   looked up by its team. NULLs are allowed. On a database that has two rows for one
   team the migration fails: the server logs it, starts without it, and tries again
   on the next start. The migration file has the query that finds them.
+- `channel_integrations.team_name` (V052) is the name Slack's `auth.test` gave with the
+  team id. NULL means the team id was typed in before 2.1 and hasn't been checked.
 
 ## Undoing a migration
 
