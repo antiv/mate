@@ -24,7 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Cancellation:** deleting the agent cancels its waiting requests.
   - **Audit:** each decision, expiry and cancellation has its audit entry.
   - **A2A and MCP:** runs are now recorded as `a2a` and `mcp`, not as a chat's.
-  - **The Approvals page** (Control Room → Governance & Access), with a count of the waiting requests beside it in the sidebar:
+  - **The Approvals page** (Control Room → Workspace), with a count of the waiting requests beside it in the sidebar:
     - **Waiting:** the requests the inbox decides. Each opens with its arguments, Approve, Reject and a note, and a link to its session.
     - **History:** every request of the workspace, a chat's included, with its decision, who made it, and how the run went on. It can be filtered by decision and source, searched, and is paged.
   - `GET /dashboard/api/approvals` takes `inbox=true` (leave out a chat's requests) and `q` (search agent, tool and user)
@@ -37,6 +37,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **In the Visual Builder,** the agent panel has an **Approvals** section with a summary and a dialog for all four settings.
   - Migration V051 adds `approver` and `answered_at` to `approval_requests`.
 - **Dashboard components** (dashboard redesign, step 2, #376) - `static/css/components.css` holds `m-` classes for cards, buttons, form fields, badges, switches, notices, dialogs and tables, on the design tokens only, so they are right in both themes without the Tailwind remap. `static/js/data-table.js` is a shared table with search, sorting, pagination and an empty state, for lists a page loads whole and for lists the API pages; `static/js/dialogs.js` opens and closes dialogs, with Escape, focus and Tab kept inside; `static/js/tabs.js` gives tabs their keyboard and ARIA states. See `docs/dev/dashboard-components.md`
+
+- **Each agent has a page** (dashboard redesign, step 4, #376) - `/dashboard/agents/<name>`, opened from the agent's row on Agents and from **Advanced Setup** in the Visual Builder. Its header holds Copy, Open in Visual Builder, Export and Delete, and it has tabs; the tab open is in the address (`#versions`):
+  - **Settings, the agent's editor**, in three columns: the basics on the left, the instruction in a Markdown editor in the centre, and on the right one section each for tools, MCP servers, File Search, memory blocks, guardrails, planner, generation, input/output, model endpoint, AI disclosure and advanced settings. A section says on its line whether it is set (`3 on`), and holds its fields and their JSON, which follow each other as you type. A save bar appears when something changed, and leaving with unsaved changes asks first; each save makes a version, as before
+  - **Pickers instead of JSON** for parent agents (the workspace's other agents) and allowed roles (the roles the workspace's members and agents use, each with how many members hold it; `widget` for an agent on a website)
+  - **New and Copy** use the same editor: `/dashboard/agents/new`, and `/dashboard/agents/new?from=<name>`
+  - **Versions:** the version history with its diff, Rollback, Run Evals and tags
+  - **Sessions:** the conversations with the agent from every surface, with search; a sub-agent shows its root agent's. Open shows one in the Session Inspector
+  - **Evals:** the agent's test cases with their latest result, and the score of each version
+  - **Usage:** the agent's model calls over 24 hours, 7 or 30 days, with calls, tokens and cost per model
+  - **Traces:** the traces that ran the agent
+  - **Channels:** its triggers, widget keys (with their dialog) and Slack integrations
+  - **Test**, for a root agent: a chat with it, the Work Room framed in the page
+  - **API:** `GET /dashboard/api/sessions` takes `exact_app=true` (its `app_name` otherwise matches part of a name), `GET /dashboard/api/usage/logs` takes `agent_name` and then returns `by_model`, and `GET /dashboard/api/traces` takes `agent_name`; both answer 404 for another workspace's agent. `/dashboard/evals?agent=<name>` opens an agent's suite, `/dashboard/traces?trace_id=<id>&hours=<n>` one trace, and `?embed=1` shows a dashboard page without its navigation and sidebar
+  - **Components:** `m-section`, `m-chips`, `m-menu` and `m-savebar` in `static/css/components.css`. See `docs/user/agents.md` and `docs/dev/dashboard-components.md`
 
 ### Security
 
@@ -57,6 +71,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **The Control Room sidebar is grouped by scope** (dashboard redesign, step 3, #376) - **Observability** (Usage, Audit Logs, Guardrail Logs, Sessions), **Workspace** (Approvals, Members, Models and keys, Rate Limits, Alerts) and, for platform administrators, **Platform** (Workspaces, Users, Settings, Migrations), with Documentation at the bottom. "Governance & Access", "Wizard & Commerce" and "System" are gone. The wizard's pages and Shop Orders show under Platform only when in use: a wizard partner, lead or session, or a stored order or an agent's shop with a `partner_key`. They still open by their address. "Platform Overview" is "Overview": it shows the current workspace
+- **The agent side panel is gone** (dashboard redesign, step 4) - creating, editing and copying an agent happen on its page, on Agents and in the Visual Builder alike. Agents is a list again: a row, its pencil, **Add Agent** and its Copy open the page
 - **Triggers page** - built on the new components. The list has a search box, sorting by any column and pages of 25; the trigger dialog keeps focus inside it, closes on Escape and takes the whole screen on a phone
 - **The confirm dialog** (`showConfirm`) moved from `base.html` to `static/js/dialogs.js`, on the dialog component. A question about deleting something starts with focus on Cancel
 - **google-adk 2.11.0 → 2.15.0, LangGraph 1.2.12 → 1.2.22, and the rest of the lock** - the lock takes releases at least a week old, apart from google-adk. litellm goes to 1.105.7, and mcp stays below 2: langchain-mcp-adapters 0.3.2 requires it, and moving MATE's MCP server and client to mcp 2 is its own change
@@ -65,6 +81,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **ADK's dev UI** no longer has a Visual Agent Builder (2.15). MATE's own Visual Builder is not affected
   - **LangGraph's fixes** include a subgraph no longer re-running its finished tasks on resume (1.2.16), and each `interrupt()` in a task getting its own id (1.2.20)
   - Checked with the unit tests, tool approval on both runtimes (one, several in one turn, reject), and a traced turn replayed on ADK 2.11 and 2.15
+
+### Removed
+
+- **Unused code** (#399) - modules nothing imported: the ADK sample guardrails `shared/callbacks/model_guardrail.py`, `tool_guardrail.py` and `mcp_tool_guardrail.py` (the guardrails are `guardrail_callback.py` and `function_call_guardrail.py`), `shared/utils/rbac_agent_factory.py`, `shared/utils/setup_database.py` and `shared/setup_service_account.py`; the report and debug helpers of `token_usage_callback.py`; and single functions no code called. Code that imported them from outside MATE must drop the import
 
 ## [2.0.1] - 2026-11-16
 
