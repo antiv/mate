@@ -64,6 +64,9 @@ A trace is the timeline of one request: every model call, tool call and hand-off
 between agents, with how long each took. Use it when the question is "why was this
 slow" rather than "why was this wrong".
 
+The **Traces** tab of an agent's page lists the traces that ran that agent; **Open**
+shows one here (`/dashboard/traces?trace_id=<id>&hours=<n>`).
+
 **Studio → Traces** lists recent traces with their total duration and number of
 steps, those of the workspace only. A trace records the workspace of the agent whose
 model calls it holds, and is shown in that workspace. A trace that records none, as

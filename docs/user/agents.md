@@ -47,6 +47,15 @@ reload or a link comes back to it.
   [Session Tracking](sessions-and-traces.md). A sub-agent has no conversations of
   its own: the tab lists those of the root agent it works under, and with more than
   one root, a list chooses which.
+- **Evals**: the agent's test cases with their latest result, and the average score
+  and pass rate of each version they ran on. **Open in Evals** opens the agent's
+  suite on the [Evals](evals.md) page, to add or run cases.
+- **Usage**: the model calls the agent made in the last 24 hours, 7 days or 30 days,
+  whoever it answered: a card per model with its calls, tokens and cost, and each
+  call below.
+- **Traces**: the 50 latest traces with a span of the agent. **Open** shows one on
+  the [Traces](sessions-and-traces.md) page. Traces are recorded only with
+  `OTEL_TRACING_ENABLED` and `OTEL_TRACES_DB_EXPORT`.
 
 A new agent has only **Settings** until it is created.
 

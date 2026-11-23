@@ -1054,6 +1054,9 @@ function escAttr(str) {
 document.addEventListener('DOMContentLoaded', () => {
     loadSuites();
     loadRatedDown();
+    // ?agent=<name> opens that agent's suite (the agent page's Evals tab links here)
+    const linked = new URLSearchParams(window.location.search).get('agent');
+    if (linked) selectAgent(linked);
 });
 </script>
 {% endblock %}

@@ -7,11 +7,14 @@ The agent page: /dashboard/agents/<name>, /dashboard/agents/new and its Copy
 import json
 import re
 import unittest
+from datetime import datetime
+
+from sqlalchemy import text
 
 from shared.test.test_cross_workspace import (
     A, A_ROOT, B, B_MARKERS, B_ROOT, BOB, _platform_admin, _signed_in, _TwoWorkspaces,
 )
-from shared.utils.models import AgentConfig, LangGraphSession, WorkspaceMember
+from shared.utils.models import AgentConfig, LangGraphSession, TokenUsageLog, WorkspaceMember
 from shared.utils.workspaces import roles_in_use
 
 import auth_server
@@ -85,6 +88,57 @@ class TestAgentPage(_TwoWorkspaces):
                                                                  runtime="langgraph", **params)["sessions"]}
         self.assertEqual(ids(), {"s-root", "s-root-x"})
         self.assertEqual(ids(exact_app="true"), {"s-root"})
+
+    def test_the_tabs_of_an_agent(self):
+        html = self._get(f"/dashboard/agents/{A_ROOT}").text
+        for tab in ("tab-evals", "tab-usage", "tab-traces"):
+            self.assertIn(f'id="{tab}"', html)
+        self.assertIn(f'href="/dashboard/evals?agent={A_ROOT}"', html)
+
+    def test_usage_of_one_agent_with_totals_per_model(self):
+        session = self.Session()
+        now = datetime.now()
+        for agent, model, tokens, cost in ((A_ROOT, "m1", 10, 0.5), (A_ROOT, "m1", 5, 0.25),
+                                           (A_ROOT, "m2", 7, None), ("ws_a_sub", "m1", 100, 9.0)):
+            session.add(TokenUsageLog(request_id=f"r-{agent}-{tokens}", agent_name=agent, model_name=model,
+                                      prompt_tokens=tokens, response_tokens=1, cost_usd=cost,
+                                      timestamp=now, workspace_id=A))
+        session.commit()
+        session.close()
+        result = self._get_json("/dashboard/api/usage/logs", agent_name=A_ROOT, hours=24)
+        self.assertEqual(result["total_records"], 3)
+        self.assertEqual({log["agent_name"] for log in result["logs"]}, {A_ROOT})
+        by_model = {m["model_name"]: m for m in result["by_model"]}
+        self.assertEqual((by_model["m1"]["calls"], by_model["m1"]["prompt_tokens"], by_model["m1"]["cost_usd"]),
+                         (2, 15, 0.75))
+        self.assertEqual((by_model["m2"]["calls"], by_model["m2"]["cost_usd"]), (1, None))
+        # Without an agent, every agent's, and no totals
+        self.assertNotIn("by_model", self._get_json("/dashboard/api/usage/logs", hours=24))
+        response = self.client.get("/dashboard/api/usage/logs", headers=_platform_admin(A),
+                                   params={"agent_name": B_ROOT})
+        self.assertEqual(response.status_code, 404)
+
+    def test_traces_of_one_agent(self):
+        session = self.Session()
+        session.execute(text(
+            "CREATE TABLE trace_spans (id INTEGER PRIMARY KEY, trace_id TEXT, span_id TEXT, "
+            "parent_span_id TEXT, name TEXT, kind TEXT, start_time DATETIME, end_time DATETIME, "
+            "duration_ms INTEGER, attributes TEXT, status TEXT, error_message TEXT)"))
+        now = datetime.now()
+        for trace, agent in (("trace-root", A_ROOT), ("trace-sub", "ws_a_sub")):
+            attributes = {"gen_ai.agent.name": agent, "mate.workspace.id": A}
+            session.execute(text(
+                "INSERT INTO trace_spans (trace_id, span_id, name, start_time, end_time, attributes) "
+                "VALUES (:t, 's', 'invoke_agent', :st, :st, :a)"),
+                {"t": trace, "st": now, "a": json.dumps(attributes)})
+        session.commit()
+        session.close()
+        traces = lambda **params: sorted(t["trace_id"] for t in self._get_json("/dashboard/api/traces", **params)["traces"])
+        self.assertEqual(traces(), ["trace-root", "trace-sub"])
+        self.assertEqual(traces(agent_name="ws_a_sub"), ["trace-sub"])
+        response = self.client.get("/dashboard/api/traces", headers=_platform_admin(A),
+                                   params={"agent_name": B_ROOT})
+        self.assertEqual(response.status_code, 404)
 
     def _get_json(self, path: str, **params):
         response = self.client.get(path, headers=_platform_admin(A), params=params)

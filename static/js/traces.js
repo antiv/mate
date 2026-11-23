@@ -132,6 +132,9 @@ function escapeHtml(s) {
 
 document.addEventListener('DOMContentLoaded', () => {
     loadTraces();
+    // ?trace_id=<id>&hours=<n> opens one trace (the agent page's Traces tab links here)
+    const linked = new URLSearchParams(window.location.search);
+    if (linked.get('trace_id')) showTraceDetail(linked.get('trace_id'), parseInt(linked.get('hours'), 10) || 24);
     // A click on the backdrop, outside the dialog, closes the trace
     const modalEl = document.getElementById('traceDetailModal');
     if (modalEl) {

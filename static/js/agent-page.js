@@ -15,7 +15,8 @@ mateActions.allow('mateAgentPage.save', 'mateAgentPage.discard',
                   'mateAgentPage.remove', 'mateAgentPage.exportAgent', 'mateAgentPage.approvals',
                   'mateAgentPage.addParent', 'mateAgentPage.removeParent',
                   'mateAgentPage.roleKey', 'mateAgentPage.addRoleFromInput', 'mateAgentPage.removeRole',
-                  'mateAgentPage.clearGuardrails', 'mateAgentPage.reloadSessions');
+                  'mateAgentPage.clearGuardrails', 'mateAgentPage.reloadSessions',
+                  'mateAgentPage.reloadUsage', 'mateAgentPage.reloadTraces');
 
 (function () {
     'use strict';
@@ -499,10 +500,175 @@ mateActions.allow('mateAgentPage.save', 'mateAgentPage.discard',
         if (sessionsTable) sessionsTable.reload({ firstPage: true });
     }
 
+    const when = (value) => MateTable.esc(value ? (typeof formatDateTime === 'function' ? formatDateTime(value) : value) : '—');
+    const percent = (value) => (value === null || value === undefined ? '—' : `${Math.round(value * 100)}%`);
+    const number = (value) => (value === null || value === undefined ? '—' : Number(value).toLocaleString());
+    const cost = (value) => (value === null || value === undefined ? '—' : `$${Number(value).toFixed(value < 0.01 ? 4 : 2)}`);
+
+    async function getJson(url) {
+        const response = await fetch(url, { credentials: 'same-origin' });
+        if (!response.ok) throw new Error(`Not loaded (${response.status})`);
+        return response.json();
+    }
+
+    function truncate(text, length) {
+        text = String(text || '');
+        return text.length > length ? `${text.slice(0, length - 1)}…` : text;
+    }
+
+    // The test cases with their latest result, and the score of each version
+    async function startEvals() {
+        const esc = MateTable.esc;
+        const name = encodeURIComponent(config.name);
+        const latest = (c) => c.latest_result || null;
+        const cases = new MateTable(el('agentEvalsCases'), {
+            noun: ['test case', 'test cases'],
+            label: 'Test cases',
+            empty: 'No test cases yet. Add them in Evals, or from a rated-down answer.',
+            columns: [
+                { key: 'input', label: 'Input', render: (c) => esc(truncate(c.input, 120)) },
+                { key: 'expected_output', label: 'Expected', render: (c) => esc(truncate(c.expected_output, 120)) },
+                { key: 'eval_method', label: 'Method' },
+                { key: 'score', label: 'Latest score', align: 'right', searchable: false,
+                  value: (c) => (latest(c) ? latest(c).score : null),
+                  render: (c) => esc(latest(c) ? percent(latest(c).score) : 'Not run') },
+                { key: 'passed', label: 'Result', searchable: false,
+                  value: (c) => (latest(c) ? (latest(c).passed ? 'passed' : 'failed') : ''),
+                  render: (c) => (!latest(c) ? '—' : latest(c).passed
+                      ? '<span class="m-badge m-badge-success">Passed</span>'
+                      : '<span class="m-badge m-badge-danger">Failed</span>') },
+                { key: 'run_at', label: 'Run', searchable: false,
+                  value: (c) => (latest(c) ? latest(c).run_at : null),
+                  render: (c) => when(latest(c) && latest(c).run_at) },
+            ],
+        });
+        const history = new MateTable(el('agentEvalsHistory'), {
+            noun: ['version', 'versions'],
+            label: 'Score by version',
+            search: false,
+            empty: 'No version has been evaluated yet.',
+            columns: [
+                { key: 'version_number', label: 'Version', render: (h) => `v${esc(h.version_number)}` },
+                { key: 'avg_score', label: 'Average score', align: 'right', render: (h) => esc(percent(h.avg_score)) },
+                { key: 'pass_rate', label: 'Pass rate', align: 'right', render: (h) => esc(percent(h.pass_rate)) },
+                { key: 'run_at', label: 'Last run', render: (h) => when(h.run_at) },
+            ],
+        });
+        try {
+            const [found, scores] = await Promise.all([getJson(`/dashboard/api/evals/agent/${name}`),
+                                                      getJson(`/dashboard/api/evals/agent/${name}/history`)]);
+            cases.setRows(found.test_cases || []);
+            history.setRows((scores.history || []).slice().reverse());
+        } catch (e) {
+            cases.setError(e.message);
+        }
+    }
+
+    // Model calls of the agent: totals per model, and each call
+    let usageTable = null;
+
+    function renderUsageModels(models) {
+        el('agentUsageModels').replaceChildren(...(models || []).map((m) => {
+            const card = document.createElement('div');
+            card.className = 'm-card';
+            card.innerHTML = `<div class="m-card-body agent-usage-model">
+                <span class="m-section-title m-mono">${MateTable.esc(m.model_name || 'unknown model')}</span>
+                <dl class="m-details">
+                    <dt>Calls</dt><dd>${number(m.calls)}</dd>
+                    <dt>Tokens in</dt><dd>${number(m.prompt_tokens)}</dd>
+                    <dt>Tokens out</dt><dd>${number(m.response_tokens)}</dd>
+                    <dt>Cost</dt><dd>${cost(m.cost_usd)}</dd>
+                </dl></div>`;
+            return card;
+        }));
+    }
+
+    function startUsage() {
+        const esc = MateTable.esc;
+        usageTable = new MateTable(el('agentUsageTable'), {
+            noun: ['call', 'calls'],
+            label: 'Model calls',
+            search: false,
+            empty: 'No model calls in this period.',
+            columns: [
+                { key: 'timestamp', label: 'Time', sortable: false, render: (l) => when(l.timestamp) },
+                { key: 'user_id', label: 'User', sortable: false },
+                { key: 'model_name', label: 'Model', sortable: false, className: 'm-mono' },
+                { key: 'prompt_tokens', label: 'In', sortable: false, align: 'right', render: (l) => esc(number(l.prompt_tokens)) },
+                { key: 'response_tokens', label: 'Out', sortable: false, align: 'right', render: (l) => esc(number(l.response_tokens)) },
+                { key: 'cost_usd', label: 'Cost', sortable: false, align: 'right', render: (l) => esc(cost(l.cost_usd)) },
+                { key: 'status', label: 'Status', sortable: false,
+                  render: (l) => (l.status && String(l.status).toUpperCase() !== 'SUCCESS'
+                      ? `<span class="m-badge m-badge-danger" title="${esc(l.error_description || '')}">${esc(l.status)}</span>`
+                      : esc(l.status || '')) },
+            ],
+            fetch: async ({ offset, limit }) => {
+                const params = new URLSearchParams({ agent_name: config.name, hours: el('agentUsageHours').value,
+                                                     page: String(Math.floor(offset / limit) + 1), limit: String(limit) });
+                const result = await getJson(`/dashboard/api/usage/logs?${params}`);
+                if (result.error) throw new Error(result.error);
+                renderUsageModels(result.by_model);
+                return { rows: result.logs || [], total: result.total_records || 0 };
+            },
+        });
+    }
+
+    function reloadUsage() {
+        if (usageTable) usageTable.reload({ firstPage: true });
+    }
+
+    // The traces that ran the agent; Open shows one on the Traces page
+    let tracesTable = null;
+
+    function traceStart(t) {
+        const starts = (t.spans || []).map((span) => span.start_time).filter(Boolean).sort();
+        return starts[0] || null;
+    }
+
+    async function loadTraces() {
+        const params = new URLSearchParams({ agent_name: config.name, hours: el('agentTracesHours').value, limit: '50' });
+        try {
+            const result = await getJson(`/dashboard/api/traces?${params}`);
+            tracesTable.setRows((result.traces || []).map((t) => Object.assign({ started: traceStart(t) }, t)));
+        } catch (e) {
+            tracesTable.setError(e.message);
+        }
+    }
+
+    function traceLink(t) {
+        const params = new URLSearchParams({ trace_id: t.trace_id, hours: el('agentTracesHours').value });
+        return `<a class="m-link" href="/dashboard/traces?${params}">Open</a>`;
+    }
+
+    function startTraces() {
+        const esc = MateTable.esc;
+        tracesTable = new MateTable(el('agentTracesTable'), {
+            noun: ['trace', 'traces'],
+            label: 'Traces',
+            empty: 'No traces of this agent in this period.',
+            columns: [
+                { key: 'started', label: 'Started', searchable: false, render: (t) => when(t.started) },
+                { key: 'root_name', label: 'Root span' },
+                { key: 'total_duration_ms', label: 'Duration', align: 'right', searchable: false,
+                  render: (t) => esc(t.total_duration_ms != null ? `${number(t.total_duration_ms)} ms` : '—') },
+                { key: 'span_count', label: 'Spans', align: 'right', searchable: false },
+                { label: 'Inspect', align: 'right', render: traceLink },
+            ],
+        });
+        loadTraces();
+    }
+
+    function reloadTraces() {
+        if (tracesTable) loadTraces();
+    }
+
     function openTab(id) {
         const name = id.replace(/^tab-/, '');
         if (name === 'versions' && !loaded.versions) loadVersionHistory(config.id, config.name);
         if (name === 'sessions' && !loaded.sessions) startSessions();
+        if (name === 'evals' && !loaded.evals) startEvals();
+        if (name === 'usage' && !loaded.usage) startUsage();
+        if (name === 'traces' && !loaded.traces) startTraces();
         loaded[name] = true;
         // The tab is in the address, so a reload (after a rollback, say) comes back to it
         try { history.replaceState(null, '', name === 'settings' ? window.location.pathname + window.location.search : `#${name}`); } catch (e) { /* no address change */ }
@@ -625,7 +791,7 @@ mateActions.allow('mateAgentPage.save', 'mateAgentPage.discard',
         addRoleFromInput: () => addRole(el('agentRoleAdd').value),
         // After a rollback: the page of the version's name, on the tab shown
         reloadAs: (name) => leave(pageUrl(name, window.location.hash)),
-        reloadSessions,
+        reloadSessions, reloadUsage, reloadTraces,
         isDirty,
     };
 

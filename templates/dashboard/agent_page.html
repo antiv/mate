@@ -15,7 +15,7 @@
 {% block title %}{{ agent.name if agent else 'New agent' }} - MATE{% endblock %}
 
 {% block extra_head %}
-<link rel="stylesheet" href="/static/css/agent-page.css?v=4">
+<link rel="stylesheet" href="/static/css/agent-page.css?v=6">
 <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.44.0/min/vs/loader.js"></script>
 {% endblock %}
 
@@ -67,6 +67,9 @@
         {% if agent %}
         <button type="button" class="m-tab" role="tab" id="tab-versions" aria-controls="panel-versions" aria-selected="false">Versions</button>
         <button type="button" class="m-tab" role="tab" id="tab-sessions" aria-controls="panel-sessions" aria-selected="false">Sessions</button>
+        <button type="button" class="m-tab" role="tab" id="tab-evals" aria-controls="panel-evals" aria-selected="false">Evals</button>
+        <button type="button" class="m-tab" role="tab" id="tab-usage" aria-controls="panel-usage" aria-selected="false">Usage</button>
+        <button type="button" class="m-tab" role="tab" id="tab-traces" aria-controls="panel-traces" aria-selected="false">Traces</button>
         {% endif %}
     </div>
 
@@ -322,6 +325,49 @@
             <div id="agentSessionsTable"></div>
         </div>
     </div>
+
+    <div id="panel-evals" role="tabpanel" aria-labelledby="tab-evals" hidden>
+        <div class="m-stack">
+            <div class="m-row">
+                <p class="m-hint">The agent's test cases with their latest result, and the score of each version they ran on.</p>
+                <span class="m-spacer"></span>
+                <a class="m-btn m-btn-secondary m-btn-sm" href="/dashboard/evals?agent={{ agent.name | urlencode }}">
+                    <i class="fas fa-flask" aria-hidden="true"></i> Open in Evals</a>
+            </div>
+            <div id="agentEvalsCases"></div>
+            <h3 class="m-section-title">Score by version</h3>
+            <div id="agentEvalsHistory"></div>
+        </div>
+    </div>
+
+    {% macro period(id, action) -%}
+            <select id="{{ id }}" class="m-input m-input-sm agent-period" aria-label="Period" data-change="{{ action }}">
+                <option value="24">Last 24 hours</option>
+                <option value="168" selected>Last 7 days</option>
+                <option value="720">Last 30 days</option>
+            </select>
+            {%- endmacro %}
+
+    <div id="panel-usage" role="tabpanel" aria-labelledby="tab-usage" hidden>
+        <div class="m-stack">
+            <div class="m-row">
+                {{ period('agentUsageHours', 'mateAgentPage.reloadUsage') }}
+                <span class="m-hint">Model calls this agent made, whoever it answered.</span>
+            </div>
+            <div id="agentUsageModels" class="agent-usage-models" aria-live="polite"></div>
+            <div id="agentUsageTable"></div>
+        </div>
+    </div>
+
+    <div id="panel-traces" role="tabpanel" aria-labelledby="tab-traces" hidden>
+        <div class="m-stack">
+            <div class="m-row">
+                {{ period('agentTracesHours', 'mateAgentPage.reloadTraces') }}
+                <span class="m-hint">Traces with a span of this agent, the 50 latest. Traces are recorded with <code>OTEL_TRACING_ENABLED</code> and <code>OTEL_TRACES_DB_EXPORT</code>.</span>
+            </div>
+            <div id="agentTracesTable"></div>
+        </div>
+    </div>
     {% endif %}
 
     <div class="m-savebar" id="agentSaveBar" {% if mode == 'edit' %}hidden{% endif %} role="region" aria-label="Save">
@@ -356,5 +402,5 @@
 <script src="/static/js/modals/memory-blocks.js?v=24"></script>
 <script src="/static/js/modals/version-history.js?v=5"></script>
 <script src="/static/js/approval-settings.js?v=1"></script>
-<script src="/static/js/agent-page.js?v=4"></script>
+<script src="/static/js/agent-page.js?v=5"></script>
 {% endblock %}

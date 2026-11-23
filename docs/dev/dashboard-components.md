@@ -259,6 +259,15 @@ runs it as `window.mateAgentPage`.
   (`version-history.js`). Sessions is a `MateTable` on `GET /dashboard/api/sessions`
   with `exact_app=true`, since `app_name` otherwise matches part of a name; its
   apps are the agent's root agents, worked out by `_agent_page()`.
+  Evals reads `/dashboard/api/evals/agent/<name>` and its `/history`. Usage is a
+  `MateTable` on `GET /dashboard/api/usage/logs?agent_name=`, which then also
+  returns `by_model`, the period's calls, tokens and cost per model. Traces reads
+  `GET /dashboard/api/traces?agent_name=`, the traces with a span whose
+  `gen_ai.agent.name` or `mate.agent.name` is the agent. Both answer 404 for another
+  workspace's agent.
+- **Links out:** `/dashboard/evals?agent=<name>` opens the agent's suite and
+  `/dashboard/traces?trace_id=<id>&hours=<n>` one trace, as
+  `/dashboard/sessions?session_id=…` opens a session.
 - **File Search** reads the agent from `<prefix>Name` and `<prefix>Project` of the
   form that opened it, `agent` here and `vb` in the Visual Builder.
 
