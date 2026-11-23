@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **The Work Room's chat fills the page** - without a frame: a new conversation has its greeting and the message field in the middle, and an earlier one a readable column down the page, with the agent's answers as text and yours in a bubble. The message field holds its buttons: **+** attaches files, the arrow sends, the square stops. The chat follows the dashboard's theme rather than the system's. An agent's **Test** tab looks the same
+
 ## [2.1.0] - 2026-11-23
 
 **Before upgrading,** back up the database, and afterwards reinstall the dependencies (`pip install -r requirements.lock`) or pull the image. The first start adds V050–V052, which change no existing data.

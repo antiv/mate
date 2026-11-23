@@ -16,7 +16,8 @@ in has, whatever their role.
 
 ## Start a conversation
 
-Select an agent, type a message and press **Send**. The list holds the agents your
+Select an agent, type a message, and press Enter or the arrow. Shift+Enter starts a new
+line. The list holds the agents your
 roles let you use. **Search agents** above it keeps the agents whose name or
 description holds every word you type; Enter opens the agent when only one is left,
 and Escape clears the search. If no agent is offered, none you may use has been created yet; an
@@ -25,8 +26,8 @@ administrator creates them on the **Agents** page, and sets who may use each.
 If an agent answers with an access-denied message, it names the roles it requires
 and the roles you have. Pass that on to your administrator.
 
-The paperclip attaches an image to your message, for agents whose model can read
-images.
+The **+** beside the message attaches images, for agents whose model can read them, PDFs
+and text files. While the agent answers, the arrow is a square that stops it.
 
 ## Conversations
 
