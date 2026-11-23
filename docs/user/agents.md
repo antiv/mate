@@ -49,8 +49,11 @@ reload or a link comes back to it.
   and pass rate of each version they ran on. **Open in Evals** opens the agent's
   suite on the [Evals](evals.md) page, to add or run cases.
 - **Usage**: the model calls the agent made in the last 24 hours, 7 days or 30 days,
-  whoever it answered: a card per model with its calls, tokens and cost, and each
-  call below.
+  whoever it answered: a card per model with its calls, tokens and cost, charts of the
+  tokens and the cost over time, and each call below. The charts have a column for each
+  hour of the last 24, or for each day, in your time zone, stacked by model in the
+  colours of the cards; past six models the smallest are **Other models**. **Show the
+  charts as a table** has the numbers. Calls whose price isn't known have no cost.
 - **Traces**: the 50 latest traces with a span of the agent. **Open** shows one on
   the [Traces](sessions-and-traces.md) page. Traces are recorded only with
   `OTEL_TRACING_ENABLED` and `OTEL_TRACES_DB_EXPORT`.

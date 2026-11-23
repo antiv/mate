@@ -13,6 +13,26 @@
 :root {
     --m-font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     --m-backdrop: rgba(20, 15, 10, 0.5);
+    /* Series of a chart, in this order, which keeps neighbours apart for colour-blind
+       readers too; checked on --bg-surface of each theme. Never a seventh: fold the rest
+       into -other. Text on a chart stays in the text tokens. */
+    --m-chart-1: #2a78d6;
+    --m-chart-2: #eb6834;
+    --m-chart-3: #1baf7a;
+    --m-chart-4: #eda100;
+    --m-chart-5: #e87ba4;
+    --m-chart-6: #008300;
+    --m-chart-other: #8a8782;
+}
+
+html.dark {
+    --m-chart-1: #3987e5;
+    --m-chart-2: #d95926;
+    --m-chart-3: #199e70;
+    --m-chart-4: #c98500;
+    --m-chart-5: #d55181;
+    --m-chart-6: #0ca30c;
+    --m-chart-other: #7d7f83;
 }
 
 /* An element with the hidden attribute stays hidden, whatever display its class sets */

@@ -15,7 +15,7 @@
 {% block title %}{{ agent.name if agent else 'New agent' }} - MATE{% endblock %}
 
 {% block extra_head %}
-<link rel="stylesheet" href="/static/css/agent-page.css?v=7">
+<link rel="stylesheet" href="/static/css/agent-page.css?v=8">
 <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.44.0/min/vs/loader.js"></script>
 {% endblock %}
 
@@ -355,6 +355,21 @@
                 <span class="m-hint">Model calls this agent made, whoever it answered.</span>
             </div>
             <div id="agentUsageModels" class="agent-usage-models" aria-live="polite"></div>
+            <div id="agentUsageCharts" class="agent-usage-charts" hidden>
+                <figure class="m-card agent-usage-chart">
+                    <figcaption class="m-section-title">Tokens</figcaption>
+                    <div class="agent-usage-plot"><canvas id="agentUsageTokens" role="img" data-title="Tokens over time, by model"></canvas></div>
+                </figure>
+                <figure class="m-card agent-usage-chart" id="agentUsageCostCard">
+                    <figcaption class="m-section-title">Cost</figcaption>
+                    <div class="agent-usage-plot"><canvas id="agentUsageCost" role="img" data-title="Cost over time, by model"></canvas></div>
+                    <p class="m-hint" id="agentUsageCostNote" hidden>Leaves out calls whose price isn't known.</p>
+                </figure>
+            </div>
+            <details id="agentUsageNumbers" class="agent-usage-numbers" hidden>
+                <summary>Show the charts as a table</summary>
+                <div class="m-table-wrap"><table class="m-table" id="agentUsageNumbersTable"></table></div>
+            </details>
             <div id="agentUsageTable"></div>
         </div>
     </div>
@@ -447,5 +462,6 @@
 <script src="/static/js/modals/version-history.js?v=5"></script>
 <script src="/static/js/approval-settings.js?v=1"></script>
 <script src="/static/js/modals/widget-keys.js?v=24"></script>
-<script src="/static/js/agent-page.js?v=6"></script>
+<script src="/static/js/usage-chart.js?v=1"></script>
+<script src="/static/js/agent-page.js?v=7"></script>
 {% endblock %}

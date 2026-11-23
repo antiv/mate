@@ -14,6 +14,7 @@ covers:
   - static/js/agent-page.js
   - static/css/agent-page.css
   - static/js/monaco-fields.js
+  - static/js/usage-chart.js
 ---
 
 # Dashboard components
@@ -62,6 +63,7 @@ Two pages are built on them alone; copy from them:
 | `m-section` | A collapsible part of a form: `<details class="m-section">` with a `<summary>` holding an icon, the title and an `m-section-state` (a word such as `3 on`; `is-set` colours it), then an `m-section-body` |
 | `m-chips`, `m-chip` | The values of a picker, each with a remove button; an empty `m-chips` takes no space |
 | `m-menu`, `m-menu-list` | A menu of links and buttons: `<details class="m-menu">` whose `<summary>` is the button |
+| `--m-chart-1` to `-6`, `--m-chart-other` | The colours of a chart's series, in that order, in both themes |
 | `m-savebar` | A bar pinned to the bottom of the page with **Discard** and **Save**, clear of the Help button |
 | `m-switch` | An on/off switch: `<button class="m-switch" role="switch" aria-checked="true" aria-label="…">` |
 | `m-notice`, `m-notice-warning`, `m-notice-floating` | An icon and a message on a tinted background; floating puts it at the bottom of the screen |
@@ -261,7 +263,11 @@ runs it as `window.mateAgentPage`.
   apps are the agent's root agents, worked out by `_agent_page()`.
   Evals reads `/dashboard/api/evals/agent/<name>` and its `/history`. Usage is a
   `MateTable` on `GET /dashboard/api/usage/logs?agent_name=`, which then also
-  returns `by_model`, the period's calls, tokens and cost per model. Traces reads
+  returns `by_model`, the period's calls, tokens and cost per model, and on the first
+  page `by_hour`, tokens and cost per model and hour in UTC, for periods up to 31 days.
+  `static/js/usage-chart.js` folds the hours into the viewer's own hours or days and
+  draws two Chart.js charts, one per measure, in the `--m-chart` colours; the cards of
+  the models are their legend. Run a palette check before changing those colours. Traces reads
   `GET /dashboard/api/traces?agent_name=`, the traces with a span whose
   `gen_ai.agent.name` or `mate.agent.name` is the agent. Both answer 404 for another
   workspace's agent.

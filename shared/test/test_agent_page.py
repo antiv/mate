@@ -7,7 +7,7 @@ The agent page: /dashboard/agents/<name>, /dashboard/agents/new and its Copy
 import json
 import re
 import unittest
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from sqlalchemy import text
 
@@ -113,10 +113,42 @@ class TestAgentPage(_TwoWorkspaces):
                          (2, 15, 0.75))
         self.assertEqual((by_model["m2"]["calls"], by_model["m2"]["cost_usd"]), (1, None))
         # Without an agent, every agent's, and no totals
-        self.assertNotIn("by_model", self._get_json("/dashboard/api/usage/logs", hours=24))
+        every = self._get_json("/dashboard/api/usage/logs", hours=24)
+        self.assertFalse({"by_model", "by_hour"} & set(every))
         response = self.client.get("/dashboard/api/usage/logs", headers=_platform_admin(A),
                                    params={"agent_name": B_ROOT})
         self.assertEqual(response.status_code, 404)
+
+    def test_usage_of_one_agent_by_the_hour(self):
+        session = self.Session()
+        now = datetime.now().replace(minute=30)
+        earlier = now - timedelta(hours=5)
+        for agent, model, tokens, cost, at in ((A_ROOT, "m1", 10, 0.5, now), (A_ROOT, "m1", 5, 0.25, now),
+                                               (A_ROOT, "m2", 7, None, now), (A_ROOT, "m1", 3, 0.1, earlier),
+                                               (A_ROOT, "m1", 1000, 9.0, now - timedelta(days=40)),
+                                               ("ws_a_sub", "m1", 100, 9.0, now)):
+            session.add(TokenUsageLog(request_id=f"r-{agent}-{tokens}", agent_name=agent, model_name=model,
+                                      prompt_tokens=tokens, response_tokens=1, cost_usd=cost,
+                                      timestamp=at, workspace_id=A))
+        session.commit()
+        session.close()
+
+        def logs(**params):
+            return self._get_json("/dashboard/api/usage/logs", agent_name=A_ROOT, **params)
+
+        by_hour = logs(hours=24)["by_hour"]
+        key = lambda at: (at.strftime("%Y-%m-%d"), at.hour)
+        rows = {(r["date"], r["hour"], r["model_name"]): (r["prompt_tokens"], r["response_tokens"], r["cost_usd"])
+                for r in by_hour}
+        self.assertEqual(rows, {(*key(now), "m1"): (15, 2, 0.75), (*key(now), "m2"): (7, 1, None),
+                                (*key(earlier), "m1"): (3, 1, 0.1)})
+        # The hours add up to the totals, and come with the first page of a period
+        # short enough for a chart
+        self.assertEqual(sum(r["prompt_tokens"] for r in by_hour),
+                         sum(m["prompt_tokens"] for m in logs(hours=24)["by_model"]))
+        self.assertNotIn("by_hour", logs(hours=24, page=2, limit=1))
+        self.assertIn("by_hour", logs(hours=24 * 31))
+        self.assertNotIn("by_hour", logs(hours=24 * 31 + 1))
 
     def test_traces_of_one_agent(self):
         session = self.Session()
