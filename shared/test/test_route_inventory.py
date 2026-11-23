@@ -38,6 +38,7 @@ from server.request_context import RequestContext, get_api_request_context, get_
 USER_ROUTES = {
     ("GET", "/dashboard/api/feedback"),
     ("POST", "/dashboard/api/feedback"),
+    ("GET", "/dashboard/api/palette"),
     ("GET", "/dashboard/api/tokens"),
     ("GET", "/dashboard/api/usage/logs"),
     ("POST", "/dashboard/api/tokens"),

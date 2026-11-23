@@ -39,7 +39,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="/static/css/redesign.css">
-    <link rel="stylesheet" href="/static/css/components.css?v=6">
+    <link rel="stylesheet" href="/static/css/components.css?v=7">
     <style>
         @keyframes mate-slide-in { from { transform: translateX(120%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
         @keyframes mate-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
@@ -473,6 +473,13 @@
             {% endif %}
         </div>
         <div class="flex items-center gap-2.5 flex-shrink-0">
+            {% if username and request.query_params.get('embed') != '1' %}
+            <button type="button" class="m-palette-open touch-target" data-click="mateCommandPalette.open"
+                    aria-label="Search" aria-haspopup="dialog" title="Go to an agent, a conversation or a page">
+                <i class="fas fa-search" aria-hidden="true"></i>
+                <span class="m-palette-open-text">Search</span><kbd data-palette-key aria-hidden="true">Ctrl K</kbd>
+            </button>
+            {% endif %}
             <!-- ADK Server Control - platform admin only -->
             {% if (is_admin is not defined or is_admin) and platform_admin %}
             <div class="mate-status-pill hidden sm:flex">
@@ -1338,6 +1345,10 @@
             });
         }
     </script>
+
+    {% if username and request.query_params.get('embed') != '1' %}
+    {% include 'dashboard/partials/command_palette.html' %}
+    {% endif %}
 
     {% if username %}
     <!-- Help button: chat with the built-in mate_help agent (static/js/help-panel.js) -->

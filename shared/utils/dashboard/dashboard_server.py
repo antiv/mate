@@ -786,6 +786,87 @@ class DashboardServer:
         finally:
             session.close()
 
+    def _chat_agents(self, ctx: RequestContext, configs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Those of the workspace's agent configs the caller may chat with: the root
+        agents (no parent_agents) their roles allow. The RBAC check refuses the others
+        at the model call anyway."""
+        project_ids = {p["id"] for p in self._get_all_projects(ctx.workspace_id)}
+        access = self._caller_access(ctx)
+        return [c for c in configs
+                if c.get("name") and not c.get("parent_agents") and c.get("project_id") in project_ids
+                and roles_allow(access, c.get("allowed_for_roles"))]
+
+    def _recent_sessions(self, user_id: str, app_names: Set[str], limit: int = 20) -> List[Dict[str, Any]]:
+        """The user's latest sessions with the apps, of both runtimes, newest first:
+        [{id, app_name, title, updated_at}]; title is "" without one. Events aren't read."""
+        if not app_names:
+            return []
+        found: List[Dict[str, Any]] = []
+
+        def add(session_id: str, app_name: str, state: Any, updated: Any) -> None:
+            if isinstance(state, str):
+                try:
+                    state = json.loads(state)
+                except ValueError:
+                    state = None
+            title = state.get("_title") if isinstance(state, dict) else None
+            found.append({"id": session_id, "app_name": app_name,
+                          "title": title if isinstance(title, str) else "",
+                          "updated_at": updated.isoformat() if hasattr(updated, "isoformat")
+                          else str(updated or "").replace(" ", "T")})
+
+        try:
+            from sqlalchemy import bindparam, create_engine, text
+            engine = create_engine(self._adk_session_sync_uri())
+            try:
+                with engine.connect() as conn:
+                    for row in conn.execute(
+                            text("SELECT id, app_name, state, update_time FROM sessions "
+                                 "WHERE user_id = :uid AND app_name IN :apps ORDER BY update_time DESC LIMIT :n")
+                            .bindparams(bindparam("apps", expanding=True)),
+                            {"uid": user_id, "apps": sorted(app_names), "n": limit}):
+                        add(*row)
+            finally:
+                engine.dispose()
+        except Exception as e:
+            logger.debug("Recent ADK sessions left out: %s", e)
+
+        session = self.db_client.get_session() if self.db_client else None
+        if session:
+            try:
+                from shared.utils.models import LangGraphSession as lg
+                for row in (session.query(lg.id, lg.app_name, lg.state, lg.updated_at)
+                            .filter(lg.user_id == user_id, lg.app_name.in_(app_names))
+                            .order_by(lg.updated_at.desc()).limit(limit)):
+                    add(*row)
+            except Exception as e:
+                logger.debug("Recent LangGraph sessions left out: %s", e)
+            finally:
+                session.close()
+        return sorted(found, key=lambda s: s["updated_at"], reverse=True)[:limit]
+
+    def _palette(self, ctx: RequestContext) -> Dict[str, Any]:
+        """What the command palette jumps to besides the pages: the agents of the workspace,
+        to their page for an admin and to the Work Room for a member who may chat with
+        them, and the caller's own recent sessions with the agents they may chat with."""
+        from urllib.parse import quote
+        configs = self._get_all_agent_configs(workspace_id=ctx.workspace_id)
+        chat = self._chat_agents(ctx, configs)
+        is_admin = ctx.is_admin
+        agents = [{
+            "name": c["name"],
+            "description": c.get("description") or "",
+            "project": (c.get("project") or {}).get("name") or "",
+            "url": (f"/dashboard/agents/{quote(c['name'], safe='')}" if is_admin
+                    else f"/dashboard/workroom?agent={quote(c['name'], safe='')}"),
+        } for c in sorted(configs if is_admin else chat, key=lambda c: c["name"].lower())]
+        sessions = [{
+            "agent": s["app_name"], "title": s["title"], "updated_at": s["updated_at"],
+            "url": (f"/dashboard/workroom?agent={quote(s['app_name'], safe='')}"
+                    f"&session={quote(s['id'], safe='')}"),
+        } for s in self._recent_sessions(ctx.user_id, {c["name"] for c in chat})]
+        return {"agents": agents, "sessions": sessions}
+
     def _agent_page(self, request: Request, ctx: RequestContext, configs: List[Dict[str, Any]],
                     agent: Optional[Dict[str, Any]], source: Optional[Dict[str, Any]]) -> HTMLResponse:
         """The agent page: editing `agent`, or a new agent (a copy of `source` when given)."""
@@ -8316,20 +8397,8 @@ class DashboardServer:
         @self.app.get("/dashboard/workroom", response_class=HTMLResponse, tags=["Dashboard - Pages"])
         async def dashboard_workroom(request: Request, agent: Optional[str] = None, session: Optional[str] = None, ctx: RequestContext = Depends(get_request_context)):
             is_admin = ctx.is_admin
-            all_agents = self._get_all_agent_configs(workspace_id=ctx.workspace_id)
-            # The root agents (no parent_agents) of the current workspace the caller
-            # may use; the RBAC check refuses the others at the model call anyway
-            project_ids = {p["id"] for p in self._get_all_projects(ctx.workspace_id)}
-            access = self._caller_access(ctx)
             agent_list = []
-            for a in all_agents:
-                if not a.get("name"):
-                    continue
-                parents = a.get("parent_agents") or []
-                if parents:
-                    continue
-                if a.get("project_id") not in project_ids or not roles_allow(access, a.get("allowed_for_roles")):
-                    continue
+            for a in self._chat_agents(ctx, self._get_all_agent_configs(workspace_id=ctx.workspace_id)):
                 desc = a.get("description") or ""
                 if not desc:
                     instr = a.get("instruction") or ""
@@ -8349,6 +8418,11 @@ class DashboardServer:
                 "selected_session": session or "",
                 "is_admin": is_admin,
             })
+
+        @self.app.get("/dashboard/api/palette", tags=["Dashboard - Pages"])
+        async def command_palette(request: Request, ctx: RequestContext = Depends(get_request_context)):
+            """The agents and the caller's own recent sessions the command palette jumps to."""
+            return await asyncio.to_thread(self._palette, ctx)
 
         @self.app.get("/dashboard/api/workroom/sessions/search", tags=["Dashboard - WorkRoom"])
         async def search_workroom_sessions(request: Request, agent: str = Query(..., min_length=1),

@@ -15,6 +15,8 @@ covers:
   - static/css/agent-page.css
   - static/js/monaco-fields.js
   - static/js/usage-chart.js
+  - static/js/command-palette.js
+  - templates/dashboard/partials/command_palette.html
 ---
 
 # Dashboard components
@@ -285,6 +287,22 @@ runs it as `window.mateAgentPage`.
   `/dashboard/sessions?session_id=…` opens a session.
 - **File Search** reads the agent from `<prefix>Name` and `<prefix>Project` of the
   form that opened it, `agent` here and `vb` in the Visual Builder.
+
+## The command palette
+
+`base.html` includes `dashboard/partials/command_palette.html` for whoever is signed
+in, outside a frame (`?embed=1`). `static/js/command-palette.js` opens it on Ctrl+K (⌘K)
+and from **Search** in the header.
+
+- **Pages** are JSON in the partial, behind the conditions of the sidebars. A new
+  sidebar link needs an entry there: `test_command_palette.py` compares the two for an
+  administrator, a workspace admin and a member.
+- **Agents and conversations** come from `GET /dashboard/api/palette`, kept for a
+  minute: the workspace's agents for an admin, those they may chat with for a member
+  (`_chat_agents`, which the Work Room uses too), and the caller's own 20 latest
+  sessions with the agents they may chat with, from both runtimes' tables. It is in
+  `USER_READABLE_PATHS`.
+- **Matching** needs every word, without accents; the closest name comes first.
 
 ## Search in the Work Room
 

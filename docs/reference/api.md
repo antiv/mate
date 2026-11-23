@@ -10,7 +10,7 @@ generated: true
 
 # HTTP API reference
 
-Every HTTP route declared in the code: **297** routes. 37 have no docstring and so no summary here.
+Every HTTP route declared in the code: **298** routes. 37 have no docstring and so no summary here.
 
 This page lists what exists and where it is implemented. For request and response schemas, and to try a call, use the live Swagger UI under **Documentation → API** in the dashboard.
 
@@ -18,7 +18,7 @@ Requests to `/dashboard/api/*` require an admin, apart from the short allowlist 
 
 ## Auth server and dashboard
 
-Port 8000. Everything a browser or an external client talks to. 277 routes.
+Port 8000. Everything a browser or an external client talks to. 278 routes.
 
 ### Authentication
 
@@ -223,6 +223,7 @@ Web interface pages for system management.
 | `GET` | `/dashboard/agents/visual` | Dashboard visual agent builder page | shared/utils/dashboard/dashboard_server.py · dashboard_agents_visual |
 | `GET` | `/dashboard/agents/{agent_name}` | An agent's page: its settings in the agent editor | shared/utils/dashboard/dashboard_server.py · dashboard_agent_page |
 | `GET` | `/dashboard/alerts` | — | shared/utils/dashboard/dashboard_server.py · dashboard_alerts |
+| `GET` | `/dashboard/api/palette` | The agents and the caller's own recent sessions the command palette jumps to | shared/utils/dashboard/dashboard_server.py · command_palette |
 | `GET` | `/dashboard/approvals` | — | shared/utils/dashboard/dashboard_server.py · dashboard_approvals |
 | `GET` | `/dashboard/audit-logs` | Dashboard audit log viewer | shared/utils/dashboard/dashboard_server.py · dashboard_audit_logs |
 | `GET` | `/dashboard/docs` | Dashboard docs page | shared/utils/dashboard/dashboard_server.py · dashboard_docs |

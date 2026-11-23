@@ -36,6 +36,13 @@ The switch at the top of every page moves between three spaces:
 | **Studio** | Building: agents, the visual builder, triggers, integrations, templates, evals, traces. |
 | **Control Room** | Running the installation, in three groups: **Observability** (usage, audit and guardrail logs, sessions); **Workspace** ([approvals](approvals.md), members, [models and keys](workspaces.md#models-and-keys), rate limits, alerts); and, for platform administrators, **Platform** ([workspaces](workspaces.md), users, server-wide [settings](settings.md), migrations, and the [wizard and shop](wizard.md) pages when in use). This documentation is at the bottom. |
 
+**Search** in the header, or Ctrl+K (⌘K on a Mac), opens a box that jumps to an agent,
+one of your recent conversations or a page you may open. Type part of the name, choose
+with the arrow keys and press Enter; Ctrl+Enter (⌘Enter) opens it in a new tab, and
+Escape closes the box. Accents don't matter: `kljucevi` finds "Ključevi". An
+administrator goes to an agent's page, anyone else to a chat with it. Inside a code
+editor Ctrl+K stays the editor's.
+
 Studio and Control Room are for administrators. Someone signed in without the admin
 role sees only the Work Room and their own usage.
 
