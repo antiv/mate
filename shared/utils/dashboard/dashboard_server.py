@@ -2729,7 +2729,12 @@ class DashboardServer:
                                 output_type=tdata.get("output_type", "memory_block"),
                                 is_enabled=False,     # imported triggers start disabled
                             )
-                            trigger.set_output_config(tdata.get("output_config") or {})
+                            output, hidden = config_secrets.restore(
+                                "output_config", tdata.get("output_config") or {}, None)
+                            trigger.set_output_config(output)
+                            if hidden:
+                                errors.append(f"Trigger '{trigger.name}': imported without its hidden "
+                                              f"values, enter them ({', '.join(hidden)})")
                             session.add(trigger)
                             triggers_imported += 1
                         except Exception as e:
@@ -8719,6 +8724,7 @@ class DashboardServer:
                     detail=f"trigger_type '{trigger_type}' is not implemented and would never fire. "
                            "Use 'cron' or 'webhook'.",
                 )
+            self._keep_hidden_values(body, None)
             config_error = trigger_config_error(
                 trigger_type, body.get("cron_expression"),
                 body.get("output_type", "memory_block"), body.get("output_config"),
@@ -8809,6 +8815,7 @@ class DashboardServer:
                 raise HTTPException(status_code=500, detail="Database unavailable")
             try:
                 trigger = self._workspace_trigger(session, ctx, trigger_id)
+                self._keep_hidden_values(body, {"output_config": trigger.get_output_config()})
                 if "agent_name" in body or "project_id" in body:
                     project_id = self._body_project_id(body.get("project_id", trigger.project_id))
                     self._require_in_workspace(
@@ -9268,6 +9275,7 @@ class DashboardServer:
             from shared.utils.alert_service import get_alert_service
             body = await request.json()
             fields = _validate_alert_rule(body)
+            self._keep_hidden_values(fields, None)
             fields.setdefault("created_by", ctx.user_id)
             self._require_scope_in_workspace(ctx, fields["scope"], str(fields.get("scope_id") or ""))
             fields["workspace_id"] = ctx.workspace_id
@@ -9294,7 +9302,10 @@ class DashboardServer:
                 raise HTTPException(status_code=404, detail="Alert rule not found")
             self._require_scope_in_workspace(ctx, fields.get("scope", current["scope"]),
                                              str(fields.get("scope_id", current["scope_id"]) or ""))
-            rule = service.update_rule(rule_id, workspace_id=ctx.workspace_id, **fields)
+            try:
+                rule = service.update_rule(rule_id, workspace_id=ctx.workspace_id, **fields)
+            except config_secrets.HiddenValue as e:
+                raise HTTPException(status_code=400, detail=str(e))
             if not rule:
                 raise HTTPException(status_code=404, detail="Alert rule not found")
             return {"alert_rule": rule}

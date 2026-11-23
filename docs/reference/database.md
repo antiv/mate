@@ -249,10 +249,10 @@ Model `AgentConfig`. Model for agent configuration.
 | `ai_disclosure_waiver` | `Text` | — | — | — |
 | `description` | `Text` | — | — | — |
 | `instruction` | `Text` | — | — | — |
-| `mcp_servers_config` | `Text` | — | — | JSON object containing multiple MCP server configurations |
+| `mcp_servers_config` | `EncryptedSecrets('mcp_servers_config')` | — | — | JSON object containing multiple MCP server configurations |
 | `parent_agents` | `Text` | — | — | JSON array of parent agent names |
 | `allowed_for_roles` | `Text` | — | — | JSON string of roles |
-| `tool_config` | `Text` | — | — | JSON string for tool configuration |
+| `tool_config` | `EncryptedSecrets('tool_config')` | — | — | JSON string for tool configuration |
 | `max_iterations` | `Integer` | — | — | For LoopAgent - maximum number of iterations |
 | `planner_config` | `Text` | — | — | JSON string for planner configuration |
 | `generate_content_config` | `Text` | — | — | JSON string for LLM generation config (temperature, top_p, etc.) |
@@ -691,7 +691,7 @@ Model `AgentTrigger`. Autonomous trigger for an agent: cron, webhook, file_watch
 | `signing_secret` | `EncryptedText` | — | — | HMAC secret for signing the request body. Unlike the fire key this is not hashed — verifying a signature means recomputing it — so it is encrypted with MATE_SECRET_KEY instead. Never returned by to_dict(). |
 | `require_signature` | `Boolean` | not null | `False` | — |
 | `output_type` | `String(50)` | not null | `'memory_block'` | — |
-| `output_config` | `Text` | — | — | — |
+| `output_config` | `EncryptedSecrets('output_config')` | — | — | — |
 | `is_enabled` | `Boolean` | not null | `True` | — |
 | `last_fired_at` | `DateTime` | — | — | — |
 | `last_result` | `Text` | — | — | — |
@@ -750,7 +750,7 @@ Model `AlertRule`. Notification rule: a condition over recorded events, a destin
 | `condition_type` | `String(50)` | not null | — | agent_error_count \| budget_threshold \| guardrail_count \| model_fallback_count |
 | `condition_config` | `Text` | — | — | — |
 | `destination_type` | `String(50)` | not null | — | http \| email \| slack \| discord |
-| `destination_config` | `Text` | — | — | — |
+| `destination_config` | `EncryptedSecrets('destination_config')` | — | — | — |
 | `cooldown_seconds` | `Integer` | not null | `3600` | — |
 | `is_enabled` | `Boolean` | not null | `True` | — |
 | `last_fired_at` | `DateTime` | — | — | The durable cooldown: read before every evaluation, so a restart cannot forget that a rule already fired. |

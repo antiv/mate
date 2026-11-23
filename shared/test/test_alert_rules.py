@@ -84,9 +84,8 @@ class TestModel(_AlertTestCase):
         rule_id = self._rule(destination_config={"url": "https://x", "headers": {"Authorization": "secret"}})
         session = self.Session()
         rule = session.get(AlertRule, rule_id)
-        self.assertEqual(rule.to_dict()["destination_config"]["headers"], "***")
-        self.assertEqual(rule.to_dict(include_secrets=True)["destination_config"]["headers"],
-                         {"Authorization": "secret"})
+        self.assertEqual(rule.to_dict()["destination_config"]["headers"], {"Authorization": "__stored__"})
+        self.assertEqual(rule.get_destination_config()["headers"], {"Authorization": "secret"})
         session.close()
 
     def test_malformed_json_does_not_raise(self):

@@ -6,7 +6,10 @@ signing secret, a trigger's signing secret, an agent's model API key, a workspac
 provider key) use the
 EncryptedText column type. It encrypts a value on its way into the database and
 decrypts it on its way out, so the code that reads and writes those columns
-sees plain text and does not change.
+sees plain text and does not change. The JSON columns that hold secrets among other
+settings (an agent's MCP servers and tools, where a trigger and an alert rule send) use
+EncryptedSecrets, which does it for those values only (config_secrets.py). A version's
+snapshot is stored the same way.
 
 MATE_SECRET_KEY is a Fernet key, separate from SECRET_KEY so the session secret
 can be rotated without losing the stored secrets (documents/design/workspaces.md,
@@ -66,12 +69,12 @@ def check_key_at_startup(enforce: bool) -> None:
         return
     if enforce:
         raise RuntimeError(
-            f"{ENV_VAR} is not set. Slack tokens, signing secrets and model keys would be "
-            f"stored in the clear. Set {ENV_VAR} (see docs/dev/deployment.md), or set "
+            f"{ENV_VAR} is not set. Slack tokens, signing secrets, model keys and the keys of "
+            f"MCP servers and webhooks would be stored in the clear. Set {ENV_VAR} (see docs/dev/deployment.md), or set "
             "MATE_ALLOW_INSECURE_DEFAULTS=true to override.")
     logger.warning(
-        "%s not set: Slack tokens, signing secrets and agent model keys are stored in the "
-        "clear. Production refuses to start without it. See docs/dev/deployment.md.", ENV_VAR)
+        "%s not set: Slack tokens, signing secrets, agent model keys and the keys of MCP "
+        "servers and webhooks are stored in the clear. Production refuses to start without it. See docs/dev/deployment.md.", ENV_VAR)
 
 
 def is_encrypted(value: Optional[str]) -> bool:
@@ -117,6 +120,48 @@ class EncryptedText(TypeDecorator):
         return decrypt(value)
 
 
+class EncryptedSecrets(TypeDecorator):
+    """A JSON text column whose secrets are encrypted at rest (config_secrets.py)."""
+
+    impl = Text
+    cache_ok = True
+
+    def __init__(self, field: str) -> None:
+        super().__init__()
+        self.field = field
+
+    def process_bind_param(self, value, dialect):
+        from .config_secrets import encrypt_secrets
+        return encrypt_secrets(self.field, value) if isinstance(value, str) else value
+
+    def process_result_value(self, value, dialect):
+        from .config_secrets import decrypt_secrets
+        return decrypt_secrets(value)
+
+
+def encrypt_snapshot(snapshot: dict) -> dict:
+    """An agent version's snapshot as stored: its secrets encrypted."""
+    from .config_secrets import FIELDS, encrypt_secrets
+    stored = dict(snapshot)
+    if stored.get("model_api_key"):
+        stored["model_api_key"] = encrypt(stored["model_api_key"])
+    for field in FIELDS:
+        if isinstance(stored.get(field), str):
+            stored[field] = encrypt_secrets(field, stored[field])
+    return stored
+
+
+def decrypt_snapshot(stored: dict) -> dict:
+    from .config_secrets import FIELDS, decrypt_secrets
+    snapshot = dict(stored)
+    if snapshot.get("model_api_key"):
+        snapshot["model_api_key"] = decrypt(snapshot["model_api_key"])
+    for field in FIELDS:
+        if isinstance(snapshot.get(field), str):
+            snapshot[field] = decrypt_secrets(snapshot[field])
+    return snapshot
+
+
 def _secret_columns():
     from .models import AgentConfig, AgentTrigger, ChannelIntegration, WorkspaceProviderKey
     return [
@@ -134,16 +179,37 @@ def _stored_in_the_clear(column):
     return stored, (column.isnot(None), stored != "", ~stored.like(f"{PREFIX}%"))
 
 
+def _json_columns():
+    from .models import AgentConfig, AgentTrigger, AlertRule
+    return [
+        (AgentConfig, AgentConfig.mcp_servers_config),
+        (AgentConfig, AgentConfig.tool_config),
+        (AgentTrigger, AgentTrigger.output_config),
+        (AlertRule, AlertRule.destination_config),
+    ]
+
+
+def _json_in_the_clear(session, model, column):
+    """(id, stored text) of the rows with a secret stored in the clear."""
+    from .config_secrets import has_secret_in_the_clear
+    stored = cast(column, String)
+    for row_id, value in session.execute(select(model.id, stored).where(column.isnot(None))).all():
+        if has_secret_in_the_clear(column.key, value):
+            yield row_id, value
+
+
 def _snapshots_in_the_clear(session):
-    """Agent versions whose snapshot holds a model_api_key stored in the clear."""
+    """Agent versions whose snapshot holds a secret stored in the clear."""
+    from .config_secrets import FIELDS, has_secret_in_the_clear
     from .models import AgentConfigVersion
-    for version in session.query(AgentConfigVersion).filter(
-            AgentConfigVersion.config_snapshot.like("%model_api_key%")):
+    for version in session.query(AgentConfigVersion):
         try:
-            key = json.loads(version.config_snapshot).get("model_api_key")
+            stored = json.loads(version.config_snapshot)
+            key = stored.get("model_api_key")
         except (ValueError, AttributeError):
             continue
-        if key and not is_encrypted(key):
+        if (key and not is_encrypted(key)) or any(
+                has_secret_in_the_clear(field, stored.get(field)) for field in FIELDS):
             yield version
 
 
@@ -164,6 +230,15 @@ def encrypt_stored_secrets(session) -> Dict[str, int]:
         session.commit()
         if rows:
             counts[f"{model.__tablename__}.{column.key}"] = len(rows)
+    for model, column in _json_columns():
+        rows = list(_json_in_the_clear(session, model, column))
+        # Not an edit: a row keeps the time of its last one
+        kept = {"updated_at": model.updated_at} if hasattr(model, "updated_at") else {}
+        for row_id, value in rows:
+            session.execute(update(model).where(model.id == row_id).values({column.key: value, **kept}))
+        session.commit()
+        if rows:
+            counts[f"{model.__tablename__}.{column.key}"] = len(rows)
     versions = list(_snapshots_in_the_clear(session))
     for version in versions:
         version.set_snapshot(version.get_snapshot())
@@ -179,4 +254,6 @@ def count_unencrypted_secrets(session) -> int:
     for model, column in _secret_columns():
         _, in_the_clear = _stored_in_the_clear(column)
         total += session.query(model.id).filter(*in_the_clear).count()
+    for model, column in _json_columns():
+        total += sum(1 for _ in _json_in_the_clear(session, model, column))
     return total + sum(1 for _ in _snapshots_in_the_clear(session))

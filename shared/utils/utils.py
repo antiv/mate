@@ -4,10 +4,11 @@ Utility functions for the MATE (Multi-Agent Tree Engine) system.
 
 import os
 import logging
-import re
 from dataclasses import dataclass
 from google.adk.models.lite_llm import LiteLlm
 from typing import Dict, Any, Optional, Set, Tuple, Any as AnyType
+
+from .config_secrets import ENV_PLACEHOLDER, FIELDS, STORED_SECRET_SENTINEL, mask
 
 logger = logging.getLogger(__name__)
 
@@ -63,17 +64,10 @@ def _is_gemini_model(model_name: str) -> bool:
     return model_name.startswith(('gemini-', 'models/'))
 
 
-# Secrets belong in the environment, not in database config rows, so string values
-# in agent and MCP configuration may reference it as ${VAR}.
-ENV_PLACEHOLDER = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
-
-
 # The edit form posts every field back, so the stored key has to survive a round
 # trip without being sent to the browser. A ${VAR} reference is not a secret and
 # goes out as written; anything else is replaced by this sentinel, and a save that
 # returns the sentinel unchanged leaves the stored value alone.
-STORED_SECRET_SENTINEL = "__stored__"
-
 
 def mask_api_key(value: Optional[str]) -> Optional[str]:
     """Hide a literal key from API responses, passing ${VAR} references through."""
@@ -84,7 +78,6 @@ def mask_api_key(value: Optional[str]) -> Optional[str]:
 
 def mask_config_secrets(config: Dict[str, Any]) -> Dict[str, Any]:
     """A copy of an agent config dict, or a version snapshot, with its secrets masked."""
-    from .config_secrets import FIELDS, mask
     masked = dict(config)
     for field in FIELDS:
         if masked.get(field):

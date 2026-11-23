@@ -17,6 +17,8 @@ from typing import Any, Dict, Optional, Tuple
 
 import httpx
 
+from .config_secrets import mask_webhook
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_HTTP_TIMEOUT = 30.0
@@ -34,11 +36,15 @@ def post_json(url: str, payload: Dict[str, Any], headers: Optional[Dict[str, str
         with httpx.Client(timeout=timeout) as client:
             resp = client.post(url, json=payload, headers=headers or {})
             resp.raise_for_status()
-        logger.info("notify: delivered to %s (%s)", url, resp.status_code)
+        logger.info("notify: delivered to %s (%s)", mask_webhook(url), resp.status_code)
         return True, f"HTTP {resp.status_code}"
+    except httpx.HTTPStatusError as e:
+        detail = f"HTTP {e.response.status_code}"
     except Exception as e:
-        logger.warning("notify: POST to %s failed: %s", url, e)
-        return False, f"{type(e).__name__}: {e}"
+        # Never the address, which may be all it takes to post there
+        detail = f"{type(e).__name__}: {e}".replace(str(url), mask_webhook(str(url)))
+    logger.warning("notify: POST to %s failed: %s", mask_webhook(str(url)), detail)
+    return False, detail
 
 
 def send_email(to_addr: str, subject: str, body: str,

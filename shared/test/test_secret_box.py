@@ -21,9 +21,9 @@ from sqlalchemy.pool import StaticPool
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from shared.utils import secret_box
+from shared.utils import config_secrets, secret_box
 from shared.utils.models import (
-    AgentConfig, AgentConfigVersion, AgentTrigger, Base, ChannelIntegration, WorkspaceProviderKey,
+    AgentConfig, AgentConfigVersion, AgentTrigger, AlertRule, Base, ChannelIntegration, WorkspaceProviderKey,
 )
 from shared.utils.trigger_runner import TriggerRunner
 
@@ -293,6 +293,124 @@ class TestVersionSnapshots(_Db):
             version = AgentConfigVersion(agent_config_id=1, version_number=1,
                                          config_snapshot=json.dumps({"model_api_key": "sk-old"}))
             self.assertEqual(version.get_snapshot()["model_api_key"], "sk-old")
+
+
+class TestSecretsInJson(_Db):
+    """The JSON columns, and the same fields of a version: only their secrets are encrypted."""
+
+    SECRET = "Zk81mQpX0rT5vB2nL7wYc3"
+    SERVERS = {"mcpServers": {"r": {"url": "https://x.example/mcp", "headers": {"Authorization": "Bearer " + SECRET}}}}
+    TOOLS = {"shop": {"partner_key": "p1"}, "require_confirmation": {
+        "tools": ["a"], "notify": {"type": "slack", "url": "https://hooks.slack.com/services/" + SECRET}}}
+    SEND = {"url": "https://hooks.example.com/" + SECRET}
+
+    def _add(self):
+        session = self.Session()
+        agent = AgentConfig(name="a", type="llm", model_name="openai/x", project_id=1,
+                            mcp_servers_config=json.dumps(self.SERVERS), tool_config=json.dumps(self.TOOLS))
+        trigger = AgentTrigger(name="t", trigger_type="cron", agent_name="a", project_id=1, prompt="p")
+        trigger.set_output_config(self.SEND)
+        rule = AlertRule(name="r", scope="global", condition_type="agent_error_count", destination_type="http")
+        rule.set_destination_config(self.SEND)
+        session.add_all([agent, trigger, rule])
+        session.flush()
+        version = AgentConfigVersion(agent_config_id=agent.id, version_number=1)
+        version.set_snapshot({"name": "a", "mcp_servers_config": json.dumps(self.SERVERS),
+                              "tool_config": json.dumps(self.TOOLS)})
+        session.add(version)
+        session.commit()
+        session.close()
+
+    def _stored(self):
+        return [self._raw(sql) for sql in (
+            "SELECT mcp_servers_config FROM agents_config", "SELECT tool_config FROM agents_config",
+            "SELECT output_config FROM agent_triggers", "SELECT destination_config FROM alert_rules",
+            "SELECT config_snapshot FROM agent_config_versions")]
+
+    def _read(self):
+        session = self.Session()
+        try:
+            agent = session.query(AgentConfig).one()
+            snapshot = session.query(AgentConfigVersion).one().get_snapshot()
+            return [json.loads(agent.mcp_servers_config), json.loads(agent.tool_config),
+                    session.query(AgentTrigger).one().get_output_config(),
+                    session.query(AlertRule).one().get_destination_config(),
+                    json.loads(snapshot["mcp_servers_config"]), json.loads(snapshot["tool_config"])]
+        finally:
+            session.close()
+
+    ALL = [SERVERS, TOOLS, SEND, SEND, SERVERS, TOOLS]
+
+    def test_only_the_secrets_are_encrypted(self):
+        with with_key(KEY):
+            self._add()
+            stored = self._stored()
+            for value in stored:
+                self.assertNotIn(self.SECRET, value)
+                self.assertIn(secret_box.PREFIX, value)
+            self.assertEqual(json.loads(stored[0])["mcpServers"]["r"]["url"], "https://x.example/mcp")
+            # The sidebar finds a shop's partner_key with LIKE (features_in_use.py)
+            self.assertIn('"partner_key": "p1"', stored[1])
+            self.assertEqual(self._read(), self.ALL)
+
+    def test_without_a_key_they_are_stored_as_written(self):
+        with without_key():
+            self._add()
+            self.assertEqual(self._stored()[0], json.dumps(self.SERVERS))
+            self.assertEqual(self._read(), self.ALL)
+
+    def test_a_text_without_a_secret_is_stored_as_written(self):
+        with with_key(KEY):
+            for text_ in ('{ "mcpServers": {"r": {"url": "https://x.example", "headers": {"A": "${T}"}}} }', "not json", ""):
+                self.assertEqual(config_secrets.encrypt_secrets("mcp_servers_config", text_), text_)
+
+    def test_those_stored_before_are_encrypted_at_start_once_and_not_as_an_edit(self):
+        with without_key():
+            self._add()
+            session = self.Session()
+            self.assertEqual(secret_box.count_unencrypted_secrets(session), 5)
+            session.close()
+        before = [self._raw(f"SELECT updated_at FROM {t}") for t in ("agent_triggers", "alert_rules")]
+        with with_key(KEY):
+            session = self.Session()
+            counts = secret_box.encrypt_stored_secrets(session)
+            self.assertEqual(counts, {"agents_config.mcp_servers_config": 1, "agents_config.tool_config": 1,
+                                      "agent_triggers.output_config": 1, "alert_rules.destination_config": 1,
+                                      "agent_config_versions.config_snapshot": 1})
+            self.assertEqual(secret_box.encrypt_stored_secrets(session), {})
+            self.assertEqual(secret_box.count_unencrypted_secrets(session), 0)
+            session.close()
+            for value in self._stored():
+                self.assertNotIn(self.SECRET, value)
+            self.assertEqual(self._read(), self.ALL)
+        self.assertEqual(before, [self._raw(f"SELECT updated_at FROM {t}")
+                                  for t in ("agent_triggers", "alert_rules")])
+
+    def test_another_key_leaves_the_rest_of_the_config(self):
+        with with_key(KEY):
+            self._add()
+        with with_key(OTHER_KEY), self.assertLogs("shared.utils.secret_box", "ERROR"):
+            servers, tools, *_ = self._read()
+        self.assertEqual(servers["mcpServers"]["r"], {"url": "https://x.example/mcp", "headers": {"Authorization": ""}})
+        self.assertEqual(tools["require_confirmation"]["tools"], ["a"])
+
+    def test_the_version_still_matches_the_agent(self):
+        from shared.utils.agent_config_identity import config_hash, config_snapshot
+        session = self.Session()
+        with without_key():
+            agent = AgentConfig(name="a", type="llm", model_name="m", project_id=1,
+                                mcp_servers_config=json.dumps(self.SERVERS, indent=2))
+            session.add(agent)
+            session.commit()
+            version = AgentConfigVersion(agent_config_id=agent.id, version_number=1)
+            version.set_snapshot(config_snapshot(agent))
+            session.add(version)
+            session.commit()
+        with with_key(KEY):
+            secret_box.encrypt_stored_secrets(session)
+            session.expire_all()
+            self.assertEqual(config_hash(version.get_snapshot()), config_hash(config_snapshot(agent)))
+        session.close()
 
 
 if __name__ == "__main__":

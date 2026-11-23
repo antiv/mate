@@ -81,7 +81,7 @@ class TestMask(unittest.TestCase):
 
     def test_what_a_tool_config_hides(self):
         masked = mask("tool_config", TOOLS)
-        self.assertEqual(masked["require_confirmation"]["notify"], {"type": "slack", "url": S})
+        self.assertEqual(masked["require_confirmation"]["notify"], {"type": "slack", "url": f"https://hooks.slack.com/{S}"})
         masked["require_confirmation"]["notify"]["url"] = TOOLS["require_confirmation"]["notify"]["url"]
         self.assertEqual(masked, TOOLS)
         self.assertEqual(mask("tool_config", {"x": {"api_key": "a", "url": "https://x.example/d/1aB2c3D4e5F6g7H8i9J0k"}}),
@@ -91,6 +91,23 @@ class TestMask(unittest.TestCase):
         self.assertEqual(json.loads(mask("mcp_servers_config", json.dumps(SERVERS))), mask("mcp_servers_config", SERVERS))
         for value in ('{ "mcpServers":{} }', "not json", "", None, '{"mcpServers": {"s": {"url": "https://x.example"}}}'):
             self.assertEqual(mask("mcp_servers_config", value), value)
+
+
+    def test_where_a_trigger_and_an_alert_send(self):
+        for url, expected in [
+            (f"https://hooks.slack.com/services/T0/B0/{SECRET}", f"https://hooks.slack.com/{S}"),
+            ("https://x.example/hook?key=1", f"https://x.example/{S}"),
+            ("https://x.example?key=1", f"https://x.example/{S}"),
+            ("https://bob:pw@x.example:8443/a", f"https://x.example:8443/{S}"),
+            ("https://x.example/", "https://x.example/"), ("https://x.example", "https://x.example"),
+            ("not an address", S), ("", ""),
+        ]:
+            for field in ("output_config", "destination_config"):
+                with self.subTest(url=url, field=field):
+                    self.assertEqual(mask(field, {"url": url, "headers": {"X-Key": "a", "Accept": "b"}, "timeout": 5}),
+                                     {"url": expected, "headers": {"X-Key": S, "Accept": "b"}, "timeout": 5})
+        self.assertEqual(mask("output_config", {"to": "a@b.c", "subject": "s", "label": "l"}),
+                         {"to": "a@b.c", "subject": "s", "label": "l"})
 
 
 class TestRestore(unittest.TestCase):
@@ -162,6 +179,91 @@ class TestRestore(unittest.TestCase):
         before = dict(config)
         require_config(config, None)
         self.assertEqual(config, before)
+
+
+class TestTriggersAndAlerts(_TwoWorkspaces):
+    URL = f"https://hooks.example.com/services/{SECRET}"
+    CONFIG = {"url": URL, "headers": {"Authorization": f"Bearer {SECRET}"}}
+    SHOWN = {"url": f"https://hooks.example.com/{S}", "headers": {"Authorization": f"Bearer {S}"}}
+
+    def _row(self, model, row_id):
+        session = self.Session()
+        try:
+            return session.get(model, row_id)
+        finally:
+            session.close()
+
+    def _request(self, method, path, body=None):
+        return getattr(self.client, method)(path, headers=_platform_admin(A), **({"json": body} if body else {}))
+
+    def _check(self, path, kind, model, stored, field, create):
+        made = self._request("post", path, {**create, field: self.CONFIG})
+        self.assertEqual(made.status_code, 200, made.text)
+        row_id = made.json()[kind]["id"]
+        self.assertEqual(made.json()[kind][field], self.SHOWN)
+        self.assertNotIn(SECRET, self._request("get", path).text)
+        # As shown, with something else changed
+        kept = self._request("put", f"{path}/{row_id}", {**create, "name": "renamed", field: self.SHOWN})
+        self.assertEqual(kept.status_code, 200, kept.text)
+        self.assertEqual(getattr(self._row(model, row_id), stored)(), self.CONFIG)
+        # To another host
+        moved = self._request("put", f"{path}/{row_id}",
+                              {**create, field: {**self.SHOWN, "url": "https://evil.example/x"}})
+        self.assertEqual(moved.status_code, 400, moved.text)
+        self.assertIn("headers.Authorization", moved.json()["detail"])
+        self.assertEqual(getattr(self._row(model, row_id), stored)(), self.CONFIG)
+        # Nothing to keep in a new one
+        self.assertEqual(self._request("post", path, {**create, "name": "two", field: self.SHOWN}).status_code, 400)
+        replaced = self._request("put", f"{path}/{row_id}", {**create, field: {"url": "https://new.example/y"}})
+        self.assertEqual(replaced.status_code, 200, replaced.text)
+        self.assertEqual(getattr(self._row(model, row_id), stored)(), {"url": "https://new.example/y"})
+        return row_id
+
+    def test_a_trigger(self):
+        from shared.utils.models import AgentTrigger
+        with patch("shared.utils.trigger_runner.TriggerRunner.sync_cron_jobs"):
+            self._check("/dashboard/api/triggers", "trigger", AgentTrigger, "get_output_config", "output_config", {
+                "name": "t", "trigger_type": "cron", "cron_expression": "0 9 * * *", "agent_name": A_ROOT,
+                "project_id": self.ids["project_a"], "prompt": "p", "output_type": "http_callback"})
+
+    def test_an_alert_rule(self):
+        from shared.utils.models import AlertRule
+        self._check("/dashboard/api/alert-rules", "alert_rule", AlertRule, "get_destination_config",
+                    "destination_config", {
+                        "name": "r", "scope": "agent", "scope_id": A_ROOT, "condition_type": "agent_error_count",
+                        "condition_config": {"threshold": 1, "window_minutes": 5}, "destination_type": "http"})
+
+    def test_an_imported_trigger_has_no_hidden_value(self):
+        import auth_server
+        from shared.utils.models import AgentTrigger
+        server = auth_server.app.state.dashboard_server
+        session = self.Session()
+        from shared.utils.workspaces import agent_workspace
+        workspace = agent_workspace(session, A_ROOT)
+        session.close()
+        result = server._import_agent_configs({"agents": [], "triggers": [{
+            "name": "imported", "agent_name": A_ROOT, "output_type": "http_callback", "output_config": self.SHOWN}]},
+            workspace_id=workspace)
+        self.assertIn("imported without its hidden values", " ".join(result["errors"]))
+        session = self.Session()
+        trigger = session.query(AgentTrigger).filter_by(name="imported").one()
+        self.assertEqual(trigger.get_output_config(), {"url": "", "headers": {"Authorization": ""}})
+        session.close()
+
+    def test_a_failed_delivery_does_not_name_the_address(self):
+        import httpx
+        from shared.utils import notify
+        for handler, expected in [
+            (lambda request: httpx.Response(404), "HTTP 404"),
+            (lambda request: (_ for _ in ()).throw(httpx.ConnectError(f"no route to {self.URL}")), "ConnectError"),
+        ]:
+            client = httpx.Client(transport=httpx.MockTransport(handler))
+            with patch.object(notify.httpx, "Client", return_value=client), \
+                    self.assertLogs("shared.utils.notify", "INFO") as logs:
+                ok, detail = notify.post_json(self.URL, {})
+            self.assertFalse(ok)
+            self.assertIn(expected, detail)
+            self.assertNotIn(SECRET, detail + " ".join(logs.output))
 
 
 class TestInTheDashboard(_TwoWorkspaces):

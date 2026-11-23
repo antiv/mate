@@ -164,7 +164,7 @@ const AlertPage = (function () {
         document.getElementById('formTokenLimit').value = (c.unit === 'usd' ? c.usd_limit : c.token_limit) ?? '';
 
         const d = rule.destination_config || {};
-        // headers come back redacted, so only the address fields are safe to prefill
+        // Secrets come back as __stored__, and saving them so keeps the stored ones
         document.getElementById('formUrl').value = d.url || '';
         document.getElementById('formTo').value = d.to || '';
 
@@ -202,9 +202,12 @@ const AlertPage = (function () {
             };
         }
 
-        const destinationConfig = destinationType === 'email'
-            ? { to: document.getElementById('formTo').value.trim() }
-            : { url: document.getElementById('formUrl').value.trim() };
+        // What the form doesn't show (headers, timeout, subject) stays while the type does
+        const edited = _editId && _rules.find(r => r.id === _editId);
+        const destinationConfig = edited && edited.destination_type === destinationType
+            ? { ...edited.destination_config } : {};
+        if (destinationType === 'email') destinationConfig.to = document.getElementById('formTo').value.trim();
+        else destinationConfig.url = document.getElementById('formUrl').value.trim();
 
         return {
             name: document.getElementById('formName').value.trim(),

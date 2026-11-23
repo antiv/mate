@@ -9,7 +9,8 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 import json
 
-from .secret_box import EncryptedText, decrypt, encrypt
+from .config_secrets import mask
+from .secret_box import EncryptedSecrets, EncryptedText, decrypt_snapshot, encrypt_snapshot
 
 Base = declarative_base()
 
@@ -366,10 +367,10 @@ class AgentConfig(Base):
     ai_disclosure_waiver = Column(Text, nullable=True)
     description = Column(Text, nullable=True)
     instruction = Column(Text, nullable=True)
-    mcp_servers_config = Column(Text, nullable=True)  # JSON object containing multiple MCP server configurations
+    mcp_servers_config = Column(EncryptedSecrets("mcp_servers_config"), nullable=True)  # JSON object containing multiple MCP server configurations
     parent_agents = Column(Text, nullable=True)  # JSON array of parent agent names
     allowed_for_roles = Column(Text, nullable=True)  # JSON string of roles
-    tool_config = Column(Text, nullable=True)  # JSON string for tool configuration
+    tool_config = Column(EncryptedSecrets("tool_config"), nullable=True)  # JSON string for tool configuration
     max_iterations = Column(Integer, nullable=True)  # For LoopAgent - maximum number of iterations
     planner_config = Column(Text, nullable=True)  # JSON string for planner configuration
     generate_content_config = Column(Text, nullable=True)  # JSON string for LLM generation config (temperature, top_p, etc.)
@@ -478,16 +479,11 @@ class AgentConfigVersion(Base):
             snapshot = json.loads(self.config_snapshot) if self.config_snapshot else {}
         except json.JSONDecodeError:
             return {}
-        if snapshot.get('model_api_key'):
-            snapshot['model_api_key'] = decrypt(snapshot['model_api_key'])
-        return snapshot
+        return decrypt_snapshot(snapshot)
 
     def set_snapshot(self, snapshot: dict) -> None:
-        """Store a snapshot, its model_api_key encrypted like the agent's own column."""
-        snapshot = dict(snapshot)
-        if snapshot.get('model_api_key'):
-            snapshot['model_api_key'] = encrypt(snapshot['model_api_key'])
-        self.config_snapshot = json.dumps(snapshot)
+        """Store a snapshot, its secrets encrypted like the agent's own columns."""
+        self.config_snapshot = json.dumps(encrypt_snapshot(snapshot))
 
     def to_dict(self) -> dict:
         return {
@@ -1441,7 +1437,7 @@ class AgentTrigger(Base):
     signing_secret = Column(EncryptedText, nullable=True)
     require_signature = Column(Boolean, nullable=False, default=False)
     output_type = Column(String(50), nullable=False, default='memory_block')
-    output_config = Column(Text, nullable=True)
+    output_config = Column(EncryptedSecrets("output_config"), nullable=True)
     is_enabled = Column(Boolean, nullable=False, default=True)
     last_fired_at = Column(DateTime, nullable=True)
     last_result = Column(Text, nullable=True)
@@ -1485,7 +1481,7 @@ class AgentTrigger(Base):
             # The secret itself is shown once at creation and never again.
             'has_signing_secret': bool(self.signing_secret),
             'output_type': self.output_type,
-            'output_config': self.get_output_config(),
+            'output_config': mask('output_config', self.get_output_config()),
             'is_enabled': self.is_enabled,
             'last_fired_at': self.last_fired_at.isoformat() if self.last_fired_at else None,
             'last_result': self.get_last_result(),
@@ -1596,7 +1592,7 @@ class AlertRule(Base):
     condition_type = Column(String(50), nullable=False)  # agent_error_count | budget_threshold | guardrail_count | model_fallback_count
     condition_config = Column(Text, nullable=True)
     destination_type = Column(String(50), nullable=False)  # http | email | slack | discord
-    destination_config = Column(Text, nullable=True)
+    destination_config = Column(EncryptedSecrets("destination_config"), nullable=True)
     cooldown_seconds = Column(Integer, nullable=False, default=3600)
     is_enabled = Column(Boolean, nullable=False, default=True)
     # The durable cooldown: read before every evaluation, so a restart cannot
@@ -1637,11 +1633,7 @@ class AlertRule(Base):
     def set_last_state(self, state: Optional[dict]) -> None:
         self.last_state = json.dumps(state) if state else None
 
-    def to_dict(self, include_secrets: bool = False) -> dict:
-        destination = self.get_destination_config()
-        if not include_secrets and destination.get('headers'):
-            # Destination headers routinely carry an auth token
-            destination = {**destination, 'headers': '***'}
+    def to_dict(self) -> dict:
         return {
             'id': self.id,
             'name': self.name,
@@ -1651,7 +1643,7 @@ class AlertRule(Base):
             'condition_type': self.condition_type,
             'condition_config': self.get_condition_config(),
             'destination_type': self.destination_type,
-            'destination_config': destination,
+            'destination_config': mask('destination_config', self.get_destination_config()),
             'cooldown_seconds': self.cooldown_seconds,
             'is_enabled': self.is_enabled,
             'last_fired_at': self.last_fired_at.isoformat() if self.last_fired_at else None,
