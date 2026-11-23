@@ -68,6 +68,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Searching the messages in the Work Room was refused for members** (from the search above) - the route was open to admins only, and the page showed the refusal as "No session holds those words". A member searches their own conversations with the agents they may use, and a search that fails says so
 - **MATE's MCP servers with a real MCP client** (#376, from #389) - an agent's server, Image Generation and Google Drive, checked with the MCP SDK's client:
   - **A failed run was a success:** when the agent's model call failed, the client got the error text as the agent's answer. The result now has `isError: true`
   - **`session_id` works:** calls of one caller to an agent's tool with the same `session_id` continue one conversation, as the tool says; it was sent where A2A doesn't read it, so every call started a new one. Another caller's `session_id` of the same name is another conversation

@@ -8335,6 +8335,11 @@ class DashboardServer:
             """The caller's own sessions with an agent of their workspace whose messages
             hold every word of q: the Work Room's session search."""
             self._require_in_workspace(ctx, agent_name=agent)
+            # As the Work Room offers it: an agent the caller may not use is not found
+            config = next((a for a in self._get_all_agent_configs(workspace_id=ctx.workspace_id)
+                           if a.get("name") == agent), None)
+            if config is not None and not roles_allow(self._caller_access(ctx), config.get("allowed_for_roles")):
+                raise HTTPException(status_code=404, detail="Agent not found")
             matches = await asyncio.to_thread(self._search_session_messages, agent, ctx.user_id, q)
             return {"sessions": matches}
 
