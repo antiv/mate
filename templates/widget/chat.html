@@ -5,7 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Chat</title>
-  <link rel="stylesheet" href="/static/css/widget/chat.css?v=8">
+  <link rel="stylesheet" href="/static/css/widget/chat.css?v=9">
 </head>
 
 <body>
@@ -61,7 +61,8 @@
     window.WIDGET_AGENT_NAME = {{ agent_name | tojson }};
     window.WIDGET_CONFIG = {{ widget_config | tojson }};
   </script>
-  <script src="/static/js/widget/chat.js?v=16"></script>
+  <script src="/static/js/standalone/chat-markdown.js?v=1"></script>
+  <script src="/static/js/widget/chat.js?v=17"></script>
 </body>
 
 </html>
