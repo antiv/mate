@@ -27,12 +27,12 @@ import logging
 import time
 from typing import Any, Callable, Optional, Tuple, Type
 
-import httpx
 import litellm
 from google.adk.agents.callback_context import CallbackContext
 from google.adk.models.llm_request import LlmRequest
 from google.adk.models.llm_response import LlmResponse
 
+from ..utils.outbound import HTTP_LIBRARIES
 from .token_usage_callback import _get_adk_session_info, start_inference_span
 
 logger = logging.getLogger(__name__)
@@ -42,8 +42,8 @@ logger = logging.getLogger(__name__)
 PROVIDER_OUTAGE_ERRORS: Tuple[Type[BaseException], ...] = (
     TimeoutError,
     ConnectionError,
-    httpx.TimeoutException,
-    httpx.NetworkError,
+    *(library.TimeoutException for library in HTTP_LIBRARIES),
+    *(library.NetworkError for library in HTTP_LIBRARIES),
     litellm.Timeout,
     litellm.APIConnectionError,
     litellm.RateLimitError,
