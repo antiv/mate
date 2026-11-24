@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- **Approvals hold for an MCP server's tools** - a tool of an MCP server named in `require_confirmation` now asks first, on both runtimes; only MATE's own tools did. A named tool that can't ask is left out of the agent, with an error in the log. **When upgrading:** an agent that lists an MCP tool there starts to ask
 - **The guard on model endpoints covers httpx2** - the OpenAI SDK moves to it in its version 3, where the image extraction tool's calls would have got past the check that keeps a workspace's endpoint off the server's own network. No release of MATE has that version. A test now makes the calls with the clients themselves
 
 ### Fixed
