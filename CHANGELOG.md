@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Trace Replay didn't show that a fallback model answered** - recording the failed call ended the span the mark goes on, so the replay showed the agent's own model and not the fallback. The fallback's call has a span of its own now
+
 ## [2.1.0] - 2026-11-23
 
 **Published again on 2026-11-24,** with the Work Room's new chat, names for its conversations and small fixes to the dashboard (#419, #421). If you took 2.1.0 before that, pull the image or the tag again: `docker pull ghcr.io/antiv/mate:2.1.0`, `git fetch --tags --force`.

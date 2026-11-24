@@ -56,6 +56,59 @@ def _set_config_identity(span: Any, agent_name: str) -> None:
         span.set_attribute(MATE_AGENT_CONFIG_VERSION, identity["version"])
 
 
+def start_inference_span(callback_context: CallbackContext, model_name: Optional[str],
+                         start_time: Optional[int] = None) -> None:
+    """Start the gen_ai.inference span of a model call, when tracing is enabled.
+    log_token_usage_callback ends it, or the error callback on a failed call.
+
+    start_time (ns since the epoch) is when the call began, for one already answered.
+    """
+    try:
+        from shared.utils.tracing.tracing_config import is_tracing_enabled
+        if is_tracing_enabled():
+            from opentelemetry import trace
+            from shared.utils.tracing.tracer import get_tracer
+            from shared.utils.tracing.genai_attributes import (
+                GEN_AI_OPERATION_NAME,
+                GEN_AI_PROVIDER_NAME,
+                GEN_AI_REQUEST_MODEL,
+                GEN_AI_CONVERSATION_ID,
+                MATE_AGENT_NAME,
+            )
+            tracer = get_tracer("mate", "1.0.0")
+            span = tracer.start_span("gen_ai.inference", start_time=start_time)
+            logger.debug(
+                "Tracing: gen_ai.inference span started agent=%s",
+                getattr(callback_context, "agent_name", None),
+            )
+            span.set_attribute(GEN_AI_OPERATION_NAME, "chat")
+            span.set_attribute(GEN_AI_PROVIDER_NAME, _get_provider_from_model(model_name))
+            if model_name:
+                span.set_attribute(GEN_AI_REQUEST_MODEL, model_name)
+            agent_name = getattr(callback_context, 'agent_name', None)
+            if agent_name:
+                span.set_attribute(MATE_AGENT_NAME, agent_name)
+                _set_config_identity(span, agent_name)
+            user_id, session_id = _get_adk_session_info(callback_context)
+            if session_id:
+                span.set_attribute(GEN_AI_CONVERSATION_ID, session_id)
+            # Store in contextvar so log_token_usage_callback can end it (same async context)
+            _inference_span_var.set(span)
+            # Fallback: key by context id so we can end span even if after-callback runs in different context
+            ctx_id = id(callback_context)
+            old = _inference_span_by_context_id.pop(ctx_id, None)
+            if old is not None:
+                try:
+                    old.end()
+                except Exception:
+                    pass
+            _inference_span_by_context_id[ctx_id] = span
+            # Set as current span so RBAC/tool spans become children of this trace
+            trace.set_span_in_context(span)
+    except Exception as e:
+        logger.debug("Tracing span start skipped: %s", e)
+
+
 def capture_model_name_callback(
     callback_context: CallbackContext, llm_request: LlmRequest
 ) -> Optional[LlmResponse]:
@@ -92,51 +145,7 @@ def capture_model_name_callback(
     else:
         logger.warning("Could not capture model name from request")
     
-    # Start GenAI inference span for distributed tracing
-    try:
-        from shared.utils.tracing.tracing_config import is_tracing_enabled
-        if is_tracing_enabled():
-            from opentelemetry import trace
-            from shared.utils.tracing.tracer import get_tracer
-            from shared.utils.tracing.genai_attributes import (
-                GEN_AI_OPERATION_NAME,
-                GEN_AI_PROVIDER_NAME,
-                GEN_AI_REQUEST_MODEL,
-                GEN_AI_CONVERSATION_ID,
-                MATE_AGENT_NAME,
-            )
-            tracer = get_tracer("mate", "1.0.0")
-            span = tracer.start_span("gen_ai.inference")
-            logger.debug(
-                "Tracing: gen_ai.inference span started agent=%s",
-                getattr(callback_context, "agent_name", None),
-            )
-            span.set_attribute(GEN_AI_OPERATION_NAME, "chat")
-            span.set_attribute(GEN_AI_PROVIDER_NAME, _get_provider_from_model(model_name))
-            if model_name:
-                span.set_attribute(GEN_AI_REQUEST_MODEL, model_name)
-            agent_name = getattr(callback_context, 'agent_name', None)
-            if agent_name:
-                span.set_attribute(MATE_AGENT_NAME, agent_name)
-                _set_config_identity(span, agent_name)
-            user_id, session_id = _get_adk_session_info(callback_context)
-            if session_id:
-                span.set_attribute(GEN_AI_CONVERSATION_ID, session_id)
-            # Store in contextvar so log_token_usage_callback can end it (same async context)
-            _inference_span_var.set(span)
-            # Fallback: key by context id so we can end span even if after-callback runs in different context
-            ctx_id = id(callback_context)
-            old = _inference_span_by_context_id.pop(ctx_id, None)
-            if old is not None:
-                try:
-                    old.end()
-                except Exception:
-                    pass
-            _inference_span_by_context_id[ctx_id] = span
-            # Set as current span so RBAC/tool spans become children of this trace
-            trace.set_span_in_context(span)
-    except Exception as e:
-        logger.debug("Tracing span start skipped: %s", e)
+    start_inference_span(callback_context, model_name)
     
     return None  # Continue with normal processing
 

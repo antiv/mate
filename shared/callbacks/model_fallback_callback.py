@@ -24,6 +24,7 @@ request to the fallback at will, past the primary provider's own filters.
 
 import copy
 import logging
+import time
 from typing import Any, Callable, Optional, Tuple, Type
 
 import httpx
@@ -32,7 +33,7 @@ from google.adk.agents.callback_context import CallbackContext
 from google.adk.models.llm_request import LlmRequest
 from google.adk.models.llm_response import LlmResponse
 
-from .token_usage_callback import _get_adk_session_info
+from .token_usage_callback import _get_adk_session_info, start_inference_span
 
 logger = logging.getLogger(__name__)
 
@@ -104,6 +105,7 @@ def make_model_fallback_callback(agent_name: str, primary_model: Optional[str],
         if not is_provider_outage(error):
             return None  # ADK re-raises it, as without a fallback
         response = None
+        started = time.time_ns()
         try:
             # Shallow, so the tools the request points at are not copied (they may
             # hold locks or clients that cannot be); what a model call can change
@@ -134,6 +136,9 @@ def make_model_fallback_callback(agent_name: str, primary_model: Optional[str],
             callback_context.state['current_model_is_fallback'] = True
         except Exception:
             pass
+        # The failed call's span is ended by then (error_callback.py). This one is ended
+        # by the after-model callback, which marks it as the fallback's.
+        start_inference_span(callback_context, primary_model, start_time=started)
         user_id, _ = _get_adk_session_info(callback_context)
         record_model_fallback(agent_name, user_id, primary_model, fallback_model, error)
         return response
