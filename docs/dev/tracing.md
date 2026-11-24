@@ -96,7 +96,7 @@ trace (one chat turn) into a timeline:
 - **Agents** come from ADK's `invoke_agent` spans (`gen_ai.operation.name`,
   `gen_ai.agent.name`).
 - **Model calls** come from MATE's `gen_ai.inference` spans, which carry the fallback
-  attribute. ADK's `call_llm` spans describe the same calls, so they are used only
+  attribute. A failed call and the fallback's answer are a span each. ADK's `call_llm` spans describe the same calls, so they are used only
   when a trace has no `gen_ai.inference` span.
 - **Tool calls** come from ADK's `execute_tool` spans; MATE's `mate.tool` spans
   describe the same calls and are used only when there are none.
