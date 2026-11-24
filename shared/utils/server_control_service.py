@@ -212,6 +212,29 @@ class ServerControlService:
             traceback.print_exc()
             return {"success": False, "message": f"Error starting {label} server: {str(e)}"}
     
+    def _is_own_agent_server(self, proc: Any) -> bool:
+        """Whether a psutil process is this installation's agent server: it runs adk_main.py
+        or langgraph_main.py of this project root, on this port. Another installation's
+        must be left running, as must any process that only has the name on its command line.
+        """
+        import psutil
+
+        cmdline = proc.info.get('cmdline') or []
+        if not cmdline or not os.path.basename(cmdline[0]).lower().startswith("python"):
+            return False
+        script = next((arg for arg in cmdline[1:] if not arg.startswith("-")), "")
+        if os.path.basename(script) not in ("adk_main.py", "langgraph_main.py"):
+            return False
+        if not os.path.isabs(script):  # started by hand
+            script = os.path.join(proc.cwd(), script)
+        if os.path.dirname(os.path.realpath(script)) != os.path.realpath(self.project_root):
+            return False
+        try:
+            port = proc.environ().get("PORT")
+        except (psutil.AccessDenied, OSError):
+            return True
+        return port is None or port == str(self.adk_port)
+
     def stop_adk_server(self) -> Dict[str, Any]:
         """Stop the agent server (ADK or LangGraph)."""
         label = self._get_framework_label()
@@ -219,18 +242,14 @@ class ServerControlService:
             import psutil
             import signal
             
-            # Find and terminate ADK server processes
+            # Find and terminate this installation's agent server
             try:
                 killed_count = 0
                 for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
                     try:
-                        cmdline = proc.info.get('cmdline')
-                        if cmdline:
-                            cmdline_str = ' '.join(cmdline)
-                            # Look for processes matching "adk_main.py", "langgraph_main.py" or legacy "adk web" in the command line
-                            if 'adk_main.py' in cmdline_str or 'langgraph_main.py' in cmdline_str or ('adk' in cmdline_str.lower() and 'web' in cmdline_str.lower()):
-                                proc.send_signal(signal.SIGTERM)
-                                killed_count += 1
+                        if self._is_own_agent_server(proc):
+                            proc.send_signal(signal.SIGTERM)
+                            killed_count += 1
                     except (psutil.NoSuchProcess, psutil.AccessDenied):
                         continue
                 

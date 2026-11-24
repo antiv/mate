@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Stopping the agent server stopped other programs too** - the Stop and Restart buttons, and shutting down, ended every process on the machine with `adk_main.py`, or `adk` and `web`, in its command line: another installation's agent server, or a program that only had them in a path. Only this installation's agent server, on its port, is stopped
 - **Trace Replay didn't show that a fallback model answered** - recording the failed call ended the span the mark goes on, so the replay showed the agent's own model and not the fallback. The fallback's call has a span of its own now
 
 ## [2.1.0] - 2026-11-23

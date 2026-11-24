@@ -67,7 +67,9 @@ new router must be included before it.
 `ServerControlService.start_adk_server()` launches `adk_main.py`, or
 `langgraph_main.py` when `AGENT_FRAMEWORK=langgraph`, with `--host`,
 `--session-db-url` and `--a2a`, and the port in the `PORT` environment variable. The
-dashboard's start, stop and restart buttons call the same service.
+dashboard's start, stop and restart buttons call the same service. Stopping ends only the process
+that runs one of those scripts of this project root on this port, so another installation
+on the machine is left alone.
 
 > The child is started with the interpreter that runs the auth server (`sys.executable`),
 > not with whatever `python` is first on `PATH`. Running `.venv/bin/python auth_server.py`
