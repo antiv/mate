@@ -3,8 +3,9 @@
 {% block title %}Work Room - MATE{% endblock %}
 
 {% block extra_head %}
-<link rel="stylesheet" href="/static/css/widget/chat.css?v=8">
+<link rel="stylesheet" href="/static/css/widget/chat.css?v=9">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.6/ace.min.js" integrity="sha384-VeLPY4H4hgSXm0s/DQ7akVyaPRCb3RlBoBUPfMSinovwd++G8rfnm3eeH0MQ/xHk" crossorigin="anonymous" defer></script>
+<script src="/static/js/standalone/chat-markdown.js?v=1"></script>
 <style>
     /* ── Work Room layout (redesign tokens) ───────────────── */
     .wr-root {
@@ -251,10 +252,9 @@
         background: none;
         border-radius: 0;
     }
-    /* Tailwind takes the markers off lists, and chat.js makes each item a list of its
-       own, with a break between them and empty paragraphs around */
+    /* Tailwind takes the markers off lists; an attachment can leave an empty paragraph */
     .wr-chat-root .widget-message.agent ul { list-style: disc; }
-    .wr-chat-root .widget-message.agent ul + br,
+    .wr-chat-root .widget-message.agent ol { list-style: decimal; }
     .wr-chat-root .widget-message.agent p:empty { display: none; }
     .wr-chat-root .widget-message-actions {
         justify-content: flex-start;

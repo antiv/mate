@@ -1309,32 +1309,27 @@
       return hold('<pre><code>' + _escapeHtml(code.trim()) + '</code></pre>');
     });
 
-    var html = _escText(text)
-      .replace(/`([^`]+)`/g, "<code>$1</code>")
-      .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
-      .replace(/\*(.+?)\*/g, "<em>$1</em>")
-      .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, function (match, alt, src) {
-        var safe = _safeUrl(src, true);
-        return safe ? '<img src="' + safe + '" alt="' + alt + '" class="widget-msg-image widget-generated-image">' : match;
-      })
-      .replace(/\[([^\]]+)\]\(([^)]+)\)/g, function (match, label, href) {
-        var safe = _safeUrl(href, false);
-        return safe ? '<a href="' + safe + '" target="_blank" rel="noopener">' + label + '</a>' : match;
-      })
-      .replace(/^### (.+)$/gm, "<strong>$1</strong>")
-      .replace(/^## (.+)$/gm, "<strong>$1</strong>")
-      .replace(/^# (.+)$/gm, "<strong>$1</strong>")
-      .replace(/^[*-] (.+)$/gm, "<li>$1</li>")
-      .replace(/^\d+\. (.+)$/gm, "<li>$1</li>")
-      .replace(/\n{2,}/g, "</p><p>")
-      .replace(/\n/g, "<br>");
-
-    html = html.replace(/(<li>.*?<\/li>)+/gs, function (match) {
-      return "<ul>" + match + "</ul>";
-    });
+    function inline(line) {
+      return line
+        .replace(/`([^`]+)`/g, "<code>$1</code>")
+        .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+        .replace(/\*(.+?)\*/g, "<em>$1</em>")
+        .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, function (match, alt, src) {
+          var safe = _safeUrl(src, true);
+          return safe ? '<img src="' + safe + '" alt="' + alt + '" class="widget-msg-image widget-generated-image">' : match;
+        })
+        .replace(/\[([^\]]+)\]\(([^)]+)\)/g, function (match, label, href) {
+          var safe = _safeUrl(href, false);
+          return safe ? '<a href="' + safe + '" target="_blank" rel="noopener">' + label + '</a>' : match;
+        })
+        .replace(/^### (.+)$/gm, "<strong>$1</strong>")
+        .replace(/^## (.+)$/gm, "<strong>$1</strong>")
+        .replace(/^# (.+)$/gm, "<strong>$1</strong>");
+    }
+    var html = mateChatMarkdown.blocks(_escText(text), inline);
     html = html.replace(/\u0000(\d+)\u0000/g, function (_, i) { return held[+i]; });
 
-    return "<p>" + html + "</p>";
+    return html;
   }
 
   function _escapeHtml(text) {

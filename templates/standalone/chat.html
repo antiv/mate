@@ -5,7 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{{ agent_name }} — MATE</title>
-  <link rel="stylesheet" href="/static/css/widget/chat.css?v=8">
+  <link rel="stylesheet" href="/static/css/widget/chat.css?v=9">
   <style>
     /* Standalone overrides — slightly wider container on desktop */
     @media (min-width: 768px) {
@@ -60,7 +60,8 @@
     window.STANDALONE_RATINGS = {{ 'true' if ratings_enabled else 'false' }};
     window.MATE_FEEDBACK_ENDPOINT = "/feedback";
   </script>
-  <script src="/static/js/standalone/chat.js?v=13"></script>
+  <script src="/static/js/standalone/chat-markdown.js?v=1"></script>
+  <script src="/static/js/standalone/chat.js?v=14"></script>
 </body>
 
 </html>

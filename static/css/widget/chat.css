@@ -240,6 +240,17 @@ html, body {
   padding-left: 20px;
   margin: 4px 0;
 }
+.widget-message.agent .md-table { overflow-x: auto; margin: 8px 0; }
+.widget-message.agent .md-table table { border-collapse: collapse; font-size: 13px; }
+.widget-message.agent .md-table th, .widget-message.agent .md-table td {
+  padding: 5px 10px;
+  border: 1px solid rgba(128,128,128,0.35);
+  text-align: left;
+  vertical-align: top;
+}
+.widget-message.agent .md-table th { font-weight: 600; background: rgba(128,128,128,0.12); }
+.widget-message.agent .md-table .md-center { text-align: center; }
+.widget-message.agent .md-table .md-right { text-align: right; }
 .widget-message.agent a {
   color: var(--w-primary);
   text-decoration: underline;
