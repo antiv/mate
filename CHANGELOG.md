@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Migrations on PostgreSQL and MySQL in CI** (#424) - all of them on an empty database, and the new ones on a database of the last release with rows, on PostgreSQL 15 and 18 and MySQL 8.4. See `docs/dev/database-and-migrations.md`
+
 ### Fixed
 
 - **Trace Replay didn't show that a fallback model answered** - recording the failed call ended the span the mark goes on, so the replay showed the agent's own model and not the fallback. The fallback's call has a span of its own now

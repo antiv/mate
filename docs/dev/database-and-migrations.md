@@ -97,15 +97,24 @@ what makes a re-run of `CREATE TABLE` or `ADD COLUMN` statements harmless.
 
    `shared/test/test_migration_system.py` checks the MySQL files for
    `ADD COLUMN IF NOT EXISTS` and for a `TEXT` default that is not an expression.
-   Nothing runs them on MySQL in CI, so try a new MySQL migration on a fresh MySQL 8
-   database.
 
 3. Update the model in `models.py`.
 4. Run `python scripts/gen_docs.py`. The database reference lists every version
    against the three dialects and marks a missing file with ✗.
    `python scripts/gen_docs.py --check`, which CI runs, fails while any version is
    missing from a dialect.
-5. Run the tests; `shared/test/` includes migration tests.
+5. Run the tests; `shared/test/` includes migration tests. CI also runs
+   `test_migrations_on_database.py` on PostgreSQL 15 and 18 and on MySQL 8.4, in the jobs
+   `migrations`: all migrations on an empty database, and the new ones on a database of
+   the last release (`RELEASED`, moved at each release) with rows in it. It fails on a
+   statement that fails, also one the tolerant apply passes over, on a table or column
+   of the models that is missing, and on a row that changed. To run it on a server of
+   yours, on which it may create and drop databases:
+
+   ```bash
+   MATE_MIGRATIONS_URL=mysql+pymysql://root:secret@127.0.0.1:3306/mysql \
+     python -m unittest discover -s shared/test -t . -p "test_migrations_on_database.py" -v
+   ```
 
 SQLite can't drop a constraint in place, so a migration that changes one rebuilds the
 table: create `<table>_vNNN`, copy the rows, `DROP TABLE`, rename (V037, V048). With
