@@ -73,7 +73,7 @@
             {% else %}
             <!-- No project selected — show selection prompt -->
             <div class="vb-canvas flex items-center justify-center">
-                <div class="text-center max-w-md mx-auto">
+                <div class="text-center max-w-md min-w-0 mx-auto">
                     <div class="w-16 h-16 mx-auto mb-5 rounded-2xl bg-gradient-to-br from-indigo-100 to-blue-100 dark:from-indigo-900/40 dark:to-blue-900/40 flex items-center justify-center">
                         <i class="fas fa-project-diagram text-2xl text-indigo-500 dark:text-indigo-400"></i>
                     </div>
@@ -82,7 +82,7 @@
                     {% if projects %}
                     <div class="flex items-center justify-center gap-3">
                         <select id="vbProjectSelect"
-                            class="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent min-w-[200px]">
+                            class="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent min-w-0 flex-1">
                             <option value="">— Select project —</option>
                             {% for project in projects %}
                             <option value="{{ project.id }}">{{ project.name }}</option>
@@ -150,7 +150,7 @@
 <script src="/static/js/modals/version-history.js?v=5"></script>
 <script src="/static/js/trace-replay.js?v=2"></script>
 <script src="/static/js/approval-settings.js?v=1"></script>
-<script src="/static/js/agents-visual-builder.js?v=27"></script>
+<script src="/static/js/agents-visual-builder.js?v=28"></script>
 
 <script src="/static/js/agent-management.js?v=22"></script>
 <script nonce="{{ request.state.csp_nonce }}">

@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **A browser test of the dashboard in CI** (#424) - every page in headless Chromium, in both themes, on a desktop and a phone: errors, CSP violations, controls off the window, cut off or under the Help button, and a Work Room conversation. See `docs/dev/browser-tests.md`
+
+### Fixed
+
+- **Visual Builder:** agents with long names overlapped; the project picker was wider than a phone's screen
+- **On a phone,** the agent page and Triggers were wider than the screen when an agent or a project has a long name
+
 ## [2.1.0] - 2026-11-23
 
 **Published again on 2026-11-24,** with the Work Room's new chat, names for its conversations and small fixes to the dashboard (#419, #421). If you took 2.1.0 before that, pull the image or the tag again: `docker pull ghcr.io/antiv/mate:2.1.0`, `git fetch --tags --force`.
