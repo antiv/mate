@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **Visual Builder:** agents with long names overlapped; the project picker was wider than a phone's screen
+- **Stopping the agent server stopped other programs too** - the Stop and Restart buttons, and shutting down, ended every process on the machine with `adk_main.py`, or `adk` and `web`, in its command line: another installation's agent server, or a program that only had them in a path. Only this installation's agent server, on its port, is stopped
 - **On a phone,** the agent page and Triggers were wider than the screen when an agent or a project has a long name
 - **Trace Replay didn't show that a fallback model answered** - recording the failed call ended the span the mark goes on, so the replay showed the agent's own model and not the fallback. The fallback's call has a span of its own now
 

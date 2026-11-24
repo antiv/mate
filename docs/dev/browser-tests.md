@@ -32,8 +32,7 @@ ports:
 - a stand-in for OpenRouter (`stand_in_model.py`), which always gives the same answer.
 
 It then imports a template into a project with a long name, and adds a trigger and 60
-usage rows. `launch.py` starts them, not `auth_server.py`, whose shutdown stops every
-process on the machine that has `adk_main.py` in its command line.
+usage rows. `launch.py` starts them, as `auth_server.py` listens on port 8000.
 
 ## What it checks
 
