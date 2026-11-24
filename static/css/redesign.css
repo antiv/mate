@@ -245,6 +245,47 @@ input, select, textarea {
     font-family: inherit;
 }
 
+/* The browser's own parts (checkboxes, date pickers, dropdown lists) in the theme */
+html { color-scheme: light; accent-color: var(--accent); }
+html.dark { color-scheme: dark; }
+
+/* A dropdown's arrow, with room to its right; the text ends before it */
+select:not([multiple]):not([size]) {
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%236b6259' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2.5 4.5 6 8l3.5-3.5'/%3E%3C/svg%3E") !important;
+    background-repeat: no-repeat !important;
+    background-position: right 10px center !important;
+    background-size: 12px 12px !important;
+    padding-right: 30px !important;
+    text-overflow: ellipsis;
+}
+html.dark select:not([multiple]):not([size]) {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%23a9b0b8' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2.5 4.5 6 8l3.5-3.5'/%3E%3C/svg%3E") !important;
+}
+
+/* A date is as high as the text beside it */
+input::-webkit-datetime-edit, input::-webkit-datetime-edit-fields-wrapper { padding-block: 0; }
+input::-webkit-calendar-picker-indicator { padding-block: 0; height: 1em; }
+
+/* An icon and the text beside it */
+main .mr-0\.5, [role="dialog"] .mr-0\.5 { margin-right: 0.35rem !important; }
+.sort-indicator { margin-left: 0.35rem; }
+
+/* 44px is for fingers (dashboard-responsive.css); with a pointer the controls of a
+   page's header are as high as each other */
+@media (max-width: 767px) {
+    main .mate-toolbar :is(button, select, input:not([type="checkbox"])) { min-height: 44px; }
+}
+@media (min-width: 768px) {
+    main .min-h-\[44px\] { min-height: 36px !important; }
+    main .mate-toolbar { align-items: center; }
+    main form.mate-toolbar { align-items: flex-end; }
+    main .mate-toolbar button { white-space: nowrap; }
+    main .mate-toolbar :is(button, select, input:not([type="checkbox"]), a.rounded-lg) { height: 36px; padding-block: 0; }
+    main .mate-toolbar .mate-segmented button { height: 32px; min-height: 32px !important; }
+}
+
 /* ── Scrollbars (subtle, token-aware) ─────────────────────── */
 * {
     scrollbar-width: thin;

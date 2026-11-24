@@ -132,7 +132,7 @@ Every environment variable the code reads: **141** in total. Descriptions come f
 | `TAVILY_API_KEY` | — | Web search for the google_search tool. With a key, results come from the Tavily API; without one, the tool falls back to DuckDuckGo. | `shared/utils/tools/google_tools.py` |
 | `TEMPLATES_REMOTE_URL` | — | Remote template gallery URL (empty = bundled templates) | `shared/utils/template_service.py` |
 | `TIKTOKEN_CACHE_DIR` | — | — | `build_standalone_agent.py` |
-| `TITLE_GEN_MODEL` | — | Model for generated titles (falls back to default) | `shared/utils/dashboard/dashboard_server.py`, `shared/utils/wizard/site_analyzer.py` |
+| `TITLE_GEN_MODEL` | — | Model that names Work Room conversations (unset = their first words) | `shared/utils/dashboard/dashboard_server.py`, `shared/utils/wizard/site_analyzer.py` |
 | `TOKEN_TTL_HOURS` | `24` | Lifetime of bearer tokens from POST /auth/token. | `shared/utils/auth_utils.py` |
 | `TRUSTED_PROXY_HOSTS` | `*` | Comma-separated proxy IPs to trust for X-Forwarded-*. Restrict in production — "*" lets any client spoof them, and audit logs then fall back to the socket peer address. | `auth_server.py`, `shared/utils/audit_service.py` |
 | `WIDGET_LEGACY_ADMIN_KEY` | `false` | true = the public widget key still works on /widget/api admin routes. Transitional only; keep false. | `server/widget_routes.py` |
