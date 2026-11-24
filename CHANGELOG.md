@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 
 - **The guard on model endpoints covers httpx2** - the OpenAI SDK moves to it in its version 3, where the image extraction tool's calls would have got past the check that keeps a workspace's endpoint off the server's own network. No release of MATE has that version. A test now makes the calls with the clients themselves
+- **litellm 1.103.10 → 1.108.10** (#389) - litellm was held at 1.103 by mcp 1. The advisories published for the versions between are about LiteLLM's proxy server, which MATE doesn't run. **When upgrading:** reinstall the dependencies (`pip install -r requirements.lock`) or pull the image; nothing needs configuring
 
 ### Fixed
 
@@ -23,6 +24,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **On a phone,** the agent page and Triggers were wider than the screen when an agent or a project has a long name
 - **Trace Replay didn't show that a fallback model answered** - recording the failed call ended the span the mark goes on, so the replay showed the agent's own model and not the fallback. The fallback's call has a span of its own now
 - **Tables and numbered lists in the chat** - in the Work Room, the widget and a standalone agent, a Markdown table was shown as its bars and dashes, and a numbered list as bullets. Lists within lists work too
+
+### Changed
+
+- **mcp 1.30 → 2.3, and the LangGraph runtime's MCP client** (#389) - the client is written on the MCP SDK, as langchain-mcp-adapters is no longer maintained and needs mcp 1. Servers are configured as before, and tool names, headers, `${VAR}` and timeouts are the same. Audio in a tool's result is a line of text instead of an error. A result that a remote server sends as an event stream may have 16 MB on both runtimes (mcp 2's own limit, 1 MB, is raised); it had none before
 
 ## [2.1.0] - 2026-11-23
 

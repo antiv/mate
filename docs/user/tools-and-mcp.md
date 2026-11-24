@@ -189,6 +189,9 @@ one entry per server:
 - An entry with `command` and `args` is started on the MATE server as a subprocess.
   `env` passes it environment variables.
 - `timeout` is the number of seconds to wait for a tool call (60 if not set).
+- A result that a remote server sends as an event stream may have 16 MB; a larger one is
+  an error the agent gets. A server that answers with JSON, and a stdio server, have no
+  such limit.
 - Write a secret as `${NAME}` and MATE reads it from the server's environment
   instead of storing it with the agent. If that variable is not set, the server is
   skipped rather than called without its credential.

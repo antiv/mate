@@ -803,7 +803,9 @@ fastuuid==0.14.0 \
 filelock==4.2.10 \
     --hash=sha256:9479aaeb4db20b5a53e3da28493edd24720b66b8a0b84030aa56ccdf243d6857 \
     --hash=sha256:fcc3c0cb8bfe7f4b3bb0e231c04b15dbad068cb3c2515f343d8fde4dce93bd5d
-    # via huggingface-hub
+    # via
+    #   huggingface-hub
+    #   litellm
 frozenlist==1.8.0 \
     --hash=sha256:0325024fe97f94c41c08872db482cf8ac4800d80e79222c6b0b7b162d5b13686 \
     --hash=sha256:032efa2674356903cd0261c4317a561a6850f3ac864a63fc1583147fb05a79b0 \
@@ -1254,7 +1256,6 @@ httpx==0.28.1 \
     #   langchain-litellm
     #   langgraph-sdk
     #   litellm
-    #   mcp
     #   openai
     #   postgrest
     #   realtime
@@ -1263,14 +1264,12 @@ httpx==0.28.1 \
     #   supabase-auth
     #   supabase-functions
     #   tavily-python
-httpx-sse==0.4.3 \
-    --hash=sha256:0ac1c9fe3c0afad2e0ebb25a934a59f4c7823b60792691f779fad2c5568830fc \
-    --hash=sha256:9b1ed0127459a66014aec3c56bebd93da3c1bc8bb6618c8082039a44889a755d
-    # via mcp
 httpx2==2.16.0 \
     --hash=sha256:0d54c98128e8f2ff7fbbde0fca8c359e5f032edeaaaac443cdb7f31f685bcd7f \
     --hash=sha256:fd2c5d7909e8d86fe92d53020c310ca0e4e431b838c207c5754b9bbf0308d49a
-    # via langsmith
+    # via
+    #   langsmith
+    #   mcp
 httpx2-jsfetch==1.0 ; python_full_version >= '3.12' and sys_platform == 'emscripten' \
     --hash=sha256:70a0e3eabfef7cce5ad9c629f7d01ca05e418f586646f4ddf14782e4c1454c60 \
     --hash=sha256:cb916b707601e69a07721aabc8f3f6659be3a6893bc1ff5c6f9e02241df2da32
@@ -1278,7 +1277,9 @@ httpx2-jsfetch==1.0 ; python_full_version >= '3.12' and sys_platform == 'emscrip
 huggingface-hub==1.33.0 \
     --hash=sha256:04e434b06e100eddbce9a6e817d72693a7884b10a79bd67ab48080d5c07eb899 \
     --hash=sha256:367be21a201db9523eddf8aeac7048f2602c1b308691c97640d5e72ed188007e
-    # via tokenizers
+    # via
+    #   litellm
+    #   tokenizers
 hyperframe==6.1.0 \
     --hash=sha256:b03380493a519fce58ea5af42e4a42317bf9bd425596f7a0835ffce80f1a42e5 \
     --hash=sha256:f630908a00854a7adeabd6382b43923a4c4cd4b821fcb527e6ab9e15382a3b08
@@ -1456,7 +1457,6 @@ langchain-core==1.8.0 \
     # via
     #   -r requirements.txt
     #   langchain-litellm
-    #   langchain-mcp-adapters
     #   langgraph
     #   langgraph-checkpoint
     #   langgraph-prebuilt
@@ -1464,10 +1464,6 @@ langchain-core==1.8.0 \
 langchain-litellm==0.11.1 \
     --hash=sha256:20599b37383b650db1fcd42fa812a8a01bf31c84d7c5fcc038ada21472a0a19e \
     --hash=sha256:7887ae2aab12b47cde7250ba202622c11c9e2e007a371cc1fbe7d88e580ce85d
-    # via -r requirements.txt
-langchain-mcp-adapters==0.3.2 \
-    --hash=sha256:094e6b3096dbcc408417d5722f6915f164772e50c502ae3d8989405bf12c3c84 \
-    --hash=sha256:61cd1a09597adb619a9bafb0642938ffc2a9463d699a753f7af0420ea46c381a
     # via -r requirements.txt
 langchain-protocol==0.0.21 \
     --hash=sha256:04b3e80852233a8db39b39d3ad2438d892531dc0ecd41459e857a139ee0e601c \
@@ -1502,15 +1498,15 @@ langsmith==0.14.17 \
     --hash=sha256:0aa2c79936c93c7cea9c55656f05e21cc5da715fecbdbda439d084adc08429be \
     --hash=sha256:53efa2db8293d0a8d60efebe0945c595b635873774b302066ed0a746ddf87562
     # via langchain-core
-litellm==1.103.10 \
-    --hash=sha256:0085bb61fdb321ce17014eac697d8d7513f36e6681d490af845e8d8b9af8e613 \
-    --hash=sha256:5774a19560e93b1da1838b160d0ac4fec5238c11bde2cd2411422a06fb4f5e7f \
-    --hash=sha256:7451792391b9e268e812b17a4a5cc0d34dba9bac8d51615798ebcc58f10e1b09 \
-    --hash=sha256:a7d2b6a0de7c0abfc97fe89184cb2b719a5f76170a4cac9ffd4d14e85fbb3b73 \
-    --hash=sha256:adbcbb663a9cc96331de0f6ddd60e81d883288b901b7a4f6fbbfeb66edb669cd \
-    --hash=sha256:b1bf12810b6565156c6b23bda2ccaf115c6edafbbf92e98220ecbc73f89d6972 \
-    --hash=sha256:ca4cbf0492f65c383de264da0ff98f48d4eb56e4edf4a55713d2562a554b986f \
-    --hash=sha256:f639bd02ac34869080b7792732336345bc066ffb04be301093090425f6caa2bc
+litellm==1.108.10 \
+    --hash=sha256:430f64c13b0fe942069db5cf4f77ceb283dc5bedc921795b33c3efaabf14bcc8 \
+    --hash=sha256:46e213022c225d05981790df1f38051571271963ba9de0a52f59037c4c50ab4e \
+    --hash=sha256:5ac43d2444442a6d1b7fe45b959f26ccada10ddf04f5b07cd8caab8e34dc9634 \
+    --hash=sha256:7314a7f51b6bcbfe1e915a301604aecf46fcef2097d9b13842f0b2fc85d591cc \
+    --hash=sha256:86365825973f8bce27dae9b9c46712a1d75d5544513529dd247719e35583ca68 \
+    --hash=sha256:a908a0f9f9e3a2e89841c50518571c930c7543c84db6cbb9e6b8dd95fb026f2f \
+    --hash=sha256:f1333e96beee237783c9430fa3fce1b522e0ca58943fd6172d01c349b5e627c8 \
+    --hash=sha256:f1bf2a68fc1e260f1a54a88611202be7fe5628bc33f300e94fbf256cc5c31afa
     # via
     #   -r requirements.txt
     #   langchain-litellm
@@ -1671,12 +1667,14 @@ markupsafe==3.0.4 \
     --hash=sha256:fd9f8797427910198f95bced71ddfed61130d7e349213bfb8466c9c99e2c46a8 \
     --hash=sha256:fdb4ca07ab75ffadab4a8b135ad59cdbb3156b99310f3d565370da74a15d6bd3
     # via jinja2
-mcp==1.30.0 \
-    --hash=sha256:445414625fce5c295faa505bb11bacece661ab6f4028d57c935db57820b7a3e4 \
-    --hash=sha256:666edb5009503e1047c9d60346a756f94b261f05cc2625f23d41c728ffc484d0
-    # via
-    #   -r requirements.txt
-    #   langchain-mcp-adapters
+mcp==2.3.0 \
+    --hash=sha256:8b147a50441cf059dc88c684e0aeed3687f0aa0f39c6cde7b90330effd2b34d8 \
+    --hash=sha256:dd0c44c089d16453e8ae31a3877a0054d7a2314caaa81f5e0541b9b1734b2377
+    # via -r requirements.txt
+mcp-types==2.3.0 \
+    --hash=sha256:968efdbdaedfab06adae40d378a34395f1090c5921d4be3c9cde283aaf76d91d \
+    --hash=sha256:d1e46549edb35ee19a94940fcee6d1addd7e589ab7ea92dda83f5d84781fc362
+    # via mcp
 multidict==7.2.1 \
     --hash=sha256:02009b402129a73e1f3da68f48eb999afbacd29f25aef0d5052b84ff5c2786a2 \
     --hash=sha256:02d9c04d395a36eeebe89e45f2269614a4675b8e83fddcba15bba2be903971e5 \
@@ -1846,6 +1844,7 @@ opentelemetry-api==1.45.2 \
     #   fastapi
     #   google-adk
     #   google-api-core
+    #   mcp
     #   opentelemetry-exporter-http-transport
     #   opentelemetry-exporter-otlp-proto-http
     #   opentelemetry-sdk
@@ -2011,6 +2010,7 @@ packaging==26.3 \
     #   huggingface-hub
     #   langchain-core
     #   langsmith
+    #   litellm
     #   pyinstaller
     #   pyinstaller-hooks-contrib
     #   pytest
@@ -2327,6 +2327,7 @@ pydantic==2.14.3 \
     #   langsmith
     #   litellm
     #   mcp
+    #   mcp-types
     #   openai
     #   postgrest
     #   pydantic-settings
@@ -2478,9 +2479,7 @@ pydantic-core==2.50.4 \
 pydantic-settings==2.16.3 \
     --hash=sha256:10e36f616623ebb586c05ca3d3cd22927146869db413d4f14c20c514442a1337 \
     --hash=sha256:d1db16a2d34006323a1b42c0640898da58adfbad7ec30baaa9e2b18aafc08999
-    # via
-    #   litellm
-    #   mcp
+    # via litellm
 pygments==2.21.0 \
     --hash=sha256:2363c69b61c4a97c838da3b130dcd6468f4848992b21a82f2a63ec34377137d9 \
     --hash=sha256:610ca751c9bc2492b38eb9a38a7fbc93edbbb2d7182edaf34e66ae493dee5c8c
@@ -2651,6 +2650,7 @@ pyyaml==6.0.3 \
     #   google-adk
     #   huggingface-hub
     #   langchain-core
+    #   litellm
     #   uvicorn
 realtime==2.34.1 \
     --hash=sha256:74f1c1839a4b74c40fdb83afc105e7eb5c359a1a31d2082751e58b87d5f936ce \
@@ -3180,10 +3180,11 @@ typing-extensions==4.16.0 \
     #   huggingface-hub
     #   langchain-core
     #   langchain-litellm
-    #   langchain-mcp-adapters
     #   langchain-protocol
     #   langsmith
+    #   litellm
     #   mcp
+    #   mcp-types
     #   openai
     #   opentelemetry-api
     #   opentelemetry-exporter-otlp-proto-http

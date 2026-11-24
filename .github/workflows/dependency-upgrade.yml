@@ -3,7 +3,7 @@ name: Dependency upgrade
 # Once a month, recompile requirements.lock with the newest releases that
 # requirements.txt allows, run the test suite on it, and open a pull request
 # when anything moved. The exact pin and the bounds in requirements.txt
-# (google-adk, SQLAlchemy below 2.1, litellm below 1.104, mcp below 2) stay
+# (google-adk, SQLAlchemy below 2.1, litellm below 1.109, mcp below 3) stay
 # where they are: moving those is a decision made by hand, after reading their
 # changelogs. If the tests fail, no pull request is opened
 # and the run is marked failed, which GitHub reports to the workflow's owner.
