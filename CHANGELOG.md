@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Visual Builder:** agents with long names overlapped; the project picker was wider than a phone's screen
 - **On a phone,** the agent page and Triggers were wider than the screen when an agent or a project has a long name
+- **Trace Replay didn't show that a fallback model answered** - recording the failed call ended the span the mark goes on, so the replay showed the agent's own model and not the fallback. The fallback's call has a span of its own now
 
 ## [2.1.0] - 2026-11-23
 

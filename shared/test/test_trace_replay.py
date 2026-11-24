@@ -17,6 +17,7 @@ from unittest.mock import MagicMock, patch
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from fastapi import HTTPException
+from google.adk.models.llm_request import LlmRequest
 from google.adk.models.llm_response import LlmResponse
 from google.genai import types
 from opentelemetry.sdk.trace import TracerProvider
@@ -252,6 +253,57 @@ class TestFallbackOnInferenceSpan(unittest.TestCase):
         self.assertEqual(attrs["gen_ai.request.model"], "gemini-2.5-flash")
         self.assertEqual(attrs["gen_ai.response.model"], "openai/gpt-4o-mini")
         self.assertEqual(attrs["gen_ai.conversation.id"], "sess-1")
+
+    def test_fallback_answer_is_marked_after_the_error_is_recorded(self):
+        """As ADK runs them: the error recorder ends the failed call's span before the
+        fallback answers, and the after-model callback runs on the fallback's answer."""
+        import asyncio
+        import httpx
+        from shared.callbacks import error_callback, model_fallback_callback as mfc
+        from shared.callbacks import token_usage_callback as tuc
+        from shared.utils.tracing import tracing_config
+        exporter = InMemorySpanExporter()
+        provider = TracerProvider()
+        provider.add_span_processor(SimpleSpanProcessor(exporter))
+        ctx = SimpleNamespace(state={}, agent_name="root")
+        request = LlmRequest(model="gemini-2.5-flash", contents=[])
+        response = LlmResponse(usage_metadata=types.GenerateContentResponseUsageMetadata(
+            prompt_token_count=10, candidates_token_count=5, total_token_count=15))
+
+        class Model:
+            model = "openai/gpt-4o-mini"
+
+            async def generate_content_async(self, request, stream=False):
+                yield response
+
+        service = MagicMock()
+        service.is_connected.return_value = False
+        error = httpx.ConnectError("down")
+
+        async def call():
+            tuc.capture_model_name_callback(ctx, request)
+            error_callback.record_model_error_callback(
+                callback_context=ctx, llm_request=request, error=error)
+            answer = await fallback(callback_context=ctx, llm_request=request, error=error)
+            tuc.log_token_usage_callback(ctx, answer)
+
+        with patch.object(tracing_config, "_TRACING_ENABLED", True), \
+                patch("shared.utils.tracing.tracer.get_tracer", side_effect=lambda *a, **k: provider.get_tracer("t")), \
+                patch.object(tuc, "get_token_usage_service", return_value=service), \
+                patch.object(error_callback, "get_token_usage_service", return_value=service), \
+                patch.object(error_callback, "_get_adk_session_info", return_value=("u1", "sess-1")), \
+                patch.object(mfc, "_get_adk_session_info", return_value=("u1", "sess-1")), \
+                patch.object(mfc, "record_model_fallback"), \
+                patch.object(tuc, "_get_adk_session_info", return_value=("u1", "sess-1")), \
+                patch("shared.utils.utils.create_model", return_value=Model()):
+            fallback = mfc.make_model_fallback_callback("root", "gemini-2.5-flash", "openai/gpt-4o-mini")
+            asyncio.run(call())
+        failed, answered = [s for s in exporter.get_finished_spans() if s.name == "gen_ai.inference"]
+        self.assertNotIn("mate.model.fallback", failed.attributes)
+        self.assertIs(answered.attributes.get("mate.model.fallback"), True)
+        self.assertEqual(answered.attributes["gen_ai.request.model"], "gemini-2.5-flash")
+        self.assertEqual(answered.attributes["gen_ai.response.model"], "openai/gpt-4o-mini")
+        self.assertGreaterEqual(answered.start_time, failed.start_time)
 
     def test_primary_answer_is_not_marked(self):
         attrs = self._run_call(fallback=False)
