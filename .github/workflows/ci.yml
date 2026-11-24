@@ -37,6 +37,32 @@ jobs:
       - name: Run pytest-native tests
         run: python -m pytest shared/test/test_sessions_api.py -v
 
+  # The dashboard's pages in Chromium: docs/dev/browser-tests.md
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7.1.0
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements.lock
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.lock
+          playwright install --with-deps --only-shell chromium
+
+      - name: Run the browser tests
+        env:
+          MATE_BROWSER_TESTS: "1"
+        run: python -m unittest discover -s shared/test -t . -p "test_dashboard_in_browser.py" -v
+
   # Every migration on a server of each kind: docs/dev/database-and-migrations.md
   migrations:
     runs-on: ubuntu-latest

@@ -121,7 +121,7 @@ mateActions.allow('applyConfigModal', 'closeConfigModal',
             levels.get(depth).push(name);
         });
 
-        const NODE_X_SPACING = 280;
+        const NODE_X_GAP = 100;
         const NODE_Y_SPACING = 280;
 
         const positionByName = new Map();
@@ -133,11 +133,14 @@ mateActions.allow('applyConfigModal', 'closeConfigModal',
             .forEach((depth) => {
                 const names = levels.get(depth) || [];
                 names.sort();
-                const count = names.length;
+                /* A box grows with its name (AgentNode: 180px at least, 17px bold) */
+                const widths = names.map((name) => Math.max(180, name.length * 10.5 + 60));
+                const total = widths.reduce((sum, width) => sum + width, NODE_X_GAP * (names.length - 1));
+                let x = 90 - total / 2;
                 names.forEach((name, index) => {
-                    const x = (index - (count - 1) / 2) * NODE_X_SPACING;
                     const y = depth * NODE_Y_SPACING;
                     positionByName.set(name, { x: x, y: y });
+                    x += widths[index] + NODE_X_GAP;
                 });
             });
 
