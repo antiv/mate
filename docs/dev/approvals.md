@@ -78,6 +78,21 @@ object (`shared/utils/approval_config.py`):
   - A hardcoded sub-agent takes its root's settings.
   - A sub-agent built by `subagent_delegation` runs in a `Runner` of its own, without the plugin, and its events never reach the chat. A tool it may only run with approval is therefore never approved: the call ends with ADK's "requires confirmation" error.
 
+## Which tools ask
+
+`require_confirmation` is applied by name to everything an agent is given:
+
+- **ADK** (`shared/utils/tools/confirmation.py`, from `ToolFactory`): a function becomes a
+  `FunctionTool` that asks; a tool object, and each tool a toolset lists, is told to ask
+  (`_require_confirmation`, which `FunctionTool` and `McpTool` read).
+- **LangGraph** (`shared/utils/langgraph/hitl.py`): a function and a LangChain tool, such as
+  an MCP server's, pause with `interrupt()` before they run.
+- **A named tool that can't ask is left out,** so it never runs without asking.
+- Client tools (ADK's `ClientToolset`, `client_tools.py`) run in the caller's program and
+  aren't asked about.
+
+`shared/test/test_confirmation_every_tool.py` runs a real MCP server on both runtimes.
+
 ## Where rows are written
 
 The agent runtime writes the rows, not the auth server. A2A and MCP calls, triggers,

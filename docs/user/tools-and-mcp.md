@@ -68,6 +68,10 @@ list the tool's function name under `require_confirmation` in the JSON:
 }
 ```
 
+The name is the one the model sees: a function of the tools above, or a tool of one of
+the agent's MCP servers. With several servers, it holds for each tool of that name. A
+tool that can't ask is left out of the agent, with an error in the server's log.
+
 When the agent reaches the tool, the chat shows an approve/reject card with the
 tool's name and arguments, and the agent waits. Approve and the tool runs; reject
 and the agent is told it may not. The paused conversation is saved, so it can be

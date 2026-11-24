@@ -42,35 +42,45 @@ def confirmation_call_id(tool_call_id: str, tool_name: str, args: Dict[str, Any]
     return f"adk-confirm-{hashlib.sha256(call.encode('utf-8')).hexdigest()[:32]}"
 
 
+def _approved(call_id: str, tool_name: str, args: Dict[str, Any]) -> bool:
+    """Pause the run for this tool call until it is answered; whether it may run."""
+    from langgraph.types import interrupt
+
+    confirmation_id = confirmation_call_id(call_id, tool_name, args)
+    pause = {
+        CONFIRMATION_ID_KEY: confirmation_id,
+        "originalFunctionCall": {"id": call_id, "name": tool_name, "args": args},
+        "toolConfirmation": {
+            "hint": f"Please approve or reject the execution of '{tool_name}'.",
+            "confirmed": False,
+        },
+    }
+    while True:
+        # Resumed with a sibling's decision only: pause again for our own.
+        resume = interrupt(pause)
+        decisions = resume.get(CONFIRMATIONS_KEY) if isinstance(resume, dict) else None
+        if isinstance(decisions, dict) and confirmation_id in decisions:
+            break
+    if not decisions[confirmation_id]:
+        logger.info(f"HITL: user rejected tool '{tool_name}'")
+        return False
+    return True
+
+
+def _rejection(tool_name: str) -> str:
+    return f"The user rejected the execution of '{tool_name}'. Do not retry unless asked."
+
+
 def wrap_with_confirmation(fn: Callable) -> Callable:
     """Pause on interrupt before executing the tool; honor the resume decision."""
     from langchain_core.tools import InjectedToolCallId
 
     @functools.wraps(fn)
     async def _confirmed(*args: Any, tool_call_id: str = "", **kwargs: Any) -> Any:
-        from langgraph.types import interrupt
-
         tool_name = getattr(fn, "__name__", "tool")
-        call_id = tool_call_id or str(uuid.uuid4())
         tool_args = {k: v for k, v in kwargs.items() if k != "tool_context"}
-        confirmation_id = confirmation_call_id(call_id, tool_name, tool_args)
-        pause = {
-            CONFIRMATION_ID_KEY: confirmation_id,
-            "originalFunctionCall": {"id": call_id, "name": tool_name, "args": tool_args},
-            "toolConfirmation": {
-                "hint": f"Please approve or reject the execution of '{tool_name}'.",
-                "confirmed": False,
-            },
-        }
-        while True:
-            # Resumed with a sibling's decision only: pause again for our own.
-            resume = interrupt(pause)
-            decisions = resume.get(CONFIRMATIONS_KEY) if isinstance(resume, dict) else None
-            if isinstance(decisions, dict) and confirmation_id in decisions:
-                break
-        if not decisions[confirmation_id]:
-            logger.info(f"HITL: user rejected tool '{tool_name}'")
-            return f"The user rejected the execution of '{tool_name}'. Do not retry unless asked."
+        if not _approved(tool_call_id or str(uuid.uuid4()), tool_name, tool_args):
+            return _rejection(tool_name)
         result = fn(*args, **kwargs)
         if inspect.isawaitable(result):
             return await result
@@ -96,18 +106,53 @@ def wrap_with_confirmation(fn: Callable) -> Callable:
     return _confirmed
 
 
+def _confirmed_tool(tool: Any) -> Any:
+    """A LangChain tool (an MCP server's) that pauses before each call."""
+    from langchain_core.messages import ToolMessage
+    from langchain_core.tools import BaseTool
+
+    class ConfirmedTool(BaseTool):
+        inner: Any = None
+
+        def _run(self, *args: Any, **kwargs: Any) -> Any:
+            raise NotImplementedError("this tool asks first, which needs ainvoke()")
+
+        async def ainvoke(self, input: Any, config: Any = None, **kwargs: Any) -> Any:
+            called = isinstance(input, dict) and input.get("type") == "tool_call"
+            call_id = (input.get("id") if called else None) or str(uuid.uuid4())
+            args = (input["args"] if called else input) or {}
+            if not _approved(call_id, self.name, args if isinstance(args, dict) else {"input": args}):
+                text = _rejection(self.name)
+                return ToolMessage(text, tool_call_id=call_id, name=self.name) if called else text
+            return await self.inner.ainvoke(input, config, **kwargs)
+
+    return ConfirmedTool(name=tool.name, description=tool.description, args_schema=tool.args_schema,
+                         response_format=tool.response_format, metadata=tool.metadata, inner=tool)
+
+
 def apply_confirmation_wrapping(tools: List[Any], confirm_names: List[str],
                                 agent_name: str = "unknown") -> List[Any]:
+    """The tools, those named asking first. One that can't is left out: a tool an
+    administrator said must ask never runs without asking."""
     if not confirm_names:
         return tools
+    from langchain_core.tools import BaseTool
+
     wrapped = []
     for tool in tools:
         tool_name = getattr(tool, "__name__", None) or getattr(tool, "name", None)
-        if tool_name in confirm_names and callable(tool):
-            wrapped.append(wrap_with_confirmation(tool))
-            logger.info(f"Tool {tool_name} requires user confirmation (agent {agent_name})")
-        else:
+        if tool_name not in confirm_names:
             wrapped.append(tool)
+            continue
+        if isinstance(tool, BaseTool):
+            wrapped.append(_confirmed_tool(tool))
+        elif callable(tool):
+            wrapped.append(wrap_with_confirmation(tool))
+        else:
+            logger.error(f"Tool {tool_name} of agent {agent_name} is left out: it is in "
+                         f"require_confirmation, and a {type(tool).__name__} can't ask")
+            continue
+        logger.info(f"Tool {tool_name} requires user confirmation (agent {agent_name})")
     return wrapped
 
 

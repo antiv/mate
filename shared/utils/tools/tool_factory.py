@@ -155,9 +155,8 @@ class ToolFactory:
 
     def _apply_confirmation_wrapping(self, tools: List[Any], config: Dict[str, Any]) -> List[Any]:
         """
-        Wrap tools listed in tool_config['require_confirmation'] with
-        FunctionTool(require_confirmation=True) so the invocation pauses and
-        waits for user approval before executing them.
+        Make the tools listed in tool_config['require_confirmation'] pause the
+        invocation and wait for approval before they run, an MCP server's too.
         """
         tool_config = config.get('tool_config')
         if not tool_config:
@@ -170,26 +169,9 @@ class ToolFactory:
             return tools
 
         from ..approval_config import parse
-        confirm_names = parse(tool_config_dict).tools
-        if not confirm_names:
-            return tools
+        from .confirmation import apply_confirmation
+        return apply_confirmation(tools, parse(tool_config_dict).tools, config.get('name', 'unknown'))
 
-        try:
-            from google.adk.tools.function_tool import FunctionTool
-        except ImportError:
-            logger.warning("FunctionTool.require_confirmation not available in this ADK version; skipping confirmation wrapping")
-            return tools
-
-        wrapped_tools = []
-        for tool in tools:
-            tool_name = getattr(tool, '__name__', None) or getattr(tool, 'name', None)
-            if tool_name in confirm_names and callable(tool) and not isinstance(tool, FunctionTool):
-                wrapped_tools.append(FunctionTool(tool, require_confirmation=True))
-                logger.info(f"Tool {tool_name} requires user confirmation (agent {config.get('name', 'unknown')})")
-            else:
-                wrapped_tools.append(tool)
-        return wrapped_tools
-    
     def _create_mcp_tools(self, config: Dict[str, Any]) -> List[Any]:
         """Create MCP tools using the specialized MCP tools module."""
         from .mcp_tools import create_mcp_tools_from_config
