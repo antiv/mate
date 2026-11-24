@@ -2,9 +2,7 @@
 
 As a script, not a module: importing shared.test gives the process a database of its own.
 
-Not `python auth_server.py`: that listens on port 8000 and, when it stops, stops every
-process on the machine whose command line has adk_main.py in it, a developer's own
-server too.
+Not `python auth_server.py`, which listens on port 8000.
 """
 
 import os
@@ -33,7 +31,6 @@ def main() -> None:
         sys.argv = [script, "--host", "127.0.0.1", "--session-db-url", "sqlite:///" + os.environ["DB_PATH"]]
         runpy.run_path(script, run_name="__main__")
         return
-    ServerControlService.stop_adk_server = lambda self: {"success": True, "message": "left alone"}
     import auth_server
     uvicorn.run(auth_server.app, host="127.0.0.1", port=int(port), log_level="warning")
 
