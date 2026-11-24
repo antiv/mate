@@ -485,9 +485,9 @@ within the server's origin. LiteLLM and the OpenAI SDK follow any, so a public b
 URL could answer 307 to an internal one. For an agent outside the default workspace
 with a `model_base_url`, `guard_model_client` wraps the model's completion client
 (ADK's `llm_client`, ChatLiteLLM's `client`). While one of its calls runs, a context
-variable makes httpx's `send()` refuse a request to an internal address and follow no
+variable makes `send()` of httpx and httpx2 refuse a request to an internal address and follow no
 redirect, so a model call fails on a redirect instead of following it. The patch on
-httpx is installed the first time such a model is built, and other requests pass
+the two is installed the first time such a model is built, and other requests pass
 untouched. A streamed answer is read guarded too (`_GuardedStream`): some providers
 (`gemini/` and `vertex_ai` through LiteLLM, codestral, predibase) send the request
 only when the first chunk is read. `OUTBOUND_ALLOW_PRIVATE_NETWORK=true` leaves the

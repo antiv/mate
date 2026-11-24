@@ -14,7 +14,7 @@ whose address changes in between is not caught (DNS rebinding).
 
 A model endpoint is called by LiteLLM, whose HTTP clients follow redirects: a public
 base URL could answer 307 to an internal one. guard_model_client() wraps the model's
-completion calls so that, while one runs, every httpx request is checked the same way
+completion calls so that, while one runs, every httpx and httpx2 request is checked the same way
 and no redirect is followed (_install_guard).
 """
 
@@ -24,7 +24,7 @@ import logging
 import os
 import socket
 from contextvars import ContextVar
-from typing import Any, Optional
+from typing import Any, Optional, Tuple
 from urllib.parse import urlparse
 
 import httpx
@@ -32,6 +32,14 @@ import httpx
 from .models import DEFAULT_WORKSPACE_ID
 
 logger = logging.getLogger(__name__)
+
+# The OpenAI SDK is on httpx2 from its version 3, litellm and others still on httpx.
+# httpx2 is not a requirement of MATE: it comes with the packages that use it.
+try:
+    import httpx2
+    HTTP_LIBRARIES: Tuple[Any, ...] = (httpx, httpx2)
+except ImportError:
+    HTTP_LIBRARIES = (httpx,)
 
 
 def private_network_allowed() -> bool:
@@ -109,22 +117,16 @@ _GUARDED: ContextVar[Optional[int]] = ContextVar("mate_outbound_guarded", defaul
 _guard_installed = False
 
 
-def _install_guard() -> None:
-    """Make httpx's send() refuse an internal address and follow no redirect while a
-    guarded model call runs. Every request of LiteLLM and the OpenAI SDK, and each
-    redirect LiteLLM follows by hand, goes through it. Other requests are untouched."""
-    global _guard_installed
-    if _guard_installed:
-        return
-    _guard_installed = True
-    sync_send, async_send = httpx.Client.send, httpx.AsyncClient.send
+def _guard_library(library: Any) -> None:
+    """Guard the send() of one HTTP library: httpx, or httpx2, its successor."""
+    sync_send, async_send = library.Client.send, library.AsyncClient.send
 
-    def _refused(request: httpx.Request, reason: str) -> httpx.ConnectError:
+    def _refused(request: Any, reason: str) -> Exception:
         logger.warning("Model request to %s refused for workspace %s: %s",
                        str(request.url)[:200], _GUARDED.get(), reason)
-        return httpx.ConnectError(f"model endpoint refused: {reason}", request=request)
+        return library.ConnectError(f"model endpoint refused: {reason}", request=request)
 
-    def send(self: httpx.Client, request: httpx.Request, **kwargs: Any) -> httpx.Response:
+    def send(self: Any, request: Any, **kwargs: Any) -> Any:
         if _GUARDED.get() is not None:
             reason = internal_address(str(request.url))
             if reason:
@@ -132,7 +134,7 @@ def _install_guard() -> None:
             kwargs["follow_redirects"] = False
         return sync_send(self, request, **kwargs)
 
-    async def asend(self: httpx.AsyncClient, request: httpx.Request, **kwargs: Any) -> httpx.Response:
+    async def asend(self: Any, request: Any, **kwargs: Any) -> Any:
         if _GUARDED.get() is not None:
             reason = await asyncio.to_thread(internal_address, str(request.url))
             if reason:
@@ -140,8 +142,21 @@ def _install_guard() -> None:
             kwargs["follow_redirects"] = False
         return await async_send(self, request, **kwargs)
 
-    httpx.Client.send = send
-    httpx.AsyncClient.send = asend
+    library.Client.send = send
+    library.AsyncClient.send = asend
+
+
+def _install_guard() -> None:
+    """Make httpx's and httpx2's send() refuse an internal address and follow no redirect
+    while a guarded model call runs. Every request of LiteLLM and the OpenAI SDK, and each
+    redirect LiteLLM follows by hand, goes through one of them. Other requests are
+    untouched. shared/test/test_outbound_guard.py checks it with the clients themselves."""
+    global _guard_installed
+    if _guard_installed:
+        return
+    _guard_installed = True
+    for library in HTTP_LIBRARIES:
+        _guard_library(library)
 
 
 class _GuardedStream:

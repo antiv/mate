@@ -12,6 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **A browser test of the dashboard in CI** (#424) - every page in headless Chromium, in both themes, on a desktop and a phone: errors, CSP violations, controls off the window, cut off or under the Help button, and a Work Room conversation. See `docs/dev/browser-tests.md`
 - **Migrations on PostgreSQL and MySQL in CI** (#424) - all of them on an empty database, and the new ones on a database of the last release with rows, on PostgreSQL 15 and 18 and MySQL 8.4. See `docs/dev/database-and-migrations.md`
 
+### Security
+
+- **The guard on model endpoints covers httpx2** - the OpenAI SDK moves to it in its version 3, where the image extraction tool's calls would have got past the check that keeps a workspace's endpoint off the server's own network. No release of MATE has that version. A test now makes the calls with the clients themselves
+
 ### Fixed
 
 - **Visual Builder:** agents with long names overlapped; the project picker was wider than a phone's screen
