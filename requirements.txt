@@ -1,10 +1,9 @@
 google-adk==2.15.0
-# Below 1.104: from 1.104.0 it requires filelock below 4, which has known
-# vulnerabilities (fixed in 4.2.1). From 1.106.0 its completion path also imports
-# mcp 2 types, and mcp stays below 2 (see below). LiteLLM's 1.107.0 release on PyPI
-# carried a credential stealer, so newer releases are taken by hand, not by the
-# monthly upgrade.
-litellm>=1.103,<1.104
+# From 1.108.6: the first 1.108 release with the fixes of GHSA-2rwg-2wh4-7c4f and a
+# filelock without known vulnerabilities (4.2.1). It needs mcp 2. Below 1.109, and moved
+# by hand after reading LiteLLM's security notices: its 1.107.0 release on PyPI carried a
+# credential stealer, so newer releases are not taken by the monthly upgrade.
+litellm>=1.108.6,<1.109
 orjson  # Required by litellm 1.81+ completion path (imports proxy utils)
 python-dotenv
 requests
@@ -26,17 +25,15 @@ tavily-python
 langgraph
 langchain-core
 langchain-litellm
-langchain-mcp-adapters
 langgraph-checkpoint-sqlite
 # langgraph-checkpoint-postgres  # For PostgreSQL checkpointing (DB_TYPE=postgresql)
 # langgraph-cli[inmem]  # Dev only: LangGraph Studio bridge (langgraph dev --allow-blocking)
 google-genai>=2.19.0
 psutil
 cryptography  # Fernet for secrets at rest (MATE_SECRET_KEY)
-# MCP dependencies for MCP servers
-# Below 2: langchain-mcp-adapters 0.3.2 requires it, and mcp 2 changes the SDK
-# that shared/utils/mcp/ is built on. Moving to 2 is its own change.
-mcp<2
+# MCP: ADK's toolset, and the LangGraph runtime's client
+# (shared/utils/langgraph/mcp_client.py), which is written on version 2 of the SDK.
+mcp>=2.3,<3
 starlette
 # SQLAlchemy ORM. 2.1 makes postgresql:// use psycopg (v3), which is not installed:
 # with it the server starts without a database.

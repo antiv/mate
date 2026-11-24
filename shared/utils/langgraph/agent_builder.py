@@ -521,7 +521,7 @@ class AgentBuilder:
     async def _build_tools(self, config: Dict[str, Any]) -> List[Any]:
         """Assemble tools via the existing ToolFactory, adapted for LangGraph.
 
-        MCP servers are handled by mcp_client (langchain-mcp-adapters) instead of
+        MCP servers are handled by mcp_client (the MCP SDK) instead of
         ADK's MCPToolset, and require_confirmation is stripped so ToolFactory does
         not wrap tools in ADK FunctionTool — the LangGraph HITL wrapper is applied
         here instead.
