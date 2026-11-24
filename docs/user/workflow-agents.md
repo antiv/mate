@@ -78,8 +78,8 @@ router/join pills for graph agents with `planner_config.edges`.
 
 ## Human-in-the-loop approval
 
-- `tool_config: {"require_confirmation": ["tool_name", ...]}` wraps the named
-  tools in `FunctionTool(require_confirmation=True)`: the invocation pauses
+- `tool_config: {"require_confirmation": ["tool_name", ...]}` makes the named
+  tools, an MCP server's too, ask first: the invocation pauses
   and waits for user approval before executing the tool. The object form also
   says who approves and who is told: see
   [Who approves, and who is told](tools-and-mcp.md#who-approves-and-who-is-told).
