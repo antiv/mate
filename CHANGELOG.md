@@ -7,10 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **A browser test of the dashboard in CI** (#424) - every page in headless Chromium, in both themes, on a desktop and a phone: errors, CSP violations, controls off the window, cut off or under the Help button, and a Work Room conversation. See `docs/dev/browser-tests.md`
+
 ### Fixed
 
-- **Tables and numbered lists in the chat** - in the Work Room, the widget and a standalone agent, a Markdown table was shown as its bars and dashes, and a numbered list as bullets. Lists within lists work too
+- **Visual Builder:** agents with long names overlapped; the project picker was wider than a phone's screen
+- **On a phone,** the agent page and Triggers were wider than the screen when an agent or a project has a long name
 - **Trace Replay didn't show that a fallback model answered** - recording the failed call ended the span the mark goes on, so the replay showed the agent's own model and not the fallback. The fallback's call has a span of its own now
+- **Tables and numbered lists in the chat** - in the Work Room, the widget and a standalone agent, a Markdown table was shown as its bars and dashes, and a numbered list as bullets. Lists within lists work too
 
 ## [2.1.0] - 2026-11-23
 
