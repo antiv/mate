@@ -164,7 +164,7 @@ address (`?all_workspaces=1`) through `window.mateScope` in `base.html`.
 administrator access required" to anyone else, a workspace's owner included. They act
 on the whole installation (`documents/design/workspaces.md`, "What stays
 platform-only"): migrations, server control, `/settings/*`, system jobs, the wizard
-and shop, users, Platform → Workspaces (`/platform/`), audit-log retention, creating
+and shop, users, Platform → Workspaces and Model groups (`/platform/`), audit-log retention, creating
 and deleting templates, reloading every agent, and binary builds, which pack the installation's `agents/` folder. The
 patterns match by prefix, so a new route under `/settings/` or `/users` is
 platform-only from the start. A request naming a workspace the caller can't open is

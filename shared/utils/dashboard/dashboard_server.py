@@ -2208,19 +2208,8 @@ class DashboardServer:
     def _snapshot_agent_config(self, session, config, change_type: str = 'update', changed_by: str = None):
         """Create a versioned snapshot of the given AgentConfig inside an existing session."""
         try:
-            from sqlalchemy import func
-            max_ver = session.query(func.max(self.AgentConfigVersion.version_number)).filter(
-                self.AgentConfigVersion.agent_config_id == config.id
-            ).scalar() or 0
-
-            version = self.AgentConfigVersion(
-                agent_config_id=config.id,
-                version_number=max_ver + 1,
-                changed_by=changed_by,
-                change_type=change_type,
-            )
-            version.set_snapshot(self._build_config_snapshot(config))
-            session.add(version)
+            from shared.utils.agent_config_identity import add_version
+            add_version(session, config, change_type, changed_by)
             session.commit()
         except Exception as e:
             logger.error(f"Error creating config version snapshot: {e}")
@@ -4175,6 +4164,18 @@ class DashboardServer:
             return self.templates.TemplateResponse(request, "dashboard/workspaces.html", {
                 "request": request,
                 "page_title": "Workspaces",
+                "username": ctx.user_id,
+                "is_admin": True,
+            })
+
+        @self.app.get("/dashboard/model-groups", response_class=HTMLResponse, tags=["Dashboard - Pages"])
+        async def dashboard_model_groups(request: Request, ctx: RequestContext = Depends(get_request_context)):
+            """Platform → Model groups (server/model_group_routes.py)"""
+            if not ctx.is_platform_admin:
+                return RedirectResponse(url="/dashboard/workroom", status_code=302)
+            return self.templates.TemplateResponse(request, "dashboard/model_groups.html", {
+                "request": request,
+                "page_title": "Model groups",
                 "username": ctx.user_id,
                 "is_admin": True,
             })

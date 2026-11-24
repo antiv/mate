@@ -10,7 +10,7 @@ generated: true
 
 # HTTP API reference
 
-Every HTTP route declared in the code: **285** routes. 37 have no docstring and so no summary here.
+Every HTTP route declared in the code: **291** routes. 37 have no docstring and so no summary here.
 
 This page lists what exists and where it is implemented. For request and response schemas, and to try a call, use the live Swagger UI under **Documentation → API** in the dashboard.
 
@@ -18,7 +18,7 @@ Requests to `/dashboard/api/*` require an admin, apart from the short allowlist 
 
 ## Auth server and dashboard
 
-Port 8000. Everything a browser or an external client talks to. 264 routes.
+Port 8000. Everything a browser or an external client talks to. 270 routes.
 
 ### Authentication
 
@@ -233,6 +233,7 @@ Web interface pages for system management.
 | `GET` | `/dashboard/invite/{token}` | An invitation to a workspace, to accept as the signed-in user (server/invitation_routes.py) | shared/utils/dashboard/dashboard_server.py · dashboard_invitation |
 | `GET` | `/dashboard/members` | Workspace settings → Members (server/member_routes.py) | shared/utils/dashboard/dashboard_server.py · dashboard_members |
 | `GET` | `/dashboard/migrations` | Dashboard migrations page | shared/utils/dashboard/dashboard_server.py · dashboard_migrations |
+| `GET` | `/dashboard/model-groups` | Platform → Model groups (server/model_group_routes.py) | shared/utils/dashboard/dashboard_server.py · dashboard_model_groups |
 | `GET` | `/dashboard/models` | Workspace settings → Models and keys (server/workspace_model_routes.py) | shared/utils/dashboard/dashboard_server.py · dashboard_models |
 | `GET` | `/dashboard/overview` | Overview — Control Room landing page | shared/utils/dashboard/dashboard_server.py · dashboard_overview |
 | `GET` | `/dashboard/rate-limits` | Dashboard rate limits and budgets page | shared/utils/dashboard/dashboard_server.py · dashboard_rate_limits |
@@ -255,6 +256,11 @@ Web interface pages for system management.
 
 | Method | Path | Summary | Implemented in |
 |---|---|---|---|
+| `GET` | `/dashboard/api/platform/model-groups` | Every group with its models in order and the agents that name it | server/model_group_routes.py · list_model_groups |
+| `POST` | `/dashboard/api/platform/model-groups` | Create a group: name and label, and optionally description, needs_tools, needs_images, own_servers_only and models (a list of {model, confirmed}) | server/model_group_routes.py · create_model_group |
+| `GET` | `/dashboard/api/platform/model-groups/check` | What is known of a model before it is put in a group: what it can do (null where LiteLLM doesn't say), and why it is not on the installation's own servers (null when it is) | server/model_group_routes.py · check_model |
+| `DELETE` | `/dashboard/api/platform/model-groups/{name}` | Delete a group | server/model_group_routes.py · delete_model_group |
+| `PUT` | `/dashboard/api/platform/model-groups/{name}` | Change any of label, description, needs_tools, needs_images, own_servers_only and models, which replaces the whole list | server/model_group_routes.py · update_model_group |
 | `GET` | `/dashboard/api/platform/workspaces` | Every workspace, closed ones included, with its owners and counts | server/platform_workspace_routes.py · list_workspaces |
 | `POST` | `/dashboard/api/platform/workspaces` | Create a workspace: name, slug, its first owner as either owner (an existing user's id) or owner_email (an address invited as owner), and optionally allow_platform_keys (default | server/platform_workspace_routes.py · create_workspace |
 | `PUT` | `/dashboard/api/platform/workspaces/{workspace_id}` | Change any of name, allow_platform_keys and platform_features | server/platform_workspace_routes.py · update_workspace |

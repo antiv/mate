@@ -144,6 +144,11 @@ PUT /dashboard/api/platform/workspaces/{workspace_id}
 POST /dashboard/api/platform/workspaces/{workspace_id}/suspend
 POST /dashboard/api/platform/workspaces/{workspace_id}/resume
 POST /dashboard/api/platform/workspaces/{workspace_id}/close
+GET /dashboard/api/platform/model-groups
+POST /dashboard/api/platform/model-groups
+GET /dashboard/api/platform/model-groups/check
+PUT /dashboard/api/platform/model-groups/{name}
+DELETE /dashboard/api/platform/model-groups/{name}
 """)
 
 # The template catalogue: files every workspace imports from. Writing to it is

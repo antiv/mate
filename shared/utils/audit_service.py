@@ -106,6 +106,12 @@ ACTION_PROVIDER_KEY_DELETE = "provider_key.delete"
 RESOURCE_WORKSPACE_SETTING = "workspace_setting"
 ACTION_WORKSPACE_SETTING_UPDATE = "workspace_setting.update"
 
+# Platform → Model groups (server/model_group_routes.py)
+RESOURCE_MODEL_GROUP = "model_group"
+ACTION_MODEL_GROUP_CREATE = "model_group.create"
+ACTION_MODEL_GROUP_UPDATE = "model_group.update"
+ACTION_MODEL_GROUP_DELETE = "model_group.delete"
+
 
 def _client_ip(request: Any) -> Optional[str]:
     """Extract client IP from a FastAPI Request.

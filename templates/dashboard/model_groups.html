@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+
+{% block title %}Model groups - MATE{% endblock %}
+
+{% block content %}
+<div class="m-stack">
+
+    <div class="m-page-head">
+        <div>
+            <h2 class="m-page-title">Model groups</h2>
+            <p class="m-page-subtitle">Lists of models under a name, for the whole installation. Only platform administrators see this page.</p>
+        </div>
+        <button type="button" class="m-btn m-btn-primary" data-click="ModelGroupsPage.create">
+            <i class="fas fa-plus" aria-hidden="true"></i>New group
+        </button>
+    </div>
+
+    <div id="groupTable"></div>
+</div>
+
+<!-- Create / edit a group -->
+<div id="groupDialog" class="m-dialog-backdrop" hidden>
+    <div class="m-dialog m-dialog-lg" role="dialog" aria-modal="true" aria-labelledby="groupDialogTitle">
+        <div class="m-dialog-head">
+            <h3 id="groupDialogTitle" class="m-dialog-title">New group</h3>
+            <button type="button" aria-label="Close" data-click="ModelGroupsPage.close" data-args='["groupDialog"]' class="m-btn m-btn-ghost m-btn-icon">
+                <i class="fas fa-times" aria-hidden="true"></i>
+            </button>
+        </div>
+        <div class="m-dialog-body m-stack">
+            <div class="m-grid-2">
+                <div class="m-field" id="groupNameField">
+                    <label for="groupName">Name *</label>
+                    <input type="text" id="groupName" maxlength="40" placeholder="support" autocomplete="off" class="m-input m-input-mono">
+                    <p class="m-hint">What agents name it by. Lowercase letters, digits and hyphens; it can't be changed later.</p>
+                </div>
+                <div class="m-field">
+                    <label for="groupLabel">Label *</label>
+                    <input type="text" id="groupLabel" maxlength="100" placeholder="Support" class="m-input">
+                </div>
+            </div>
+            <div class="m-field">
+                <label for="groupDescription">Description</label>
+                <input type="text" id="groupDescription" maxlength="500" placeholder="What the group is for" class="m-input">
+            </div>
+
+            <div class="m-field">
+                <span class="m-label">Its models must</span>
+                <div class="m-row">
+                    <label class="m-check"><input type="checkbox" id="groupTools" data-change="ModelGroupsPage.showModels">Call tools</label>
+                    <label class="m-check"><input type="checkbox" id="groupImages" data-change="ModelGroupsPage.showModels">Read images</label>
+                </div>
+            </div>
+            <label class="m-check">
+                <input type="checkbox" id="groupOwn" data-change="ModelGroupsPage.showModels">
+                <span>Own servers only
+                    <span class="m-hint">Every model runs on an endpoint in this server's own network, such as a local Ollama.</span>
+                </span>
+            </label>
+
+            <div class="m-field">
+                <span class="m-label" id="groupModelsLabel">Models, in order</span>
+                <ol id="groupModels" class="m-list" aria-labelledby="groupModelsLabel"></ol>
+                <p id="groupNoModels" class="m-hint">No models yet. A group without models can't be used.</p>
+                <form id="groupAddForm" class="m-row m-row-fill">
+                    <input type="text" id="groupAddModel" maxlength="255" placeholder="openrouter/anthropic/claude-sonnet-4.5" autocomplete="off" aria-label="Model to add" class="m-input m-input-mono">
+                    <button type="submit" id="groupAddButton" class="m-btn m-btn-secondary">Add</button>
+                </form>
+                <p class="m-hint">Written as in an agent's Model Name. The first model is the group's first choice.</p>
+            </div>
+            <p id="groupError" class="m-error" role="alert" hidden></p>
+        </div>
+        <div class="m-dialog-foot">
+            <span class="m-spacer"></span>
+            <button type="button" data-click="ModelGroupsPage.close" data-args='["groupDialog"]' class="m-btn m-btn-secondary">Cancel</button>
+            <button type="button" id="groupSave" data-click="ModelGroupsPage.save" class="m-btn m-btn-primary">Save</button>
+        </div>
+    </div>
+</div>
+
+<!-- The agents of a group, and where they go when it is deleted -->
+<div id="agentsDialog" class="m-dialog-backdrop" hidden>
+    <div class="m-dialog" role="dialog" aria-modal="true" aria-labelledby="agentsDialogTitle">
+        <div class="m-dialog-head">
+            <h3 id="agentsDialogTitle" class="m-dialog-title">Agents</h3>
+            <button type="button" aria-label="Close" data-click="ModelGroupsPage.close" data-args='["agentsDialog"]' class="m-btn m-btn-ghost m-btn-icon">
+                <i class="fas fa-times" aria-hidden="true"></i>
+            </button>
+        </div>
+        <div class="m-dialog-body m-stack">
+            <p id="agentsNote"></p>
+            <ul id="agentsList" class="m-list"></ul>
+            <div id="moveField" class="m-field">
+                <label for="moveTo">Move them to</label>
+                <select id="moveTo" class="m-input"></select>
+                <p id="moveHint" class="m-hint"></p>
+            </div>
+            <p id="agentsError" class="m-error" role="alert" hidden></p>
+        </div>
+        <div class="m-dialog-foot">
+            <span class="m-spacer"></span>
+            <button type="button" data-click="ModelGroupsPage.close" data-args='["agentsDialog"]' class="m-btn m-btn-secondary">Close</button>
+            <button type="button" id="moveAndDelete" data-click="ModelGroupsPage.moveAndDelete" class="m-btn m-btn-danger">Move and delete</button>
+        </div>
+    </div>
+</div>
+
+<script src="/static/js/model-groups-page.js?v=1"></script>
+{% endblock %}

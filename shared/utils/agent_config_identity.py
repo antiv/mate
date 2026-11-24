@@ -56,6 +56,18 @@ def config_snapshot(config: Any) -> Dict[str, Any]:
     }
 
 
+def add_version(session: Any, config: Any, change_type: str, changed_by: Optional[str]) -> None:
+    """Adds a version holding the config as it is now; the caller commits."""
+    from sqlalchemy import func
+    from .models import AgentConfigVersion
+    last = session.query(func.max(AgentConfigVersion.version_number)).filter(
+        AgentConfigVersion.agent_config_id == config.id).scalar() or 0
+    version = AgentConfigVersion(agent_config_id=config.id, version_number=last + 1,
+                                 changed_by=changed_by, change_type=change_type)
+    version.set_snapshot(config_snapshot(config))
+    session.add(version)
+
+
 def config_hash(snapshot: Dict[str, Any], keys: Optional[set] = None) -> str:
     """A short, stable hash of a snapshot, over `keys` when given (else all of them)."""
     fields = {k: v for k, v in snapshot.items()
