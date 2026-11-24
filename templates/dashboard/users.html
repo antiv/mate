@@ -480,7 +480,9 @@
     });
 
     // ── Init ──────────────────────────────────────────────────────────────────
-    render();
+    // ?role=pending: the link in a new sign-up's notification
+    document.getElementById('filterRole').value = new URLSearchParams(window.location.search).get('role') || '';
+    applyFilters();
 })();
 </script>
 {% endblock %}

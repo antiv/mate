@@ -50,12 +50,12 @@ class TestWorkroomCreateAgentLink(unittest.TestCase):
         self.assertIn("No agents configured yet.", page)
         self.assertIn('href="/dashboard/agents"', page)
         self.assertIn("Create your first agent", page)
-        self.assertNotIn("Ask an administrator to add an agent.", page)
+        self.assertNotIn("Ask an administrator of the workspace.", page)
 
     def test_non_admin_sees_ask_admin_not_create_link(self):
         page = self._get_workroom(is_admin=False)
-        self.assertIn("No agents configured yet.", page)
-        self.assertIn("Ask an administrator to add an agent.", page)
+        self.assertIn("There is no agent you can use in this workspace yet.", page)
+        self.assertIn("Ask an administrator of the workspace.", page)
         self.assertNotIn("Create your first agent", page)
         self.assertNotIn('href="/dashboard/agents"', page)
 
@@ -66,11 +66,12 @@ class TestWorkroomCreateAgentLink(unittest.TestCase):
             / "dashboard"
             / "workroom.html"
         ).read_text(encoding="utf-8")
-        # Empty-state create link must sit inside {% if is_admin %}
-        empty = template.split("No agents configured yet.", 1)[1].split("{% endif %}", 1)[0]
-        self.assertIn("{% if is_admin %}", empty)
-        self.assertIn('href="/dashboard/agents"', empty)
-        self.assertIn("Ask an administrator to add an agent.", empty)
+        # Empty-state create link must sit inside {% elif is_admin %}
+        empty = template.split("{% if pending %}", 1)[1].split('<div class="wr-chat-root', 1)[0]
+        for_admin = empty.split("{% elif is_admin %}", 1)[1].split("{% else %}", 1)
+        self.assertIn('href="/dashboard/agents"', for_admin[0])
+        self.assertNotIn('href="/dashboard/agents"', empty.split("{% elif is_admin %}", 1)[0] + for_admin[1])
+        self.assertIn("Ask an administrator of the workspace.", for_admin[1])
 
 
 if __name__ == "__main__":

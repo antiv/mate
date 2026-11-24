@@ -175,7 +175,8 @@ role such as `user` makes the user a member of the Default workspace with that r
 ### Approval flow (default)
 
 New SSO users are created **`pending`**: a member of no workspace, with no agent
-access. An admin approves them on the **Users** page by removing `pending`; a user who
+access. `NEW_USER_NOTIFY_TYPE` (`http`, `email`, `slack`, `discord`) with `NEW_USER_NOTIFY_URL`
+or `NEW_USER_NOTIFY_TO` announces each (`shared/utils/signup_notify.py`). An admin approves them on the **Users** page by removing `pending`; a user who
 is a member nowhere then joins the Default workspace as a member. Agent roles are set
 per workspace on its **Members** page. A link from a workspace invitation also lets a
 user in: signing in from it passes the invitation page as `next`.
@@ -192,6 +193,10 @@ Edit roles through the dashboard, not with SQL on `users.roles`: the memberships
 follow from a role change are written by an ORM listener, which a raw `UPDATE` skips.
 
 ### Restricting which users can access MATE
+
+A Google address that Google hasn't verified (`email_verified`) is refused: the address is
+the user's id, and what an invitation is matched with. GitHub's is the public one, or the
+primary verified one.
 
 By default any valid Google or GitHub account can log in and be provisioned (as `pending`, unless `OAUTH_DEFAULT_ROLE` says otherwise). See [Enterprise access restrictions](#enterprise-access-restrictions) to limit this.
 

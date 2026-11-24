@@ -125,7 +125,10 @@ Accepting needs a dashboard session whose user id, or `users.email`, is the invi
 address, and a workspace that is open. It inserts the membership with the `user` agent
 role, flushes, and only then drops `pending` from `users.roles`, since the `User`
 listener adds a user who leaves `pending` as a member nowhere to the default
-workspace. The session then switches to the workspace. The page `/dashboard/invite/{token}`
+workspace. The session then switches to the workspace. In a single sign-on session the
+invitation may be named by its id instead of the token (`invitation_id`): one of
+`invitations_for()`, which the Work Room offers, as the provider has verified the address;
+any other id is 404. The page `/dashboard/invite/{token}`
 sends `Referrer-Policy: no-referrer`. A signed-out visitor goes to
 `/login?redirect=...`, whose Google and GitHub buttons carry it on as `?next=`, which
 `_safe_next` keeps to this site. Single sign-on checks `OAUTH_ALLOWED_DOMAINS` and

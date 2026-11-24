@@ -58,23 +58,29 @@ function initMobileNav() {
 
 document.addEventListener('DOMContentLoaded', initMobileNav);
 
-/**
- * The count beside Approvals in the sidebar: requests waiting for the inbox.
- * The Approvals page calls it again after a decision.
- */
-async function refreshApprovalsCount() {
-  const badge = document.getElementById('approvalsNavCount');
+/** A count beside a sidebar item. It is a hint: a failed request leaves it as it was. */
+async function refreshNavCount(id, url, label) {
+  const badge = document.getElementById(id);
   if (!badge) return;
   try {
-    const resp = await fetch('/dashboard/api/approvals?status=pending&inbox=true&limit=1', { credentials: 'same-origin' });
+    const resp = await fetch(url, { credentials: 'same-origin' });
     if (!resp.ok) return;
     const total = (await resp.json()).total || 0;
     badge.textContent = total > 99 ? '99+' : String(total);
     badge.hidden = total === 0;
-    badge.setAttribute('aria-label', `${total} waiting`);
-  } catch (e) {
-    // The count is a hint; a failed request leaves it as it was
-  }
+    badge.setAttribute('aria-label', `${total} ${label}`);
+    badge.title = `${total} ${label}`;
+  } catch (e) { /* see above */ }
 }
 
-document.addEventListener('DOMContentLoaded', refreshApprovalsCount);
+/** Requests waiting for the inbox. The Approvals page calls it again after a decision. */
+function refreshApprovalsCount() {
+  return refreshNavCount('approvalsNavCount', '/dashboard/api/approvals?status=pending&inbox=true&limit=1', 'waiting');
+}
+
+/** Sign-ups waiting to be let in. */
+function refreshUsersCount() {
+  return refreshNavCount('usersNavCount', '/dashboard/api/users/waiting', 'waiting to be let in');
+}
+
+document.addEventListener('DOMContentLoaded', () => { refreshApprovalsCount(); refreshUsersCount(); });

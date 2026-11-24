@@ -430,7 +430,7 @@
     <link rel="stylesheet" href="/static/css/dashboard-responsive.css">
     {% block extra_head %}{% endblock %}
     <script src="/static/js/server-control.js"></script>
-    <script src="/static/js/dashboard-nav.js?v=2"></script>
+    <script src="/static/js/dashboard-nav.js?v=3"></script>
 </head>
 {# The installation's own pages are for platform administrators only #}
 {% set platform_admin = is_platform_admin(request) if is_platform_admin is defined else true %}
@@ -639,10 +639,11 @@
 
                 {% else %}
                 <!-- ── Control Room ───────────────────── -->
-                {% macro nav_item(path, icon, label) -%}
+                {% macro nav_item(path, icon, label, count_id=None) -%}
                     <a href="{{ path }}" class="mate-nav-item {% if request.url.path == path %}sidebar-active{% endif %}" title="{{ label }}">
                         <i class="fas {{ icon }} sidebar-icon"></i>
                         <span class="sidebar-text">{{ label }}</span>
+                        {% if count_id %}<span id="{{ count_id }}" class="m-count sidebar-text mate-nav-count" hidden></span>{% endif %}
                     </a>
                 {%- endmacro %}
                 <div class="space-y-0.5">
@@ -675,7 +676,7 @@
                 <p class="sidebar-section-header">Platform</p>
                 <div class="space-y-0.5">
                     {{ nav_item('/dashboard/workspaces', 'fa-building', 'Workspaces') }}
-                    {{ nav_item('/dashboard/users', 'fa-users', 'Users') }}
+                    {{ nav_item('/dashboard/users', 'fa-users', 'Users', 'usersNavCount') }}
                     {{ nav_item('/dashboard/settings', 'fa-sliders-h', 'Settings') }}
                     {{ nav_item('/dashboard/migrations', 'fa-database', 'Migrations') }}
                     {% if _in_use.wizard %}

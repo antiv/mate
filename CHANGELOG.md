@@ -11,9 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **A browser test of the dashboard in CI** (#424) - every page in headless Chromium, in both themes, on a desktop and a phone: errors, CSP violations, controls off the window, cut off or under the Help button, and a Work Room conversation. See `docs/dev/browser-tests.md`
 - **Migrations on PostgreSQL and MySQL in CI** (#424) - all of them on an empty database, and the new ones on a database of the last release with rows, on PostgreSQL 15 and 18 and MySQL 8.4. See `docs/dev/database-and-migrations.md`
+- **New sign-ups** (#424) - a user who signs in with Google or GitHub for the first time is told that their account is waiting to be let in, where they saw "No agents configured yet". The number beside **Users** counts who waits, and `NEW_USER_NOTIFY_TYPE` with `NEW_USER_NOTIFY_URL` or `NEW_USER_NOTIFY_TO` sends a message to Slack, Discord, email or a webhook. Someone invited who signs in without the link sees the invitation in the Work Room and joins from there
 
 ### Security
 
+- **A Google address has to be verified** - signing in with one that Google hasn't verified is refused, as the address is who the user is
 - **Approvals hold for an MCP server's tools** - a tool of an MCP server named in `require_confirmation` now asks first, on both runtimes; only MATE's own tools did. A named tool that can't ask is left out of the agent, with an error in the log. **When upgrading:** an agent that lists an MCP tool there starts to ask
 - **The guard on model endpoints covers httpx2** - the OpenAI SDK moves to it in its version 3, where the image extraction tool's calls would have got past the check that keeps a workspace's endpoint off the server's own network. No release of MATE has that version. A test now makes the calls with the clients themselves
 - **litellm 1.103.10 → 1.108.10** (#389) - litellm was held at 1.103 by mcp 1. The advisories published for the versions between are about LiteLLM's proxy server, which MATE doesn't run. **When upgrading:** reinstall the dependencies (`pip install -r requirements.lock`) or pull the image; nothing needs configuring

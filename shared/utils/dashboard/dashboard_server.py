@@ -787,6 +787,17 @@ class DashboardServer:
         finally:
             session.close()
 
+    def _is_waiting(self, user_id: str) -> bool:
+        """Whether the user is a sign-up nobody has let in yet."""
+        session = self.db_client.get_session() if self.db_client else None
+        if not session:
+            return False
+        try:
+            user = session.query(self.User).filter_by(user_id=user_id).first()
+            return user is not None and "pending" in user.get_roles()
+        finally:
+            session.close()
+
     def _chat_agents(self, ctx: RequestContext, configs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """Those of the workspace's agent configs the caller may chat with: the root
         agents (no parent_agents) their roles allow. The RBAC check refuses the others
@@ -5043,6 +5054,18 @@ class DashboardServer:
             """Get all users."""
             return {"users": self._get_all_users()}
 
+        @self.app.get("/dashboard/api/users/waiting", tags=["Dashboard - Users"])
+        async def get_waiting_users(request: Request, ctx: RequestContext = Depends(get_request_context)):
+            """How many new sign-ups wait to be let in: the count beside Users."""
+            from shared.utils.signup_notify import waiting
+            session = self.db_client.get_session() if self.db_client else None
+            if not session:
+                raise HTTPException(status_code=503, detail="Database not available")
+            try:
+                return {"total": waiting(session)}
+            finally:
+                session.close()
+
         @self.app.get("/dashboard/api/projects", tags=["Dashboard - Projects"])
         async def get_projects_api(request: Request, ctx: RequestContext = Depends(get_request_context)):
             """The current workspace's projects."""
@@ -8449,6 +8472,7 @@ class DashboardServer:
                     "description": desc,
                     "type": a.get("type", "llm"),
                 })
+            from server.invitation_routes import invitations_for
             return self.templates.TemplateResponse(request, "dashboard/workroom.html", {
                 "request": request,
                 "page_title": "Work Room",
@@ -8457,6 +8481,8 @@ class DashboardServer:
                 "selected_agent": agent or "",
                 "selected_session": session or "",
                 "is_admin": is_admin,
+                "pending": not agent_list and self._is_waiting(ctx.user_id),
+                "invitations": invitations_for(request, ctx.user_id) if not agent else [],
             })
 
         @self.app.get("/dashboard/api/palette", tags=["Dashboard - Pages"])

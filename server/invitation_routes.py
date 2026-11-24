@@ -9,7 +9,10 @@ email address to the current workspace, with a role.
 - Inviting an address that already has an open invitation to the workspace replaces
   that invitation. Inviting a member is refused (409).
 - Accepting happens on the page /dashboard/invite/{token}, which calls POST /accept.
-  It needs a dashboard session whose user id or email is the invited address. It adds
+  It needs a dashboard session whose user id or email is the invited address. Someone
+  who signed in with Google or GitHub also sees the open invitations of their address
+  in the Work Room, and accepts one there by its id: their provider verified the
+  address, which is what the link proves otherwise. It adds
   the membership with DEFAULT_AGENT_ROLES and takes a pending sign-up out of pending.
   It does not make them a member of the default workspace. Single sign-on applies
   OAUTH_ALLOWED_DOMAINS and OAUTH_ALLOWED_EMAILS before there is a session, as for any
@@ -30,7 +33,7 @@ import os
 import re
 import secrets
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request
 from sqlalchemy import func, or_
@@ -164,6 +167,34 @@ def _addresses(user: Optional[User], user_id: str) -> Set[str]:
     return {a.lower() for a in (user_id, user.email if user else None) if a}
 
 
+def _signed_in_with_provider(request: Request, user_id: str) -> bool:
+    """Whether the caller's address is one their provider verified (oauth_routes)."""
+    user = request.session.get("user")
+    return isinstance(user, dict) and user.get("user_id") == user_id
+
+
+def invitations_for(request: Request, user_id: str) -> List[Dict[str, Any]]:
+    """The open invitations of the signed-in user's address, to open workspaces they are
+    no member of: what the Work Room offers them."""
+    if not _signed_in_with_provider(request, user_id) or is_reserved_user_id(user_id):
+        return []
+    session = open_session()
+    try:
+        user = session.query(User).filter(User.user_id == user_id).first()
+        member_of = session.query(WorkspaceMember.workspace_id).filter(WorkspaceMember.user_id == user_id)
+        rows = (session.query(WorkspaceInvitation, Workspace.name)
+                .join(Workspace, Workspace.id == WorkspaceInvitation.workspace_id)
+                .filter(func.lower(WorkspaceInvitation.email).in_(_addresses(user, user_id)),
+                        WorkspaceInvitation.accepted_at.is_(None),
+                        WorkspaceInvitation.workspace_id.notin_(member_of), *open_filters())
+                .order_by(WorkspaceInvitation.id))
+        return [{"id": invitation.id, "workspace": name, "role": invitation.role,
+                 "invited_by": invitation.created_by}
+                for invitation, name in rows if status_of(invitation) == "open"]
+    finally:
+        session.close()
+
+
 def invitation_for_page(token: str, user_id: str) -> Dict[str, Any]:
     """What /dashboard/invite/{token} shows the signed-in user. state is open, accepted,
     expired or invalid (unknown, revoked, or its workspace suspended or closed)."""
@@ -254,10 +285,18 @@ async def revoke_invitation(invitation_id: int, request: Request,
 async def accept_invitation(request: Request, body: Dict[str, Any] = Body(...),
                             ctx: RequestContext = Depends(get_api_request_context)):
     """Accept an invitation as the signed-in user, whose id or email must be the invited
-    address. The session then works in the workspace joined."""
+    address: by the link's token, or by its id for one of invitations_for(). The session
+    then works in the workspace joined."""
     session = open_session()
     try:
-        invitation = _by_token(session, body.get("token"))
+        if "invitation_id" in body:
+            # One that isn't the caller's is not found, so ids say nothing of others'
+            mine = {i["id"] for i in invitations_for(request, ctx.user_id)}
+            wanted = body["invitation_id"]
+            invitation = (session.get(WorkspaceInvitation, wanted)
+                          if type(wanted) is int and wanted in mine else None)
+        else:
+            invitation = _by_token(session, body.get("token"))
         if invitation is None or _open_workspace(session, invitation.workspace_id) is None:
             raise HTTPException(status_code=404, detail="This invitation is not valid. It may "
                                                         "have been revoked.")

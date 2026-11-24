@@ -83,6 +83,16 @@ CHAT_MESSAGE_KEYS = {'slack': 'text', 'discord': 'content'}
 DESTINATION_TYPES = ('http', 'email', 'slack', 'discord')
 
 
+def destination_from(kind: Optional[str], url: Optional[str], to: Optional[str]) -> Optional[Dict[str, Any]]:
+    """A destination set in the environment, as deliver() takes it; None when it isn't complete."""
+    kind = (kind or "").strip().lower()
+    if kind not in DESTINATION_TYPES:
+        return None
+    field, value = ("to", to) if kind == "email" else ("url", url)
+    value = (value or "").strip()
+    return {"type": kind, field: value} if value else None
+
+
 def may_email(workspace_id: Optional[int]) -> bool:
     """True if the workspace may send email through the server's SMTP account
     (platform_only.FEATURE_EMAIL). No workspace means the default one."""
