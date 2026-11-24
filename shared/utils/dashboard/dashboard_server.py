@@ -8531,8 +8531,10 @@ class DashboardServer:
             # Generate a short title via LiteLLM
             title = ""
             model = os.environ.get("TITLE_GEN_MODEL")
+            first_words = " ".join(first_user_text.split())
+            first_words = first_words[:50] + ("…" if len(first_words) > 50 else "")
             if not model:
-                title = session_id
+                title = first_words
             else:
                 try:
                     from shared.utils.provider_keys import completion
@@ -8548,10 +8550,10 @@ class DashboardServer:
                         temperature=0.3,
                         max_tokens=30,
                     )
-                    title = gen_resp.choices[0].message.content.strip().strip('"').strip("'").rstrip(".")
+                    title = gen_resp.choices[0].message.content.strip().strip('"').strip("'").rstrip(".") or first_words
                 except Exception as exc:
                     logger.warning("Session title generation failed: %s", exc)
-                    title = first_user_text[:50] + ("…" if len(first_user_text) > 50 else "")
+                    title = first_words
 
             # Persist to ADK session state
             if title:

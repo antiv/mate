@@ -507,6 +507,9 @@ textarea.m-input { resize: vertical; }
 .m-section > summary::-webkit-details-marker { display: none; }
 .m-section > summary::before {
     content: '\25B8';
+    width: 10px;
+    font-size: 15px;
+    line-height: 1;
     color: var(--text-tertiary);
     transition: transform 0.15s ease;
 }

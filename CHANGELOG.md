@@ -7,11 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Changed
-
-- **The Work Room's chat fills the page** - without a frame: a new conversation has its greeting and the message field in the middle, and an earlier one a readable column down the page, with the agent's answers as text and yours in a bubble. The message field holds its buttons: **+** attaches files, the arrow sends, the square stops. The chat follows the dashboard's theme rather than the system's. An agent's **Test** tab looks the same
-
 ## [2.1.0] - 2026-11-23
+
+**Published again on 2026-11-24,** with the Work Room's new chat, names for its conversations and small fixes to the dashboard (#419, #421). If you took 2.1.0 before that, pull the image or the tag again: `docker pull ghcr.io/antiv/mate:2.1.0`, `git fetch --tags --force`.
 
 **Before upgrading,** back up the database, and afterwards reinstall the dependencies (`pip install -r requirements.lock`) or pull the image. The first start adds V050–V052, which change no existing data.
 
@@ -90,6 +88,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Work Room conversations had no name** - the list said "Session" for each. A conversation is named after the first reply: by `TITLE_GEN_MODEL`, or by the first words of the message when that isn't set (it would have been the session's id). It works on the LangGraph runtime too, whose sessions take `PATCH` now, as ADK's do
+- **Small things in the dashboard:**
+  - **Visual Builder:** Delete and Save fell out of the agent's panel, and the page was longer than the window. Long agent names ran out of their boxes, the toolbar's labels wrapped, and the minimap and the zoom controls were light in the dark theme; the minimap is at the top, clear of the tools
+  - **Dropdowns:** the arrow has room beside it, and a long value ends in "…" before it
+  - **Heights:** the buttons, fields and dropdowns of one row are as high as each other, on Usage, Audit Logs, Users, Members, Models and keys, Templates, the agent page and the wizard's pages
+  - **The dark theme** reaches checkboxes, date fields and the lists dropdowns open
+  - **Agents** no longer has a margin and a scrollbar of its own inside the page
+  - **Alerts'** New Rule button and Wizard Leads' filters fit their row, and sort arrows keep clear of the column's name
 - **Editing an alert rule keeps its headers** - saving it in the dashboard dropped the headers, timeout and subject the form doesn't show
 - **Importing an agent over itself keeps its model key** - the export's `__stored__` was saved as the key
 - **Two approvals in one turn on LangGraph** (#387) - an answer raised an error when the agent waited on several, and the session stayed stuck. Each answer now resumes the call it names
@@ -106,6 +112,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **The Work Room's chat fills the page** - without a frame: a new conversation has its greeting and the message field in the middle, and an earlier one a readable column down the page, with the agent's answers as text and yours in a bubble. The message field holds its buttons: **+** attaches files, the arrow sends, the square stops. The chat follows the dashboard's theme rather than the system's. An agent's **Test** tab looks the same
+- **Buttons of Agents and the Visual Builder** - one set, with **Add Agent** as the main one, instead of a colour each
 - **The Control Room sidebar is grouped by scope** (dashboard redesign, step 3, #376) - **Observability** (Usage, Audit Logs, Guardrail Logs, Sessions), **Workspace** (Approvals, Members, Models and keys, Rate Limits, Alerts) and, for platform administrators, **Platform** (Workspaces, Users, Settings, Migrations), with Documentation at the bottom. "Governance & Access", "Wizard & Commerce" and "System" are gone. The wizard's pages and Shop Orders show under Platform only when in use: a wizard partner, lead or session, or a stored order or an agent's shop with a `partner_key`. They still open by their address. "Platform Overview" is "Overview": it shows the current workspace
 - **The agent side panel is gone** (dashboard redesign, step 4) - creating, editing and copying an agent happen on its page, on Agents and in the Visual Builder alike. Agents is a list again: a row, its pencil, **Add Agent** and its Copy open the page
 - **Triggers page** - built on the new components. The list has a search box, sorting by any column and pages of 25; the trigger dialog keeps focus inside it, closes on Escape and takes the whole screen on a phone

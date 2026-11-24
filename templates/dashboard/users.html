@@ -5,12 +5,12 @@
 {% block content %}
 <div class="space-y-4">
     <!-- Header -->
-    <div class="flex justify-between items-center">
+    <div class="flex flex-wrap gap-3 justify-between items-center">
         <div>
             <h2 class="text-xl font-bold text-gray-900 dark:text-white">Users</h2>
             <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">Manage users and their roles</p>
         </div>
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-2 mate-toolbar">
             <button data-click="triggerCleanup" class="border border-red-500 text-red-500 hover:bg-red-50 dark:hover:bg-red-950 px-3 py-1.5 text-sm rounded-lg flex items-center transition-colors">
                 <i class="fas fa-trash-alt mr-1.5 text-xs"></i>
                 Clean Up Inactive Users

@@ -3,14 +3,13 @@
 {% block title %}Visual Builder - MATE{% endblock %}
 
 {% block extra_head %}
-<link rel="stylesheet" href="/static/css/agents.css?v=20">
+<link rel="stylesheet" href="/static/css/agents.css?v=22">
 {% endblock %}
 
 {% block content %}
 {% from 'dashboard/modals/config_modals.html' import config_modals %}
-<div class="flex h-screen">
-    <div class="flex-1 flex flex-col h-screen">
-        <div class="space-y-4 overflow-y-auto flex-1 p-4">
+<div class="vb-page">
+    <div class="vb-page-inner">
             <!-- Header -->
             <div class="flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-center">
                 <div class="min-w-0">
@@ -48,19 +47,19 @@
                 <div class="flex flex-wrap gap-2 min-w-0 flex-1 sm:flex-initial justify-end">
                     <button
                         data-click="backToAgentsTable"
-                        class="bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 px-3 py-2 text-xs rounded-lg flex items-center min-h-[44px] touch-target mb-2 sm:mb-0">
-                        <i class="fas fa-table mr-1.5"></i>
+                        class="m-btn m-btn-secondary">
+                        <i class="fas fa-table"></i>
                         Agents Table
                     </button>
                     {% if selected_project_id %}
                     <button data-click="saveProjectAsTemplate"
-                        class="bg-purple-600 hover:bg-purple-700 text-white px-3 py-2 text-xs rounded-lg flex items-center transition-colors shadow-sm ml-2">
-                        <i class="fas fa-save mr-1.5"></i> Save as Template
+                        class="m-btn m-btn-secondary">
+                        <i class="fas fa-save"></i> Save as Template
                     </button>
                     <button data-click="downloadBinary"
-                        class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 text-xs rounded-lg flex items-center transition-colors shadow-sm ml-2"
+                        class="m-btn m-btn-secondary"
                         title="Build & download standalone executable">
-                        <i class="fas fa-box mr-1.5"></i> Download Binary
+                        <i class="fas fa-box"></i> Download Binary
                     </button>
                     {% endif %}
                 </div>
@@ -68,12 +67,12 @@
 
             <!-- React Flow Visual Builder Root -->
             {% if selected_project_id %}
-            <div class="h-[calc(100vh-160px)]">
+            <div class="vb-canvas">
                 <div id="agentVisualRoot" class="w-full h-full"></div>
             </div>
             {% else %}
             <!-- No project selected — show selection prompt -->
-            <div class="h-[calc(100vh-160px)] flex items-center justify-center">
+            <div class="vb-canvas flex items-center justify-center">
                 <div class="text-center max-w-md mx-auto">
                     <div class="w-16 h-16 mx-auto mb-5 rounded-2xl bg-gradient-to-br from-indigo-100 to-blue-100 dark:from-indigo-900/40 dark:to-blue-900/40 flex items-center justify-center">
                         <i class="fas fa-project-diagram text-2xl text-indigo-500 dark:text-indigo-400"></i>
@@ -100,7 +99,6 @@
                 </div>
             </div>
             {% endif %}
-        </div>
     </div>
 </div>
 
@@ -152,7 +150,7 @@
 <script src="/static/js/modals/version-history.js?v=5"></script>
 <script src="/static/js/trace-replay.js?v=2"></script>
 <script src="/static/js/approval-settings.js?v=1"></script>
-<script src="/static/js/agents-visual-builder.js?v=26"></script>
+<script src="/static/js/agents-visual-builder.js?v=27"></script>
 
 <script src="/static/js/agent-management.js?v=22"></script>
 <script nonce="{{ request.state.csp_nonce }}">

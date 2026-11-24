@@ -827,7 +827,7 @@ mateActions.allow('applyConfigModal', 'closeConfigModal',
 
         return React.createElement(
             'div',
-            { className: 'h-full flex flex-col text-xs text-gray-900 dark:text-gray-100 gap-3' },
+            { className: 'flex-1 min-h-0 flex flex-col text-xs text-gray-900 dark:text-gray-100 gap-3' },
             /* Header */
             React.createElement(
                 'div',
@@ -899,7 +899,7 @@ mateActions.allow('applyConfigModal', 'closeConfigModal',
 
         return React.createElement(
             'div',
-            { className: 'h-full flex flex-col text-xs text-gray-900 dark:text-gray-100 gap-2' },
+            { className: 'flex-1 min-h-0 flex flex-col text-xs text-gray-900 dark:text-gray-100 gap-2' },
             /* Header */
             React.createElement(
                 'div',
@@ -1215,7 +1215,7 @@ mateActions.allow('applyConfigModal', 'closeConfigModal',
 
         return React.createElement(
             'div',
-            { className: 'h-full flex flex-col text-xs text-gray-900 dark:text-gray-100' },
+            { className: 'flex-1 min-h-0 flex flex-col text-xs text-gray-900 dark:text-gray-100' },
             React.createElement(
                 'div',
                 { className: 'space-y-3 overflow-y-auto pr-1 flex-1' },
@@ -1228,7 +1228,7 @@ mateActions.allow('applyConfigModal', 'closeConfigModal',
                         'Name',
                     ),
                     React.createElement('input', {
-                        className: 'w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-gray-100 dark:bg-gray-700 text-xs',
+                        className: 'vb-field w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-gray-100 dark:bg-gray-700 text-xs',
                         value: agent.name || '',
                         disabled: true,
                     }),
@@ -1247,7 +1247,7 @@ mateActions.allow('applyConfigModal', 'closeConfigModal',
                         React.createElement(
                             'select',
                             {
-                                className: 'w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-xs',
+                                className: 'vb-field w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-xs',
                                 value: agent.type || 'llm',
                                 onChange: handleInput('type'),
                             },
@@ -1265,7 +1265,7 @@ mateActions.allow('applyConfigModal', 'closeConfigModal',
                             'Model',
                         ),
                         React.createElement('input', {
-                            className: 'w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-xs',
+                            className: 'vb-field w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-xs',
                             value: agent.model_name || '',
                             onChange: handleInput('model_name'),
                         }),
@@ -1280,7 +1280,7 @@ mateActions.allow('applyConfigModal', 'closeConfigModal',
                         'Fallback model',
                     ),
                     React.createElement('input', {
-                        className: 'w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-xs',
+                        className: 'vb-field w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-xs',
                         value: agent.fallback_model || '',
                         placeholder: 'Used when the model fails',
                         onChange: handleInput('fallback_model'),
@@ -1296,7 +1296,7 @@ mateActions.allow('applyConfigModal', 'closeConfigModal',
                         React.createElement('span', { className: 'text-red-500 font-bold' }, '*')
                     ),
                     React.createElement('textarea', {
-                        className: 'w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-xs min-h-[40px]',
+                        className: 'vb-field w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-xs min-h-[40px]',
                         value: agent.description || '',
                         placeholder: 'Description is required...',
                         onChange: handleInput('description'),
@@ -1312,7 +1312,7 @@ mateActions.allow('applyConfigModal', 'closeConfigModal',
                         React.createElement('span', { className: 'text-red-500 font-bold' }, '*')
                     ),
                     React.createElement('textarea', {
-                        className: 'w-full px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-xs min-h-[60px] cursor-pointer hover:border-blue-400 dark:hover:border-blue-500',
+                        className: 'vb-field w-full px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-xs min-h-[60px] cursor-pointer hover:border-blue-400 dark:hover:border-blue-500',
                         value: agent.instruction || '',
                         readOnly: true,
                         placeholder: 'Click to edit instructions in Markdown editor...',
@@ -1332,12 +1332,12 @@ mateActions.allow('applyConfigModal', 'closeConfigModal',
                     { className: 'border-t border-gray-200 dark:border-gray-700 pt-2' },
                     React.createElement(
                         'div',
-                        { className: 'flex items-center justify-between mb-1' },
+                        { className: 'vb-section-head' },
                         React.createElement('span', { className: 'text-[11px] font-semibold text-gray-700 dark:text-gray-300' },
                             'Tools' + (activeToolCount > 0 ? ' (' + activeToolCount + ')' : '')),
                         React.createElement('button', {
                             type: 'button',
-                            className: 'text-[11px] px-2 py-0.5 bg-yellow-600 hover:bg-yellow-500 text-white rounded flex items-center gap-1 disabled:opacity-50',
+                            className: 'm-btn m-btn-secondary vb-btn',
                             onClick: function () { if (props.onOpenToolPicker) props.onOpenToolPicker(agent.name); },
                             disabled: !!agent.hardcoded,
                             title: agent.hardcoded ? 'Hardcoded agents cannot be modified' : 'Open Tool Settings',
@@ -1364,11 +1364,11 @@ mateActions.allow('applyConfigModal', 'closeConfigModal',
                     { className: 'border-t border-gray-200 dark:border-gray-700 pt-2' },
                     React.createElement(
                         'div',
-                        { className: 'flex items-center justify-between mb-1' },
+                        { className: 'vb-section-head' },
                         React.createElement('span', { className: 'text-[11px] font-semibold text-gray-700 dark:text-gray-300' }, 'Approvals'),
                         React.createElement('button', {
                             type: 'button',
-                            className: 'text-[11px] px-2 py-0.5 bg-teal-600 hover:bg-teal-500 text-white rounded flex items-center gap-1 disabled:opacity-50',
+                            className: 'm-btn m-btn-secondary vb-btn',
                             onClick: function () { if (props.onOpenApprovals) props.onOpenApprovals(agent.name); },
                             disabled: !!agent.hardcoded,
                             title: agent.hardcoded ? 'Hardcoded agents cannot be modified' : 'Which tools ask first, and who decides',
@@ -1387,12 +1387,12 @@ mateActions.allow('applyConfigModal', 'closeConfigModal',
                     { className: 'border-t border-gray-200 dark:border-gray-700 pt-2' },
                     React.createElement(
                         'div',
-                        { className: 'flex items-center justify-between mb-1' },
+                        { className: 'vb-section-head' },
                         React.createElement('span', { className: 'text-[11px] font-semibold text-gray-700 dark:text-gray-300' },
                             'MCP Servers' + (mcpServerNames.length > 0 ? ' (' + mcpServerNames.length + ')' : '')),
                         React.createElement('button', {
                             type: 'button',
-                            className: 'text-[11px] px-2 py-0.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded flex items-center gap-1 disabled:opacity-50',
+                            className: 'm-btn m-btn-secondary vb-btn',
                             onClick: function () { if (props.onAddMcpServer) props.onAddMcpServer(agent.name); },
                             disabled: !!agent.hardcoded,
                             title: agent.hardcoded ? 'Hardcoded agents cannot be modified' : 'Add MCP Server',
@@ -1428,16 +1428,16 @@ mateActions.allow('applyConfigModal', 'closeConfigModal',
                     { className: 'border-t border-gray-200 dark:border-gray-700 pt-2' },
                     React.createElement(
                         'div',
-                        { className: 'flex items-center justify-between mb-1' },
+                        { className: 'vb-section-head' },
                         React.createElement('span', { className: 'text-[11px] font-semibold text-gray-700 dark:text-gray-300' },
                             'File Search' + (fsStores.length > 0 ? ' (' + fsStores.length + ')' : '')),
                         React.createElement('button', {
                             type: 'button',
-                            className: 'text-[11px] px-2 py-0.5 bg-blue-600 hover:bg-blue-500 text-white rounded flex items-center gap-1',
+                            className: 'm-btn m-btn-secondary vb-btn',
                             onClick: function () { if (props.onOpenFileSearch) props.onOpenFileSearch(); },
                             title: 'Manage File Search stores',
                         },
-                            React.createElement('i', { className: 'fas fa-file-search' }),
+                            React.createElement('i', { className: 'fas fa-search' }),
                             ' Manage',
                         ),
                     ),
@@ -1468,11 +1468,11 @@ mateActions.allow('applyConfigModal', 'closeConfigModal',
                     { className: 'border-t border-gray-200 dark:border-gray-700 pt-2' },
                     React.createElement(
                         'div',
-                        { className: 'flex items-center justify-between' },
+                        { className: 'vb-section-head' },
                         React.createElement('span', { className: 'text-[11px] font-semibold text-gray-700 dark:text-gray-300' }, 'Memory Blocks'),
                         React.createElement('button', {
                             type: 'button',
-                            className: 'text-[11px] px-2 py-0.5 bg-purple-600 hover:bg-purple-500 text-white rounded flex items-center gap-1',
+                            className: 'm-btn m-btn-secondary vb-btn',
                             onClick: function () {
                                 if (typeof window.showMemoryBlocksModal === 'function') {
                                     window.showMemoryBlocksModal(agent.name);
@@ -1491,7 +1491,7 @@ mateActions.allow('applyConfigModal', 'closeConfigModal',
                     { className: 'flex items-center justify-between' },
                     React.createElement(
                         'label',
-                        { className: 'inline-flex items-center space-x-1 text-[11px]' },
+                        { className: 'vb-check' },
                         React.createElement('input', {
                             type: 'checkbox',
                             className: 'rounded border-gray-300 dark:border-gray-600',
@@ -1502,7 +1502,7 @@ mateActions.allow('applyConfigModal', 'closeConfigModal',
                     ),
                     React.createElement(
                         'span',
-                        { className: 'text-[10px] text-gray-500 dark:text-gray-400' },
+                        { className: 'text-[10px] text-gray-500 dark:text-gray-400 truncate ml-3' },
                         parents.length === 0 ? 'Root agent' : 'Parents: ' + parents.join(', '),
                     ),
                 ),
@@ -1511,7 +1511,7 @@ mateActions.allow('applyConfigModal', 'closeConfigModal',
                     { className: 'flex items-center justify-between mt-1' },
                     React.createElement(
                         'label',
-                        { className: 'inline-flex items-center space-x-1 text-[11px]' },
+                        { className: 'vb-check' },
                         React.createElement('input', {
                             type: 'checkbox',
                             className: 'rounded border-gray-300 dark:border-gray-600',
@@ -1530,9 +1530,10 @@ mateActions.allow('applyConfigModal', 'closeConfigModal',
                     {
                         type: 'button',
                         onClick: props.onAdvancedSetup,
-                        className: 'flex items-center justify-center gap-1 w-full px-3 py-1.5 text-[11px] bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 rounded border border-gray-300 dark:border-gray-600',
+                        className: 'm-btn m-btn-secondary w-full',
                     },
-                    '⚙ Advanced Setup',
+                    React.createElement('i', { className: 'fas fa-cog', 'aria-hidden': 'true' }),
+                    'Advanced Setup',
                 ),
                 React.createElement(
                     'div',
@@ -1541,7 +1542,7 @@ mateActions.allow('applyConfigModal', 'closeConfigModal',
                         'button',
                         {
                             type: 'button',
-                            className: 'px-2 py-1 text-[11px] bg-red-600 hover:bg-red-700 text-white rounded disabled:opacity-60',
+                            className: 'm-btn m-btn-danger',
                             onClick: onDelete,
                             disabled: saving || agent.hardcoded,
                             title: agent.hardcoded ? 'Hardcoded agents cannot be deleted from here' : 'Delete agent',
@@ -1552,7 +1553,7 @@ mateActions.allow('applyConfigModal', 'closeConfigModal',
                         'button',
                         {
                             type: 'button',
-                            className: 'px-3 py-1 text-[11px] bg-blue-600 hover:bg-blue-700 text-white rounded disabled:opacity-60',
+                            className: 'm-btn m-btn-primary',
                             onClick: onSave,
                             disabled: saving,
                         },
@@ -2235,13 +2236,13 @@ mateActions.allow('applyConfigModal', 'closeConfigModal',
                 'div',
                 {
                     className:
-                        'flex-1 min-h-[320px] bg-white dark:bg-gray-900 rounded-lg shadow border border-gray-200 dark:border-gray-700 overflow-hidden flex flex-col',
+                        'flex-1 min-w-0 min-h-[320px] bg-white dark:bg-gray-900 rounded-lg shadow border border-gray-200 dark:border-gray-700 overflow-hidden flex flex-col',
                 },
                 React.createElement(
                     'div',
                     {
                         className:
-                            'flex items-center justify-between px-3 py-2 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-xs text-gray-600 dark:text-gray-300',
+                            'vb-bar flex items-center justify-between px-3 py-2 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-xs text-gray-600 dark:text-gray-300',
                     },
                     React.createElement(
                         'div',
@@ -2260,13 +2261,12 @@ mateActions.allow('applyConfigModal', 'closeConfigModal',
                     ),
                     React.createElement(
                         'div',
-                        { className: 'flex items-center gap-1' },
+                        { className: 'vb-bar-actions' },
                         React.createElement(
                             'button',
                             {
                                 type: 'button',
-                                className:
-                                    'px-2 py-1 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 rounded',
+                                className: 'm-btn m-btn-ghost vb-btn vb-btn-icon',
                                 onClick: function () {
                                     const inst = reactFlowInstanceRef.current;
                                     if (!inst) return;
@@ -2280,8 +2280,7 @@ mateActions.allow('applyConfigModal', 'closeConfigModal',
                             'button',
                             {
                                 type: 'button',
-                                className:
-                                    'px-2 py-1 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 rounded',
+                                className: 'm-btn m-btn-ghost vb-btn vb-btn-icon',
                                 onClick: function () {
                                     const inst = reactFlowInstanceRef.current;
                                     if (!inst) return;
@@ -2295,8 +2294,7 @@ mateActions.allow('applyConfigModal', 'closeConfigModal',
                             'button',
                             {
                                 type: 'button',
-                                className:
-                                    'px-2 py-1 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 rounded',
+                                className: 'm-btn m-btn-ghost vb-btn vb-btn-icon',
                                 onClick: function () {
                                     const inst = reactFlowInstanceRef.current;
                                     if (!inst) return;
@@ -2310,20 +2308,18 @@ mateActions.allow('applyConfigModal', 'closeConfigModal',
                             'button',
                             {
                                 type: 'button',
-                                className:
-                                    'ml-2 px-2 py-1 bg-orange-600 hover:bg-orange-700 text-white rounded disabled:opacity-60',
+                                className: 'm-btn m-btn-secondary vb-btn',
                                 disabled: !props.projectId || loading,
                                 onClick: syncFromDb,
                             },
-                            React.createElement('i', { className: 'fas fa-sync-alt mr-1' }),
+                            React.createElement('i', { className: 'fas fa-sync-alt' }),
                             'Sync',
                         ),
                         React.createElement(
                             'button',
                             {
                                 type: 'button',
-                                className:
-                                    'ml-1 px-2 py-1 bg-green-600 hover:bg-green-700 text-white rounded disabled:opacity-60',
+                                className: 'm-btn m-btn-secondary vb-btn',
                                 disabled: !props.projectId,
                                 onClick: function () {
                                     apiExportAgents(props.projectId)
@@ -2338,14 +2334,14 @@ mateActions.allow('applyConfigModal', 'closeConfigModal',
                                         });
                                 },
                             },
+                            React.createElement('i', { className: 'fas fa-download' }),
                             'Export',
                         ),
                         React.createElement(
                             'button',
                             {
                                 type: 'button',
-                                className:
-                                    'ml-1 px-2 py-1 bg-purple-600 hover:bg-purple-700 text-white rounded disabled:opacity-60',
+                                className: 'm-btn m-btn-secondary vb-btn',
                                 disabled: !props.projectId,
                                 onClick: function () {
                                     var input = document.createElement('input');
@@ -2384,13 +2380,14 @@ mateActions.allow('applyConfigModal', 'closeConfigModal',
                                     input.click();
                                 },
                             },
+                            React.createElement('i', { className: 'fas fa-upload' }),
                             'Import',
                         ),
                         React.createElement(
                             'button',
                             {
                                 type: 'button',
-                                className: 'ml-1 px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded disabled:opacity-60',
+                                className: 'm-btn m-btn-secondary vb-btn',
                                 disabled: !props.projectId,
                                 onClick: function () {
                                     let rootAgent = (window.visualBuilder && typeof window.visualBuilder.getSelectedNode === 'function') ? window.visualBuilder.getSelectedNode() : null;
@@ -2412,19 +2409,19 @@ mateActions.allow('applyConfigModal', 'closeConfigModal',
                                     }
                                 },
                             },
-                            React.createElement('i', { className: 'fas fa-comments mr-1' }),
+                            React.createElement('i', { className: 'fas fa-comments' }),
                             'Chat',
                         ),
                         Replay ? React.createElement(
                             'button',
                             {
                                 type: 'button',
-                                className: 'ml-1 px-2 py-1 rounded text-white ' + (replayOpen ? 'bg-indigo-800' : 'bg-indigo-600 hover:bg-indigo-700'),
+                                className: 'm-btn m-btn-secondary vb-btn',
                                 'aria-pressed': replayOpen,
                                 title: 'Replay a traced session on the canvas',
                                 onClick: function () { setReplayOpen(!replayOpen); },
                             },
-                            React.createElement('i', { className: 'fas fa-film mr-1' }),
+                            React.createElement('i', { className: 'fas fa-film' }),
                             'Replay',
                         ) : null,
                     ),
@@ -2467,7 +2464,7 @@ mateActions.allow('applyConfigModal', 'closeConfigModal',
                                 }, 100);
                             },
                         },
-                        React.createElement(MiniMap, null),
+                        React.createElement(MiniMap, { position: 'top-right', style: { width: 150, height: 100 } }),
                         React.createElement(Background, { gap: 16, color: '#9ca3af' }),
                         React.createElement(Controls, null),
 
@@ -2511,7 +2508,7 @@ mateActions.allow('applyConfigModal', 'closeConfigModal',
                 'div',
                 {
                     className:
-                        'w-full lg:w-80 xl:w-96 bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 flex flex-col p-3 text-xs',
+                        'w-full lg:w-80 xl:w-96 min-h-0 overflow-hidden bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 flex flex-col p-4 text-xs',
                 },
                 /* Panel header */
                 React.createElement(
