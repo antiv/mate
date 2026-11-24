@@ -116,7 +116,7 @@ def _upsert_oauth_user(user_id: str, email: str, display_name: str, provider: st
         user = session.query(User).filter(User.user_id == user_id).first()
         waits = False
         if user is None:
-            role = _cfg("OAUTH_DEFAULT_ROLE", PENDING)
+            role = _cfg("OAUTH_DEFAULT_ROLE", "pending")
             waits = role == PENDING
             user = User(
                 user_id=user_id,
