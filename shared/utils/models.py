@@ -342,6 +342,30 @@ class WorkspaceSetting(Base):
                         onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
 
+class ModelGroup(Base):
+    """A named, ordered list of models, for agents to name as group/<name> (V053).
+
+    models is a JSON list of {"model", "confirmed"}; shared/utils/model_groups.py reads
+    and checks it.
+    """
+
+    __tablename__ = 'model_groups'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(40), nullable=False, unique=True)
+    label = Column(String(100), nullable=False)
+    description = Column(String(500), nullable=True)
+    # What each of its models must do
+    needs_tools = Column(Boolean, nullable=False, default=False)
+    needs_images = Column(Boolean, nullable=False, default=False)
+    # Every model runs on the installation's own endpoints
+    own_servers_only = Column(Boolean, nullable=False, default=False)
+    models = Column(Text, nullable=False, default='[]')
+    updated_by = Column(String(255), nullable=True)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc),
+                        onupdate=lambda: datetime.now(timezone.utc), nullable=False)
+
+
 class AgentConfig(Base):
     """Model for agent configuration."""
     

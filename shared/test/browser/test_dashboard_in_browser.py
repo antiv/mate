@@ -25,7 +25,7 @@ PAGES = [
     "/dashboard/docs", "/dashboard/audit-logs", "/dashboard/guardrail-logs", "/dashboard/sessions",
     "/dashboard/wizard-leads", "/dashboard/wizard-pricing", "/dashboard/shop-orders",
     "/dashboard/evals", "/dashboard/triggers", "/dashboard/integrations", "/dashboard/workroom",
-    "/dashboard/approvals", "/dashboard/alerts", "/dashboard/settings",
+    "/dashboard/approvals", "/dashboard/alerts", "/dashboard/settings", "/dashboard/model-groups",
 ]
 NOT_A_PAGE = {
     "/dashboard/workroom/canvas",  # the sandboxed frame of the Work Room's canvas

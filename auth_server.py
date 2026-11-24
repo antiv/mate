@@ -405,6 +405,7 @@ from server.wizard_routes import router as wizard_router
 from server.slack_routes import router as slack_router, dashboard_router as slack_dashboard_router
 from server.docs_routes import router as docs_router
 from server.workspace_routes import router as workspace_router
+from server.model_group_routes import router as model_group_router
 from server.platform_workspace_routes import router as platform_workspace_router
 from server.member_routes import router as member_router
 from server.invitation_routes import router as invitation_router
@@ -424,6 +425,7 @@ app.include_router(slack_dashboard_router)
 app.include_router(docs_router)
 app.include_router(workspace_router)
 app.include_router(platform_workspace_router)
+app.include_router(model_group_router)
 app.include_router(member_router)
 app.include_router(invitation_router)
 app.include_router(workspace_model_router)

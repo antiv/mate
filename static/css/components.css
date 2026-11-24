@@ -556,6 +556,16 @@ textarea.m-input { resize: vertical; }
 }
 .m-chip button:hover, .m-chip button:focus-visible { background: var(--bg-surface); }
 
+/* ── List: rows in a box, with buttons at their end ── */
+.m-list { margin: 0; padding: 0; list-style: none; border: 1px solid var(--border); border-radius: 9px; }
+.m-list:empty { display: none; }
+.m-list > li { display: flex; align-items: center; gap: 4px; padding: 8px 10px; }
+.m-list > li + li { border-top: 1px solid var(--border); }
+.m-list-main { display: flex; flex: 1; flex-direction: column; gap: 4px; min-width: 0; overflow-wrap: anywhere; }
+.m-list-plain { margin: 0; padding: 0; list-style: none; overflow-wrap: anywhere; }
+.m-row-fill { flex-wrap: nowrap; }
+.m-row-fill > .m-input { flex: 1; min-width: 0; }
+
 /* ── Menu: <details class="m-menu"><summary>…</summary><div class="m-menu-list">… ── */
 .m-menu { position: relative; }
 .m-menu > summary { list-style: none; }

@@ -10,7 +10,7 @@ generated: true
 
 # Database reference
 
-**40** tables defined in `shared/utils/models.py`; migrations are at **V052**. Migrations apply automatically on startup and are the source of truth for the schema: the models describe it, the migrations create it.
+**41** tables defined in `shared/utils/models.py`; migrations are at **V053**. Migrations apply automatically on startup and are the source of truth for the schema: the models describe it, the migrations create it.
 
 ## Migrations
 
@@ -70,6 +70,7 @@ A ✗ means that dialect has no file for that version. All dialects are in step.
 | V050 | approval requests | ✓ | ✓ | ✓ |
 | V051 | approval approver | ✓ | ✓ | ✓ |
 | V052 | slack team name | ✓ | ✓ | ✓ |
+| V053 | add model groups | ✓ | ✓ | ✓ |
 
 ## `users`
 
@@ -229,6 +230,23 @@ Model `WorkspaceSetting`. A workspace's own value for a setting the installation
 | `workspace_id` | `Integer` | PK, FK → `workspaces.id` | — | — |
 | `setting_key` | `String(100)` | PK | — | — |
 | `value` | `Text` | — | — | — |
+| `updated_by` | `String(255)` | — | — | — |
+| `updated_at` | `DateTime` | not null | `(computed)` | — |
+
+## `model_groups`
+
+Model `ModelGroup`. A named, ordered list of models, for agents to name as group/<name> (V053).
+
+| Column | Type | Constraints | Default | Notes |
+|---|---|---|---|---|
+| `id` | `Integer` | PK | — | — |
+| `name` | `String(40)` | not null, unique | — | — |
+| `label` | `String(100)` | not null | — | — |
+| `description` | `String(500)` | — | — | — |
+| `needs_tools` | `Boolean` | not null | `False` | What each of its models must do |
+| `needs_images` | `Boolean` | not null | `False` | — |
+| `own_servers_only` | `Boolean` | not null | `False` | Every model runs on the installation's own endpoints |
+| `models` | `Text` | not null | `'[]'` | — |
 | `updated_by` | `String(255)` | — | — | — |
 | `updated_at` | `DateTime` | not null | `(computed)` | — |
 

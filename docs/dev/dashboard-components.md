@@ -54,7 +54,7 @@ Two pages are built on them alone; copy from them:
 | `m-field` | A label and its control in a column. `m-hint` and `m-error` go under the control; `is-invalid` on the field marks the control |
 | `m-input` | Input, select and textarea. `m-input-sm` for toolbars, `m-input-mono` for code |
 | `m-check` | A label around a checkbox and its text |
-| `m-stack`, `m-row`, `m-grid-2`, `m-divider` | Layout: a column with gaps, a wrapping row, two columns that stack on a phone, a rule |
+| `m-stack`, `m-row`, `m-grid-2`, `m-divider` | Layout: a column with gaps, a wrapping row (`m-row-fill`: one line, its input taking the free space), two columns that stack on a phone, a rule |
 | `m-badge` + `-accent` / `-success` / `-warning` / `-danger` / `-violet` | A short label in a pill |
 | `m-count` | A number in a pill, beside a tab or a sidebar item |
 | `m-link` | A button that reads as a link, such as a name in a table that opens its row |
@@ -64,6 +64,7 @@ Two pages are built on them alone; copy from them:
 | `m-tabs`, `m-tab` | Tabs; see below |
 | `m-section` | A collapsible part of a form: `<details class="m-section">` with a `<summary>` holding an icon, the title and an `m-section-state` (a word such as `3 on`; `is-set` colours it), then an `m-section-body` |
 | `m-chips`, `m-chip` | The values of a picker, each with a remove button; an empty `m-chips` takes no space |
+| `m-list`, `m-list-main` | An `<ol>` or `<ul>` of rows in a box: a row's text in `m-list-main`, its buttons after it. `m-list-plain` is a list without marks, such as in a table's cell |
 | `m-menu`, `m-menu-list` | A menu of links and buttons: `<details class="m-menu">` whose `<summary>` is the button |
 | `--m-chart-1` to `-6`, `--m-chart-other` | The colours of a chart's series, in that order, in both themes |
 | `m-savebar` | A bar pinned to the bottom of the page with **Discard** and **Save**, clear of the Help button |
