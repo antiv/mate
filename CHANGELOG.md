@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **A browser test of the dashboard in CI** (#424) - every page in headless Chromium, in both themes, on a desktop and a phone: errors, CSP violations, controls off the window, cut off or under the Help button, and a Work Room conversation. See `docs/dev/browser-tests.md`
+- **Migrations on PostgreSQL and MySQL in CI** (#424) - all of them on an empty database, and the new ones on a database of the last release with rows, on PostgreSQL 15 and 18 and MySQL 8.4. See `docs/dev/database-and-migrations.md`
 
 ### Fixed
 

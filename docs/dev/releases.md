@@ -19,7 +19,8 @@ done by hand.
 ## Cutting a release
 
 1. In `CHANGELOG.md`, rename `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` and add an
-   empty `## [Unreleased]` above it. Merge that.
+   empty `## [Unreleased]` above it. In `shared/test/test_migrations_on_database.py`, set
+   `RELEASED` to the last migration, if there are new ones. Merge that.
 2. Tag the merged commit and push the tag:
 
    ```bash

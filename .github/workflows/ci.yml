@@ -63,6 +63,65 @@ jobs:
           MATE_BROWSER_TESTS: "1"
         run: python -m unittest discover -s shared/test -t . -p "test_dashboard_in_browser.py" -v
 
+  # Every migration on a server of each kind: docs/dev/database-and-migrations.md
+  migrations:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: PostgreSQL 15
+            run: -e POSTGRES_PASSWORD=mate -p 5432:5432 postgres:15
+            url: postgresql://postgres:mate@127.0.0.1:5432/postgres
+          - name: PostgreSQL 18
+            run: -e POSTGRES_PASSWORD=mate -p 5432:5432 postgres:18
+            url: postgresql://postgres:mate@127.0.0.1:5432/postgres
+          - name: MySQL 8.4
+            run: -e MYSQL_ROOT_PASSWORD=mate -p 3306:3306 mysql:8.4
+            url: mysql+pymysql://root:mate@127.0.0.1:3306/mysql
+    name: migrations (${{ matrix.name }})
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7.1.0
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements.lock
+
+      - name: Start the database
+        run: docker run -d --name database ${{ matrix.run }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.lock
+
+      - name: Wait for the database
+        env:
+          URL: ${{ matrix.url }}
+        run: |
+          python - <<'PY'
+          import os, time
+          from sqlalchemy import create_engine
+          for attempt in range(60):
+              try:
+                  create_engine(os.environ["URL"]).connect().close()
+                  break
+              except Exception as error:
+                  if attempt == 59:
+                      raise
+                  time.sleep(2)
+          PY
+
+      - name: Run the migrations
+        env:
+          MATE_MIGRATIONS_URL: ${{ matrix.url }}
+        run: python -m unittest discover -s shared/test -t . -p "test_migrations_on_database.py" -v
+
   docs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
