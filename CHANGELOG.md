@@ -27,7 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **mcp 1.30 → 2.3, and the LangGraph runtime's MCP client** (#389) - the client is written on the MCP SDK, as langchain-mcp-adapters is no longer maintained and needs mcp 1. Servers are configured as before, and tool names, headers, `${VAR}` and timeouts are the same. Audio in a tool's result is a line of text instead of an error. **A result larger than 1 MB** that a server sends as an event stream is refused by mcp 2, and the agent gets an error: on ADK from any remote server, on LangGraph (16 MB over streamable HTTP) from one with `transport: sse`. A JSON answer and a stdio server have no such limit
+- **mcp 1.30 → 2.3, and the LangGraph runtime's MCP client** (#389) - the client is written on the MCP SDK, as langchain-mcp-adapters is no longer maintained and needs mcp 1. Servers are configured as before, and tool names, headers, `${VAR}` and timeouts are the same. Audio in a tool's result is a line of text instead of an error. A result that a remote server sends as an event stream may have 16 MB on both runtimes (mcp 2's own limit, 1 MB, is raised); it had none before
 
 ## [2.1.0] - 2026-11-23
 

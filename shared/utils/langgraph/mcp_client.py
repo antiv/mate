@@ -31,13 +31,12 @@ from mcp import ClientSession, StdioServerParameters, stdio_client, types
 from mcp.client.sse import sse_client
 from mcp.client.streamable_http import streamable_http_client
 
+from shared.utils.mcp_limits import raise_event_limit
 from shared.utils.tools.mcp_tools import _parse_json_field, _resolve_env, resolve_mcp_command
 
 logger = logging.getLogger(__name__)
 
-# The SDK's own limit for a streamable HTTP event is 1 MB, which a tool that returns an
-# image passes. The SSE transport's can't be set.
-MAX_EVENT_BYTES = 16 * 1024 * 1024
+raise_event_limit()
 MAX_TOOL_PAGES = 1000
 
 
@@ -141,8 +140,7 @@ async def _open_session(connection: Dict[str, Any]) -> AsyncIterator[ClientSessi
     else:
         timeout = httpx2.Timeout(connection["timeout"], read=connection["sse_read_timeout"])
         async with httpx2.AsyncClient(headers=connection["headers"], timeout=timeout) as client:
-            streams = streamable_http_client(connection["url"], http_client=client,
-                                             max_sse_event_size=MAX_EVENT_BYTES)
+            streams = streamable_http_client(connection["url"], http_client=client)
             async with streams as (read, write), ClientSession(read, write) as session:
                 await session.initialize()
                 yield session

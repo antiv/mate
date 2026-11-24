@@ -150,6 +150,8 @@ def create_mcp_toolset_http(
             SseConnectionParams,
             StreamableHTTPConnectionParams,
         )
+        from ..mcp_limits import raise_event_limit
+        raise_event_limit()
 
         # A stdio server is a local process; an HTTP one is wherever the URL points.
         # Refuse anything that is not http(s) rather than handing an arbitrary
