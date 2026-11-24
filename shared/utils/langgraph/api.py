@@ -115,6 +115,22 @@ def create_app(allow_origins: Optional[List[str]] = None) -> FastAPI:
             raise HTTPException(status_code=404, detail=f"Session not found: {session_id}")
         return session
 
+    @app.patch("/apps/{app_name}/users/{user_id}/sessions/{session_id}")
+    async def update_session(app_name: str, user_id: str, session_id: str, request: Request):
+        """Merge stateDelta into the session's state without a run, as ADK does. The
+        Work Room keeps a conversation's name there."""
+        try:
+            body = await request.json()
+        except Exception:
+            body = None
+        delta = (body.get("stateDelta") or body.get("state_delta")) if isinstance(body, dict) else None
+        if not isinstance(delta, dict):
+            raise HTTPException(status_code=422, detail="stateDelta must be an object")
+        if not store.session_exists(app_name, user_id, session_id):
+            raise HTTPException(status_code=404, detail=f"Session not found: {session_id}")
+        store.update_state(session_id, delta)
+        return store.get_session(app_name, user_id, session_id)
+
     @app.delete("/apps/{app_name}/users/{user_id}/sessions/{session_id}")
     async def delete_session(app_name: str, user_id: str, session_id: str):
         if not store.session_exists(app_name, user_id, session_id):

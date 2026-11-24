@@ -19,9 +19,9 @@
                 {% endif %}
             </p>
         </div>
-        <div class="flex flex-wrap gap-2 items-center">
+        <div class="flex flex-wrap gap-2 items-center mate-toolbar">
             <!-- View Toggle Switch -->
-            <div class="flex items-center space-x-1 bg-gray-100 dark:bg-gray-700 rounded-lg p-0.5">
+            <div class="flex items-center space-x-1 bg-gray-100 dark:bg-gray-700 rounded-lg p-0.5 mate-segmented">
                 <button data-click="switchView" data-args='["analytics"]' 
                         class="px-3 py-2 min-h-[44px] rounded-md text-xs font-medium transition-colors touch-target {% if view == 'analytics' %}bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm{% else %}text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300{% endif %}">
                     <i class="fas fa-chart-bar mr-1"></i>Analytics
@@ -32,7 +32,7 @@
                 </button>
             </div>
             
-            <select id="timeRangeSelect" data-change="updateTimeRange" class="border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg px-2 py-1 text-xs">
+            <select id="timeRangeSelect" data-change="updateTimeRange" class="border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg px-3 py-1 text-xs">
                 {% if view == "analytics" %}
                     <option value="7" {% if days == 7 %}selected{% endif %}>Last 7 days</option>
                     <option value="30" {% if days == 30 %}selected{% endif %}>Last 30 days</option>

@@ -1159,46 +1159,22 @@
         });
     }
 
-    // ── Auto-title: generate a descriptive title after first AI reply ──
-    var _titleGenDone = !!SESSION; // skip for restored sessions (already titled)
-    function _startTitleObserver() {
-        if (_titleGenDone) return;
-        var msgEl = document.getElementById("widgetMessages");
-        if (!msgEl) return;
-        var observer = new MutationObserver(function (mutations) {
-            if (_titleGenDone) { observer.disconnect(); return; }
-            for (var i = 0; i < mutations.length; i++) {
-                var added = mutations[i].addedNodes;
-                for (var j = 0; j < added.length; j++) {
-                    var node = added[j];
-                    if (node.nodeType === 1 && node.classList &&
-                        node.classList.contains("widget-message") &&
-                        !node.classList.contains("user")) {
-                        _titleGenDone = true;
-                        observer.disconnect();
-                        // Wait a tick so chat.js has stored the session id
-                        setTimeout(function () {
-                            var sid = localStorage.getItem(PREFIX + "_sid");
-                            var uid = localStorage.getItem(PREFIX + "_uid");
-                            if (!sid || !uid) return;
-                            fetch("/dashboard/api/workroom/title", {
-                                method: "POST",
-                                credentials: "same-origin",
-                                headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify({ agent: AGENT, user_id: uid, session_id: sid })
-                            })
-                            .then(function (r) { return r.ok ? r.json() : null; })
-                            .then(function (data) {
-                                if (data && data.title) loadSessions(uid);
-                            })
-                            .catch(function () {});
-                        }, 800);
-                        return;
-                    }
-                }
-            }
-        });
-        observer.observe(msgEl, { childList: true, subtree: false });
+    // ── Auto-title: name the conversation once the agent has answered ──
+    var _titleAsked = false;
+    function _askForTitle() {
+        var sid = localStorage.getItem(PREFIX + "_sid");
+        var uid = localStorage.getItem(PREFIX + "_uid");
+        if (_titleAsked || !sid || !uid) return;
+        _titleAsked = true;
+        fetch("/dashboard/api/workroom/title", {
+            method: "POST",
+            credentials: "same-origin",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ agent: AGENT, user_id: uid, session_id: sid })
+        })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (data) { if (data && data.title) loadSessions(uid); })
+        .catch(function () {});
     }
 
     // ── Main flow ────────────────────────────────────────────────
@@ -1237,8 +1213,8 @@
         sessionStorage.removeItem(PREFIX + "_msgs");
         loadChatJS();
         if (userId) loadSessions(userId);
-        // Attach observer to auto-generate title after first AI reply
-        _startTitleObserver();
+        // Another conversation in the same page gets a name of its own
+        document.getElementById("widgetNewChat").addEventListener("click", function () { _titleAsked = false; });
     }
 
     // ── Canvas ───────────────────────────────────────────────────
@@ -1728,6 +1704,7 @@
 
     // Called after stream completes — move code blocks to canvas, leave pills in chat
     window.mateOnAgentDone = function (agentEl) {
+        _askForTitle();
         var blocks = agentEl.querySelectorAll(".mate-code-block");
         if (!blocks.length) return;
 

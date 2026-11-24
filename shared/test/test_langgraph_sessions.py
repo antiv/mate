@@ -52,6 +52,20 @@ class SessionStoreTestCase(unittest.TestCase):
         # duplicate → None (endpoint maps this to HTTP 400, matching ADK)
         self.assertIsNone(self.store.create_session("my_app", "u1", session_id="fixed-id"))
 
+    def test_a_state_delta_is_merged_without_a_run(self):
+        # The Work Room names a conversation so, on both runtimes
+        from fastapi.testclient import TestClient
+        from shared.utils.langgraph.api import create_app
+        with patch("shared.utils.langgraph.api.get_session_store", return_value=self.store):
+            client = TestClient(create_app())
+        session = self.store.create_session("my_app", "u1", state={"kept": 1})
+        path = f"/apps/my_app/users/u1/sessions/{session['id']}"
+        answer = client.patch(path, json={"stateDelta": {"_title": "Openings"}})
+        self.assertEqual((answer.status_code, answer.json()["state"]), (200, {"kept": 1, "_title": "Openings"}))
+        self.assertEqual(client.patch(path.replace("u1", "u2"), json={"stateDelta": {"_title": "x"}}).status_code, 404)
+        self.assertEqual(client.patch(path, json={"stateDelta": "x"}).status_code, 422)
+        self.assertEqual(self.store.get_session("my_app", "u1", session["id"])["state"]["_title"], "Openings")
+
     def test_get_missing_session_returns_none(self):
         self.assertIsNone(self.store.get_session("my_app", "u1", "ghost"))
 

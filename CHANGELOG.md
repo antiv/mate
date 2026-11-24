@@ -10,6 +10,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **The Work Room's chat fills the page** - without a frame: a new conversation has its greeting and the message field in the middle, and an earlier one a readable column down the page, with the agent's answers as text and yours in a bubble. The message field holds its buttons: **+** attaches files, the arrow sends, the square stops. The chat follows the dashboard's theme rather than the system's. An agent's **Test** tab looks the same
+- **Buttons of Agents and the Visual Builder** - one set, with **Add Agent** as the main one, instead of a colour each
+
+### Fixed
+
+- **Work Room conversations had no name** - the list said "Session" for each. A conversation is named after the first reply: by `TITLE_GEN_MODEL`, or by the first words of the message when that isn't set (it would have been the session's id). It works on the LangGraph runtime too, whose sessions take `PATCH` now, as ADK's do
+- **Small things in the dashboard:**
+  - **Visual Builder:** Delete and Save fell out of the agent's panel, and the page was longer than the window. Long agent names ran out of their boxes, the toolbar's labels wrapped, and the minimap and the zoom controls were light in the dark theme; the minimap is at the top, clear of the tools
+  - **Dropdowns:** the arrow has room beside it, and a long value ends in "…" before it
+  - **Heights:** the buttons, fields and dropdowns of one row are as high as each other, on Usage, Audit Logs, Users, Members, Models and keys, Templates, the agent page and the wizard's pages
+  - **The dark theme** reaches checkboxes, date fields and the lists dropdowns open
+  - **Agents** no longer has a margin and a scrollbar of its own inside the page
+  - **Alerts'** New Rule button and Wizard Leads' filters fit their row, and sort arrows keep clear of the column's name
 
 ## [2.1.0] - 2026-11-23
 
