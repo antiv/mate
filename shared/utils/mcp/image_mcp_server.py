@@ -1,12 +1,49 @@
 """
-Image MCP Server Implementation
-Handles Image MCP endpoints and protocol requests
+The Image Generation MCP server, at /images/mcp: generates images with the server's provider keys.
 """
 
-from fastapi import Depends, FastAPI, Request, HTTPException
-from fastapi.responses import StreamingResponse, Response
-from ..tools.image_mcp_protocol_handler import ImageMCPProtocolHandler
-from ..tools.mcp_jsonrpc import no_stream, wants_stream
+import base64
+from typing import Any, Dict, List
+
+from fastapi import FastAPI, HTTPException, Request
+from mcp import types
+from mcp.server.lowlevel import Server
+
+from .served import checked_arguments, serve, text_result
+
+TOOLS = [
+    types.Tool(
+        name="generate_image_gpt_image_1",
+        description="Generate images using GPT Image 1 model",
+        input_schema={"type": "object", "properties": {
+            "prompt": {"type": "string", "description": "The text prompt to generate the image from"},
+            "size": {"type": "string", "description": "Image size", "enum": ['256x256', '512x512', '1024x1024'], "default": "1024x1024"},
+            "n": {"type": "integer", "description": "Number of images to generate", "default": 1, "minimum": 1, "maximum": 10},
+        }, "required": ["prompt"]}),
+    types.Tool(
+        name="generate_image_dall_e_3",
+        description="Generate images using DALL-E 3 model",
+        input_schema={"type": "object", "properties": {
+            "prompt": {"type": "string", "description": "The text prompt to generate the image from"},
+            "size": {"type": "string", "description": "Image size", "enum": ['1024x1024', '1024x1792', '1792x1024'], "default": "1024x1024"},
+            "quality": {"type": "string", "description": "Image quality", "enum": ['standard', 'hd'], "default": "standard"},
+            "n": {"type": "integer", "description": "Number of images to generate", "default": 1, "minimum": 1, "maximum": 1},
+        }, "required": ["prompt"]}),
+    types.Tool(
+        name="generate_image_nano_banana",
+        description="Generate images using Nano Banana (Gemini 2.5 Flash Image) model",
+        input_schema={"type": "object", "properties": {
+            "prompt": {"type": "string", "description": "The text prompt to generate the image from"},
+            "asset_name": {"type": "string", "description": "Name for the asset to track versions", "default": "generated_image"},
+        }, "required": ["prompt"]}),
+]
+# The model of each tool, and the request parameters it takes from the caller with their
+# defaults. No others: a caller could pick any model and parameters on the server's keys.
+MODELS: Dict[str, Any] = {
+    "generate_image_gpt_image_1": ("gpt-image-1", {"size": "1024x1024", "n": 1}),
+    "generate_image_dall_e_3": ("dall-e-3", {"size": "1024x1024", "quality": "standard", "n": 1}),
+    "generate_image_nano_banana": ("nano-banana", {}),
+}
 
 
 def _require_user(request: Request) -> str:
@@ -22,113 +59,91 @@ def _require_user(request: Request) -> str:
     return user
 
 
-# What an unauthenticated health check may see: not which model or keys are set
-_PUBLIC_HEALTH_KEYS = ("status", "service", "tools", "endpoint", "protocol")
+class _Images:
+    """A tool context that keeps the images for the answer instead of saving them: the
+    image tool gives a path, never the data, and an MCP caller has no session to look in."""
+
+    def __init__(self) -> None:
+        self.saved: List[types.ImageContent] = []
+
+    async def save_artifact(self, filename: str, content: Any) -> int:
+        blob = content.inline_data
+        self.saved.append(types.ImageContent(type="image", data=base64.b64encode(blob.data).decode(),
+                                             mime_type=blob.mime_type or "image/png"))
+        return 0
 
 
 class ImageMCPServer:
-    """Image MCP Server with endpoint registration"""
-    
+    """The Image Generation MCP server."""
+
     def __init__(self, app: FastAPI, image_mcp_available: bool = True):
-        self.app = app
         self.image_mcp_available = image_mcp_available
-        self.mcp_handler = ImageMCPProtocolHandler(image_mcp_available)
-        self._register_endpoints()
-    
-    def _register_endpoints(self):
-        """Register all Image MCP endpoints"""
-        
-        @self.app.get("/images/mcp/health", tags=["MCP - Images"])
-        async def image_mcp_health_check():
-            """Image MCP server health check (no auth required, so no setup details)"""
-            health = self.mcp_handler.get_mcp_health()
-            return {k: health[k] for k in _PUBLIC_HEALTH_KEYS if k in health}
+        server = Server("image-generation-mcp-server", version="1.0.0",
+                        on_list_tools=self._list_tools, on_call_tool=self._call_tool)
+        serve(app, "/images/mcp", "MCP - Images", server, _require_user, self._info, self._health,
+              lambda: self.image_mcp_available)
 
-        @self.app.post("/images/mcp/initialize", tags=["MCP - Images"])
-        async def image_mcp_initialize(request: Request, user: str = Depends(_require_user)):
-            """Image MCP protocol initialize endpoint"""
-            return self.mcp_handler.get_mcp_initialize()
+    def _info(self) -> Dict[str, Any]:
+        return {
+            "name": "Image Generation MCP Server",
+            "version": "1.0.0",
+            "description": "Image generation tools via Model Context Protocol",
+            "tools": len(TOOLS),
+            "endpoints": {
+                "health": "/images/mcp/health",
+                "tools_list": "/images/mcp/tools/list",
+                "tools_call": "/images/mcp/tools/call",
+                "initialize": "/images/mcp/initialize",
+            },
+            "available_tools": [tool.name for tool in TOOLS],
+        }
 
-        @self.app.get("/images/mcp/sse", tags=["MCP - Images"])
-        async def image_mcp_sse(request: Request, user: str = Depends(_require_user)):
-            """Image MCP Server-Sent Events endpoint for real-time communication"""
-            return await self.mcp_handler.get_mcp_sse_stream()
-
-        @self.app.post("/images/mcp/tools/list", tags=["MCP - Images"])
-        async def image_mcp_list_tools(request: Request, user: str = Depends(_require_user)):
-            """Image MCP protocol tools/list endpoint"""
-            return self.mcp_handler.get_mcp_tools_list()
-
-        @self.app.post("/images/mcp/tools/call", tags=["MCP - Images"])
-        async def image_mcp_call_tool(request: Request, user: str = Depends(_require_user)):
-            """Image MCP protocol tools/call endpoint"""
-            try:
-                body = await request.json()
-                params = body.get("params", {})
-                tool_name = params.get("name")
-                arguments = params.get("arguments", {})
-                request_id = body.get("id", 1)
-                return await self.mcp_handler.call_mcp_tool(tool_name, arguments, request_id)
-            except Exception as e:
-                return {
-                    "jsonrpc": "2.0",
-                    "id": body.get("id", 1) if 'body' in locals() else 1,
-                    "error": {
-                        "code": -32603,
-                        "message": f"Internal error: {str(e)}"
-                    }
-                }
-
-        @self.app.get("/images/mcp", tags=["MCP - Images"])
-        async def image_mcp_info(request: Request, user: str = Depends(_require_user)):
-            """Image MCP server info endpoint"""
-            if wants_stream(request):
-                return no_stream()
-            return self.mcp_handler.get_mcp_info()
-
-        @self.app.post("/images/mcp", tags=["MCP - Images"])
-        async def image_mcp_protocol_handler(request: Request, user: str = Depends(_require_user)):
-            """Handle Image MCP protocol requests at the root /images/mcp endpoint"""
-            return await self.mcp_handler.handle_mcp_request(request)
-
-        @self.app.options("/images/mcp")
-        async def image_mcp_options():
-            """Handle CORS preflight requests"""
-            return self.mcp_handler.get_cors_options_response()
-
-        @self.app.options("/images/mcp/sse")
-        async def image_mcp_sse_options():
-            """Handle CORS preflight requests for SSE"""
-            return self.mcp_handler.get_sse_cors_options_response()
-    
-    def check_image_mcp_availability(self) -> bool:
-        """Check if Image MCP tools are available and update handler"""
-        try:
-            # Import validation function
+    def _health(self) -> Dict[str, Any]:
+        """Open to anyone, so not which model or keys are set."""
+        status = "unhealthy"
+        if self.image_mcp_available:
             from ..tools.image_tools import validate_image_generation_setup
-            
-            # Run actual validation
-            is_available, error_message, details = validate_image_generation_setup()
-            
-            if is_available:
-                self.image_mcp_available = True
-                self.mcp_handler = ImageMCPProtocolHandler(True)
-                print("✅ Image MCP tools initialized successfully")
-                print(f"   Default image model: {details.get('default_model')} "
-                      f"({details.get('provider')}, from {details.get('source')})")
-                return True
-            else:
-                print(f"⚠️  Image MCP tools not available: {error_message}")
-                self.image_mcp_available = False
-                self.mcp_handler = ImageMCPProtocolHandler(False)
-                return False
-            
+            try:
+                status = "healthy" if validate_image_generation_setup()[0] else "degraded"
+            except Exception:
+                status = "healthy"  # as far as was checked at startup
+        return {
+            "status": status,
+            "service": "image-generation-mcp-server",
+            "tools": len(TOOLS) if self.image_mcp_available else 0,
+            "endpoint": "/images/mcp",
+            "protocol": "MCP",
+        }
+
+    async def _list_tools(self, context: Any, params: Any) -> types.ListToolsResult:
+        return types.ListToolsResult(tools=TOOLS)
+
+    async def _call_tool(self, context: Any, params: types.CallToolRequestParams) -> types.CallToolResult:
+        arguments = checked_arguments(TOOLS, params)
+        from ..tools import image_tools
+
+        model, defaults = MODELS[params.name]
+        config = {name: arguments.get(name, default) for name, default in defaults.items()}
+        images = _Images()
+        result = await image_tools._generate_image_internal(arguments["prompt"], images, model, config)
+        if not result.get("success"):
+            return text_result(str(result.get("error") or "No image was generated."), is_error=True)
+        text = f"Image generated with {model}.\nPrompt: {arguments['prompt']}"
+        if not images.saved and result.get("url"):
+            text += f"\n{result['url']}"
+        return types.CallToolResult(content=[types.TextContent(type="text", text=text), *images.saved])
+
+    def check_image_mcp_availability(self) -> bool:
+        """Whether an image can be generated with the keys set; the server answers 503 without."""
+        try:
+            from ..tools.image_tools import validate_image_generation_setup
+            self.image_mcp_available, error_message, details = validate_image_generation_setup()
         except Exception as e:
-            print(f"⚠️  Image MCP tools validation error: {e}")
-            self.image_mcp_available = False
-            self.mcp_handler = ImageMCPProtocolHandler(False)
-            return False
-    
-    def recheck_availability(self) -> bool:
-        """Re-check image MCP availability and update status"""
-        return self.check_image_mcp_availability()
+            self.image_mcp_available, error_message, details = False, f"validation error: {e}", {}
+        if self.image_mcp_available:
+            print("✅ Image MCP tools initialized successfully")
+            print(f"   Default image model: {details.get('default_model')} "
+                  f"({details.get('provider')}, from {details.get('source')})")
+        else:
+            print(f"⚠️  Image MCP tools not available: {error_message}")
+        return self.image_mcp_available

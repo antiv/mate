@@ -65,7 +65,7 @@ class TestAgentMcpAuth(_AuthPatches):
         AgentMCPServer(app, "secret", "Admins only")
         self.client = TestClient(app)
 
-    ROUTES = (("post", "/initialize"), ("get", "/sse"), ("post", "/tools/list"),
+    ROUTES = (("post", "/initialize"), ("post", "/tools/list"),
               ("post", "/tools/call"), ("get", ""), ("post", ""))
 
     def test_routes_need_a_caller(self):
@@ -98,7 +98,7 @@ class TestGoogleDriveMcpAuth(_AuthPatches):
         self.client = TestClient(app)
 
     def test_routes_need_a_caller(self):
-        for method, path in (("post", "/gdrive/mcp/initialize"), ("get", "/gdrive/mcp/sse"),
+        for method, path in (("post", "/gdrive/mcp/initialize"),
                              ("post", "/gdrive/mcp/tools/list"), ("post", "/gdrive/mcp/tools/call"),
                              ("get", "/gdrive/mcp"), ("post", "/gdrive/mcp")):
             self.assertEqual(self.call(method, path).status_code, 401, path)

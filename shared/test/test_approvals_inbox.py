@@ -266,7 +266,7 @@ class TestTriggerWaits(_Database):
 
 
 class TestSurface(unittest.TestCase):
-    """The /a2a/ middleware marks the run; MATE's MCP bridge marks its calls."""
+    """The /a2a/ middleware marks the run."""
 
     def surface_seen(self, headers):
         from shared.utils.a2a_routes import CallerAsA2AUser
@@ -281,9 +281,6 @@ class TestSurface(unittest.TestCase):
 
     def test_an_a2a_call(self):
         self.assertEqual(self.surface_seen([]), "a2a")
-
-    def test_the_mcp_bridge(self):
-        self.assertEqual(self.surface_seen([(b"x-mate-surface", b"mcp")]), "mcp")
 
     def test_other_paths_are_left_alone(self):
         from shared.utils.a2a_routes import CallerAsA2AUser
@@ -313,11 +310,6 @@ class TestSurface(unittest.TestCase):
         finally:
             run_surface.reset(token)
         self.assertEqual(record.call_args.kwargs["source"], "mcp")
-
-    def test_the_proxy_drops_the_header_clients_send(self):
-        import inspect
-        from server import proxy_routes
-        self.assertIn("SURFACE_HEADER)}", inspect.getsource(proxy_routes))
 
 
 if __name__ == "__main__":

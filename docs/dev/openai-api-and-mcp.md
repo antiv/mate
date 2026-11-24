@@ -84,7 +84,7 @@ Rules that follow from this:
 Set `MCP_EXPOSED_AGENTS` to a list of agent names (unset, none is exposed) and each
 becomes an MCP server at
 `/agents/<name>/mcp`, with the standard endpoints under it (`initialize`,
-`tools/list`, `tools/call`, `sse`, and an unauthenticated `health`). An MCP client
+`tools/list`, `tools/call`, and an unauthenticated `health`). An MCP client
 that connects sees the agent as a tool it can call, plus a prompt that asks the agent
 a question through that tool and a resource describing the agent.
 
@@ -93,8 +93,8 @@ The callers are the same as for the OpenAI-compatible API: a personal access tok
 `admin`, or a role in `ALLOWED_API_ROLES` among their agent roles in the request's
 workspace (`pat_auth.api_roles`). On top of that the user's roles must grant the agent
 itself (its `allowed_for_roles`; an agent with none is admin-only), checked by
-`shared/utils/mcp/mcp_auth.py`. The check sits on the route because the tool call
-reaches the agent over A2A without the caller's identity. Without credentials the
+`shared/utils/mcp/mcp_auth.py`. The agent then runs as the
+caller, on either runtime. Without credentials the
 routes answer 401, without access to the agent 403.
 
 ```bash
@@ -122,8 +122,7 @@ personal access tokens).
 
 ## Agent-to-agent (A2A)
 
-The agent server is started with A2A enabled, and the agent MCP servers above answer
-through it. [A2A (agent-to-agent)](a2a.md) describes how agents are exposed over that
+The agent server is started with A2A enabled. [A2A (agent-to-agent)](a2a.md) describes how agents are exposed over that
 protocol.
 
 ## Choosing between them

@@ -37,7 +37,7 @@ class TestImageMcpAuth(unittest.TestCase):
     def test_routes_need_a_signed_in_caller(self):
         for method, path in (("post", "/images/mcp/tools/call"), ("post", "/images/mcp/tools/list"),
                              ("post", "/images/mcp/initialize"), ("get", "/images/mcp"),
-                             ("post", "/images/mcp"), ("get", "/images/mcp/sse")):
+                             ("post", "/images/mcp")):
             resp = getattr(self.client, method)(path, json=CALL) if method == "post" \
                 else self.client.get(path)
             self.assertEqual(resp.status_code, 401, path)

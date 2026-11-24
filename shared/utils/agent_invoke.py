@@ -9,6 +9,8 @@ session_id so multi-turn threads persist. ReplyCollector reads the reply out of
 
 import json
 import logging
+from typing import List
+from urllib.parse import quote
 
 import httpx
 
@@ -28,6 +30,9 @@ class ReplyCollector:
         self._buffer = ""
         self._author = ""
         self._text = ""
+        # Why the run failed, and the tools it waits to be allowed, if it does
+        self.error = ""
+        self.waiting_for: List[str] = []
 
     def feed(self, chunk: bytes) -> None:
         self._buffer += chunk.decode("utf-8", errors="replace")
@@ -45,6 +50,9 @@ class ReplyCollector:
             self._event(event)
 
     def _event(self, event: dict) -> None:
+        error = event.get("error") or event.get("errorMessage") or event.get("error_message")
+        if error:
+            self.error = str(error)
         author = event.get("author", "")
         if author != self._author:
             self._author = author
@@ -53,6 +61,12 @@ class ReplyCollector:
         if any(p.get("functionCall") or p.get("functionResponse")
                or p.get("function_call") or p.get("function_response") for p in parts):
             self._text = ""
+            for part in parts:
+                call = part.get("functionCall") or part.get("function_call") or {}
+                if call.get("name") == "adk_request_confirmation":
+                    asked = (call.get("args") or {}).get("originalFunctionCall") or {}
+                    if asked.get("name") and asked["name"] not in self.waiting_for:
+                        self.waiting_for.append(asked["name"])
             return
         for part in parts:
             text = part.get("text")
@@ -71,7 +85,7 @@ class ReplyCollector:
 async def _ensure_session(client: httpx.AsyncClient, base: str, agent_name: str,
                           user_id: str, session_id: str) -> None:
     """Create the ADK session at a specific id if it does not already exist."""
-    session_url = f"{base}/apps/{agent_name}/users/{user_id}/sessions/{session_id}"
+    session_url = f"{base}/apps/{agent_name}/users/{quote(user_id, safe='')}/sessions/{quote(session_id, safe='')}"
     try:
         check = await client.get(session_url)
         if check.status_code == 404:
@@ -84,7 +98,16 @@ async def run_agent_message(agent_name: str, user_id: str, session_id: str,
                             text: str, timeout: float = 120.0) -> str:
     """
     Send `text` to `agent_name` under (user_id, session_id) and return the final
-    assistant text. Reuses the ADK /run_sse contract shared by the widget, OpenAI
+    assistant text.
+    """
+    return (await run_agent(agent_name, user_id, session_id, text, timeout)).reply
+
+
+async def run_agent(agent_name: str, user_id: str, session_id: str,
+                    text: str, timeout: float = 120.0) -> ReplyCollector:
+    """
+    Send `text` to `agent_name` under (user_id, session_id) and return what it answered,
+    or why it didn't. Reuses the ADK /run_sse contract shared by the widget, OpenAI
     and trigger surfaces.
     """
     cfg = get_adk_config()
@@ -110,4 +133,4 @@ async def run_agent_message(agent_name: str, user_id: str, session_id: str,
             async for chunk in r.aiter_bytes():
                 collector.feed(chunk)
 
-    return collector.reply
+    return collector

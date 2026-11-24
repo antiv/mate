@@ -1,117 +1,221 @@
 """
-Google Drive MCP Server Implementation
-Handles Google Drive MCP endpoints and protocol requests
+The Google Drive MCP server, at /gdrive/mcp: reads Drive with the installation's service account.
 """
 
-from fastapi import Depends, FastAPI, Request, HTTPException
-from fastapi.responses import StreamingResponse, Response
-from ..tools.google_drive_mcp_protocol_handler import GoogleDriveMCPProtocolHandler
-from ..tools.mcp_jsonrpc import no_stream, wants_stream
+import asyncio
+import os
+from typing import Any, Dict
+
+from fastapi import FastAPI
+from mcp import types
+from mcp.server.lowlevel import Server
+
 from .mcp_auth import require_drive_user
+from .served import checked_arguments, serve, text_result
+
+TOOLS = [
+    types.Tool(
+        name="list_files_in_folder",
+        description="List all files in a Google Drive folder. If folder_id is empty, uses GOOGLE_DRIVE_FOLDER_ID environment variable.",
+        input_schema={"type": "object", "properties": {
+            "folder_id": {"type": "string", "description": "Google Drive folder ID (optional if GOOGLE_DRIVE_FOLDER_ID env var is set)"},
+        }, "required": []}),
+    types.Tool(
+        name="read_google_doc",
+        description="Read content from a Google Doc/PDF/text file by file ID",
+        input_schema={"type": "object", "properties": {
+            "doc_id": {"type": "string", "description": "Google Drive file ID"},
+        }, "required": ["doc_id"]}),
+    types.Tool(
+        name="read_google_doc_by_name",
+        description="Read content from a Google Doc by searching for its name in a folder",
+        input_schema={"type": "object", "properties": {
+            "doc_name": {"type": "string", "description": "Name of the document to search for"},
+            "folder_id": {"type": "string", "description": "Google Drive folder ID (optional if GOOGLE_DRIVE_FOLDER_ID env var is set)"},
+        }, "required": ["doc_name"]}),
+    types.Tool(
+        name="search_files",
+        description="Search for files in a Google Drive folder using a query",
+        input_schema={"type": "object", "properties": {
+            "query": {"type": "string", "description": "Search query to match against file names and content"},
+            "folder_id": {"type": "string", "description": "Google Drive folder ID (optional if GOOGLE_DRIVE_FOLDER_ID env var is set)"},
+        }, "required": ["query"]}),
+    types.Tool(
+        name="get_file_metadata",
+        description="Get metadata for a specific Google Drive file",
+        input_schema={"type": "object", "properties": {
+            "file_id": {"type": "string", "description": "Google Drive file ID"},
+        }, "required": ["file_id"]}),
+    types.Tool(
+        name="get_file_sharing_permissions",
+        description="Get detailed sharing permissions for a file, including email addresses of users it's shared with",
+        input_schema={"type": "object", "properties": {
+            "file_id": {"type": "string", "description": "Google Drive file ID"},
+        }, "required": ["file_id"]}),
+    types.Tool(
+        name="find_by_name",
+        description="Find files by name. Searches for files containing the name in the filename. Returns single match with content, or list for multiple matches.",
+        input_schema={"type": "object", "properties": {
+            "name": {"type": "string", "description": "Name or name parts to search for in filenames"},
+            "folder_id": {"type": "string", "description": "Google Drive folder ID (optional if GOOGLE_DRIVE_FOLDER_ID env var is set)"},
+        }, "required": ["name"]}),
+]
+
+
+def format_result(result: Dict[str, Any]) -> str:
+    """A tool's result as text"""
+    if result.get("status") == "error":
+        return f"❌ Error: {result.get('error_message', 'Unknown error')}"
+
+    output = []
+    output.append(f"✅ {result.get('message', 'Operation completed')}\n")
+
+    # Format based on what data is available
+    if "files" in result:
+        files = result["files"]
+        if files:
+            output.append(f"Files ({len(files)}):")
+            for file in files:
+                output.append(f"  • {file['name']} (ID: {file['id']})")
+                output.append(f"    Type: {file.get('mimeType', 'unknown')}, Size: {file.get('size', 'unknown')}, Modified: {file.get('modifiedTime', 'unknown')}")
+        else:
+            output.append("No files found.")
+
+    if "content" in result:
+        output.append(f"\n📄 File Content:")
+        output.append(f"File: {result.get('doc_name', result.get('file_name', 'unknown'))}")
+        content = result["content"]
+        # Limit content display to first 2000 chars
+        if len(content) > 2000:
+            output.append(f"{content[:2000]}...\n[Content truncated, total length: {len(content)} characters]")
+        else:
+            output.append(content)
+
+    if "metadata" in result:
+        metadata = result["metadata"]
+        output.append(f"\n📋 File Metadata:")
+        output.append(f"Name: {metadata.get('name')}")
+        output.append(f"ID: {metadata.get('id')}")
+        output.append(f"Type: {metadata.get('mimeType')}")
+        output.append(f"Size: {metadata.get('size')}")
+        output.append(f"Created: {metadata.get('createdTime')}")
+        output.append(f"Modified: {metadata.get('modifiedTime')}")
+        output.append(f"Owners: {', '.join(metadata.get('owners', []))}")
+
+    if "shared_with" in result:
+        shared = result["shared_with"]
+        output.append(f"\n🔗 Sharing Permissions:")
+        output.append(f"File: {result.get('file_name')}")
+        output.append(f"Owners: {', '.join(result.get('owners', []))}")
+
+        if shared.get("users"):
+            output.append(f"\nUsers ({len(shared['users'])}):")
+            for user in shared["users"]:
+                output.append(f"  • {user.get('email', user.get('displayName', 'Unknown'))} - {user['role']}")
+
+        if shared.get("groups"):
+            output.append(f"\nGroups ({len(shared['groups'])}):")
+            for group in shared["groups"]:
+                output.append(f"  • {group.get('email', 'Unknown')} - {group['role']}")
+
+        if shared.get("domains"):
+            output.append(f"\nDomains ({len(shared['domains'])}):")
+            for domain in shared["domains"]:
+                output.append(f"  • {domain.get('domain', 'Unknown')} - {domain['role']}")
+
+        if shared.get("anyone"):
+            output.append(f"\nPublic Access:")
+            for anyone in shared["anyone"]:
+                output.append(f"  • Anyone with link - {anyone['role']}")
+
+    if "file" in result and result.get("status") == "single_match_found":
+        file_info = result["file"]
+        output.append(f"\n📄 Matched File:")
+        output.append(f"Name: {file_info.get('name')}")
+        output.append(f"ID: {file_info.get('id')}")
+        output.append(f"Type: {file_info.get('mimeType')}")
+        if "content_preview" in result:
+            output.append(f"\nContent Preview:")
+            output.append(result["content_preview"])
+
+    if "matching_files" in result:
+        files = result["matching_files"]
+        output.append(f"\n📁 Multiple Matches ({len(files)}):")
+        for file in files:
+            output.append(f"  • {file['name']} (ID: {file['id']})")
+            output.append(f"    Type: {file.get('mimeType', 'unknown')}")
+
+    if "available_files" in result:
+        files = result["available_files"]
+        output.append(f"\n📁 Available Files ({len(files)}):")
+        for file in files[:20]:  # Limit to first 20
+            output.append(f"  • {file['name']} (ID: {file['id']})")
+        if len(files) > 20:
+            output.append(f"  ... and {len(files) - 20} more files")
+
+    return "\n".join(output)
 
 
 class GoogleDriveMCPServer:
-    """Google Drive MCP Server with endpoint registration"""
-    
+    """The Google Drive MCP server."""
+
     def __init__(self, app: FastAPI, gdrive_mcp_available: bool = True):
-        self.app = app
         self.gdrive_mcp_available = gdrive_mcp_available
-        self.mcp_handler = GoogleDriveMCPProtocolHandler(gdrive_mcp_available)
-        self._register_endpoints()
-    
-    def _register_endpoints(self):
-        """Register all Google Drive MCP endpoints"""
-        
-        @self.app.get("/gdrive/mcp/health", tags=["MCP - Google Drive"])
-        async def gdrive_mcp_health_check():
-            """Google Drive MCP server health check (no auth required)"""
-            return self.mcp_handler.get_mcp_health()
+        server = Server("google-drive-mcp-server", version="1.0.0",
+                        on_list_tools=self._list_tools, on_call_tool=self._call_tool)
+        serve(app, "/gdrive/mcp", "MCP - Google Drive", server, require_drive_user, self._info, self._health,
+              lambda: self.gdrive_mcp_available)
 
-        @self.app.post("/gdrive/mcp/initialize", tags=["MCP - Google Drive"])
-        async def gdrive_mcp_initialize(request: Request, user: str = Depends(require_drive_user)):
-            """Google Drive MCP protocol initialize endpoint"""
-            return self.mcp_handler.get_mcp_initialize()
+    def _info(self) -> Dict[str, Any]:
+        return {
+            "name": "Google Drive MCP Server",
+            "version": "1.0.0",
+            "description": "Google Drive file management tools via Model Context Protocol",
+            "tools": len(TOOLS),
+            "endpoints": {
+                "health": "/gdrive/mcp/health",
+                "tools_list": "/gdrive/mcp/tools/list",
+                "tools_call": "/gdrive/mcp/tools/call",
+                "initialize": "/gdrive/mcp/initialize",
+            },
+            "available_tools": [tool.name for tool in TOOLS],
+        }
 
-        @self.app.get("/gdrive/mcp/sse", tags=["MCP - Google Drive"])
-        async def gdrive_mcp_sse(request: Request, user: str = Depends(require_drive_user)):
-            """Google Drive MCP Server-Sent Events endpoint for real-time communication"""
-            return await self.mcp_handler.get_mcp_sse_stream()
+    def _health(self) -> Dict[str, Any]:
+        health: Dict[str, Any] = {
+            "status": "healthy" if self.gdrive_mcp_available else "unhealthy",
+            "service": "google-drive-mcp-server",
+            "tools": len(TOOLS) if self.gdrive_mcp_available else 0,
+            "endpoint": "/gdrive/mcp",
+            "protocol": "MCP",
+        }
+        if not self.gdrive_mcp_available:
+            health["error"] = "Google Drive credentials not configured (GOOGLE_SERVICE_ACCOUNT_INFO)"
+            health["details"] = {"has_credentials": bool(os.getenv("GOOGLE_SERVICE_ACCOUNT_INFO"))}
+        return health
 
-        @self.app.post("/gdrive/mcp/tools/list", tags=["MCP - Google Drive"])
-        async def gdrive_mcp_list_tools(request: Request, user: str = Depends(require_drive_user)):
-            """Google Drive MCP protocol tools/list endpoint"""
-            return self.mcp_handler.get_mcp_tools_list()
+    async def _list_tools(self, context: Any, params: Any) -> types.ListToolsResult:
+        return types.ListToolsResult(tools=TOOLS)
 
-        @self.app.post("/gdrive/mcp/tools/call", tags=["MCP - Google Drive"])
-        async def gdrive_mcp_call_tool(request: Request, user: str = Depends(require_drive_user)):
-            """Google Drive MCP protocol tools/call endpoint"""
-            try:
-                body = await request.json()
-                params = body.get("params", {})
-                tool_name = params.get("name")
-                arguments = params.get("arguments", {})
-                request_id = body.get("id", 1)
-                return await self.mcp_handler.call_mcp_tool(tool_name, arguments, request_id)
-            except Exception as e:
-                return {
-                    "jsonrpc": "2.0",
-                    "id": body.get("id", 1) if 'body' in locals() else 1,
-                    "error": {
-                        "code": -32603,
-                        "message": f"Internal error: {str(e)}"
-                    }
-                }
+    async def _call_tool(self, context: Any, params: types.CallToolRequestParams) -> types.CallToolResult:
+        arguments = checked_arguments(TOOLS, params)
+        from ..tools import google_drive_tools
 
-        @self.app.get("/gdrive/mcp", tags=["MCP - Google Drive"])
-        async def gdrive_mcp_info(request: Request, user: str = Depends(require_drive_user)):
-            """Google Drive MCP server info endpoint"""
-            if wants_stream(request):
-                return no_stream()
-            return self.mcp_handler.get_mcp_info()
+        function = getattr(google_drive_tools, params.name)
+        # The tool's own parameters, in order; a folder left out is the default one. They
+        # call Drive and read files, so off the event loop.
+        schema = next(tool.input_schema for tool in TOOLS if tool.name == params.name)
+        given = [arguments.get(name, "") for name in schema["properties"]]
+        result = await asyncio.to_thread(function, *given, None)
+        return text_result(format_result(result), is_error=result.get("status") == "error", structured=result)
 
-        @self.app.post("/gdrive/mcp", tags=["MCP - Google Drive"])
-        async def gdrive_mcp_protocol_handler(request: Request, user: str = Depends(require_drive_user)):
-            """Handle Google Drive MCP protocol requests at the root /gdrive/mcp endpoint"""
-            return await self.mcp_handler.handle_mcp_request(request)
-
-        @self.app.options("/gdrive/mcp")
-        async def gdrive_mcp_options():
-            """Handle CORS preflight requests"""
-            return self.mcp_handler.get_cors_options_response()
-
-        @self.app.options("/gdrive/mcp/sse")
-        async def gdrive_mcp_sse_options():
-            """Handle CORS preflight requests for SSE"""
-            return self.mcp_handler.get_sse_cors_options_response()
-    
     def check_gdrive_mcp_availability(self) -> bool:
-        """Check if Google Drive MCP tools are available and update handler"""
-        try:
-            import os
-            
-            # Check if credentials are configured
-            has_service_account_info = bool(os.getenv('GOOGLE_SERVICE_ACCOUNT_INFO'))
-            
-            if has_service_account_info:
-                self.gdrive_mcp_available = True
-                self.mcp_handler = GoogleDriveMCPProtocolHandler(True)
-                print("✅ Google Drive MCP tools initialized successfully")
-                print("   Credentials: GOOGLE_SERVICE_ACCOUNT_INFO environment variable")
-                return True
-            else:
-                print("⚠️  Google Drive MCP tools not available: No credentials configured")
-                print("   Set GOOGLE_SERVICE_ACCOUNT_INFO environment variable")
-                self.gdrive_mcp_available = False
-                self.mcp_handler = GoogleDriveMCPProtocolHandler(False)
-                return False
-            
-        except Exception as e:
-            print(f"⚠️  Google Drive MCP tools validation error: {e}")
-            self.gdrive_mcp_available = False
-            self.mcp_handler = GoogleDriveMCPProtocolHandler(False)
-            return False
-    
-    def recheck_availability(self) -> bool:
-        """Re-check Google Drive MCP availability and update status"""
-        return self.check_gdrive_mcp_availability()
-
+        """Whether the credentials are configured; the server answers 503 without them."""
+        self.gdrive_mcp_available = bool(os.getenv("GOOGLE_SERVICE_ACCOUNT_INFO"))
+        if self.gdrive_mcp_available:
+            print("✅ Google Drive MCP tools initialized successfully")
+            print("   Credentials: GOOGLE_SERVICE_ACCOUNT_INFO environment variable")
+        else:
+            print("⚠️  Google Drive MCP tools not available: No credentials configured")
+            print("   Set GOOGLE_SERVICE_ACCOUNT_INFO environment variable")
+        return self.gdrive_mcp_available

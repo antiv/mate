@@ -1,13 +1,12 @@
 ---
 title: "A2A (agent-to-agent)"
-summary: Expose MATE agents over the A2A protocol, and how the MCP bridge uses it.
+summary: Expose MATE agents over the A2A protocol.
 audience: dev
 order: 52
 covers:
   - adk_main.py
   - shared/utils/a2a_routes.py
   - shared/utils/server_control_service.py
-  - shared/utils/tools/agent_mcp_protocol_handler.py
 ---
 
 # A2A (Agent-to-Agent) Support
@@ -116,23 +115,9 @@ a member the proxy sets `x-mate-a2a-user` to their id, and `CallerAsA2AUser` in
 with their sessions and roles. An admin's request runs as ADK's
 `A2A_USER_<contextId>`, as before.
 
-`CallerAsA2AUser` also marks the run as an A2A run (`shared/utils/run_surface.py`),
-or an MCP one when the request has `x-mate-surface: mcp`, which MATE's MCP bridge
-sends. An approval request the run makes is then answered in the inbox rather than in
+`CallerAsA2AUser` also marks the run as an A2A run (`shared/utils/run_surface.py`). An
+approval request the run makes is then answered in the inbox rather than in
 a chat ([Approval requests](approvals.md)).
-
-## MCP Integration
-
-An agent exposed as an MCP server (`MCP_EXPOSED_AGENTS`, see
-[OpenAI API and MCP](openai-api-and-mcp.md)) is answered over A2A.
-`shared/utils/tools/agent_mcp_protocol_handler.py` turns an MCP `tools/call` into an
-A2A `message/send` request and posts it straight to the ADK server at
-`http://<adk_host>:<adk_port>/a2a/{agent_name}`, not through the auth server's proxy;
-the MCP routes check the caller themselves. A call with a `session_id` carries a
-`contextId` made from the caller, the agent and the `session_id` (`mcp_context_id`), so
-its calls are one conversation. It reads the reply's text from the
-returned message, or from the task's artifacts. Exposing an agent over MCP therefore
-needs A2A enabled on the ADK server.
 
 ## Requirements
 
@@ -146,7 +131,7 @@ layer, the 0.3 names. `shared/test/test_a2a_routes.py` sends one request of each
 
 ### 0.3 method names
 
-This is the form the MCP bridge sends. No version header is needed:
+No version header is needed:
 
 ```bash
 curl -u admin:mate -X POST http://localhost:8000/a2a/chess_mate_root \

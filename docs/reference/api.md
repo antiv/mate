@@ -10,7 +10,7 @@ generated: true
 
 # HTTP API reference
 
-Every HTTP route declared in the code: **299** routes. 37 have no docstring and so no summary here.
+Every HTTP route declared in the code: **284** routes. 37 have no docstring and so no summary here.
 
 This page lists what exists and where it is implemented. For request and response schemas, and to try a call, use the live Swagger UI under **Documentation → API** in the dashboard.
 
@@ -18,7 +18,7 @@ Requests to `/dashboard/api/*` require an admin, apart from the short allowlist 
 
 ## Auth server and dashboard
 
-Port 8000. Everything a browser or an external client talks to. 278 routes.
+Port 8000. Everything a browser or an external client talks to. 263 routes.
 
 ### Authentication
 
@@ -433,34 +433,6 @@ Example endpoints demonstrating authentication patterns.
 |---|---|---|---|
 | `GET` | `/mcp` | List the exposed agent MCP servers the caller may use, with their URLs | shared/utils/mcp/agent_mcp_manager.py · list_agent_mcp_endpoints |
 
-### MCP - Google Drive
-
-Google Drive MCP server endpoints for file operations.
-
-| Method | Path | Summary | Implemented in |
-|---|---|---|---|
-| `GET` | `/gdrive/mcp` | Google Drive MCP server info endpoint | shared/utils/mcp/google_drive_mcp_server.py · gdrive_mcp_info |
-| `POST` | `/gdrive/mcp` | Handle Google Drive MCP protocol requests at the root /gdrive/mcp endpoint | shared/utils/mcp/google_drive_mcp_server.py · gdrive_mcp_protocol_handler |
-| `GET` | `/gdrive/mcp/health` | Google Drive MCP server health check (no auth required) | shared/utils/mcp/google_drive_mcp_server.py · gdrive_mcp_health_check |
-| `POST` | `/gdrive/mcp/initialize` | Google Drive MCP protocol initialize endpoint | shared/utils/mcp/google_drive_mcp_server.py · gdrive_mcp_initialize |
-| `GET` | `/gdrive/mcp/sse` | Google Drive MCP Server-Sent Events endpoint for real-time communication | shared/utils/mcp/google_drive_mcp_server.py · gdrive_mcp_sse |
-| `POST` | `/gdrive/mcp/tools/call` | Google Drive MCP protocol tools/call endpoint | shared/utils/mcp/google_drive_mcp_server.py · gdrive_mcp_call_tool |
-| `POST` | `/gdrive/mcp/tools/list` | Google Drive MCP protocol tools/list endpoint | shared/utils/mcp/google_drive_mcp_server.py · gdrive_mcp_list_tools |
-
-### MCP - Images
-
-Image generation MCP server endpoints (DALL-E, Stable Diffusion, etc.).
-
-| Method | Path | Summary | Implemented in |
-|---|---|---|---|
-| `GET` | `/images/mcp` | Image MCP server info endpoint | shared/utils/mcp/image_mcp_server.py · image_mcp_info |
-| `POST` | `/images/mcp` | Handle Image MCP protocol requests at the root /images/mcp endpoint | shared/utils/mcp/image_mcp_server.py · image_mcp_protocol_handler |
-| `GET` | `/images/mcp/health` | Image MCP server health check (no auth required, so no setup details) | shared/utils/mcp/image_mcp_server.py · image_mcp_health_check |
-| `POST` | `/images/mcp/initialize` | Image MCP protocol initialize endpoint | shared/utils/mcp/image_mcp_server.py · image_mcp_initialize |
-| `GET` | `/images/mcp/sse` | Image MCP Server-Sent Events endpoint for real-time communication | shared/utils/mcp/image_mcp_server.py · image_mcp_sse |
-| `POST` | `/images/mcp/tools/call` | Image MCP protocol tools/call endpoint | shared/utils/mcp/image_mcp_server.py · image_mcp_call_tool |
-| `POST` | `/images/mcp/tools/list` | Image MCP protocol tools/list endpoint | shared/utils/mcp/image_mcp_server.py · image_mcp_list_tools |
-
 ### OpenAI Compatibility
 
 | Method | Path | Summary | Implemented in |
@@ -565,13 +537,12 @@ Widget admin API for agent, memory blocks, and file management.
 | `GET` | `/admin-redoc` | — | auth_server.py · get_admin_redoc |
 | `WS` | `/run_live` | Proxy WebSocket connection to ADK server's /run_live endpoint | server/proxy_routes.py · websocket_run_live |
 | `GET` | `/sw.js` | Serve service worker at root for PWA scope | auth_server.py · service_worker |
-| `GET` | `{base_path}` | Agent MCP server info endpoint | shared/utils/mcp/agent_mcp_server.py · agent_mcp_info |
-| `POST` | `{base_path}` | Handle Agent MCP protocol requests at the root endpoint | shared/utils/mcp/agent_mcp_server.py · agent_mcp_protocol_handler |
-| `GET` | `{base_path}/health` | Agent MCP server health check (no auth required) | shared/utils/mcp/agent_mcp_server.py · agent_mcp_health_check |
-| `POST` | `{base_path}/initialize` | Agent MCP protocol initialize endpoint | shared/utils/mcp/agent_mcp_server.py · agent_mcp_initialize |
-| `GET` | `{base_path}/sse` | Agent MCP Server-Sent Events endpoint for real-time communication | shared/utils/mcp/agent_mcp_server.py · agent_mcp_sse |
-| `POST` | `{base_path}/tools/call` | Agent MCP protocol tools/call endpoint | shared/utils/mcp/agent_mcp_server.py · agent_mcp_call_tool |
-| `POST` | `{base_path}/tools/list` | Agent MCP protocol tools/list endpoint | shared/utils/mcp/agent_mcp_server.py · agent_mcp_list_tools |
+| `GET` | `{path}` | MCP server info endpoint; 405 for a client that asks for a stream | shared/utils/mcp/served.py · mcp_info |
+| `POST` | `{path}` | The MCP endpoint: streamable HTTP, each message answered with JSON | shared/utils/mcp/served.py · mcp_endpoint |
+| `GET` | `{path}/health` | MCP server health check (no auth required) | shared/utils/mcp/served.py · mcp_health |
+| `POST` | `{path}/initialize` | MCP initialize, without a client | shared/utils/mcp/served.py · mcp_initialize |
+| `POST` | `{path}/tools/call` | MCP tools/call, without a client | shared/utils/mcp/served.py · mcp_call_tool |
+| `POST` | `{path}/tools/list` | MCP tools/list, without a client | shared/utils/mcp/served.py · mcp_list_tools |
 
 ## Agent server: ADK runtime
 
