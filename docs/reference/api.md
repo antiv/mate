@@ -10,7 +10,7 @@ generated: true
 
 # HTTP API reference
 
-Every HTTP route declared in the code: **280** routes. 38 have no docstring and so no summary here.
+Every HTTP route declared in the code: **284** routes. 37 have no docstring and so no summary here.
 
 This page lists what exists and where it is implemented. For request and response schemas, and to try a call, use the live Swagger UI under **Documentation → API** in the dashboard.
 
@@ -18,7 +18,7 @@ Requests to `/dashboard/api/*` require an admin, apart from the short allowlist 
 
 ## Auth server and dashboard
 
-Port 8000. Everything a browser or an external client talks to. 259 routes.
+Port 8000. Everything a browser or an external client talks to. 263 routes.
 
 ### Authentication
 
@@ -537,8 +537,12 @@ Widget admin API for agent, memory blocks, and file management.
 | `GET` | `/admin-redoc` | — | auth_server.py · get_admin_redoc |
 | `WS` | `/run_live` | Proxy WebSocket connection to ADK server's /run_live endpoint | server/proxy_routes.py · websocket_run_live |
 | `GET` | `/sw.js` | Serve service worker at root for PWA scope | auth_server.py · service_worker |
+| `GET` | `{path}` | MCP server info endpoint; 405 for a client that asks for a stream | shared/utils/mcp/served.py · mcp_info |
+| `POST` | `{path}` | The MCP endpoint: streamable HTTP, each message answered with JSON | shared/utils/mcp/served.py · mcp_endpoint |
 | `GET` | `{path}/health` | MCP server health check (no auth required) | shared/utils/mcp/served.py · mcp_health |
-| `POST` | `{path}/{method}` | — | shared/utils/mcp/served.py · mcp_method |
+| `POST` | `{path}/initialize` | MCP initialize, without a client | shared/utils/mcp/served.py · mcp_initialize |
+| `POST` | `{path}/tools/call` | MCP tools/call, without a client | shared/utils/mcp/served.py · mcp_call_tool |
+| `POST` | `{path}/tools/list` | MCP tools/list, without a client | shared/utils/mcp/served.py · mcp_list_tools |
 
 ## Agent server: ADK runtime
 

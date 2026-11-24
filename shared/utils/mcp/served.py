@@ -123,28 +123,34 @@ def serve(app: FastAPI, path: str, tag: str, server: Server, caller: Callable[..
         """MCP server health check (no auth required)"""
         return health()
 
-    @app.get(path, tags=[tag])
+    @app.get(f"{path}", tags=[tag])
     async def mcp_info(request: Request, user: str = Depends(user_of)) -> Any:
-        """MCP server info endpoint"""
+        """MCP server info endpoint; 405 for a client that asks for a stream"""
         if _wants_stream(request):
             return Response(status_code=405, headers={"Allow": "POST"})
         return info()
 
-    @app.post(path, tags=[tag], response_class=Response)
+    @app.post(f"{path}", tags=[tag], response_class=Response)
     async def mcp_endpoint(request: Request, user: str = Depends(user_of)) -> Response:
         """The MCP endpoint: streamable HTTP, each message answered with JSON"""
         return _Answer(server, user)
 
-    for method in ("initialize", "tools/list", "tools/call"):
-        def add(method: str = method) -> None:
-            @app.post(f"{path}/{method}", tags=[tag], response_class=Response,
-                      name=f"mcp_{method.replace('/', '_')}")
-            async def mcp_method(request: Request, user: str = Depends(user_of)) -> Response:
-                return _Answer(server, user, await _message(request, method))
-            mcp_method.__doc__ = f"MCP {method}, without a client"
-        add()
+    @app.post(f"{path}/initialize", tags=[tag], response_class=Response)
+    async def mcp_initialize(request: Request, user: str = Depends(user_of)) -> Response:
+        """MCP initialize, without a client"""
+        return _Answer(server, user, await _message(request, "initialize"))
 
-    @app.options(path)
+    @app.post(f"{path}/tools/list", tags=[tag], response_class=Response)
+    async def mcp_list_tools(request: Request, user: str = Depends(user_of)) -> Response:
+        """MCP tools/list, without a client"""
+        return _Answer(server, user, await _message(request, "tools/list"))
+
+    @app.post(f"{path}/tools/call", tags=[tag], response_class=Response)
+    async def mcp_call_tool(request: Request, user: str = Depends(user_of)) -> Response:
+        """MCP tools/call, without a client"""
+        return _Answer(server, user, await _message(request, "tools/call"))
+
+    @app.options(f"{path}")
     async def mcp_options() -> Response:
         """Handle CORS preflight requests"""
         return Response(status_code=200, headers={
