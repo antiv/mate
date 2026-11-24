@@ -20,8 +20,6 @@ import os
 import threading
 from typing import Any, Dict, Optional, Tuple
 
-from .approval_config import NOTIFY_TYPES
-
 logger = logging.getLogger(__name__)
 
 
@@ -30,14 +28,9 @@ def default_destination(workspace_id: Optional[int]) -> Optional[Dict[str, Any]]
     from .models import DEFAULT_WORKSPACE_ID
     if (workspace_id or DEFAULT_WORKSPACE_ID) != DEFAULT_WORKSPACE_ID:
         return None
-    kind = (os.getenv("APPROVALS_NOTIFY_TYPE") or "").strip().lower()
-    if kind not in NOTIFY_TYPES:
-        return None
-    if kind == "email":
-        to = (os.getenv("APPROVALS_NOTIFY_TO") or "").strip()
-        return {"type": kind, "to": to} if to else None
-    url = (os.getenv("APPROVALS_NOTIFY_URL") or "").strip()
-    return {"type": kind, "url": url} if url else None
+    from .notify import destination_from
+    return destination_from(os.getenv("APPROVALS_NOTIFY_TYPE"), os.getenv("APPROVALS_NOTIFY_URL"),
+                            os.getenv("APPROVALS_NOTIFY_TO"))
 
 
 def link(request_id: int) -> str:

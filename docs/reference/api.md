@@ -10,7 +10,7 @@ generated: true
 
 # HTTP API reference
 
-Every HTTP route declared in the code: **299** routes. 37 have no docstring and so no summary here.
+Every HTTP route declared in the code: **300** routes. 37 have no docstring and so no summary here.
 
 This page lists what exists and where it is implemented. For request and response schemas, and to try a call, use the live Swagger UI under **Documentation → API** in the dashboard.
 
@@ -18,7 +18,7 @@ Requests to `/dashboard/api/*` require an admin, apart from the short allowlist 
 
 ## Auth server and dashboard
 
-Port 8000. Everything a browser or an external client talks to. 278 routes.
+Port 8000. Everything a browser or an external client talks to. 279 routes.
 
 ### Authentication
 
@@ -171,7 +171,7 @@ Documentation pages and search, served from the docs/ folder.
 |---|---|---|---|
 | `GET` | `/dashboard/api/invitations` | The current workspace's invitations not accepted yet, newest first | server/invitation_routes.py · list_invitations |
 | `POST` | `/dashboard/api/invitations` | Invite an email address to the current workspace: email, and role (owner, admin or member; default member) | server/invitation_routes.py · invite |
-| `POST` | `/dashboard/api/invitations/accept` | Accept an invitation as the signed-in user, whose id or email must be the invited address | server/invitation_routes.py · accept_invitation |
+| `POST` | `/dashboard/api/invitations/accept` | Accept an invitation as the signed-in user, whose id or email must be the invited address: by the link's token, or by its id for one of invitations_for() | server/invitation_routes.py · accept_invitation |
 | `DELETE` | `/dashboard/api/invitations/{invitation_id}` | Revoke an invitation of the current workspace that was not accepted yet | server/invitation_routes.py · revoke_invitation |
 | `GET` | `/dashboard/api/members` | The current workspace's members, and whether the caller may change them | server/member_routes.py · list_members |
 | `POST` | `/dashboard/api/members/leave` | Leave the current workspace | server/member_routes.py · leave_workspace |
@@ -372,6 +372,7 @@ User management API endpoints.
 | `GET` | `/dashboard/api/users` | Get all users | shared/utils/dashboard/dashboard_server.py · get_users |
 | `POST` | `/dashboard/api/users` | Create a new user | shared/utils/dashboard/dashboard_server.py · create_user |
 | `POST` | `/dashboard/api/users/cleanup` | Manually trigger temporary user cleanup | shared/utils/dashboard/dashboard_server.py · trigger_user_cleanup |
+| `GET` | `/dashboard/api/users/waiting` | How many new sign-ups wait to be let in: the count beside Users | shared/utils/dashboard/dashboard_server.py · get_waiting_users |
 | `DELETE` | `/dashboard/api/users/{user_id}` | Delete a user | shared/utils/dashboard/dashboard_server.py · delete_user |
 | `PUT` | `/dashboard/api/users/{user_id}` | Update a user's platform roles (admin, pending) and profile data | shared/utils/dashboard/dashboard_server.py · update_user |
 

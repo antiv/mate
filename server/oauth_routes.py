@@ -102,6 +102,7 @@ def _upsert_oauth_user(user_id: str, email: str, display_name: str, provider: st
     """Create or update the users table row for an OAuth login."""
     from shared.utils.database_client import get_database_client
     from shared.utils.models import User
+    from shared.utils.signup_notify import PENDING, announce
 
     db_client = get_database_client()
     if not db_client:
@@ -113,13 +114,16 @@ def _upsert_oauth_user(user_id: str, email: str, display_name: str, provider: st
 
     try:
         user = session.query(User).filter(User.user_id == user_id).first()
+        waits = False
         if user is None:
+            role = _cfg("OAUTH_DEFAULT_ROLE", PENDING)
+            waits = role == PENDING
             user = User(
                 user_id=user_id,
                 email=email,
                 display_name=display_name,
                 oauth_provider=provider,
-                roles=json.dumps([_cfg("OAUTH_DEFAULT_ROLE", "pending")]),
+                roles=json.dumps([role]),
             )
             session.add(user)
             logger.info("Created OAuth user %s via %s", user_id, provider)
@@ -128,6 +132,8 @@ def _upsert_oauth_user(user_id: str, email: str, display_name: str, provider: st
             user.display_name = display_name
             user.oauth_provider = provider
         session.commit()
+        if waits:
+            announce(user_id, display_name, provider)
     except Exception as exc:
         session.rollback()
         logger.error("Error upserting OAuth user %s: %s", user_id, exc)
@@ -174,6 +180,10 @@ async def oauth_callback(provider: str, request: Request):
         if provider == "google":
             info = token.get("userinfo") or {}
             email = info.get("email", "")
+            # The address is who the user is here, and what an invitation is matched with
+            if email and info.get("email_verified") not in (True, "true"):
+                logger.warning("OAuth login rejected, Google hasn't verified the address: %s", email)
+                return RedirectResponse(url="/login?error=email_not_verified")
             user_id = email or info.get("sub", "")
             display_name = info.get("name") or email or user_id
 

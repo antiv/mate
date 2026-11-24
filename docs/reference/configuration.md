@@ -10,7 +10,7 @@ generated: true
 
 # Configuration reference
 
-Every environment variable the code reads: **141** in total. Descriptions come from the comments in `.env.example`; defaults come from the code. A ⚠ marks a variable read with different defaults in different places.
+Every environment variable the code reads: **144** in total. Descriptions come from the comments in `.env.example`; defaults come from the code. A ⚠ marks a variable read with different defaults in different places.
 
 | Variable | Default | Description | Read in |
 |---|---|---|---|
@@ -90,15 +90,18 @@ Every environment variable the code reads: **141** in total. Descriptions come f
 | `MATE_FEEDBACK_KEY` | — | API key for the standalone feedback endpoint | `shared/utils/standalone_feedback.py` |
 | `MATE_FEEDBACK_URL` | — | Standalone feedback endpoint base URL | `shared/utils/standalone_feedback.py` |
 | `MATE_PLUGINS_ENABLED` | `false` | App-wide MATE plugin: RBAC/guardrails/token tracking as ADK Plugin instead of per-agent callbacks; covers all agents incl. runtime-created ones (requires ADK >= 2.0) | `shared/utils/agent_manager.py`, `shared/utils/utils.py` |
-| `MATE_PUBLIC_URL` | — | The dashboard's address, for links in notifications (e.g. https://mate.example.com) | `shared/utils/approval_notify.py` |
+| `MATE_PUBLIC_URL` | — | The dashboard's address, for links in notifications (e.g. https://mate.example.com) | `shared/utils/approval_notify.py`, `shared/utils/signup_notify.py` |
 | `MATE_SECRET_KEY` | — | Encrypts stored secrets: Slack bot tokens and signing secrets, trigger signing secrets, agent model keys, the keys of MCP servers and webhooks. Unset = stored in the clear, with a startup warning; MATE_ENV=production refuses to start without it. Generate: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())" Keep it: secrets stored with it cannot be read without it. | `shared/utils/secret_box.py` |
 | `MCP_EXPOSED_AGENTS` | — | Agents to expose as MCP servers at /agents/<name>/mcp (none when unset) | `shared/utils/mcp/agent_mcp_manager.py` |
 | `MEMORY_SERVICE` | `database` | database; any other value keeps memory in RAM (lost on restart) | `adk_main.py` |
 | `MODEL_NAME` | — | Model assumed for attachment handling when an agent has none (decides if PDFs/images are converted to text) | `server/proxy_routes.py`, `server/widget_routes.py` |
 | `MYSTERY_GEN_MODEL` | — | Model for the mystery-game generator (falls back to default) | `shared/utils/tools/mystery_game.py` |
+| `NEW_USER_NOTIFY_TO` | — | ...the address for email | `shared/utils/signup_notify.py` |
+| `NEW_USER_NOTIFY_TYPE` | — | Where a new sign-up waiting to be let in is announced (http, email, slack, discord) | `shared/utils/signup_notify.py` |
+| `NEW_USER_NOTIFY_URL` | — | ...the webhook URL for http, slack and discord | `shared/utils/signup_notify.py` |
 | `OAUTH_ALLOWED_DOMAINS` | — | Comma-separated email domains allowed to sign in via SSO. Empty = anyone with a provider account can create a session. | `server/oauth_routes.py` |
 | `OAUTH_ALLOWED_EMAILS` | — | Comma-separated individual emails allowed to sign in. | `server/oauth_routes.py` |
-| `OAUTH_DEFAULT_ROLE` | `pending` | Role for new SSO users. Default 'pending' = no agent access until an admin grants a role on /dashboard/users. Roles: admin (full), user (dashboard agents), widget (public embeddable widget/trial agents — auto-assigned), pending (no access). Agents with NO roles set are admin-only. | `server/oauth_routes.py` |
+| `OAUTH_DEFAULT_ROLE` | `(computed)` | Role for new SSO users. Default 'pending' = no agent access until an admin grants a role on /dashboard/users. Roles: admin (full), user (dashboard agents), widget (public embeddable widget/trial agents — auto-assigned), pending (no access). Agents with NO roles set are admin-only. | `server/oauth_routes.py` |
 | `OLLAMA_HOST` | `http://localhost:11434` | Ollama server for the image_data_extraction (vision) tool only | `shared/utils/tools/image_tools.py` |
 | `OPENAI_API_KEY` | — | LLM Provider API Keys Only set keys for providers you actually use. Model prefix in agent config determines which provider is used: gemini-* → Google Gemini (uses GOOGLE_API_KEY) openai/gpt-4o → OpenAI anthropic/claude-* → Anthropic deepseek/deepseek-* → DeepSeek ollama_chat/model → Local Ollama (set OLLAMA_API_BASE) openrouter/provider/model → OpenRouter (aggregator) mistral/*, groq/*, cohere/*, together_ai/* → respective providers | `shared/utils/tools/image_tools.py` |
 | `OPENAI_API_KEY_BACKUP` | — | Fallback OpenAI key for the image tool | `shared/utils/tools/image_tools.py` |

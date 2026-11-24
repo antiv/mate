@@ -58,6 +58,7 @@
     }
     .wr-agent-search .m-input { padding-left: 32px; }
     .wr-agent-search-empty { text-align: center; font-size: 13px; color: var(--text-secondary); }
+    .wr-invitation { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; width: 100%; max-width: 640px; margin-top: 12px; text-align: left; }
     .wr-agents-grid {
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
@@ -655,7 +656,15 @@
             <i class="fas fa-comments"></i>
         </div>
         <h2 style="margin: 6px 0 0; font-size: 20px; font-weight: 800; color: var(--text-primary);">Work Room</h2>
-        <p style="margin: 0; font-size: 13px; color: var(--text-secondary);">Select an agent to start chatting</p>
+        {% if agents %}<p style="margin: 0; font-size: 13px; color: var(--text-secondary);">Select an agent to start chatting</p>{% endif %}
+
+        {% for invitation in invitations %}
+        <div class="m-notice wr-invitation">
+            <span>{{ invitation.invited_by or "An owner" }} invited you to the workspace
+                <strong>{{ invitation.workspace }}</strong>, as <strong>{{ invitation.role }}</strong>.</span>
+            <button type="button" class="m-btn m-btn-primary m-btn-sm" data-invitation="{{ invitation.id }}">Join {{ invitation.workspace }}</button>
+        </div>
+        {% endfor %}
 
         {% if agents %}
         <div style="width:100%;">
@@ -687,13 +696,17 @@
         </div>
         {% else %}
         <div class="mt-8 text-center">
+            {% if pending %}
+            <p class="text-sm text-gray-500 dark:text-gray-400">Your account is waiting for an administrator to let you in.</p>
+            <p class="mt-3 text-xs text-gray-500 dark:text-gray-400">You are signed in as {{ username }}. {% if invitations %}Accept the invitation above, or open this page again later.{% else %}There is nothing else to do: open this page again later.{% endif %}</p>
+            {% elif is_admin %}
             <p class="text-sm text-gray-500 dark:text-gray-400">No agents configured yet.</p>
-            {% if is_admin %}
             <a href="/dashboard/agents" class="mt-3 inline-flex items-center gap-1.5 text-xs text-blue-600 dark:text-blue-400 hover:underline">
                 <i class="fas fa-plus"></i>Create your first agent
             </a>
             {% else %}
-            <p class="mt-3 text-xs text-gray-500 dark:text-gray-400">Ask an administrator to add an agent.</p>
+            <p class="text-sm text-gray-500 dark:text-gray-400">There is no agent you can use in this workspace yet.</p>
+            <p class="mt-3 text-xs text-gray-500 dark:text-gray-400">Ask an administrator of the workspace.</p>
             {% endif %}
         </div>
         {% endif %}
@@ -847,6 +860,29 @@
 {% endblock %}
 
 {% block scripts %}
+{% if invitations %}
+<script nonce="{{ request.state.csp_nonce }}">
+// Accepting an invitation of the signed-in address, without its link
+document.querySelectorAll("[data-invitation]").forEach(function (button) {
+    button.addEventListener("click", async function () {
+        button.disabled = true;
+        try {
+            const r = await fetch("/dashboard/api/invitations/accept", {
+                method: "POST", credentials: "same-origin",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({invitation_id: Number(button.dataset.invitation)}),
+            });
+            const data = await r.json().catch(() => ({}));
+            if (!r.ok) throw new Error(data.detail || `Request failed (${r.status})`);
+            window.location.href = "/dashboard";
+        } catch (e) {
+            button.disabled = false;
+            showNotification(e.message, "error");
+        }
+    });
+});
+</script>
+{% endif %}
 {% if not selected_agent and agents %}
 <script nonce="{{ request.state.csp_nonce }}">
 // The welcome page's agent search: filters the cards by name and description as

@@ -143,6 +143,8 @@ on the **Members** page.
 - A link works once and for 7 days, and only for a signed-in user whose id or email
   is the invited address. Someone signed in as another person is told to sign out
   and sign in as that address.
+- Someone who signs in with Google or GitHub without the link sees the open invitations
+  of their address in the Work Room, and joins from there.
 - Accepting takes a new sign-up out of `pending`. It makes them a member of this
   workspace only, not of the Default workspace.
 - Sign-in restrictions (`OAUTH_ALLOWED_DOMAINS`, `OAUTH_ALLOWED_EMAILS`) still apply:
@@ -180,9 +182,11 @@ To bring someone into a workspace, invite them (see [Invitations](#invitations))
 
 When someone signs in through Google or GitHub for the first time without an
 invitation, MATE creates their user record with the `pending` role. They can sign in
-but cannot use any agent.
+but cannot use any agent: the Work Room tells them that their account is waiting. The
+number beside **Users** counts who waits. With `NEW_USER_NOTIFY_TYPE` set, a message goes
+to Slack, Discord, email or a webhook, with a link to them.
 
-1. Open **Control Room → Platform → Users**. Filter by **Provider** or search for their email.
+1. Open **Control Room → Platform → Users**. Type `pending` as the **Role**, or search for their email.
 2. Click edit on their row.
 3. Remove `pending` from **Platform roles** and save. They join the Default workspace
    as a member with the `user` agent role.

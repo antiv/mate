@@ -45,7 +45,7 @@ class _FakeProvider:
         self.email = email
 
     async def authorize_access_token(self, request):
-        return {"userinfo": {"email": self.email, "name": self.email.split("@")[0]}}
+        return {"userinfo": {"email": self.email, "email_verified": True, "name": self.email.split("@")[0]}}
 
 
 class TestPhase3EndToEnd(_TwoWorkspaces):

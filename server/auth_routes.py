@@ -42,6 +42,7 @@ async def login_page(request: Request) -> HTMLResponse:
         "profile_fetch_failed": "Could not retrieve your profile from the provider.",
         "provider_not_configured": "That sign-in provider is not configured.",
         "not_allowed": "This account is not allowed to sign in. Contact your administrator.",
+        "email_not_verified": "Your provider hasn't verified this email address. Verify it there, then sign in again.",
         "unknown_provider": "Unknown OAuth provider.",
     }
     error_key = request.query_params.get("error", "")

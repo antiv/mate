@@ -125,6 +125,7 @@ GET /dashboard/api/shop/orders
 PATCH /dashboard/api/shop/orders/{order_pk}
 DELETE /dashboard/api/shop/orders/{order_pk}
 GET /dashboard/api/users
+GET /dashboard/api/users/waiting
 POST /dashboard/api/users
 PUT /dashboard/api/users/{user_id}
 DELETE /dashboard/api/users/{user_id}
