@@ -457,7 +457,8 @@ class DashboardServer:
         'trigger': ('trigger',),
         'slack': ('slack',),
         'eval': ('eval',),
-        'all': ('chat', 'api', 'trigger', 'slack', 'eval'),
+        'mcp': ('mcp',),
+        'all': ('chat', 'api', 'trigger', 'slack', 'eval', 'mcp'),
     }
 
     @classmethod

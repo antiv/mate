@@ -580,17 +580,18 @@ non-admin can't use (`caller_access`, below), before the agent server is reached
 closes the WebSocket with 1008.
 
 For a non-admin's `/a2a/*` request the proxy sets `x-mate-a2a-user` to the caller,
-and drops that header, and `x-mate-surface` (`shared/utils/run_surface.py`), from
-every request a client sends. On the agent server
+and drops that header from every request a client sends. On the agent server
 `a2a_routes.CallerAsA2AUser` puts it in the request's `scope["user"]`, which a2a-sdk
 hands to the executor, and ADK runs the agent as that user. Without it ADK runs the
 agent as `A2A_USER_<context id>`, an id the client picks: anyone sending another
 caller's `contextId` would continue that session, and RBAC would check a made-up
-user. Admin requests and the MCP bridge, which calls the agent server directly, send
-no header and keep ADK's id. The bridge's caller doesn't pick the context either: for
-a call with a `session_id` it is a hash of the caller, the agent and the `session_id`
-(`mcp_context_id` in `shared/utils/tools/agent_mcp_protocol_handler.py`), and without
-one the agent server makes a new one.
+user. Admin requests send no header and keep ADK's id.
+
+An agent's MCP server doesn't go through the proxy or A2A: it checks the caller itself
+and runs the agent as them over `/run_sse`. The caller doesn't pick the session: for a
+call with a `session_id` it is a hash of the caller, the agent and the `session_id`
+(`mcp_session_id` in `shared/utils/mcp/agent_mcp_server.py`), and without one a new one.
+It asks the rate limits itself, as the OpenAI-compatible API does.
 
 `/list-apps` answers with the agents of the request's workspace, for everyone: the
 one `X-MATE-Workspace` names, else the caller's default. An app with no

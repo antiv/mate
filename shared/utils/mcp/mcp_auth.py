@@ -5,8 +5,8 @@ The same callers as the OpenAI-compatible API: a Personal Access Token, the
 dashboard's login token, Basic auth or a dashboard session, held by an admin or
 by a role in ALLOWED_API_ROLES. An agent's MCP server also checks that the agent
 is in the request's workspace (a token's own, server/pat_auth.py) and the agent's
-own allowed_for_roles: the tool call reaches the agent over A2A without the
-caller's identity, so nothing further along can check it. The Google Drive server
+own allowed_for_roles; the run is then the caller's, so its sub-agents' roles are
+checked against them too. The Google Drive server
 works with the installation's service account, which is the default workspace's
 (shared/utils/platform_only.py): a request of another workspace needs a platform
 administrator.

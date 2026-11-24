@@ -5,7 +5,7 @@ Tests for the A2A routes (shared/utils/a2a_routes.py) on the pinned a2a-sdk.
 adk_main.py logs and carries on when the A2A setup fails, so a dependency bump
 that breaks it would only print a line at startup. These tests fail instead:
 the routes must import, mount, serve each agent's card, and answer JSON-RPC in
-both the 1.x method names and the 0.3 ones the MCP bridge sends.
+both the 1.x method names and the 0.3 ones.
 """
 
 import json
@@ -79,7 +79,7 @@ class TestA2ARoutes(unittest.TestCase):
         self.assertEqual(card["name"], "custom", "fields agent.json leaves out keep their defaults")
 
     def test_message_send_the_0_3_method_name_still_works(self):
-        # The MCP bridge (agent_mcp_protocol_handler.py) and existing callers send this
+        # Existing callers send this
         r = self._rpc("bot", "message/send", {"message": {
             "role": "user", "messageId": "m1", "kind": "message", "parts": [{"kind": "text", "text": "hello"}]}})
         self.assertEqual(r.status_code, 200, r.text)
@@ -117,7 +117,7 @@ class TestA2ARoutes(unittest.TestCase):
             "parts": [{"kind": "text", "text": "x"}]}}}
         reply = client.post("/a2a/bot", json=message, headers={A2A_USER_HEADER: "bob@corp.com"})
         self.assertIn("as bob@corp.com", json.dumps(reply.json()))
-        # No header (an admin's request, the MCP bridge): ADK's own id, as before
+        # No header (an admin's request): ADK's own id, as before
         reply = client.post("/a2a/bot", json=message)
         self.assertIn("as A2A_USER_ctx-of-someone", json.dumps(reply.json()))
 
@@ -151,30 +151,6 @@ class TestCardData(unittest.TestCase):
         (agents_dir / "bot").mkdir()
         (agents_dir / "bot" / "agent.json").write_text("{not json", encoding="utf-8")
         self.assertEqual(card_data_for("bot", agents_dir)["description"], "A2A-enabled bot agent")
-
-
-class TestMcpBridgeReadsTheReply(unittest.TestCase):
-    """The MCP bridge (agent_mcp_protocol_handler) turns an A2A answer into MCP text."""
-
-    def test_a_tasks_artifacts_are_the_reply(self):
-        from shared.utils.tools.agent_mcp_protocol_handler import a2a_result_text
-        task = {"kind": "task", "status": {"state": "completed"},
-                "artifacts": [{"parts": [{"kind": "text", "text": "Zdravo"}, {"kind": "data", "data": {}}]},
-                              {"parts": [{"kind": "text", "text": "svete"}]}],
-                "history": [{"role": "user", "parts": [{"kind": "text", "text": "the question"}]}]}
-        self.assertEqual(a2a_result_text(task), "Zdravo\nsvete")
-
-    def test_a_failed_tasks_status_message_is_the_reply(self):
-        from shared.utils.tools.agent_mcp_protocol_handler import a2a_result_text
-        task = {"kind": "task", "status": {"state": "failed",
-                                           "message": {"parts": [{"kind": "text", "text": "Model error"}]}}}
-        self.assertEqual(a2a_result_text(task), "Model error")
-
-    def test_a_message_result_is_read_too(self):
-        from shared.utils.tools.agent_mcp_protocol_handler import a2a_result_text
-        self.assertEqual(a2a_result_text({"kind": "message", "parts": [{"kind": "text", "text": "hi"}]}), "hi")
-        self.assertEqual(a2a_result_text({"message": {"parts": [{"kind": "text", "text": "hey"}]}}), "hey")
-        self.assertIsNone(a2a_result_text({"kind": "task", "artifacts": []}))
 
 
 if __name__ == "__main__":

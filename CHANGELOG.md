@@ -30,6 +30,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **MATE's MCP servers are on the MCP SDK, and an agent runs as the caller** (#389) - agents, Image Generation and Google Drive, at the same addresses with the same authentication:
+  - **An agent's tool works on the LangGraph runtime too,** where a call failed
+  - **The agent runs as the caller,** where it ran as nobody in particular: its sub-agents' roles, tools that need an administrator, usage and cost, rate limits and budgets are the caller's. An administrator's token therefore lets the agent do what it does for an administrator. **When upgrading:** a conversation begun with a `session_id` starts anew
+  - **A run that waits for an approval says so** in its answer
+  - **An image comes back** in the answer of an image tool, which gave none; a generation that failed is an error, where it was reported as generated
+  - The protocol version is negotiated, a request needs `Content-Type: application/json`, and arguments are checked against the tool's schema. An unknown tool is error `-32602`. A tool's `raw_result` is `structuredContent` (Google Drive) or gone (images). A request without an `id` takes no answer, as JSON-RPC says, except on `/initialize`, `/tools/list` and `/tools/call`
+  - `GET .../mcp/sse`, which no MCP client could use, is gone
 - **mcp 1.30 → 2.3, and the LangGraph runtime's MCP client** (#389) - the client is written on the MCP SDK, as langchain-mcp-adapters is no longer maintained and needs mcp 1. Servers are configured as before, and tool names, headers, `${VAR}` and timeouts are the same. Audio in a tool's result is a line of text instead of an error. A result that a remote server sends as an event stream may have 16 MB on both runtimes (mcp 2's own limit, 1 MB, is raised); it had none before
 
 ## [2.1.0] - 2026-11-23

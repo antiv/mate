@@ -23,8 +23,8 @@ Two tools save artifacts today:
 - browser automation (`shared/utils/tools/browser_tools.py`) saves screenshots as
   `browser_screenshot_<timestamp>.png`.
 
-The image MCP server path (`image_mcp_protocol_handler.py`) passes a context whose
-`save_artifact` raises, so images generated through it are not stored.
+The image MCP server (`shared/utils/mcp/image_mcp_server.py`) passes a context that
+keeps the image for its answer, so images generated through it are not stored.
 
 Artifacts are read back through the agent server's
 `/apps/{app}/users/{user}/sessions/{session}/artifacts` routes (ADK's own, or the
