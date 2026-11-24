@@ -5,7 +5,7 @@ Each agent gets a JSON-RPC endpoint at /a2a/{agent} and its card at
 /a2a/{agent}/.well-known/agent-card.json. The card and the routes are built
 through google.adk.a2a._compat, which supports both a2a-sdk 0.3.x and 1.x: on
 1.x the routes also accept the 0.3 method names (message/send, tasks/get, ...),
-which the MCP bridge and existing callers send.
+which existing callers send.
 """
 
 import json
@@ -75,7 +75,7 @@ class CallerAsA2AUser:
 
     a2a-sdk passes scope["user"] to the agent executor, and ADK runs the agent as its
     name; without it ADK makes the user A2A_USER_<context id>, an id the client picks.
-    A request without the header (an admin's, the MCP bridge's) keeps that."""
+    A request without the header (an admin's) keeps that."""
 
     def __init__(self, app: Any) -> None:
         self.app = app
@@ -85,16 +85,13 @@ class CallerAsA2AUser:
             await self.app(scope, receive, send)
             return
         from . import run_surface
-        surface = "a2a"
         for name, value in scope.get("headers", []):
             header = name.decode("latin-1").lower()
             if header == A2A_USER_HEADER:
                 from starlette.authentication import SimpleUser
                 scope = {**scope, "user": SimpleUser(value.decode("utf-8", "replace"))}
-            elif header == run_surface.SURFACE_HEADER and value.decode("latin-1").lower() == "mcp":
-                surface = "mcp"
         # The run started by this request, and the tasks it creates, see the surface
-        token = run_surface.set_surface(surface)
+        token = run_surface.set_surface("a2a")
         try:
             await self.app(scope, receive, send)
         finally:

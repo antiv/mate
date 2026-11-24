@@ -17,7 +17,7 @@ from .models import AgentResponse
 
 logger = logging.getLogger(__name__)
 
-ORIGINS = ('chat', 'api', 'trigger', 'slack', 'eval')
+ORIGINS = ('chat', 'api', 'trigger', 'slack', 'eval', 'mcp')
 
 # Each internal caller already stamps something distinctive on the run; these are the
 # markers, in one place so they can be tested and kept honest.
@@ -25,8 +25,8 @@ ORIGINS = ('chat', 'api', 'trigger', 'slack', 'eval')
 #   eval     shared/utils/dashboard/dashboard_server.py:128  user_id="eval_runner"
 #   api      server/openai_routes.py:128          session_id="openai_sess_…"
 #   slack    server/slack_routes.py:272           session_id="slack_…"
-# A2A and MCP carry no marker today and therefore fall under 'chat'. Splitting them
-# out needs a prefix at the point those sessions are created.
+#   mcp      shared/utils/mcp/agent_mcp_server.py session_id="mcp_sess_…"
+# A2A carries no marker today and therefore falls under 'chat'.
 _USER_ID_ORIGINS = {
     'trigger_runner': 'trigger',
     'eval_runner': 'eval',
@@ -34,6 +34,7 @@ _USER_ID_ORIGINS = {
 _SESSION_PREFIX_ORIGINS = (
     ('openai_sess_', 'api'),
     ('slack_', 'slack'),
+    ('mcp_sess_', 'mcp'),
 )
 
 

@@ -113,6 +113,7 @@ Latency is only meaningful for comparable traffic, so it has its own selector:
 | **Chat**, **API**, **Slack** | Each of those on its own. |
 | **Triggers** | Scheduled and webhook runs. |
 | **Evals** | Test runs. |
+| **MCP** | Calls of an agent's MCP server. |
 | **All** | Everything. |
 
 ### Individual requests

@@ -6,7 +6,6 @@ order: 54
 covers:
   - shared/utils/mcp/**
   - shared/utils/tools/mcp_tools.py
-  - shared/utils/tools/*mcp_protocol_handler.py
 ---
 
 # Exposed MCP Servers
@@ -24,11 +23,8 @@ MATE exposes:
 - `GET /images/mcp/health` - Health check (no auth required; status only)
 - `POST /images/mcp` - The MCP endpoint: what a client connects to
 - `GET /images/mcp` - Server info endpoint; 405 when a client asks it for a stream
-- `POST /images/mcp/initialize` - MCP protocol initialization
-- `POST /images/mcp/tools/list` - List available tools
-- `POST /images/mcp/tools/call` - Execute tool calls
-- `GET /images/mcp/sse` - MATE's own keep-alive stream, not an MCP transport ([Protocol Details](#protocol-details))
-- `OPTIONS /images/mcp` & `/images/mcp/sse` - CORS preflight handlers
+- `POST /images/mcp/initialize`, `/tools/list`, `/tools/call` - that method alone, without an MCP client: the body's `params` and `id` are optional
+- `OPTIONS /images/mcp` - CORS preflight
 
 **Available Tools (3):**
 - `generate_image_gpt_image_1` - Generate images using GPT Image 1 model
@@ -40,7 +36,7 @@ MATE exposes:
   - Single image only
 - `generate_image_nano_banana` - Generate images using Nano Banana (Gemini 2.5 Flash Image via OpenRouter) model
   - `asset_name` is accepted and ignored; `model_config` is no longer taken from callers
-  - All three go through the agents' image tool path; see [Image generation](image-generation.md)
+  - All three go through the agents' image tool path; see [Image generation](image-generation.md). The image is in the answer, as image content; a generation that failed has `isError: true`
 
 Every route except the health check needs a signed-in caller.
 
@@ -58,11 +54,8 @@ platform feature (the default workspace always); another workspace's token gets 
 - `GET /gdrive/mcp/health` - Health check (no auth required)
 - `POST /gdrive/mcp` - The MCP endpoint: what a client connects to
 - `GET /gdrive/mcp` - Server info endpoint; 405 when a client asks it for a stream
-- `POST /gdrive/mcp/initialize` - MCP protocol initialization
-- `POST /gdrive/mcp/tools/list` - List available tools
-- `POST /gdrive/mcp/tools/call` - Execute tool calls
-- `GET /gdrive/mcp/sse` - MATE's own keep-alive stream, not an MCP transport ([Protocol Details](#protocol-details))
-- `OPTIONS /gdrive/mcp` & `/gdrive/mcp/sse` - CORS preflight handlers
+- `POST /gdrive/mcp/initialize`, `/tools/list`, `/tools/call` - that method alone, without an MCP client: the body's `params` and `id` are optional
+- `OPTIONS /gdrive/mcp` - CORS preflight
 
 **Available Tools (7):**
 - `list_files_in_folder` - List all files in a Google Drive folder
@@ -97,11 +90,8 @@ MCP_EXPOSED_AGENTS=creative_agent,main_entity,jira_agent
 - `GET /agents/{agent_name}/mcp/health` - Health check (no auth required; shows the agent's name and description)
 - `POST /agents/{agent_name}/mcp` - The MCP endpoint: what a client connects to
 - `GET /agents/{agent_name}/mcp` - Server info endpoint; 405 when a client asks it for a stream
-- `POST /agents/{agent_name}/mcp/initialize` - MCP protocol initialization
-- `POST /agents/{agent_name}/mcp/tools/list` - List available tools
-- `POST /agents/{agent_name}/mcp/tools/call` - Execute tool calls
-- `GET /agents/{agent_name}/mcp/sse` - MATE's own keep-alive stream, not an MCP transport ([Protocol Details](#protocol-details))
-- `OPTIONS /agents/{agent_name}/mcp` & `/agents/{agent_name}/mcp/sse` - CORS preflight handlers
+- `POST /agents/{agent_name}/mcp/initialize`, `/tools/list`, `/tools/call` - that method alone, without an MCP client: the body's `params` and `id` are optional
+- `OPTIONS /agents/{agent_name}/mcp` - CORS preflight
 
 `GET /mcp` lists the exposed agents the caller may use:
 
@@ -124,17 +114,18 @@ Every route except health and CORS preflight, and `GET /mcp`, needs a caller:
   and an admin passes it). Otherwise 403, and `GET /mcp` leaves the agent out.
 
 `shared/utils/mcp/mcp_auth.py` does the check, using `get_pat_user` from
-`server/pat_auth.py` and `RBACMiddleware.check_agent_access`. It sits on the route
-because the tool call reaches the agent over A2A without the caller's identity.
-The call carries `x-mate-surface: mcp`, so an approval request the agent makes is
-recorded as an MCP run's, answered in the inbox ([Approval requests](approvals.md)).
+`server/pat_auth.py` and `RBACMiddleware.check_agent_access`. The agent
+then runs as the caller, over `/run_sse`: its sub-agents' roles, the tools that need an
+admin, usage, and the rate limits and budgets are the caller's. An approval request it
+makes is recorded as an MCP run's, answered in the inbox
+([Approval requests](approvals.md)); the call says what it waits for.
 `/gdrive/mcp` applies the first two checks.
 
 **Available Tools (1 per agent):**
 - `call_{agent_name}_agent` - Call the agent with a message
   - **Parameters:**
     - `message` (required): The message to send to the agent
-    - `session_id` (optional): calls of one caller with the same `session_id` continue one conversation; without it, each call is a conversation of its own. The A2A context is made from the caller, the agent and the `session_id` (`mcp_context_id`), so the same `session_id` of another caller is another conversation
+    - `session_id` (optional): calls of one caller with the same `session_id` continue one conversation; without it, each call is a conversation of its own. The session (`mcp_session_id`) is made from the caller, the agent and the `session_id`, so the same `session_id` of another caller is another conversation. It is among the caller's own in the Work Room
   - **Returns:** Agent's response as text content. A run that failed has `isError: true` and the error as its text
 
 **Prompt and resource (1 each per agent):**
@@ -152,7 +143,7 @@ recorded as an MCP run's, answered in the inbox ([Approval requests](approvals.m
 - Only agents listed in `MCP_EXPOSED_AGENTS` are exposed
 - Each agent becomes accessible via MCP protocol
 - Agent descriptions from the database are used as MCP server descriptions
-- Tool calls are routed to agents via A2A (Agent-to-Agent) protocol
+- A tool call runs the agent over `/run_sse`, on either runtime
 
 **Example Usage:**
 
@@ -182,7 +173,7 @@ curl -u admin:mate -X POST http://localhost:8000/agents/creative_agent/mcp/tools
 - Agents must exist in the `agents_config` table
 - Agents must not be disabled (`disabled = false`)
 - Agent names must be listed in `MCP_EXPOSED_AGENTS` environment variable
-- ADK server must be running (agents are called via A2A protocol)
+- The agent server must be running
 
 ---
 
@@ -308,16 +299,12 @@ External MCP servers are created via `create_mcp_tools_from_config()`, which dis
 
 ## Protocol Details
 
-- **Protocol:** JSON-RPC 2.0
-- **MCP Version:** `2024-11-05`, whatever version the client asks for
-- **Transport:** JSON-RPC over `POST`, each answered in its own response with JSON. The servers send nothing on their own, so a `GET` that asks for `text/event-stream` gets 405, which MCP clients expect. `GET .../sse` sends keep-alives in MATE's own form; a client on the legacy HTTP+SSE transport can't connect to it
-- **Runtime:** an agent's tool call goes over A2A, which only the ADK runtime serves. With `AGENT_FRAMEWORK=langgraph` the agent servers list their tools, but a call answers "Agent call failed (HTTP 404)"
-- **Messages:** `shared/utils/tools/mcp_jsonrpc.py` reads them for the three servers:
-  - a `notifications/...` message, and a response of the client, get 202 with no body;
-  - `ping` gets an empty result;
-  - a body that isn't JSON or isn't one message (a batch) gets 400;
-  - a request without an `id` is answered with id 1
-- **Checked with** the MCP Python SDK's client (1.30 and 2.3.0) and MCP Inspector 2.13.0, on streamable HTTP: initialize, ping, tools, prompts, resources, and a tool call that succeeds and one that fails. All accept `2024-11-05`; the newer ones try `server/discover` first and go on with `initialize`
+- **Server:** the MCP Python SDK's (`mcp.server.lowlevel.Server`), behind MATE's routes and authentication (`shared/utils/mcp/served.py`). It negotiates the protocol version and answers `ping`, notifications and messages that aren't valid
+- **Transport:** streamable HTTP, stateless: each `POST` is answered on its own, with JSON. The servers send nothing on their own, so a `GET` that asks for `text/event-stream` gets 405, which MCP clients expect. The legacy HTTP+SSE transport isn't served
+- **Headers:** `Content-Type: application/json` is required on the MCP endpoint. `Accept` may be anything
+- **Arguments** are checked against the tool's schema; wrong ones, and an unknown tool, are error `-32602`
+- **A request body** may have 4 MB
+- **Checked with** the SDK's client (2.3.0), by `shared/test/test_mcp_served.py`, with `initialize` and with the newest protocol
 - **CORS:** Enabled for web-based MCP clients
 - **Authentication:** Every endpoint except health and CORS preflight requires a caller. Agent servers, `GET /mcp` and `/gdrive/mcp` take a personal access token, Basic auth, the dashboard's login token or a session ([Who may call](#who-may-call)); `/images/mcp` takes a signed-in dashboard user and no personal access tokens
 - **Availability:** both built-in servers answer 503 while their dependencies aren't configured; the image server's health check reports `degraded` with the reason
@@ -326,11 +313,9 @@ External MCP servers are created via `create_mcp_tools_from_config()`, which dis
 
 ## Implementation
 
-- **Built-in Server Classes:** `ImageMCPServer` and `GoogleDriveMCPServer` in `shared/utils/mcp/`
-- **Built-in Protocol Handlers:** `ImageMCPProtocolHandler` and `GoogleDriveMCPProtocolHandler` in `shared/utils/tools/`
-- **Agent MCP Manager:** `AgentMCPManager` in `shared/utils/mcp/agent_mcp_manager.py` - manages dynamic agent MCP server creation
-- **Agent MCP Server:** `AgentMCPServer` in `shared/utils/mcp/agent_mcp_server.py` - creates MCP endpoints for individual agents
-- **Agent MCP Protocol Handler:** `AgentMCPProtocolHandler` in `shared/utils/tools/agent_mcp_protocol_handler.py` - handles agent tool calls via A2A protocol
+- **Shared layer:** `serve()` in `shared/utils/mcp/served.py` registers the routes of one server and hands its messages to the SDK
+- **Servers:** `AgentMCPServer`, `ImageMCPServer` and `GoogleDriveMCPServer` in `shared/utils/mcp/` give it their tools, prompts and resources
+- **Agent MCP Manager:** `AgentMCPManager` in `shared/utils/mcp/agent_mcp_manager.py` makes the server of each exposed agent
 - **Initialization:** MCP servers are initialized in `auth_server.py` via `initialize_mcp_servers()`
 - **Tool Creation:** External MCP tools are created via `create_mcp_tools_from_config()` in `shared/utils/tools/mcp_tools.py`
 
