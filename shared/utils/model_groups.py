@@ -24,7 +24,7 @@ import logging
 import os
 import re
 import socket
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, Iterator, List, Optional
 from urllib.parse import urlparse
 
 from sqlalchemy.orm import Session
@@ -229,7 +229,7 @@ def usable_models(name: str, context: ModelContext) -> List[str]:
     ModelGroupError when there is no such group or it has no models, NoProviderKey when
     the workspace can call none of them."""
     from .database_client import get_database_client
-    from .provider_keys import Credentials, NoProviderKey, model_credentials, provider_of
+    from .provider_keys import NoProviderKey, model_credentials
     db = get_database_client()
     session = db.get_session() if db else None
     if session is None:
@@ -244,14 +244,29 @@ def usable_models(name: str, context: ModelContext) -> List[str]:
         session.close()
     if not models:
         raise ModelGroupError(f"The model group {PREFIX}{name} has no models")
+    usable = list(_usable(name, models, own_servers_only, lambda provider: model_credentials(context, None, provider)))
+    if not usable:
+        raise NoProviderKey(_none_usable(name, own_servers_only))
+    return usable
 
-    by_provider: Dict[str, Any] = {}  # provider -> Credentials, None for the environment, or NoProviderKey
-    usable = []
+
+def _none_usable(name: str, own_servers_only: bool) -> str:
+    if own_servers_only:
+        return f"No model of {PREFIX}{name} runs on its own servers for this workspace"
+    return f"This workspace has no key for any model of {PREFIX}{name}"
+
+
+def _usable(name: str, models: List[str], own_servers_only: bool,
+            credentials_for: Callable[[str], Any]) -> Iterator[str]:
+    """Those of the models that a call may go to. credentials_for(provider) is asked once
+    for each provider: Credentials, None for the environment, or NoProviderKey raised."""
+    from .provider_keys import Credentials, NoProviderKey, provider_of
+    by_provider: Dict[str, Any] = {}
     for model in models:
         provider = provider_of(model)
         if provider not in by_provider:
             try:
-                by_provider[provider] = model_credentials(context, model)
+                by_provider[provider] = credentials_for(provider)
             except NoProviderKey as e:
                 by_provider[provider] = e
         credentials = by_provider[provider]
@@ -270,11 +285,27 @@ def usable_models(name: str, context: ModelContext) -> List[str]:
                 continue
         if not keyed and not _environment_has_key(model):
             continue
-        usable.append(model)
-    if not usable:
-        raise NoProviderKey(f"This workspace has no key for any model of {PREFIX}{name}" if not own_servers_only
-                            else f"No model of {PREFIX}{name} runs on its own servers for this workspace")
-    return usable
+        yield model
+
+
+def groups_for(session: Session, workspace_id: int) -> List[Dict[str, Any]]:
+    """The groups as an agent of the workspace may choose them: the model that would
+    answer now, or the reason why none would. A group without models can't be stored
+    (save_refusal); one the workspace has no key for can."""
+    from .provider_keys import workspace_credentials
+    found = []
+    for group in session.query(ModelGroup).order_by(ModelGroup.id):
+        models = [m["model"] for m in models_of(group)]
+        own = bool(group.own_servers_only)
+        answers = next(_usable(group.name, models, own,
+                               lambda provider: workspace_credentials(session, workspace_id, provider)), None)
+        reason = None
+        if answers is None:
+            reason = _none_usable(group.name, own) if models else f"The model group {PREFIX}{group.name} has no models"
+        found.append({"name": group.name, "model_name": PREFIX + group.name, "label": group.label,
+                      "description": group.description or "", "own_servers_only": own,
+                      "has_models": bool(models), "answers": answers, "reason": reason})
+    return found
 
 
 def answering_model(model_name: Optional[str], context: ModelContext) -> str:

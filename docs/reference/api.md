@@ -10,7 +10,7 @@ generated: true
 
 # HTTP API reference
 
-Every HTTP route declared in the code: **291** routes. 37 have no docstring and so no summary here.
+Every HTTP route declared in the code: **292** routes. 37 have no docstring and so no summary here.
 
 This page lists what exists and where it is implemented. For request and response schemas, and to try a call, use the live Swagger UI under **Documentation → API** in the dashboard.
 
@@ -18,7 +18,7 @@ Requests to `/dashboard/api/*` require an admin, apart from the short allowlist 
 
 ## Auth server and dashboard
 
-Port 8000. Everything a browser or an external client talks to. 270 routes.
+Port 8000. Everything a browser or an external client talks to. 271 routes.
 
 ### Authentication
 
@@ -207,6 +207,7 @@ Database migration management API endpoints.
 | Method | Path | Summary | Implemented in |
 |---|---|---|---|
 | `GET` | `/dashboard/api/workspace-models` | The workspace's provider keys (masked), the providers it can hold a key for, its image model, and what the caller may change | server/workspace_model_routes.py · list_models_and_keys |
+| `GET` | `/dashboard/api/workspace-models/groups` | The model groups an agent of the workspace can be on, each with the model that would answer now, or why none would; and the model of an agent without one | server/workspace_model_routes.py · list_groups |
 | `PUT` | `/dashboard/api/workspace-models/image-model` | Set the workspace's image model, for its agents that name none; empty falls back to the installation's | server/workspace_model_routes.py · set_image_model |
 | `PUT` | `/dashboard/api/workspace-models/keys` | Add or replace the workspace's key for a provider | server/workspace_model_routes.py · set_provider_key |
 | `DELETE` | `/dashboard/api/workspace-models/keys/{provider}` | Delete the workspace's key for a provider | server/workspace_model_routes.py · delete_provider_key |

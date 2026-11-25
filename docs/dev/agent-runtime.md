@@ -238,6 +238,9 @@ agent asks the second; a new one has to.
   models that LiteLLM calls by the same name.
 - **Elsewhere** something depends on the model before the call (attachments),
   `answering_model()` gives the first usable one.
+- **Choosing one:** `groups_for(session, workspace_id)` gives every group with the model that
+  would answer in a workspace, by the same rules; the agent editor and Create Agent's
+  `list_model_groups` show it.
 
 ## The LangGraph runtime
 

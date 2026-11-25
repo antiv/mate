@@ -96,7 +96,7 @@ under the server's `agents/` folder.
 | **Name** | A unique identifier on the whole installation. Other agents and triggers refer to the agent by this name. It starts with a letter or an underscore and holds only letters, digits and underscores, for example `support_root`; another name is refused. A name already in use, in any workspace, is refused with "This name is taken". |
 | **Type** | **LLM** for an ordinary agent. **Loop** repeats its sub-agents up to **Max iterations** times, under **Advanced**. **Graph** runs its sub-agents as a workflow with routing. |
 | **Project** | The project the agent belongs to. |
-| **Model** | Which model answers. See [Choosing a model](#choosing-a-model). |
+| **Model** | **Model**, and its name, or **Group**, and one of the list. See [Choosing a model](#choosing-a-model). |
 | **Description** | What the agent is for, in a sentence. A parent agent decides which sub-agent to hand work to by reading these, so a missing or vague description means the agent is not picked. |
 | **Parent agents** | The agents this one works under. See [Connect agents into a tree](#connect-agents-into-a-tree). |
 | **Allowed roles** | Who may use the agent. See [Who can use an agent](#who-can-use-an-agent). |
@@ -115,7 +115,9 @@ The prefix of the model name selects the provider:
 | `openrouter/provider/model` | OpenRouter |
 | `ollama_chat/llama3.2` | a local Ollama server |
 | any other `provider/model` | that provider, through LiteLLM |
-| `group/coding` | a [model group](model-groups.md): the models your administrator put in it |
+
+Choose **Group** instead to put the agent on a [model group](model-groups.md): a list of
+models your administrator keeps. The line under it says which of them answers now.
 
 Each provider needs its API key set on the server; the
 [configuration reference](../reference/configuration.md) lists them. A workspace
@@ -133,7 +135,7 @@ Three optional fields change where the model comes from. The first two are in th
   the agent's version history, encrypted when the server has `MATE_SECRET_KEY`.
 - **Fallback Model** answers when the main model fails, so a provider outage does
   not reach the person chatting. It uses the provider's key from the server, not
-  the base URL or key above.
+  the base URL or key above. An agent on a group has none of the three.
 
 ## Connect agents into a tree
 

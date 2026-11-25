@@ -467,6 +467,82 @@ class TestSaving(_Groups):
         self.assertIsNone(self._db(lambda s: save_refusal(s, {"description": "d"}, {"model_name": "openai/x"})))
 
 
+class TestChoosing(_Groups):
+    """What the agent editor and Create Agent's tools are offered."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._group("g", "openai/gpt-4o", "openrouter/x/y")
+        self._group("local", "ollama_chat/qwen3:8b", own_servers_only=True)
+        self._group("bare")
+        os.environ["OPENAI_API_KEY"] = "k"
+
+    def _offered(self, headers: Dict[str, str]) -> Dict[str, Dict[str, Any]]:
+        response = self.client.get("/dashboard/api/workspace-models/groups", headers=headers)
+        self.assertEqual(response.status_code, 200, response.text)
+        return {g["name"]: g for g in response.json()["groups"]}
+
+    def test_each_with_the_model_that_answers_in_this_workspace(self) -> None:
+        offered = self._offered(_platform_admin(A))
+        self.assertEqual((offered["g"]["model_name"], offered["g"]["answers"], offered["g"]["reason"]),
+                         ("group/g", "openai/gpt-4o", None))
+        self.assertEqual((offered["bare"]["has_models"], offered["bare"]["answers"]), (False, None))
+        self.assertIn("has no models", offered["bare"]["reason"])
+        with _addresses(localhost="127.0.0.1"):
+            self.assertEqual(self._offered(_platform_admin(A))["local"]["answers"], "ollama_chat/qwen3:8b")
+        # B has a key of its own for openrouter, and no other
+        self.assertEqual(self._offered(_platform_admin(B))["g"]["answers"], "openai/gpt-4o")
+        self._no_platform_keys()
+        offered = self._offered(_platform_admin(B))
+        self.assertEqual(offered["g"]["answers"], "openrouter/x/y")
+        self.assertEqual((offered["local"]["has_models"], offered["local"]["answers"]), (True, None))
+        self.assertIn("own servers", offered["local"]["reason"])
+
+    def test_it_is_the_model_a_call_goes_to(self) -> None:
+        for workspace, context in ((A, self.a), (B, self.b)):
+            self.assertEqual(self._offered(_platform_admin(workspace))["g"]["answers"], answering_model("group/g", context))
+
+    def test_the_model_of_an_agent_without_one(self) -> None:
+        os.environ["GEMINI_MODEL"] = "openrouter/x/default"
+        response = self.client.get("/dashboard/api/workspace-models/groups", headers=_platform_admin(A))
+        self.assertEqual(response.json()["default_model"], "openrouter/x/default")
+
+    def _tool(self, name: str, *args: Any, agent: str = A_ROOT, admin: bool = True, **kwargs: Any) -> Dict[str, Any]:
+        from shared.utils.database_client import get_database_client
+        from shared.utils.tools import create_agent_tool
+        with patch.object(create_agent_tool, "_is_admin_user", return_value=admin), \
+                patch.object(create_agent_tool, "reload_agent_cache", return_value={"success": True}), \
+                patch.object(create_agent_tool, "get_database_client", get_database_client):
+            return getattr(create_agent_tool, name)(*args, tool_context=MagicMock(agent_name=agent), **kwargs)
+
+    def _stored(self, name: str) -> Optional[str]:
+        return self._db(lambda s: s.query(AgentConfig.model_name).filter_by(name=name).scalar())
+
+    def test_an_agent_lists_those_an_agent_can_be_stored_with(self) -> None:
+        self._no_platform_keys()
+        listed = {agent: {g["model_name"]: g["answers"] for g in self._tool("list_model_groups", agent=agent)["groups"]}
+                  for agent in (A_ROOT, B_ROOT)}
+        self.assertEqual((listed[A_ROOT]["group/g"], listed[B_ROOT]["group/g"]), ("openai/gpt-4o", "openrouter/x/y"))
+        self.assertNotIn("group/bare", listed[A_ROOT])
+        self.assertEqual(self._tool("list_model_groups", admin=False)["status"], "error")
+        self.assertEqual(self._tool("list_model_groups", agent="nobody_s")["status"], "error")
+
+    def test_it_comes_with_create_agent(self) -> None:
+        from shared.utils.tools.tool_factory import ToolFactory
+        tools = ToolFactory().create_tools({"name": A_ROOT, "tool_config": json.dumps({"create_agent": True})})
+        self.assertIn("list_model_groups", [getattr(t, "__name__", "") for t in tools])
+
+    def test_an_agent_puts_another_on_a_group(self) -> None:
+        made = self._tool("create_agent", "child", "d", "i", model="group/g")
+        self.assertEqual((made["status"], self._stored("child")), ("success", "group/g"), made)
+        self.assertEqual(self._tool("update_agent", "child", model="group/local")["status"], "success")
+        self.assertEqual(self._stored("child"), "group/local")
+        for bad in ("group/bare", "group/gone"):
+            self.assertIn(bad, self._tool("update_agent", "child", model=bad)["error_message"])
+            self.assertIn(bad, self._tool("create_agent", "child_two", "d", "i", model=bad)["error_message"])
+        self.assertEqual((self._stored("child"), self._stored("child_two")), ("group/local", None))
+
+
 class TestStandalone(_Groups):
 
     def _build(self, **bundle: Any) -> Path:

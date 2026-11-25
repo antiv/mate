@@ -106,10 +106,16 @@
                         </div>
                     </div>
                     <div class="m-field">
-                        <label for="{{ p }}Model">Model</label>
-                        <input type="text" id="{{ p }}Model" class="m-input" placeholder="gemini/gemini-2.5-flash" spellcheck="false">
+                        <span class="m-label" id="{{ p }}ModelLabel">Model</span>
+                        <div class="m-segments" role="radiogroup" aria-labelledby="{{ p }}ModelLabel">
+                            <label><input type="radio" name="{{ p }}ModelKind" id="{{ p }}ModelKindModel" value="model" checked><span>Model</span></label>
+                            <label><input type="radio" name="{{ p }}ModelKind" id="{{ p }}ModelKindGroup" value="group"><span>Group</span></label>
+                        </div>
+                        <input type="text" id="{{ p }}Model" class="m-input" placeholder="gemini/gemini-2.5-flash" spellcheck="false" aria-label="Model name" aria-describedby="{{ p }}ModelHint">
+                        <select id="{{ p }}ModelGroup" class="m-input" aria-label="Model group" aria-describedby="{{ p }}ModelHint" hidden></select>
+                        <p class="m-hint" id="{{ p }}ModelHint" aria-live="polite" hidden></p>
                     </div>
-                    <div class="m-field">
+                    <div class="m-field" id="{{ p }}FallbackModelField">
                         <label for="{{ p }}FallbackModel">Fallback model <span class="m-muted">(optional)</span></label>
                         <input type="text" id="{{ p }}FallbackModel" class="m-input" placeholder="openai/gpt-4o-mini" spellcheck="false">
                         <p class="m-hint">Answers instead when the model fails. Uses the provider's server key.</p>
@@ -463,5 +469,6 @@
 <script src="/static/js/approval-settings.js?v=1"></script>
 <script src="/static/js/modals/widget-keys.js?v=24"></script>
 <script src="/static/js/usage-chart.js?v=1"></script>
-<script src="/static/js/agent-page.js?v=8"></script>
+<script src="/static/js/model-choice.js?v=1"></script>
+<script src="/static/js/agent-page.js?v=9"></script>
 {% endblock %}

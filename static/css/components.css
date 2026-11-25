@@ -128,6 +128,23 @@ textarea.m-input { resize: vertical; }
 .m-check input { margin-top: 2px; accent-color: var(--accent); }
 .m-check .m-hint { display: block; margin-top: 2px; }
 
+/* A choice of two or three, as radio buttons: <div class="m-segments" role="radiogroup">
+   <label><input type="radio" name="kind" value="a" checked><span>A</span></label> … */
+.m-segments { display: flex; gap: 2px; padding: 2px; border-radius: 9px; background: var(--bg-surface-2); }
+.m-segments > label { position: relative; flex: 1; min-width: 0; cursor: pointer; }
+.m-segments input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.m-segments span {
+    display: block;
+    padding: 4px 10px;
+    border-radius: 7px;
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-weight: 600;
+    text-align: center;
+}
+.m-segments input:checked + span { background: var(--bg-surface); color: var(--text-primary); box-shadow: 0 0 0 1px var(--border); }
+.m-segments input:focus-visible + span { box-shadow: 0 0 0 2px var(--accent); }
+
 .m-stack { display: flex; flex-direction: column; gap: 14px; }
 .m-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .m-grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }

@@ -1144,6 +1144,69 @@ mateActions.allow('applyConfigModal', 'closeConfigModal',
         { key: 'mystery_character', label: 'Mystery Character' },
     ];
 
+    /* Model or Group (static/js/model-choice.js), and the fallback model, which a group has no use for */
+    function ModelFields(props) {
+        const agent = props.agent;
+        const choice = window.mateModelChoice;
+        const group = choice.isGroup(agent.model_name);
+        const [groups, setGroups] = useState(undefined);  // undefined while loading, null when they did not load
+        // What the field held before the other kind was chosen
+        const [other, setOther] = useState('');
+
+        useEffect(function () {
+            let shown = true;
+            choice.load().then(function (found) { if (shown) setGroups(found); });
+            return function () { shown = false; };
+        }, []);
+
+        const setField = function (name) {
+            return function (event) { props.onChange(Object.assign({}, agent, { [name]: event.target.value })); };
+        };
+        const choose = function (toGroup) {
+            if (toGroup === group) return;
+            setOther(agent.model_name || '');
+            props.onChange(Object.assign({}, agent, { model_name: choice.isGroup(other) === toGroup ? other : (toGroup ? choice.PREFIX : '') }));
+        };
+        const hint = groups === undefined ? { text: '' }
+            : choice.hint(agent.model_name, groups, !!(agent.model_base_url || agent.model_api_key));
+        const className = 'vb-field w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-xs';
+        const radio = function (label, toGroup) {
+            return React.createElement('label', null,
+                React.createElement('input', { type: 'radio', name: 'vbModelKind', checked: group === toGroup,
+                                               onChange: function () { choose(toGroup); } }),
+                React.createElement('span', null, label));
+        };
+
+        return React.createElement(
+            React.Fragment,
+            null,
+            React.createElement(
+                'div',
+                { className: 'space-y-1' },
+                React.createElement('span', { className: 'block text-[11px] font-semibold', id: 'vbModelLabel' }, 'Model'),
+                React.createElement('div', { className: 'm-segments', role: 'radiogroup', 'aria-labelledby': 'vbModelLabel' },
+                    radio('Model', false), radio('Group', true)),
+                group
+                    ? React.createElement('select', { className: className, 'aria-label': 'Model group', value: agent.model_name.trim(),
+                                                      onChange: setField('model_name') },
+                        choice.options(agent.model_name, groups).map(function (o) {
+                            return React.createElement('option', { key: o.value, value: o.value,
+                                                                   disabled: o.disabled && o.value !== agent.model_name }, o.text);
+                        }))
+                    : React.createElement('input', { className: className, 'aria-label': 'Model name', value: agent.model_name || '',
+                                                     spellCheck: false, onChange: setField('model_name') }),
+                hint.text && React.createElement('p', { className: hint.error ? 'm-error' : 'm-hint', 'aria-live': 'polite' }, hint.text),
+            ),
+            !group && React.createElement(
+                'div',
+                null,
+                React.createElement('label', { className: 'block text-[11px] font-semibold mb-1', htmlFor: 'vbFallbackModel' }, 'Fallback model'),
+                React.createElement('input', { id: 'vbFallbackModel', className: className, value: agent.fallback_model || '',
+                                               placeholder: 'Used when the model fails', onChange: setField('fallback_model') }),
+            ),
+        );
+    }
+
     function ConfigPanel(props) {
         const agent = props.agent;
         const onChange = props.onChange;
@@ -1238,57 +1301,25 @@ mateActions.allow('applyConfigModal', 'closeConfigModal',
                 ),
                 React.createElement(
                     'div',
-                    { className: 'grid grid-cols-2 gap-3' },
-                    React.createElement(
-                        'div',
-                        null,
-                        React.createElement(
-                            'label',
-                            { className: 'block text-[11px] font-semibold mb-1' },
-                            'Type',
-                        ),
-                        React.createElement(
-                            'select',
-                            {
-                                className: 'vb-field w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-xs',
-                                value: agent.type || 'llm',
-                                onChange: handleInput('type'),
-                            },
-                            React.createElement('option', { value: 'llm' }, 'LLM'),
-                            React.createElement('option', { value: 'graph' }, 'Graph'),
-                            React.createElement('option', { value: 'loop' }, 'Loop'),
-                        ),
-                    ),
-                    React.createElement(
-                        'div',
-                        null,
-                        React.createElement(
-                            'label',
-                            { className: 'block text-[11px] font-semibold mb-1' },
-                            'Model',
-                        ),
-                        React.createElement('input', {
-                            className: 'vb-field w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-xs',
-                            value: agent.model_name || '',
-                            onChange: handleInput('model_name'),
-                        }),
-                    ),
-                ),
-                React.createElement(
-                    'div',
                     null,
                     React.createElement(
                         'label',
                         { className: 'block text-[11px] font-semibold mb-1' },
-                        'Fallback model',
+                        'Type',
                     ),
-                    React.createElement('input', {
-                        className: 'vb-field w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-xs',
-                        value: agent.fallback_model || '',
-                        placeholder: 'Used when the model fails',
-                        onChange: handleInput('fallback_model'),
-                    }),
+                    React.createElement(
+                        'select',
+                        {
+                            className: 'vb-field w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-xs',
+                            value: agent.type || 'llm',
+                            onChange: handleInput('type'),
+                        },
+                        React.createElement('option', { value: 'llm' }, 'LLM'),
+                        React.createElement('option', { value: 'graph' }, 'Graph'),
+                        React.createElement('option', { value: 'loop' }, 'Loop'),
+                    ),
                 ),
+                React.createElement(ModelFields, { key: agent.name, agent: agent, onChange: onChange }),
                 React.createElement(
                     'div',
                     null,
@@ -2180,6 +2211,10 @@ mateActions.allow('applyConfigModal', 'closeConfigModal',
             if (!draftAgent || !draftAgent.id) {
                 return;
             }
+            if (draftAgent.model_name === window.mateModelChoice.PREFIX) {
+                if (typeof window.showNotification === 'function') window.showNotification('Choose a model group, or a model.', 'error');
+                return;
+            }
             setSaving(true);
             try {
                 await apiUpdateAgent(draftAgent);
@@ -2193,7 +2228,7 @@ mateActions.allow('applyConfigModal', 'closeConfigModal',
             } catch (error) {
                 console.error('[AgentVisualBuilder] Failed to save agent', error);
                 if (typeof window.showNotification === 'function') {
-                    window.showNotification('Failed to save agent', 'error');
+                    window.showNotification('Not saved: ' + error.message, 'error');
                 }
             } finally {
                 setSaving(false);

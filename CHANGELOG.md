@@ -12,7 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **A browser test of the dashboard in CI** (#424) - every page in headless Chromium, in both themes, on a desktop and a phone: errors, CSP violations, controls off the window, cut off or under the Help button, and a Work Room conversation. See `docs/dev/browser-tests.md`
 - **Migrations on PostgreSQL and MySQL in CI** (#424) - all of them on an empty database, and the new ones on a database of the last release with rows, on PostgreSQL 15 and 18 and MySQL 8.4. See `docs/dev/database-and-migrations.md`
 - **New sign-ups** (#424) - a user who signs in with Google or GitHub for the first time is told that their account is waiting to be let in, where they saw "No agents configured yet". The number beside **Users** counts who waits, and `NEW_USER_NOTIFY_TYPE` with `NEW_USER_NOTIFY_URL` or `NEW_USER_NOTIFY_TO` sends a message to Slack, Discord, email or a webhook. Someone invited who signs in without the link sees the invitation in the Work Room and joins from there
-- **Model groups** (#424) - an agent may name a group, such as `group/coding`, instead of a model. Platform administrators keep the list of each group's models on **Platform → Model groups**, with what they must do (call tools, read images) and **Own servers only**. The first model the agent's workspace has a key for answers, on both runtimes; the next ones are tried on a provider outage. A changed list applies to the next message. Usage and traces name the model that answered, with the group beside it. Six groups come without models. See `docs/user/model-groups.md`. The migrations are V053 and V054
+- **Model groups** (#424) - an agent may name a group, such as `group/coding`, instead of a model. Platform administrators keep the list of each group's models on **Platform → Model groups**, with what they must do (call tools, read images) and **Own servers only**. The first model the agent's workspace has a key for answers, on both runtimes; the next ones are tried on a provider outage. A changed list applies to the next message. **Group** beside **Model** on the agent page and in the Visual Builder lists them and says which model answers now; Create Agent has `list_model_groups`. Usage and traces name the model that answered, with the group beside it. Six groups come without models. See `docs/user/model-groups.md`. The migrations are V053 and V054
 
 ### Security
 
@@ -23,7 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **Visual Builder:** agents with long names overlapped; the project picker was wider than a phone's screen
+- **Visual Builder:** agents with long names overlapped; the project picker was wider than a phone's screen; a save that is refused says why
 - **Stopping the agent server stopped other programs too** - the Stop and Restart buttons, and shutting down, ended every process on the machine with `adk_main.py`, or `adk` and `web`, in its command line: another installation's agent server, or a program that only had them in a path. Only this installation's agent server, on its port, is stopped
 - **On a phone,** the agent page and Triggers were wider than the screen when an agent or a project has a long name
 - **Trace Replay didn't show that a fallback model answered** - recording the failed call ended the span the mark goes on, so the replay showed the agent's own model and not the fallback. The fallback's call has a span of its own now

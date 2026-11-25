@@ -7,6 +7,7 @@ covers:
   - templates/dashboard/model_groups.html
   - static/js/model-groups-page.js
   - server/model_group_routes.py
+  - static/js/model-choice.js
   - shared/utils/model_groups.py
   - shared/utils/group_model.py
   - shared/utils/langgraph/group_model.py
@@ -14,10 +15,23 @@ covers:
 
 # Model groups
 
-An agent may name a group instead of a model: `group/coding` in **Model Name**. Which
+An agent may name a group instead of a model: `group/coding`. Which
 models are in the group is decided on **Control Room → Platform → Model groups**, so
 changing a model means changing one list instead of every agent. Only platform
 administrators can open that page.
+
+## Put an agent on a group
+
+Choose **Group** under **Model**, on the agent's page or in the Visual Builder's side
+panel, and pick one. The line under it says which model **answers now** in this
+workspace, or why none does. A group without models can't be picked. **Fallback model**
+is hidden, as the group's next models take its place, and comes back with **Model**.
+
+The agent's configuration holds `group/<name>` in `model_name`, as its API, versions,
+exports and templates do. In the widget's admin page, type it into **Model**.
+
+An agent with the [Create Agent](tools-and-mcp.md) tool sees the groups with
+`list_model_groups`, and may put the agents it makes or changes on one.
 
 ## Which model answers
 

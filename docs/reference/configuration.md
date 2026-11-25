@@ -66,7 +66,7 @@ Every environment variable the code reads: **145** in total. Descriptions come f
 | `EVAL_JUDGE_MODEL` | — | Model used to judge agent runs (falls back below) | `shared/utils/agent_improver.py`, `shared/utils/eval_runner.py` |
 | `EVAL_REGRESSION_WEBHOOK_URL` | — | POST target for eval regression reports | `shared/utils/dashboard/dashboard_server.py` |
 | `GEMINI_API_KEY` | — | Google Gemini key (falls back to GOOGLE_API_KEY) | `shared/utils/embedding_service.py`, `shared/utils/langgraph/model_factory.py`, `shared/utils/model_groups.py` +1 more |
-| `GEMINI_MODEL` | `gemini-2.5-flash` | Default Gemini model | `shared/utils/langgraph/model_factory.py`, `shared/utils/tools/subagent_delegation_tool.py`, `shared/utils/utils.py` |
+| `GEMINI_MODEL` | `gemini-2.5-flash` | Default Gemini model | `server/workspace_model_routes.py`, `shared/utils/langgraph/model_factory.py`, `shared/utils/tools/subagent_delegation_tool.py` +1 more |
 | `GITHUB_CLIENT_ID` | — | GitHub (OAuth 2.0) — create at https://github.com/settings/developers Authorization callback URL: https://<your-domain>/auth/callback/github | `server/oauth_routes.py` |
 | `GITHUB_CLIENT_SECRET` | — | — | `server/oauth_routes.py` |
 | `GOOGLE_API_KEY` | — | — | `shared/utils/embedding_service.py`, `shared/utils/langgraph/model_factory.py`, `shared/utils/model_groups.py` +2 more |

@@ -83,6 +83,56 @@ mateActions.allow('mateAgentPage.save', 'mateAgentPage.discard',
         return instructionEditor ? instructionEditor.getValue() : field('Instruction').value;
     }
 
+    // ── Model or Group (model-choice.js) ──────────────────────────────────
+
+    let modelGroups = null;      // of the workspace, once loaded
+    let groupsLoaded = false;
+
+    const onGroup = () => field('ModelKindGroup').checked;
+
+    const modelName = () => (onGroup() ? field('ModelGroup').value : field('Model').value);
+
+    function setModel(name) {
+        const group = mateModelChoice.isGroup(name);
+        field('ModelKindGroup').checked = group;
+        field('ModelKindModel').checked = !group;
+        field('Model').value = group || name == null ? '' : name;
+        fillGroups(group ? name.trim() : mateModelChoice.PREFIX);
+    }
+
+    function fillGroups(chosen) {
+        field('ModelGroup').replaceChildren(...mateModelChoice.options(chosen, modelGroups).map((o) => {
+            const option = new Option(o.text, o.value);
+            option.disabled = o.disabled && o.value !== chosen;
+            return option;
+        }));
+        field('ModelGroup').value = chosen;
+    }
+
+    function showModel() {
+        const group = onGroup();
+        field('Model').hidden = group;
+        field('ModelGroup').hidden = !group;
+        // The group's next models take the fallback model's place
+        field('FallbackModelField').hidden = group;
+        const line = field('ModelHint');
+        const hasEndpoint = !!(field('ModelBaseUrl').value.trim() || field('ModelApiKey').value.trim());
+        const { text, error } = group && !groupsLoaded ? { text: '', error: false }
+            : mateModelChoice.hint(modelName(), modelGroups, hasEndpoint);
+        if (line.textContent !== text) line.textContent = text;
+        line.className = error ? 'm-error' : 'm-hint';
+        line.hidden = !text;
+    }
+
+    function startModelGroups() {
+        mateModelChoice.load().then((found) => {
+            modelGroups = found;
+            groupsLoaded = true;
+            fillGroups(field('ModelGroup').value);
+            showModel();
+        });
+    }
+
     /** The form as the agents API takes it. */
     function collect() {
         const form = new FormData();
@@ -90,7 +140,7 @@ mateActions.allow('mateAgentPage.save', 'mateAgentPage.discard',
         form.append('name', value('Name').trim());
         form.append('project_id', value('Project'));
         form.append('type', value('Type'));
-        form.append('model_name', value('Model'));
+        form.append('model_name', modelName());
         form.append('model_base_url', value('ModelBaseUrl'));
         form.append('fallback_model', value('FallbackModel'));
         form.append('ai_disclosure', value('AiDisclosure'));
@@ -127,7 +177,7 @@ mateActions.allow('mateAgentPage.save', 'mateAgentPage.discard',
         set('Type', c.type || 'llm');
         const projectId = c.project_id != null ? c.project_id : data.defaultProjectId;
         set('Project', projectId != null ? String(projectId) : '');
-        set('Model', c.model_name);
+        setModel(c.model_name);
         set('FallbackModel', c.fallback_model);
         set('Description', c.description);
         set('Instruction', c.instruction);
@@ -309,6 +359,7 @@ mateActions.allow('mateAgentPage.save', 'mateAgentPage.discard',
 
     function changed() {
         updateStates();
+        showModel();
         updateInstructionInfo();
         if (mode !== 'edit') return;
         const dirty = isDirty();
@@ -362,6 +413,7 @@ mateActions.allow('mateAgentPage.save', 'mateAgentPage.discard',
         if (!form.get('name')) return invalid('A name is required.', 'Name');
         if (!form.get('project_id')) return invalid('Select a project for this agent.', 'Project');
         if (!form.get('description')) return invalid('A description is required.', 'Description');
+        if (form.get('model_name') === mateModelChoice.PREFIX) return invalid('Choose a model group, or a model.', 'ModelGroup');
         if (!form.get('instruction')) return invalid('An instruction is required.');
         return false;
     }
@@ -879,6 +931,7 @@ mateActions.allow('mateAgentPage.save', 'mateAgentPage.discard',
         // Clear, the dialogs (file search, memory blocks, approvals) and the pickers' chips
         document.addEventListener('click', () => setTimeout(changed, 0));
         startInstructionEditor();
+        startModelGroups();
         startTabs();
         if (mode === 'edit' && typeof loadFileSearchData === 'function') loadFileSearchData(P);
         markClean();

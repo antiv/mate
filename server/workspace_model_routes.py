@@ -9,6 +9,8 @@ current workspace's own provider keys and its image model.
 - An owner or admin of the workspace sets its image model (workspace_settings), which
   wins over the installation's for its agents. A workspace admin sees the keys,
   masked, and changes none (403).
+- An admin sees which model groups its agents can be on, and the model that would
+  answer for each now (the agent editor).
 - Model calls read both on every call (shared/utils/provider_keys.py), so a change
   applies without reloading agents.
 
@@ -17,6 +19,7 @@ key.
 """
 
 import logging
+import os
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 from urllib.parse import urlparse
@@ -27,6 +30,7 @@ from sqlalchemy.exc import IntegrityError
 from server.member_routes import open_session
 from server.request_context import RequestContext, get_api_request_context
 from shared.utils import audit_service, secret_box
+from shared.utils.model_groups import groups_for
 from shared.utils.models import DEFAULT_WORKSPACE_ID, Workspace, WorkspaceProviderKey, WorkspaceSetting
 from shared.utils.provider_keys import PROVIDERS, masked
 from shared.utils.system_settings import IMAGE_MODEL
@@ -122,6 +126,18 @@ def list_models_and_keys(ctx: RequestContext = Depends(get_api_request_context))
         "can_manage_keys": ctx.is_platform_admin or ctx.workspace_role == ROLE_OWNER,
         "can_store_keys": secret_box.key_configured(),
     }
+
+
+@router.get("/groups")
+def list_groups(ctx: RequestContext = Depends(get_api_request_context)):
+    """The model groups an agent of the workspace can be on, each with the model that
+    would answer now, or why none would; and the model of an agent without one."""
+    session = open_session()
+    try:
+        return {"groups": groups_for(session, ctx.workspace_id), 
+                "default_model": os.getenv("GEMINI_MODEL", "gemini-2.5-flash")}
+    finally:
+        session.close()
 
 
 @router.put("/keys")

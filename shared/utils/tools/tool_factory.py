@@ -88,9 +88,11 @@ class ToolFactory:
                             created_tools = creator(config)
                         tools.extend(created_tools)
                     elif tool_type == 'create_agent' and tool_config_value is not None:
-                        # Handle create_agent, delete_agent, update_agent, and read_agent tools separately
+                        # Handle create_agent, delete_agent, update_agent, read_agent, and list_model_groups tools separately
                         try:
-                            from .create_agent_tool import create_agent, delete_agent, update_agent, read_agent
+                            from .create_agent_tool import (
+                                create_agent, delete_agent, list_model_groups, read_agent, update_agent,
+                            )
                             # Check if already added to avoid duplicates
                             existing_tool_names = {getattr(t, "__name__", str(t)) for t in tools}
                             if "create_agent" not in existing_tool_names:
@@ -105,6 +107,9 @@ class ToolFactory:
                             if "read_agent" not in existing_tool_names:
                                 tools.append(read_agent)
                                 logger.debug(f"Added read_agent tool to agent {config.get('name', 'unknown')}")
+                            if "list_model_groups" not in existing_tool_names:
+                                tools.append(list_model_groups)
+                                logger.debug(f"Added list_model_groups tool to agent {config.get('name', 'unknown')}")
                         except Exception as e:
                             logger.warning(f"Failed to add agent management tools: {e}")
                         
