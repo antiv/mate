@@ -21,6 +21,8 @@ MATE_MEMORY_OPERATION = "mate.memory.operation"
 # Set on a gen_ai.inference span answered by the agent's fallback model;
 # gen_ai.request.model is then the primary and gen_ai.response.model the fallback.
 MATE_MODEL_FALLBACK = "mate.model.fallback"
+# The model group of the agent, when it names one (shared/utils/model_groups.py)
+MATE_MODEL_GROUP = "mate.model.group"
 # The agent config the answering agent was built from (shared/utils/agent_config_identity.py):
 # its agent_config_versions id and number when a stored version holds it, and always
 # a short hash of it, so two runs on different unversioned configs still differ.

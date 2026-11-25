@@ -50,6 +50,9 @@ def create_chat_model(model_name: Optional[str] = None,
 
     `context` is the agent and project the model is for, as in create_model().
     """
+    from shared.utils.model_groups import group_of
+    if group_of(model_name) is not None:
+        raise ValueError(f"{model_name} is a model group (group_model.py builds its models)")
     context = context or ModelContext()
     requested_name = (model_name or os.getenv("GEMINI_MODEL", "gemini-2.5-flash")).strip()
     effective_model_name = litellm_model_name(requested_name)

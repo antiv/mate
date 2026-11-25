@@ -454,7 +454,7 @@
                             {{ log.agent_name or '—' }}
                         </td>
                         <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate" data-label="Model">
-                            {{ log.model_name or '—' }}
+                            {{ log.model_name or '—' }}{% if log.model_group %}<div class="text-gray-400">group/{{ log.model_group }}</div>{% endif %}
                         </td>
                         <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate" data-label="Prompt Tokens">
                             {{ log.prompt_tokens or 0 }}
@@ -750,7 +750,7 @@ function formatUsd(value) {
                     </div>
                     <div>
                         <strong class="text-gray-700 dark:text-gray-300">Model Name:</strong>
-                        <p class="text-gray-600 dark:text-gray-400 mt-1">${esc(log.model_name || EMPTY_VALUE)}</p>
+                        <p class="text-gray-600 dark:text-gray-400 mt-1">${esc(log.model_name || EMPTY_VALUE)}${log.model_group ? ` (group/${esc(log.model_group)})` : ''}</p>
                     </div>
                     <div>
                         <strong class="text-gray-700 dark:text-gray-300">Status:</strong>
@@ -929,7 +929,7 @@ function formatUsd(value) {
                     ${esc(log.agent_name || EMPTY_VALUE)}${mateScope.label(log) ? `<div class="text-gray-400">${esc(mateScope.label(log))}</div>` : ''}
                 </td>
                 <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate" data-label="Model">
-                    ${esc(log.model_name || EMPTY_VALUE)}
+                    ${esc(log.model_name || EMPTY_VALUE)}${log.model_group ? `<div class="text-gray-400">group/${esc(log.model_group)}</div>` : ''}
                 </td>
                 <td class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 truncate" data-label="Prompt Tokens">
                     ${log.prompt_tokens || 0}

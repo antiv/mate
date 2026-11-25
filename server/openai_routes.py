@@ -8,6 +8,7 @@ as a `role: "tool"` message that resumes the paused agent turn. The caller's
 tools are added to the agent's own — they do not replace them.
 """
 
+import asyncio
 import hashlib
 import json
 import logging
@@ -31,9 +32,10 @@ from server.openai_translate import (build_runtime_turns, consumed_index,
 from server.pat_auth import get_pat_user, pat_workspace
 from server.widget_routes import model_supports_vision
 from shared.utils.database_client import get_database_client
+from shared.utils.model_groups import answering_model
 from shared.utils.models import AgentConfig, Project, User
 from shared.utils.rate_limit_service import get_rate_limit_service
-from shared.utils.utils import get_adk_config
+from shared.utils.utils import ModelContext, get_adk_config
 from shared.utils.workspaces import workspace_of_project
 
 logger = logging.getLogger(__name__)
@@ -392,7 +394,8 @@ async def chat_completions(
     # Only ask whether the model can see when there is something to see: a
     # plain chat turn should not pay for a capability lookup.
     vision = (not has_image_parts(messages, consumed)
-              or model_supports_vision(model_name))
+              or model_supports_vision(await asyncio.to_thread(
+                  answering_model, model_name, ModelContext(agent_name, project_id))))
     turns = build_runtime_turns(messages, consumed, preamble, vision, known_call_ids)
 
     if not turns:

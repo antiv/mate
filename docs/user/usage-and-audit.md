@@ -66,6 +66,9 @@ Below are what the period cost (see [Cost](#cost)), a daily trend, the split bet
 prompt and response tokens, the busiest agents, activity by hour, satisfaction per
 agent, and a per-agent table with average response time and success rate.
 
+The logs name the model that answered. For an agent on a
+[model group](model-groups.md), the group is under it.
+
 ### Cost
 
 Every successful model call is priced in US dollars when it is logged, at the list

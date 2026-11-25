@@ -10,7 +10,7 @@ generated: true
 
 # Configuration reference
 
-Every environment variable the code reads: **144** in total. Descriptions come from the comments in `.env.example`; defaults come from the code. A ⚠ marks a variable read with different defaults in different places.
+Every environment variable the code reads: **145** in total. Descriptions come from the comments in `.env.example`; defaults come from the code. A ⚠ marks a variable read with different defaults in different places.
 
 | Variable | Default | Description | Read in |
 |---|---|---|---|
@@ -65,15 +65,16 @@ Every environment variable the code reads: **144** in total. Descriptions come f
 | `EVAL_IMPROVE_MODEL` | — | Model used to rewrite agents; falls back to EVAL_JUDGE_MODEL | `shared/utils/agent_improver.py` |
 | `EVAL_JUDGE_MODEL` | — | Model used to judge agent runs (falls back below) | `shared/utils/agent_improver.py`, `shared/utils/eval_runner.py` |
 | `EVAL_REGRESSION_WEBHOOK_URL` | — | POST target for eval regression reports | `shared/utils/dashboard/dashboard_server.py` |
-| `GEMINI_API_KEY` | — | Google Gemini key (falls back to GOOGLE_API_KEY) | `shared/utils/embedding_service.py`, `shared/utils/langgraph/model_factory.py`, `shared/utils/tools/image_tools.py` |
+| `GEMINI_API_KEY` | — | Google Gemini key (falls back to GOOGLE_API_KEY) | `shared/utils/embedding_service.py`, `shared/utils/langgraph/model_factory.py`, `shared/utils/model_groups.py` +1 more |
 | `GEMINI_MODEL` | `gemini-2.5-flash` | Default Gemini model | `shared/utils/langgraph/model_factory.py`, `shared/utils/tools/subagent_delegation_tool.py`, `shared/utils/utils.py` |
 | `GITHUB_CLIENT_ID` | — | GitHub (OAuth 2.0) — create at https://github.com/settings/developers Authorization callback URL: https://<your-domain>/auth/callback/github | `server/oauth_routes.py` |
 | `GITHUB_CLIENT_SECRET` | — | — | `server/oauth_routes.py` |
-| `GOOGLE_API_KEY` | — | — | `shared/utils/embedding_service.py`, `shared/utils/langgraph/model_factory.py`, `shared/utils/provider_keys.py` +1 more |
+| `GOOGLE_API_KEY` | — | — | `shared/utils/embedding_service.py`, `shared/utils/langgraph/model_factory.py`, `shared/utils/model_groups.py` +2 more |
 | `GOOGLE_CLIENT_ID` | — | OAuth 2.0 / OIDC Single Sign-On Leave blank to disable a provider; Basic Auth remains available regardless. Google (OIDC) — create at https://console.cloud.google.com/apis/credentials Authorized redirect URI: https://<your-domain>/auth/callback/google | `server/oauth_routes.py` |
 | `GOOGLE_CLIENT_SECRET` | — | — | `server/oauth_routes.py` |
 | `GOOGLE_CONF_URL` | `https://accounts.google.com/.well-known/openid-configuration` | — | `server/oauth_routes.py` |
 | `GOOGLE_DRIVE_FOLDER_ID` | — | for gdrive mcp + Google Calendar tool (shared service account) | `shared/utils/tools/cv_analyzer_tools.py`, `shared/utils/tools/google_drive_tools.py` |
+| `GOOGLE_GENAI_USE_VERTEXAI` | — | Gemini on Vertex AI, with the server's Google credentials instead of a key | `shared/utils/model_groups.py` |
 | `GOOGLE_SERVICE_ACCOUNT_FILE` | `service-account-key.json` | Service-account key for Google tools | `shared/utils/tools/google_calendar_tools.py`, `shared/utils/tools/google_drive_tools.py` |
 | `GOOGLE_SERVICE_ACCOUNT_INFO` | — | — | `shared/utils/mcp/google_drive_mcp_server.py`, `shared/utils/tools/google_calendar_tools.py`, `shared/utils/tools/google_drive_tools.py` |
 | `IMAGE_ALLOW_PRIVATE_NETWORK` | `false` | let the image tool download from private/loopback addresses (a local image model) | `shared/utils/tools/image_tools.py` |

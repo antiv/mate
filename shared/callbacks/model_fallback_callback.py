@@ -16,6 +16,9 @@ provider or the server's (shared/utils/provider_keys.py). It never inherits the 
 the primary model, and the fallback is usually on a different provider, so
 reusing them would send that key to the wrong host.
 
+An agent on a model group has the group's next models in the same place
+(group_fallback_callback), and its fallback_model is not used.
+
 Only a provider outage falls back: a timeout, a connection failure, a 5xx or a
 rate limit. Errors the request itself causes (a content-policy refusal, an
 oversized context, a bad request) do not, or anyone chatting could move their
@@ -90,6 +93,42 @@ def record_model_fallback(agent_name: Optional[str], user_id: Optional[str],
         logger.warning(f"Audit entry for model fallback failed: {e}")
 
 
+async def _ask(llm: Any, llm_request: LlmRequest, ask: Optional[Callable[..., Any]] = None) -> Optional[LlmResponse]:
+    """The failed request's answer from another model, or None when it gives none."""
+    # Shallow, so the tools the request points at are not copied (they may
+    # hold locks or clients that cannot be); what a model call can change
+    # is copied, so the failed request is left as it was.
+    request = llm_request.model_copy(update={
+        "model": llm.model,
+        "contents": copy.deepcopy(llm_request.contents),
+        "config": llm_request.config.model_copy(deep=True) if llm_request.config else None,
+    })
+    response = None
+    # Not streamed: a callback returns one response. The final one carries
+    # the whole answer and its usage.
+    async for response in (ask or llm.generate_content_async)(request, stream=False):
+        pass
+    return response
+
+
+def _answered(callback_context: CallbackContext, primary_model: Optional[str], fallback_model: str,
+              started: int, error: Exception) -> None:
+    """Records that the fallback answered: usage, its span, the audit log."""
+    # Token logging reads the model from state; without this the fallback's
+    # tokens would be booked against the model that failed. The flag lets the
+    # Usage page show what the fallback cost apart.
+    try:
+        callback_context.state['current_model_name'] = fallback_model
+        callback_context.state['current_model_is_fallback'] = True
+    except Exception:
+        pass
+    # The failed call's span is ended by then (error_callback.py). This one is ended
+    # by the after-model callback, which marks it as the fallback's.
+    start_inference_span(callback_context, primary_model, start_time=started)
+    user_id, _ = _get_adk_session_info(callback_context)
+    record_model_fallback(callback_context.agent_name, user_id, primary_model, fallback_model, error)
+
+
 def make_model_fallback_callback(agent_name: str, primary_model: Optional[str],
                                  fallback_model: str,
                                  project_id: Optional[int] = None) -> Callable[..., Any]:
@@ -104,21 +143,9 @@ def make_model_fallback_callback(agent_name: str, primary_model: Optional[str],
                                       error: Exception) -> Optional[LlmResponse]:
         if not is_provider_outage(error):
             return None  # ADK re-raises it, as without a fallback
-        response = None
         started = time.time_ns()
         try:
-            # Shallow, so the tools the request points at are not copied (they may
-            # hold locks or clients that cannot be); what a model call can change
-            # is copied, so the failed request is left as it was.
-            request = llm_request.model_copy(update={
-                "model": llm.model,
-                "contents": copy.deepcopy(llm_request.contents),
-                "config": llm_request.config.model_copy(deep=True) if llm_request.config else None,
-            })
-            # Not streamed: a callback returns one response. The final one carries
-            # the whole answer and its usage.
-            async for response in llm.generate_content_async(request, stream=False):
-                pass
+            response = await _ask(llm, llm_request)
         except Exception as fallback_error:
             logger.error(
                 f"Agent '{agent_name}': fallback model '{fallback_model}' failed too "
@@ -127,20 +154,37 @@ def make_model_fallback_callback(agent_name: str, primary_model: Optional[str],
             return None  # ADK re-raises the primary model's error
         if response is None:
             return None
-
-        # Token logging reads the model from state; without this the fallback's
-        # tokens would be booked against the model that failed. The flag lets the
-        # Usage page show what the fallback cost apart.
-        try:
-            callback_context.state['current_model_name'] = fallback_model
-            callback_context.state['current_model_is_fallback'] = True
-        except Exception:
-            pass
-        # The failed call's span is ended by then (error_callback.py). This one is ended
-        # by the after-model callback, which marks it as the fallback's.
-        start_inference_span(callback_context, primary_model, start_time=started)
-        user_id, _ = _get_adk_session_info(callback_context)
-        record_model_fallback(agent_name, user_id, primary_model, fallback_model, error)
+        _answered(callback_context, primary_model, fallback_model, started, error)
         return response
 
     return model_fallback_callback
+
+
+async def group_fallback_callback(*, callback_context: CallbackContext, llm_request: LlmRequest,
+                                  error: Exception) -> Optional[LlmResponse]:
+    """ADK on_model_error_callback of an agent on a model group: the group's next models,
+    one after another, as long as each fails of an outage."""
+    from ..utils.group_model import CURRENT_CALL, GroupModel
+    call = CURRENT_CALL.get()
+    agent = getattr(getattr(callback_context, "_invocation_context", None), "agent", None)
+    group = getattr(agent, "model", None)
+    if call is None or not isinstance(group, GroupModel) or not is_provider_outage(error):
+        return None
+    primary = call.model
+    for name in call.models[1:]:
+        started = time.time_ns()
+        try:
+            response = await _ask(group.llm(name), llm_request,
+                                  lambda request, stream, name=name: group.ask(name, request, stream))
+        except Exception as next_error:
+            logger.error("Agent '%s': '%s' of group/%s failed too (%s: %s)", callback_context.agent_name,
+                         name, call.group, type(next_error).__name__, next_error)
+            if is_provider_outage(next_error):
+                continue
+            return None  # ADK re-raises the first model's error
+        if response is None:
+            return None
+        call.model = name
+        _answered(callback_context, primary, name, started, error)
+        return response
+    return None

@@ -95,12 +95,20 @@ def _user_event(new_message: Dict[str, Any], invocation_id: str) -> Dict[str, An
 
 def _log_token_usage(event: Dict[str, Any], app_name: str, user_id: str,
                      session_id: str, model_names: Dict[str, str],
-                     fallback_models: Optional[Dict[str, str]] = None) -> None:
+                     fallback_models: Optional[Dict[str, str]] = None,
+                     group_models: Optional[Dict[str, Any]] = None) -> None:
     author = event.get("author") or app_name
     model_name = model_names.get(author) or model_names.get(app_name)
     fallback = (fallback_models or {}).get(author)
     is_fallback = False
-    if fallback:
+    group = (group_models or {}).get(author)
+    if group is not None:
+        model_name, first = group.answered(event.get("modelVersion"))
+        is_fallback = model_name != first
+        if is_fallback:
+            from shared.callbacks.model_fallback_callback import record_model_fallback
+            record_model_fallback(author, user_id, first, model_name, None)
+    elif fallback:
         from shared.utils.langgraph.model_factory import litellm_model_name
         if event.get("modelVersion") == litellm_model_name(fallback):
             from shared.callbacks.model_fallback_callback import record_model_fallback
@@ -121,6 +129,7 @@ def _log_token_usage(event: Dict[str, Any], app_name: str, user_id: str,
             prompt_tokens=usage.get("prompt_token_count"),
             response_tokens=usage.get("candidates_token_count"),
             is_fallback=is_fallback,
+            model_group=group.group if group is not None else None,
         )
     except Exception as e:
         logger.warning(f"Token usage logging failed: {e}")
@@ -411,7 +420,7 @@ async def execute_run(app_name: str, user_id: str, session_id: str,
                                            run_context.state)
                     store.append_event(session_id, event)
                     _log_token_usage(event, app_name, user_id, session_id, built.model_names,
-                                     built.fallback_models)
+                                     built.fallback_models, built.group_models)
                 yield event
 
             # A tool node surfaces one pause at a time, so a turn with several

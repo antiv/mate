@@ -47,7 +47,7 @@ When `OTEL_TRACING_ENABLED=false` (default), tracing is disabled. Tool wrapping 
 
 | Instrumentation Point | Span Name | Attributes |
 |---|---|---|
-| LLM inference | `gen_ai.inference` | `gen_ai.operation.name`, `gen_ai.provider.name`, `gen_ai.request.model`, `mate.agent.name`, `gen_ai.conversation.id`, `gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens`, `gen_ai.response.model`; `mate.model.fallback=true` when the agent's fallback model answered (then `gen_ai.request.model` is the primary and `gen_ai.response.model` the fallback); the config the agent was built from (see below) |
+| LLM inference | `gen_ai.inference` | `gen_ai.operation.name`, `gen_ai.provider.name`, `gen_ai.request.model`, `mate.agent.name`, `gen_ai.conversation.id`, `gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens`, `gen_ai.response.model`; `mate.model.fallback=true` when the agent's fallback model answered (then `gen_ai.request.model` is the primary and `gen_ai.response.model` the fallback); `mate.model.group` when the agent names a [model group](agent-runtime.md#model-groups); the config the agent was built from (see below) |
 | RBAC check | `mate.rbac_check` | `mate.agent.name`, `mate.user.id`, `mate.rbac.allowed` |
 | Tool invocation | `mate.tool` | `mate.tool.name`, `mate.agent.name` |
 | Session memory | `mate.memory` | `mate.memory.operation` (add/search) |

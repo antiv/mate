@@ -15,6 +15,7 @@ from typing import Dict, Any, Optional
 from google.adk.tools.tool_context import ToolContext
 from sqlalchemy.orm import Session
 from ..database_client import get_database_client
+from ..model_groups import save_refusal
 from ..models import DEFAULT_WORKSPACE_ID, AgentConfig
 from ..user_service import get_user_service
 from ..agent_cleanup import left_behind
@@ -348,6 +349,10 @@ def create_agent(
                 "hardcoded": False
             }
             
+            refusal = save_refusal(session, config_data)
+            if refusal:
+                return {"status": "error", "error_message": refusal}
+
             # Create agent using same logic as dashboard
             processed_data = config_data.copy()
             if 'parent_agents' in processed_data and isinstance(processed_data['parent_agents'], list):
@@ -690,6 +695,10 @@ def update_agent(
                     "status": "error",
                     "error_message": "No fields to update. Provide at least one field: description, instruction, model, parent_agent, tool_config, or mcp_servers_config"
                 }
+
+            refusal = save_refusal(session, config_data, agent_config.to_dict())
+            if refusal:
+                return {"status": "error", "error_message": refusal}
 
             # read_agent hides the secrets: a hidden value it gives back keeps the stored one
             try:

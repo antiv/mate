@@ -25,7 +25,8 @@ same model strings as Model Name, for example `openai/gpt-4o-mini` or
 because an outage usually takes down a whole provider.
 
 Leave it empty and nothing changes. A fallback equal to the agent's own model
-is ignored.
+is ignored. So is one on an agent that names a [model group](model-groups.md), whose
+next models are its fallbacks; a fallback model can't be a group.
 
 The fallback uses the workspace's key for its provider, set under
 [Models and keys](workspaces.md#models-and-keys), or else the server's

@@ -10,7 +10,7 @@ generated: true
 
 # Database reference
 
-**41** tables defined in `shared/utils/models.py`; migrations are at **V053**. Migrations apply automatically on startup and are the source of truth for the schema: the models describe it, the migrations create it.
+**41** tables defined in `shared/utils/models.py`; migrations are at **V054**. Migrations apply automatically on startup and are the source of truth for the schema: the models describe it, the migrations create it.
 
 ## Migrations
 
@@ -71,6 +71,7 @@ A ✗ means that dialect has no file for that version. All dialects are in step.
 | V051 | approval approver | ✓ | ✓ | ✓ |
 | V052 | slack team name | ✓ | ✓ | ✓ |
 | V053 | add model groups | ✓ | ✓ | ✓ |
+| V054 | usage model group | ✓ | ✓ | ✓ |
 
 ## `users`
 
@@ -109,6 +110,7 @@ Model `TokenUsageLog`. Model for token usage logs.
 | `timestamp` | `DateTime` | not null | `(computed)` | — |
 | `cost_usd` | `Float` | — | — | The call's cost in US dollars, priced when logged; NULL when the model has no known price, which is not the same as free (see shared/utils/model_pricing.py) |
 | `is_fallback` | `Boolean` | not null | `False` | Answered by the agent's fallback model after its own model failed |
+| `model_group` | `String(40)` | — | — | The agent's model group when it names one; model_name is the model that answered (V054) |
 | `project_id` | `Integer` | — | — | The agent's project when the row was written; kept when the agent is renamed, moved or deleted (V044, shared/utils/log_projects.py) |
 | `workspace_id` | `Integer` | — | — | That project's workspace, copied the same way (V046) |
 

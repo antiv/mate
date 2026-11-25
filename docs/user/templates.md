@@ -39,7 +39,8 @@ After the import, open the project on the **Agents** page. Three things usually 
 your attention:
 
 - **Models.** A template names the models its authors used. If your server has no
-  key for that provider, change **Model Name** on each agent.
+  key for that provider, change **Model Name** on each agent. A template whose agents
+  name a [model group](model-groups.md) that your server doesn't have isn't imported.
 - **Keys.** A template holds none. Where its agents used one in an MCP server or a
   tool, the imported agent's is empty: enter it on the agent's page.
 - **Roles.** Check **Allowed Roles** on the root agent so that the right people can

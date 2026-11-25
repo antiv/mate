@@ -30,6 +30,7 @@ from shared.callbacks.token_usage_callback import (
     capture_model_name_callback,
     log_token_usage_callback,
 )
+from shared.utils.model_groups import group_of, leaves_own_servers
 from shared.utils.utils import create_model, model_context_of, resolve_agent_endpoint
 from ..context_values import context_values as _get_context_values
 
@@ -247,6 +248,12 @@ def _resolve_subagent_model(
     base_url = None
     api_key = None
 
+    # The parent's group may keep its data on our own servers; the model a subtask is
+    # given must not take it elsewhere
+    refusal = leaves_own_servers((parent_config or {}).get("model_name"), model_name)
+    if refusal:
+        raise ValueError(refusal)
+
     # A subagent on the parent's model reaches it the way the parent does. Through
     # resolve_agent_endpoint, as the parent itself: it resolves ${VAR} and, with a
     # base URL but no key, sends a placeholder, so LiteLLM never falls back to the
@@ -334,6 +341,7 @@ async def _run_single_subagent(
             }
         return None
 
+    from shared.callbacks.model_fallback_callback import group_fallback_callback
     # The child has no agents_config row, and guardrails are looked up by agent
     # name, so it would run with none. It is bound to its parent's instead.
     from shared.callbacks.guardrail_callback import (
@@ -362,6 +370,8 @@ async def _run_single_subagent(
         before_model_callback=_before_model,
         after_model_callback=_after_model,
         before_tool_callback=_limit_subagent_tool_steps,
+        # The next models of its group, as for any agent on one
+        on_model_error_callback=group_fallback_callback if group_of(effective_model_name) is not None else None,
     )
 
     from google.adk.artifacts.in_memory_artifact_service import InMemoryArtifactService

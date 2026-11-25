@@ -1251,6 +1251,19 @@ class DashboardServer:
         if errors:
             raise HTTPException(status_code=400, detail="; ".join(errors))
 
+    def _refuse_bad_group(self, config: Dict[str, Any], stored: Optional[Dict[str, Any]] = None) -> None:
+        """400 when the model group the config names can't be used (model_groups.py)."""
+        from shared.utils.model_groups import save_refusal
+        session = self.db_client.get_session() if self.db_client else None
+        if not session:
+            return
+        try:
+            refusal = save_refusal(session, config, stored)
+        finally:
+            session.close()
+        if refusal:
+            raise HTTPException(status_code=400, detail=refusal)
+
     def _refuse_platform_only(self, ctx: RequestContext, config: Dict[str, Any],
                               before: Optional[Dict[str, Any]] = None) -> None:
         """403 when a caller who is no platform administrator gives an agent a feature
@@ -1487,6 +1500,7 @@ class DashboardServer:
                     'error_description': log.error_description,
                     'timestamp': log.timestamp.isoformat() if log.timestamp else None,
                     'cost_usd': log.cost_usd,
+                    'model_group': log.model_group,
                     'workspace_id': log.workspace_id,
                 } for log in logs],
                 "total_records": total_count,
@@ -2380,6 +2394,15 @@ class DashboardServer:
                     except (json.JSONDecodeError, TypeError):
                         pass
             
+            if for_build:
+                # A standalone agent has no platform administrator to keep its groups
+                from shared.utils.model_groups import group_of
+                from shared.utils.models import ModelGroup
+                named = {group_of(c.model_name) for c in filtered_configs} - {None}
+                export_data["model_groups"] = [
+                    {"name": g.name, "label": g.label, "own_servers_only": g.own_servers_only, "models": g.models}
+                    for g in session.query(ModelGroup).filter(ModelGroup.name.in_(named))]
+
             if memory_blocks_project_ids:
                 from shared.utils.models import MemoryBlock
                 all_blocks = []
@@ -2535,6 +2558,7 @@ class DashboardServer:
             return {"error": "Database connection failed"}
         
         # Ensure session is clean
+        from shared.utils.model_groups import save_refusal
         session.rollback()
         
         try:
@@ -2591,6 +2615,12 @@ class DashboardServer:
                         del agent_data["model_api_key"]
                     hidden = config_secrets.restore_config(
                         agent_data, existing_agent.to_dict() if existing_agent else None)
+                    refusal = save_refusal(session, agent_data,
+                                           existing_agent.to_dict() if existing_agent else None)
+                    if refusal:
+                        skipped_count += 1
+                        errors.append(f"Agent '{agent_data['name']}': {refusal}")
+                        continue
                     if not platform_admin:
                         added = features_added(agent_data, existing_agent.to_dict() if existing_agent else None)
                         if added:
@@ -3406,6 +3436,7 @@ class DashboardServer:
         if not session:
             return {"error": "Database connection failed"}
         
+        from shared.utils.model_groups import save_refusal
         session.rollback()
         
         try:
@@ -3456,6 +3487,11 @@ class DashboardServer:
                 if proj_name not in db_agent_map and self._name_unavailable(
                         session, proj_name, workspace_id, platform_admin):
                     agents_skipped.append({"name": proj_name, "reason": "this name is taken"})
+                    continue
+                # An agent it has already keeps its model
+                refusal = save_refusal(session, tpl_agent) if proj_name not in db_agent_map else None
+                if refusal:
+                    agents_skipped.append({"name": proj_name, "reason": refusal})
                     continue
                 if not platform_admin:
                     existing = db_agent_map.get(proj_name)
@@ -5807,6 +5843,7 @@ class DashboardServer:
                 for agent in (template or {}).get("agents") or []:
                     self._refuse_platform_only(ctx, agent)
                     self._refuse_bad_approval_config(agent)
+                    self._refuse_bad_group(agent)
                 result = self._import_template(template_id, project_name=project_name, changed_by=ctx.user_id,
                                                workspace_id=ctx.workspace_id,
                                                platform_admin=ctx.is_platform_admin)
@@ -6097,6 +6134,7 @@ class DashboardServer:
             self._keep_hidden_values(config_data, None)
             self._refuse_platform_only(ctx, config_data)
             self._refuse_bad_approval_config(config_data)
+            self._refuse_bad_group(config_data)
             success = self._create_agent_config(config_data, changed_by=ctx.user_id)
             if success:
                 audit_service.log(ctx.user_id, audit_service.ACTION_AGENT_CREATE, audit_service.RESOURCE_AGENT, resource_id=name, details={"project_id": config_data.get("project_id")}, request=request)
@@ -6189,6 +6227,7 @@ class DashboardServer:
             self._keep_hidden_values(config_data, stored)
             self._refuse_platform_only(ctx, config_data, stored)
             self._refuse_bad_approval_config(config_data)
+            self._refuse_bad_group(config_data, stored)
             # Read before writing: switching the Art. 50 notice off, or back on, is
             # a compliance decision and gets its own entry rather than hiding
             # inside a generic agent.update.
@@ -6346,6 +6385,7 @@ class DashboardServer:
                 self._check_agent_names(ctx, snapshot.get("name") or current.get("name"),
                                         parents if isinstance(parents, list) else [], config_id)
                 self._refuse_platform_only(ctx, snapshot, current)
+                self._refuse_bad_group(snapshot, current)
             result = self._rollback_agent_config(config_id, version_id, changed_by=ctx.user_id)
             if result:
                 return {"success": True, "message": "Agent rolled back successfully", "config": result}
@@ -7954,7 +7994,10 @@ class DashboardServer:
             # Have OpenRouter's prices before the runs log their calls, so a variant on
             # an openrouter model is not compared as unpriced
             from shared.utils.model_pricing import OPENROUTER_PREFIX, price_for
-            for model in {v.snapshot.get("model_name") or "" for v in variants}:
+            from shared.utils.model_groups import answering_model
+            from shared.utils.utils import model_context_of
+            for model in {await run_in_threadpool(answering_model, v.snapshot.get("model_name"),
+                                                  model_context_of(v.snapshot)) for v in variants}:
                 if model.startswith(OPENROUTER_PREFIX):
                     await run_in_threadpool(price_for, model, True)
                     break

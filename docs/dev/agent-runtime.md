@@ -63,6 +63,7 @@ Every call to `create_model()` and `create_chat_model()` passes a `ModelContext`
 |---|---|
 | An agent's own model (both runtimes) | The agent, from its row (`model_context_of(config)`) |
 | Its fallback model | The same agent |
+| Each model of its [group](#model-groups) | The same agent |
 | A subagent started by `subagent_delegation` | The parent agent: the subagent works for it |
 | The context-compaction summarizer | The root agent, by name (`ModelContext(agent_name=...)`): its workspace is the agent's |
 | The fallback agent shown when configuration fails to load | `ModelContext()`, the installation |
@@ -190,7 +191,7 @@ For an `llm` agent, these callbacks are attached unless plugin mode is on:
 |---|---|---|
 | before the model | `combined_user_profile_and_rbac_callback` | Injects the user's profile, checks the user's roles against the agent's, runs input guardrails. Returning a response here skips the model. |
 | after the model | `guardrail_after_model_callback`, then `log_token_usage_callback` | Runs output guardrails, then writes a `token_usage_logs` row for whatever is returned. |
-| on a model error | `record_model_error_callback`, then the fallback callback when configured | Writes an `ERROR` row; with `fallback_model` set, retries the request on that model. |
+| on a model error | `record_model_error_callback`, then the fallback callback when configured | Writes an `ERROR` row; with `fallback_model` set, retries the request on that model, and on a model group's next models for an agent on one. |
 
 They live in `shared/callbacks/`. The role check is described from the user's side in
 [Users and roles](../user/users-and-roles.md); it has no bypass for administrators.
@@ -211,6 +212,32 @@ retry on the fallback. It is built for the same agent, so it takes the workspace
 for its provider or the environment's, never the agent's `model_base_url` or
 `model_api_key`. Each fallback is written to
 the audit log as `agent.model_fallback`.
+
+### Model groups
+
+`group/<name>` in `model_name` is a model group
+([user guide](../user/model-groups.md)). `shared/utils/model_groups.py` holds its rules:
+`usable_models(name, context)` gives the models a call may go to, in order, and
+`save_refusal()` says why an agent can't be stored with it. Every path that stores an
+agent asks the second; a new one has to.
+
+- **ADK:** `create_model()` returns a `GroupModel` (`shared/utils/group_model.py`), which
+  asks `usable_models()` on every call and sends the call to the first one, built by
+  `create_model()` for the same context. It is a `LiteLlm`, so ADK keeps the ids that
+  pair tool calls with results, and strips them for the native Gemini backend.
+- **`CURRENT_CALL`** (a `ContextVar`) ties the callbacks to the call: the before-model
+  callback sets it, `GroupModel` writes the models into it, and the callbacks for usage,
+  errors and spans read the model from it. `llm_request.model` and
+  `state["current_model_name"]` are the group's name before the call.
+- **The next models** are tried by `group_fallback_callback`, an `on_model_error`
+  callback, as the fallback model is.
+- **LangGraph:** `create_react_agent()` takes a function as its model and calls it
+  before each model call; `GroupChatModel.for_tools()`
+  (`shared/utils/langgraph/group_model.py`) is that function. The run finds the
+  model that answered by the name LiteLLM was called with, so a group can't hold two
+  models that LiteLLM calls by the same name.
+- **Elsewhere** something depends on the model before the call (attachments),
+  `answering_model()` gives the first usable one.
 
 ## The LangGraph runtime
 
