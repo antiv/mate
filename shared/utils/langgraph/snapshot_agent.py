@@ -88,7 +88,7 @@ class LangGraphSnapshotAgent:
                     continue
                 _apply_output_guardrails(event, built.guardrail_engines, meta)
                 _log_token_usage(event, built.name, EVAL_USER_ID, session_id, built.model_names,
-                                 built.fallback_models)
+                                 built.fallback_models, built.group_models)
                 collector.feed(event)
                 if events is not None:
                     events.append(event)

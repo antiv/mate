@@ -26,7 +26,9 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
 from shared.utils.database_client import get_database_client
+from shared.utils.model_groups import answering_model, save_refusal
 from shared.utils.models import WidgetApiKey, AgentConfig, Project
+from shared.utils.utils import ModelContext
 from shared.utils.ai_disclosure import DEFAULT_DISCLOSURE, resolve_disclosure
 from server.csp import set_csp_header, widget_frame_ancestors
 from server.request_context import RequestContext, get_api_request_context
@@ -558,7 +560,7 @@ async def widget_chat(request: Request, wk: WidgetApiKey = Depends(verify_widget
                 message_parts.insert(0, {"text": prefix})
 
     # Load agent config from database (model name, debug_mode, etc.)
-    model_name = ""
+    model_name, project_id = "", None
     debug_mode = False
     try:
         from shared.utils.database_client import get_database_client
@@ -569,6 +571,7 @@ async def widget_chat(request: Request, wk: WidgetApiKey = Depends(verify_widget
             agent_config = session.query(AgentConfig).filter_by(name=app_name).first()
             if agent_config:
                 model_name = agent_config.model_name
+                project_id = agent_config.project_id
                 debug_mode = bool(getattr(agent_config, "debug_mode", False))
             session.close()
     except Exception as e:
@@ -577,6 +580,7 @@ async def widget_chat(request: Request, wk: WidgetApiKey = Depends(verify_widget
     if not model_name:
         model_name = os.getenv("MODEL_NAME", "")
 
+    model_name = await asyncio.to_thread(answering_model, model_name, ModelContext(app_name, project_id))
     message_parts = await asyncio.to_thread(prepare_attachments, message_parts, model_name)
 
     adk_payload = {
@@ -798,6 +802,9 @@ async def update_widget_agent(request: Request, wk: WidgetApiKey = Depends(verif
         ).first()
         if not agent:
             raise HTTPException(status_code=404, detail="Agent not found")
+        refusal = save_refusal(session, data, agent.to_dict()) if "model_name" in data else None
+        if refusal:
+            raise HTTPException(status_code=400, detail=refusal)
         changed = {}
         for field in ("instruction", "model_name", "description"):
             if field in data:

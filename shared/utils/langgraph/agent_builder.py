@@ -14,6 +14,8 @@ import logging
 from pathlib import Path
 from typing import Annotated, Any, Dict, List, Optional, Tuple
 
+from shared.utils.model_groups import group_of
+
 logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
@@ -48,7 +50,8 @@ class BuiltAgent:
     def __init__(self, name: str, graph: Any, model_name: str, config: Dict[str, Any],
                  guardrail_engines: Optional[Dict[str, Any]] = None,
                  model_names: Optional[Dict[str, str]] = None,
-                 fallback_models: Optional[Dict[str, str]] = None):
+                 fallback_models: Optional[Dict[str, str]] = None,
+                 group_models: Optional[Dict[str, Any]] = None):
         self.name = name
         self.graph = graph
         self.model_name = model_name
@@ -58,6 +61,8 @@ class BuiltAgent:
         self.model_names = model_names or {name: model_name}
         # author → configured fallback model, for agents that have one
         self.fallback_models = fallback_models or {}
+        # author → its GroupChatModel, for agents that name a model group
+        self.group_models = group_models or {}
 
 
 _checkpointer = None
@@ -192,7 +197,8 @@ def _fallback_model(config: Dict[str, Any]) -> Optional[str]:
 
     fallback = (config.get("fallback_model") or "").strip()
     # Compared as litellm sees them: a run tells the two apart by that name.
-    if not fallback or litellm_model_name(fallback) == litellm_model_name(config.get("model_name")):
+    # A group brings its own fallbacks
+    if not fallback or group_of(config.get("model_name")) is not None or litellm_model_name(fallback) == litellm_model_name(config.get("model_name")):
         return None
     return fallback
 
@@ -376,18 +382,26 @@ class AgentBuilder:
         model_names = {name: config.get("model_name") for name, config in tree.items()}
         fallback_models = {name: fallback for name, config in tree.items()
                            if (fallback := _fallback_model(config))}
+        from shared.utils.langgraph.group_model import GroupChatModel
+        from shared.utils.utils import model_context_of
+        group_models = {name: GroupChatModel(group, model_context_of(config),
+                                             _json_field(config, "generate_content_config"))
+                        for name, config in tree.items()
+                        if (group := group_of(config.get("model_name"))) is not None}
 
         if len(tree) == 1:
             graph = await self._build_react_agent(root_config, children_of, checkpointer=checkpointer,
-                                                  client_tools=client_tools)
+                                                  client_tools=client_tools,
+                                                  group_model=group_models.get(app_name))
         else:
             graph = await self._build_multi_agent_graph(app_name, tree, children_of, checkpointer,
-                                                        client_tools=client_tools)
+                                                        client_tools=client_tools, group_models=group_models)
 
         logger.info(f"Built LangGraph agent '{app_name}' ({len(tree)} agent(s) in tree)")
         return BuiltAgent(name=app_name, graph=graph, model_name=root_config.get("model_name"),
                           config=root_config, guardrail_engines=guardrail_engines,
-                          model_names=model_names, fallback_models=fallback_models)
+                          model_names=model_names, fallback_models=fallback_models,
+                          group_models=group_models)
 
     def _collect_tree(self, config: Dict[str, Any], tree: Dict[str, Dict[str, Any]],
                       children_of: Dict[str, List[str]]) -> None:
@@ -426,7 +440,8 @@ class AgentBuilder:
                                  checkpointer: Any = None,
                                  extra_tools: Optional[List[Any]] = None,
                                  transfer_note: Optional[str] = None,
-                                 client_tools: Optional[List[Dict[str, Any]]] = None) -> Any:
+                                 client_tools: Optional[List[Dict[str, Any]]] = None,
+                                 group_model: Any = None) -> Any:
         from langgraph.prebuilt import create_react_agent
         from shared.utils.langgraph.model_factory import create_chat_model
         from shared.utils.utils import model_context_of, resolve_agent_endpoint
@@ -437,13 +452,20 @@ class AgentBuilder:
             logger.debug(f"Agent '{app_name}': planner_config is not supported by the langgraph runtime; ignoring")
 
         base_url, api_key = resolve_agent_endpoint(config)
-        model = create_chat_model(
-            config.get("model_name"),
-            generate_content_config=_json_field(config, "generate_content_config"),
-            api_key=api_key,
-            base_url=base_url,
-            context=model_context_of(config),
-        )
+        group = group_of(config.get("model_name"))
+        if group is not None:
+            if base_url or api_key:
+                raise ValueError(f"{config['model_name']} takes no endpoint or key of the agent's own; "
+                                 "those belong to one model")
+            model = None  # below, with the agent's tools
+        else:
+            model = create_chat_model(
+                config.get("model_name"),
+                generate_content_config=_json_field(config, "generate_content_config"),
+                api_key=api_key,
+                base_url=base_url,
+                context=model_context_of(config),
+            )
         fallback = _fallback_model(config)
         if fallback:
             # Not the agent's endpoint and key, which belong to its own model: the
@@ -472,6 +494,8 @@ class AgentBuilder:
             reserved = {getattr(t, "name", None) for t in tools}
             tools.extend(build_client_tools(client_tools, reserved_names={r for r in reserved if r}))
 
+        if group is not None:
+            model = group_model.for_tools(tools)
         return create_react_agent(
             model,
             tools=tools,
@@ -484,7 +508,8 @@ class AgentBuilder:
 
     async def _build_multi_agent_graph(self, root_name: str, tree: Dict[str, Dict[str, Any]],
                                        children_of: Dict[str, List[str]], checkpointer: Any,
-                                       client_tools: Optional[List[Dict[str, Any]]] = None) -> Any:
+                                       client_tools: Optional[List[Dict[str, Any]]] = None,
+                                       group_models: Optional[Dict[str, Any]] = None) -> Any:
         from langgraph.graph import END, START, MessagesState, StateGraph
 
         # total=False: current_agent is routing state set by transfer_to_agent —
@@ -507,7 +532,8 @@ class AgentBuilder:
                 extra_tools=extra_tools, transfer_note=transfer_note,
                 # Only the root may hold the caller's tools; a sub-agent must
                 # never end up with more than its parent.
-                client_tools=client_tools if agent_name == root_name else None)
+                client_tools=client_tools if agent_name == root_name else None,
+                group_model=(group_models or {}).get(agent_name))
             builder.add_node(agent_name, node_graph)
             builder.add_edge(agent_name, END)
 

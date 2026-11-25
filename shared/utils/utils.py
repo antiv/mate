@@ -149,6 +149,7 @@ def create_model(model_name: str = None, api_key: str = None, base_url: str = No
     Create model based on provider prefix auto-detection.
     
     Routing logic:
+    - 'group/*' → a model group: the model is looked up on each call (group_model.py)
     - No prefix or 'gemini-*' / 'models/*' → native Gemini backend
     - 'openrouter/*' → LiteLlm with OpenRouter config
     - 'ollama_chat/*' / 'ollama/*' → LiteLlm pointed at local Ollama
@@ -172,6 +173,16 @@ def create_model(model_name: str = None, api_key: str = None, base_url: str = No
     effective_model_name = (model_name or os.getenv("GEMINI_MODEL", "gemini-2.5-flash")).strip()
     requested_name = effective_model_name
     context = context or ModelContext()
+
+    from .model_groups import group_of
+    group = group_of(effective_model_name)
+    if group is not None:
+        if api_key or base_url:
+            raise ValueError(f"{effective_model_name} takes no endpoint or key of the agent's own; "
+                             "those belong to one model")
+        from .group_model import GroupModel
+        logger.info(f"Creating model group: {effective_model_name} ({context.describe()})")
+        return GroupModel(group, context)
 
     if _is_gemini_model(effective_model_name):
         logger.info(f"Creating Gemini model: {effective_model_name} ({context.describe()})")

@@ -432,7 +432,7 @@ async def proxy_adk(request: Request, path: str, username: str = Depends(get_aut
                 message_parts = new_message.get("parts")
                 if message_parts and isinstance(message_parts, list):
                     # Load model name
-                    model_name = ""
+                    model_name, project_id = "", None
                     try:
                         from shared.utils.database_client import get_database_client
                         from shared.utils.models import AgentConfig
@@ -442,6 +442,7 @@ async def proxy_adk(request: Request, path: str, username: str = Depends(get_aut
                             agent_config = session.query(AgentConfig).filter_by(name=app_name).first()
                             if agent_config:
                                 model_name = agent_config.model_name
+                                project_id = agent_config.project_id
                             session.close()
                     except Exception as e:
                         logger.error("Failed to load agent model name from DB: %s", e)
@@ -450,6 +451,10 @@ async def proxy_adk(request: Request, path: str, username: str = Depends(get_aut
                         model_name = os.getenv("MODEL_NAME", "")
                         
                     from server.widget_routes import prepare_attachments
+                    from shared.utils.model_groups import answering_model
+                    from shared.utils.utils import ModelContext
+                    model_name = await asyncio.to_thread(answering_model, model_name,
+                                                         ModelContext(app_name, project_id))
                     processed_parts = await asyncio.to_thread(prepare_attachments, message_parts, model_name)
 
                     payload["new_message"]["parts"] = processed_parts

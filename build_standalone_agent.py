@@ -167,7 +167,8 @@ def print_mcp_dependency_report(deps: List[Dict[str, str]]):
             print(f"   • '{cmd}': {hint}")
 
 
-def create_database(output_dir: Path, agents: List[Dict], memory_blocks: List[Dict] = None, triggers: List[Dict] = None) -> Path:
+def create_database(output_dir: Path, agents: List[Dict], memory_blocks: List[Dict] = None, triggers: List[Dict] = None,
+                    model_groups: List[Dict] = None) -> Path:
     """Create a fresh SQLite database and import agents.
     
     Uses direct SQLAlchemy table creation (not DatabaseClient) to avoid
@@ -185,7 +186,8 @@ def create_database(output_dir: Path, agents: List[Dict], memory_blocks: List[Di
 
     # Import models (Base contains all table definitions)
     sys.path.insert(0, str(PROJECT_ROOT))
-    from shared.utils.models import Base, AgentConfig, Project
+    from shared.utils.model_groups import group_of
+    from shared.utils.models import Base, AgentConfig, ModelGroup, Project
 
     db_url = f"sqlite:///{db_path}"
     engine = create_engine(db_url, connect_args={"check_same_thread": False})
@@ -205,6 +207,16 @@ def create_database(output_dir: Path, agents: List[Dict], memory_blocks: List[Di
         session.add(default_project)
         session.flush()
         project_id = default_project.id
+
+        # The model groups the agents name. A dashboard build brings them; an export doesn't
+        groups = {g["name"]: g for g in model_groups or []}
+        missing = {group_of(a.get("model_name")) for a in agents} - {None} - set(groups)
+        if missing:
+            raise ValueError("Agents name a model group that the file doesn't hold: "
+                             f"{', '.join(sorted(missing))}. Give them a model, or build from the dashboard")
+        for group in groups.values():
+            session.add(ModelGroup(name=group["name"], label=group["label"], models=group["models"],
+                                   own_servers_only=bool(group["own_servers_only"])))
 
         # Import agents
         imported = 0
@@ -704,7 +716,8 @@ Examples:
 
     # Step 5: Create database
     print(f"\n🗄️  Step 5: Creating SQLite database...")
-    db_path = create_database(output_dir, agents, memory_blocks, triggers)
+    db_path = create_database(output_dir, agents, memory_blocks, triggers,
+                              export_data.get("model_groups"))
     print(f"   Database: {db_path}")
 
     # Step 5b: Scan MCP dependencies

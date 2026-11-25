@@ -115,6 +115,7 @@ The prefix of the model name selects the provider:
 | `openrouter/provider/model` | OpenRouter |
 | `ollama_chat/llama3.2` | a local Ollama server |
 | any other `provider/model` | that provider, through LiteLLM |
+| `group/coding` | a [model group](model-groups.md): the models your administrator put in it |
 
 Each provider needs its API key set on the server; the
 [configuration reference](../reference/configuration.md) lists them. A workspace

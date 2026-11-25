@@ -138,7 +138,8 @@ from the server environment, and the subagent fails with an error when that vari
 is not set. On any other model, from the task or from `default_model`, it uses the
 workspace's key for that provider, or the server's where the workspace may use it
 ([Models and keys](workspaces.md#models-and-keys)), and the parent's endpoint and
-key are not used.
+key are not used. A subagent of an agent in a [model group](model-groups.md) with Own
+servers only fails on a model outside such a group.
 
 ### Supported Tool Names & Aliases
 A subagent can be given these tools, by name or alias, and only those its parent holds:

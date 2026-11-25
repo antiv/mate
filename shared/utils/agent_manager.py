@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel, create_model
 from .agent_cleanup import may_name_as_parent
 from .database_client import get_database_client
+from .model_groups import group_of
 from .models import DEFAULT_WORKSPACE_ID, AgentConfig, Project
 from .workspaces import agent_workspace
 
@@ -729,7 +730,10 @@ class AgentManager:
                 # After the recorder, which returns None: ADK stops at the first
                 # callback that returns a response.
                 fallback_model = (config.get('fallback_model') or '').strip()
-                if fallback_model and fallback_model != (config.get('model_name') or '').strip():
+                if group_of(config.get('model_name')) is not None:
+                    from ..callbacks.model_fallback_callback import group_fallback_callback
+                    error_callbacks.append(group_fallback_callback)
+                elif fallback_model and fallback_model != (config.get('model_name') or '').strip():
                     from ..callbacks.model_fallback_callback import make_model_fallback_callback
                     error_callbacks.append(make_model_fallback_callback(
                         agent_name, config.get('model_name'), fallback_model,

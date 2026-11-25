@@ -56,6 +56,18 @@ def _set_config_identity(span: Any, agent_name: str) -> None:
         span.set_attribute(MATE_AGENT_CONFIG_VERSION, identity["version"])
 
 
+def _set_group_models(span: Any, call: Any, is_fallback: bool) -> None:
+    """The span of a call on a model group started before its model was known."""
+    from shared.utils.tracing.genai_attributes import (
+        GEN_AI_PROVIDER_NAME, GEN_AI_REQUEST_MODEL, MATE_MODEL_GROUP)
+    span.set_attribute(MATE_MODEL_GROUP, call.group)
+    # As for a fallback model: the request was the first model's
+    requested = call.models[0] if is_fallback and call.models else call.model
+    if requested:
+        span.set_attribute(GEN_AI_REQUEST_MODEL, requested)
+        span.set_attribute(GEN_AI_PROVIDER_NAME, _get_provider_from_model(requested))
+
+
 def start_inference_span(callback_context: CallbackContext, model_name: Optional[str],
                          start_time: Optional[int] = None) -> None:
     """Start the gen_ai.inference span of a model call, when tracing is enabled.
@@ -137,6 +149,11 @@ def capture_model_name_callback(
     if not hasattr(callback_context, 'state'):
         callback_context.state = {}
     
+    from ..utils.group_model import CURRENT_CALL, GroupCall
+    from ..utils.model_groups import group_of
+    group = group_of(model_name)
+    CURRENT_CALL.set(GroupCall(group) if group is not None else None)
+
     # Set by the fallback callback when the fallback model answers this call
     callback_context.state['current_model_is_fallback'] = False
     if model_name:
@@ -184,6 +201,11 @@ def log_token_usage_callback(
             model_name = callback_context.state.get('current_model_name')
             is_fallback = bool(callback_context.state.get('current_model_is_fallback'))
         
+        # An agent on a model group: the model the call went to, and the group beside it
+        from ..utils.group_model import CURRENT_CALL, answered_by
+        group_call = CURRENT_CALL.get()
+        model_name = answered_by(model_name)
+
         # Fallback: try to get model name from response if not captured
         if not model_name:
             model_name = getattr(llm_response, 'model_name', None)
@@ -215,6 +237,7 @@ def log_token_usage_callback(
             "thoughts_tokens": usage.thoughts_token_count or 0,
             "tool_use_tokens": usage.tool_use_prompt_token_count or 0,
             "is_fallback": is_fallback,
+            "model_group": group_call.group if group_call else None,
         }
         
         # Save to database
@@ -294,6 +317,8 @@ def log_token_usage_callback(
                 span.set_attribute(GEN_AI_USAGE_OUTPUT_TOKENS, usage.candidates_token_count or 0)
                 if model_name:
                     span.set_attribute(GEN_AI_RESPONSE_MODEL, model_name)
+                if group_call:
+                    _set_group_models(span, group_call, is_fallback)
                 if is_fallback:
                     span.set_attribute(MATE_MODEL_FALLBACK, True)
                 span.end()

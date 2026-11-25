@@ -50,6 +50,9 @@ The file holds `__stored__` in place of the keys in the agents' MCP servers and 
 Replace each before building, best with a `${VAR}` that you then set in `.env`.
 **Download Binary** builds with the stored keys, so whoever has the binary has them too.
 
+A build from the dashboard brings the [model groups](../user/model-groups.md) its agents
+name. An exported file doesn't: give its agents models first, or the build is refused.
+
 ### 2. Prepare the Build
 
 ```bash

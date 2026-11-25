@@ -1,6 +1,6 @@
 ---
 title: "Model groups"
-summary: Lists of models under a name, kept by a platform administrator for the whole installation.
+summary: An agent names a group, such as group/coding, and a platform administrator says which models are in it.
 audience: user
 order: 166
 covers:
@@ -8,16 +8,42 @@ covers:
   - static/js/model-groups-page.js
   - server/model_group_routes.py
   - shared/utils/model_groups.py
+  - shared/utils/group_model.py
+  - shared/utils/langgraph/group_model.py
 ---
 
 # Model groups
 
-**Control Room → Platform → Model groups** holds lists of models under a name, such as
-`group/coding`. Only platform administrators can open it.
+An agent may name a group instead of a model: `group/coding` in **Model Name**. Which
+models are in the group is decided on **Control Room → Platform → Model groups**, so
+changing a model means changing one list instead of every agent. Only platform
+administrators can open that page.
 
-Agents can't choose a group yet: the page, the rules below and the audit log are the
-first part of model groups. The agent's side is planned in
-[#424](https://github.com/antiv/mate/issues/424).
+## Which model answers
+
+- **The first model of the list that the agent's workspace has a key for**: its own, under
+  [Models and keys](workspaces.md#models-and-keys), or the server's where the workspace
+  may use it. A model on a local server needs no key.
+- **The next one only when the provider is unavailable**, by the rules of the
+  [fallback model](fallback-model.md#when-it-fires). If that one is unavailable too, the
+  next, to the end of the list. The list takes the fallback model's place: an agent on
+  a group doesn't use its **Fallback Model**.
+- **It is looked up on every call.** A changed group or key applies to the next message,
+  without reloading anything.
+
+[Usage](usage-and-audit.md) and [traces](sessions-and-traces.md) name the model that
+answered, with the group beside it, and cost is that model's. A call fails, and says why, when:
+
+- the workspace has no key for any model of the group;
+- there is no such group, or it has no models. It never goes to another model.
+
+Saving an agent is refused when its group doesn't exist or has no models, and when it
+also has a **Model Base URL** or **Model API Key**, which belong to one model. So are a
+rollback, an import and a template that bring such an agent. A
+[subtask](subagent-delegation.md) may be given a group as its model too. Image
+generation, memory search and the eval judge keep their own settings.
+
+## The groups
 
 A new installation has six groups without models: `standard`, `fast`, `reasoning`,
 `coding`, `vision` and `local`. Rename their labels, change them or delete them as you
@@ -57,6 +83,15 @@ A model is accepted when both hold:
 An Ollama model whose tag is `cloud` or ends in `-cloud` runs on Ollama's servers, and
 is refused. Ollama can also give such a model another name, which MATE can't see: keep
 those off the Ollama server of such a group.
+
+Both are checked again on every call, on the address the call would go to. A workspace
+whose own entry for the provider has an address elsewhere doesn't use that model. A
+subtask of such an agent stays in its group, or in another one with Own servers only.
+
+It is about the agent's own model. What else MATE does with a conversation goes to that
+feature's model: its title in the Work Room, the summary of a long conversation where
+`CONTEXT_COMPACTION_SUMMARIZER_MODEL` names a model, memory
+search, a guardrail that asks a model, image tools, and any tool the agent has.
 
 ## Groups that agents use
 

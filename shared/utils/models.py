@@ -114,6 +114,8 @@ class TokenUsageLog(Base):
     cost_usd = Column(Float, nullable=True)
     # Answered by the agent's fallback model after its own model failed
     is_fallback = Column(Boolean, nullable=False, default=False)
+    # The agent's model group when it names one; model_name is the model that answered (V054)
+    model_group = Column(String(40), nullable=True)
     # The agent's project when the row was written; kept when the agent is renamed,
     # moved or deleted (V044, shared/utils/log_projects.py)
     project_id = Column(Integer, nullable=True)
@@ -138,6 +140,7 @@ class TokenUsageLog(Base):
             'timestamp': self.timestamp.isoformat() if self.timestamp else None,
             'cost_usd': self.cost_usd,
             'is_fallback': bool(self.is_fallback),
+            'model_group': self.model_group,
         }
 
 

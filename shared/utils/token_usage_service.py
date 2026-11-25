@@ -120,6 +120,7 @@ class TokenUsageService:
                 error_description=token_data.get('error_description'),
                 cost_usd=cost,
                 is_fallback=bool(token_data.get('is_fallback')),
+                model_group=token_data.get('model_group'),
                 **scope_of_agent(session, token_data.get('agent_name')),
             )
             
@@ -144,7 +145,8 @@ class TokenUsageService:
                        tool_use_tokens: Optional[int] = None, status: str = 'SUCCESS',
                        error_description: Optional[str] = None, 
                        timestamp: Optional[datetime] = None,
-                       is_fallback: bool = False) -> Optional[Dict[str, Any]]:
+                       is_fallback: bool = False,
+                       model_group: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """
         Convenience method to log token usage with all parameters.
         
@@ -162,6 +164,7 @@ class TokenUsageService:
             error_description: Description of error if status is not SUCCESS
             timestamp: Timestamp of the request (optional, defaults to now)
             is_fallback: Whether the agent's fallback model answered
+            model_group: The agent's model group, when it names one
             
         Returns:
             Inserted record or None if failed
@@ -179,6 +182,7 @@ class TokenUsageService:
             'status': status,
             'error_description': error_description,
             'is_fallback': is_fallback,
+            'model_group': model_group,
         }
         
         if timestamp:

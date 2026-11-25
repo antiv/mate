@@ -23,6 +23,7 @@ from .token_usage_callback import (
     _get_adk_session_info,
     _inference_span_by_context_id,
     _inference_span_var,
+    _set_group_models,
 )
 
 logger = logging.getLogger(__name__)
@@ -35,7 +36,8 @@ MAX_ERROR_DESCRIPTION = 2000
 def record_agent_error(agent_name: Optional[str], user_id: Optional[str],
                        session_id: Optional[str], error: BaseException,
                        request_id: Optional[str] = None,
-                       model_name: Optional[str] = None) -> bool:
+                       model_name: Optional[str] = None,
+                       model_group: Optional[str] = None) -> bool:
     """Write one ERROR row for a failed agent call. Never raises.
 
     Shared by both runtimes. Callers are already on a failure path, so a logging
@@ -49,6 +51,7 @@ def record_agent_error(agent_name: Optional[str], user_id: Optional[str],
             user_id=user_id,
             agent_name=agent_name,
             model_name=model_name,
+            model_group=model_group,
             prompt_tokens=0,
             response_tokens=0,
             thoughts_tokens=0,
@@ -74,6 +77,10 @@ def _end_inference_span(callback_context: CallbackContext) -> None:
         if span is None:
             span = _inference_span_by_context_id.pop(id(callback_context), None)
         if span:
+            from ..utils.group_model import CURRENT_CALL
+            group_call = CURRENT_CALL.get()
+            if group_call is not None:
+                _set_group_models(span, group_call, False)
             span.end()
             _inference_span_var.set(None)
             _inference_span_by_context_id.pop(id(callback_context), None)
@@ -92,9 +99,11 @@ def record_model_error_callback(*, callback_context: CallbackContext,
     try:
         agent_name = getattr(callback_context, 'agent_name', None)
         user_id, session_id = _get_adk_session_info(callback_context)
+        from ..utils.group_model import CURRENT_CALL, answered_by
+        group_call = CURRENT_CALL.get()
         model_name = None
         try:
-            model_name = callback_context.state.get('current_model_name')
+            model_name = answered_by(callback_context.state.get('current_model_name'))
         except Exception:
             pass
         record_agent_error(
@@ -103,6 +112,7 @@ def record_model_error_callback(*, callback_context: CallbackContext,
             session_id=session_id,
             error=error,
             model_name=model_name,
+            model_group=group_call.group if group_call is not None else None,
         )
         _end_inference_span(callback_context)
     except Exception as e:
