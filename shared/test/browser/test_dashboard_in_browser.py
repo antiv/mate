@@ -11,7 +11,7 @@ import re
 import unittest
 from typing import Any, Dict, List
 
-from shared.test.browser.server import PASSWORD, ROOT, USERNAME, Mate
+from shared.test.browser.server import MODEL, PASSWORD, ROOT, USERNAME, Mate
 from shared.test.browser.stand_in_model import ANSWER, TITLE
 
 ENABLED = os.getenv("MATE_BROWSER_TESTS") == "1"
@@ -179,6 +179,34 @@ class TestDashboardInBrowser(unittest.TestCase):
         page.locator(".react-flow__node", has_text=self.mate.agent).first.click()
         page.wait_for_timeout(1000)
         self.assertEqual(self.problems + page.evaluate(LOOK), [])
+
+    def test_an_agent_is_put_on_a_model_group(self) -> None:
+        self.mate.call("PUT", "/dashboard/api/platform/model-groups/fast", {
+            "models": [{"model": MODEL, "confirmed": ["tools"]}]})
+        page = self._open("desktop", "light")
+        page.goto(self.mate.url + f"/dashboard/agents/{self.mate.agent}")
+        page.check("#agentModelKindGroup", force=True)
+        page.select_option("#agentModelGroup", "group/fast")
+        page.get_by_text(f"Answers now: {MODEL}").wait_for()
+        self.assertFalse(page.is_visible("#agentFallbackModel"))
+        self.assertEqual(self.problems + page.evaluate(LOOK), [])
+        page.click("#agentSaveBtn")
+        page.get_by_text("Saved.").wait_for()
+        page.get_by_text(f"Answers now: {MODEL}").wait_for()
+        self.assertEqual(page.input_value("#agentModelGroup"), "group/fast")
+        self.assertFalse(page.is_visible("#agentSaveBar"))
+        # Back to a model, in the Visual Builder
+        page.goto(self.mate.url + f"/dashboard/agents/visual?project_id={self.mate.project_id}")
+        page.locator(".react-flow__node", has_text=self.mate.agent).first.click()
+        page.get_by_text(f"Answers now: {MODEL}").wait_for()
+        self.assertEqual(self.problems + page.evaluate(LOOK), [])
+        page.get_by_role("radio", name="Model").check(force=True)
+        page.get_by_label("Model name").fill(MODEL)
+        page.get_by_role("button", name="Save", exact=True).click()
+        page.get_by_text("Agent updated").wait_for()
+        agents = self.mate.call("GET", "/dashboard/api/agents")["configs"]
+        self.assertEqual([a["model_name"] for a in agents if a["name"] == self.mate.agent], [MODEL])
+        self.assertEqual(self.problems, [])
 
     def test_conversation_is_answered_and_named(self) -> None:
         page = self._open("desktop", "light")

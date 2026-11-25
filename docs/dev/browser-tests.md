@@ -43,7 +43,8 @@ Every page in `PAGES`, light and dark, at 1440×900 and 390×844:
 - no control is off the window, or cut off by a box that doesn't scroll;
 - no control is under the Help button once the page is scrolled to its end.
 
-Also: the Visual Builder's boxes don't overlap, and a Work Room conversation is answered
+Also: the Visual Builder's boxes don't overlap, an agent is put on a model group and back
+on a model, and a Work Room conversation is answered
 and gets a name.
 
 `LOOK` is the script that finds layout problems; `test_looking_finds_what_is_broken`

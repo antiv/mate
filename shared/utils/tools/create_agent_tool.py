@@ -15,7 +15,7 @@ from typing import Dict, Any, Optional
 from google.adk.tools.tool_context import ToolContext
 from sqlalchemy.orm import Session
 from ..database_client import get_database_client
-from ..model_groups import save_refusal
+from ..model_groups import groups_for, save_refusal
 from ..models import DEFAULT_WORKSPACE_ID, AgentConfig
 from ..user_service import get_user_service
 from ..agent_cleanup import left_behind
@@ -190,7 +190,8 @@ def create_agent(
         name: Name of the new agent (required, must be unique)
         description: Description of the new agent (required)
         instruction: Instruction/prompt for the new agent (required)
-        model: Model name for the new agent (optional, uses current agent's model if not specified)
+        model: Model for the new agent: a model name, or a model group as "group/<name>", which
+            list_model_groups gives (optional, uses current agent's model if not specified)
         parent_agent: Name of parent agent. Defaults to the current agent, so the new
             agent immediately becomes part of the current agent tree. Pass "ROOT" to
             create a standalone top-level agent.
@@ -543,7 +544,8 @@ def update_agent(
         agent_name: Name of the agent to update (required)
         description: New description (optional)
         instruction: New instruction/prompt (optional)
-        model: New model name (optional)
+        model: New model: a model name, or a model group as "group/<name>", which
+            list_model_groups gives (optional)
         parent_agent: New parent agent name (optional, use empty string to remove parent)
         tool_config: New tool configuration as JSON string (optional, e.g., '{"google_drive": true, "image_tools": true}')
         mcp_servers_config: New MCP servers configuration as JSON string (optional, e.g., '{"mcpServers": {"server1": {"command": "npx", "args": ["mcp-server"]}}}')
@@ -875,3 +877,54 @@ def read_agent(
             "status": "error",
             "error_message": f"Unexpected error: {str(e)}"
         }
+
+
+def list_model_groups(tool_context: ToolContext = None) -> Dict[str, Any]:
+    """
+    List the model groups an agent can be on instead of one model. A group is a list of
+    models an administrator keeps: the first one this workspace has a key for answers.
+    Give a group's model_name as the model of create_agent or update_agent.
+
+    Args:
+        tool_context: Tool context to get current agent information (automatically provided)
+
+    Returns:
+        Dict with status and the groups:
+        - status: "success" or "error"
+        - groups: For each its model_name ("group/<name>"), label, description,
+          own_servers_only (its models run on this installation's own servers), and
+          answers: the model that answers now, or None with the reason
+    """
+    if not _is_admin_user(tool_context):
+        logger.warning(f"Non-admin user '{_get_user_id_from_context(tool_context)}' attempted to list model groups")
+        return {
+            "status": "error",
+            "error_message": "Permission denied. Only admin users can list model groups. Please contact an administrator if you need this information."
+        }
+    db_client = get_database_client()
+    session = db_client.get_session()
+    if not session:
+        return {
+            "status": "error",
+            "error_message": "Failed to get database session"
+        }
+    try:
+        workspace_id = _caller_workspace(session, getattr(tool_context, 'agent_name', None))
+        if workspace_id is None:
+            return {
+                "status": "error",
+                "error_message": "Could not determine the workspace of the current agent"
+            }
+        # Those an agent can be stored with (save_refusal)
+        return {"status": "success",
+                "groups": [{key: group[key] for key in ("model_name", "label", "description", "own_servers_only",
+                                                        "answers", "reason")}
+                           for group in groups_for(session, workspace_id) if group["has_models"]]}
+    except Exception as e:
+        logger.error(f"Error listing model groups: {e}")
+        return {
+            "status": "error",
+            "error_message": f"Failed to list model groups: {str(e)}"
+        }
+    finally:
+        session.close()

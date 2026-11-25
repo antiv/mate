@@ -39,7 +39,7 @@ only be adjusted there. In the Visual Builder they are in a dialog.
 | **Image Tools** | Generate images. Type any LiteLLM image model in the dialog (suggestions list common ones), or leave it empty for the server's default, set under [Settings](settings.md). | An API key for the chosen model's provider. |
 | **Image Data Extraction** | Read structured data out of an image. | A vision model, set in the dialog. |
 | **Memory Blocks** | Read and update the project's shared notes. See [Memory blocks](memory-blocks.md). | Nothing. |
-| **Create Agent** | Create, read, change and delete other agents. | Nothing. Give this only to agents you trust to redesign your setup. |
+| **Create Agent** | Create, read, change and delete other agents, and list the [model groups](model-groups.md) they can be on. | Nothing. Give this only to agents you trust to redesign your setup. |
 | **Code Executor** | Run Python and shell commands on the server. | See the warning below. |
 | **Shop (E-commerce)** | Show a catalog, keep a cart, take orders. Edit the catalog, currency and shop name in the JSON. | `vendor_email` to email orders; `partner_key` to list them under **Shop Orders**. These two are set by a platform administrator, and work only in a workspace allowed the server's credentials (Default always); elsewhere the shop takes orders without them. |
 | **Subagent Delegation** | Split a task and hand the parts to temporary helper agents that run in parallel. | Nothing. Limits and the helpers' model are set in the JSON. |

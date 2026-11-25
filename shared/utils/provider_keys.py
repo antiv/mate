@@ -159,25 +159,30 @@ def model_credentials(context: ModelContext, model_name: Optional[str],
         workspace_id = _workspace_of(session, context)
         if workspace_id is None:
             raise NoProviderKey(f"No workspace found for {context.describe()}")
-        row = session.query(WorkspaceProviderKey).filter_by(
-            workspace_id=workspace_id, provider=provider).first()
-        if row is not None:
-            if row.api_key is None:
-                # Stored with another MATE_SECRET_KEY, or none: secret_box logged it
-                raise NoProviderKey(f"This workspace's key for {provider} can't be read; enter it again")
-            default = PROVIDERS[provider].base_url if provider in PROVIDERS else None
-            if not (row.base_url or default):
-                raise NoProviderKey(f"This workspace's {provider} entry has no base URL")
-            return Credentials(api_key=row.api_key, base_url=row.base_url or default,
-                               workspace_id=workspace_id, own_endpoint=bool(row.base_url))
-        if workspace_id == DEFAULT_WORKSPACE_ID:
-            return None
-        allowed = session.query(Workspace.allow_platform_keys).filter_by(id=workspace_id).scalar()
-        if allowed:
-            return None
-        raise NoProviderKey(f"This workspace has no key for {provider or 'this model'}")
+        return workspace_credentials(session, workspace_id, provider)
     finally:
         session.close()
+
+
+def workspace_credentials(session: Any, workspace_id: int, provider: str) -> Optional[Credentials]:
+    """model_credentials() for a workspace rather than one of its agents."""
+    row = session.query(WorkspaceProviderKey).filter_by(
+        workspace_id=workspace_id, provider=provider).first()
+    if row is not None:
+        if row.api_key is None:
+            # Stored with another MATE_SECRET_KEY, or none: secret_box logged it
+            raise NoProviderKey(f"This workspace's key for {provider} can't be read; enter it again")
+        default = PROVIDERS[provider].base_url if provider in PROVIDERS else None
+        if not (row.base_url or default):
+            raise NoProviderKey(f"This workspace's {provider} entry has no base URL")
+        return Credentials(api_key=row.api_key, base_url=row.base_url or default,
+                           workspace_id=workspace_id, own_endpoint=bool(row.base_url))
+    if workspace_id == DEFAULT_WORKSPACE_ID:
+        return None
+    allowed = session.query(Workspace.allow_platform_keys).filter_by(id=workspace_id).scalar()
+    if allowed:
+        return None
+    raise NoProviderKey(f"This workspace has no key for {provider or 'this model'}")
 
 
 def masked(api_key: Optional[str]) -> str:

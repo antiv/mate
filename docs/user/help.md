@@ -47,7 +47,7 @@ The agent is called `mate_help` and sits in its own project, **MATE Help**. It i
 created by a database migration, so every installation has it. Open it on the
 **Agents** page like any other agent.
 
-- **Choose the model** in the agent's **Model** field. It starts with none set, which
+- **Choose the model**, or a [model group](model-groups.md), under **Model** on the agent's page. It starts with none set, which
   means the server's default model (`GEMINI_MODEL`, or `gemini-2.5-flash`). A fallback
   model and a custom endpoint and key can be set the same way as for any agent; see
   [Agents](agents.md).

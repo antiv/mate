@@ -12,6 +12,7 @@ covers:
   - templates/dashboard/modals/trigger_modal.html
   - templates/dashboard/agent_page.html
   - static/js/agent-page.js
+  - static/js/model-choice.js
   - static/css/agent-page.css
   - static/js/monaco-fields.js
   - static/js/usage-chart.js
@@ -54,6 +55,7 @@ Two pages are built on them alone; copy from them:
 | `m-field` | A label and its control in a column. `m-hint` and `m-error` go under the control; `is-invalid` on the field marks the control |
 | `m-input` | Input, select and textarea. `m-input-sm` for toolbars, `m-input-mono` for code |
 | `m-check` | A label around a checkbox and its text |
+| `m-segments` | A choice of two or three, as radio buttons: `<div class="m-segments" role="radiogroup">` with a `<label>` around each input and its `<span>` |
 | `m-stack`, `m-row`, `m-grid-2`, `m-divider` | Layout: a column with gaps, a wrapping row (`m-row-fill`: one line, its input taking the free space), two columns that stack on a phone, a rule |
 | `m-badge` + `-accent` / `-success` / `-warning` / `-danger` / `-violet` | A short label in a pill |
 | `m-count` | A number in a pill, beside a tab or a sidebar item |
@@ -252,6 +254,9 @@ runs it as `window.mateAgentPage`.
   /dashboard/api/agents`, or `PUT /dashboard/api/agents/<id>`. The page then
   reloads at the agent's address, which a rename changes, and shows "Saved." from
   `sessionStorage`.
+- **Model or Group** (`static/js/model-choice.js`, which the Visual Builder uses too): both
+  are `model_name`, so the form has no field more. The list, and which model answers now,
+  come from `GET /dashboard/api/workspace-models/groups` after the page is shown.
 - **The save bar and the question on leaving** compare the form, as the API would
   receive it, with what it held after loading.
 - **The instruction** is a Monaco editor (`static/js/monaco-fields.js`, which the
